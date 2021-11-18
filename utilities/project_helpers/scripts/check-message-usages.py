@@ -1,17 +1,25 @@
 #!/usr/bin/python
+# -*- coding: utf-8 -*-
 
-import sys
+import argparse
 import subprocess
 import codecs
 import os
 import re
 import xml.etree.ElementTree as xml
 
-from check_message_lib import find_language_file_name, root_directory
+from check_message_lib import find_language_file_name, ROOT_DIRECTORY
 
-language = sys.argv[1]
+arg_parser = argparse.ArgumentParser(description='Check for usage of XML and JS message keys in code.')
+arg_parser.add_argument('-lang', required=True, help='Language (as a 2-letter code) of the messages file')
+arguments = arg_parser.parse_args()
+language = arguments.lang
 
-line_regexp = r'^(.+?):(.*)$'
+script_directory = os.path.dirname(os.path.realpath(__file__))
+os.chdir(script_directory)
+
+LINE_REGEXP = r'^(.+?):(.*)$'
+
 
 def find_xml_prefixes_and_files():
 
@@ -19,13 +27,13 @@ def find_xml_prefixes_and_files():
     grep_command = 'grep -R -P "[>\'\\"](' + '|'.join(prefixes) + ')\\." --include=*.java --include=*.xsl --include=*.xmap --include=*.xslt --include=input-forms.xml --exclude-dir=*/target/* *'
     prefix_regexp = "[>'\"]((?:" + "|".join(prefixes) + ")\..+?)[<'\"]"
 
-    os.chdir(root_directory)
+    os.chdir(ROOT_DIRECTORY)
     with open(os.devnull, 'w') as devnull:
         output = subprocess.check_output(grep_command, shell=True, stderr=devnull)
     output_lines = output.strip().split('\n')
     message_prefixes = set()
     for grep_line in output_lines:
-        line_match = re.search(line_regexp, grep_line, re.U)
+        line_match = re.search(LINE_REGEXP, grep_line, re.U)
         (file_name, line) = line_match.groups()
         match_tuples = re.findall(prefix_regexp, line, re.U)
         for match_tuple in match_tuples:
@@ -66,12 +74,12 @@ def add_js_results(language, results):
             key = message_match.group(1)
             result = {'type':'js', 'match':'no', 'key':key, 'file_name':None, 'prefix':None}
             grep_command = 'grep -R -P "(\\\\$|jQuery)\\.i18n\._\\([\'\\"]' + key + '[\'\\"][),]" --include=*.js --include=*.html --exclude-dir=*/target/* *'
-            os.chdir(root_directory)
+            os.chdir(ROOT_DIRECTORY)
             try:
                 with open(os.devnull, 'w') as devnull:
                     output = subprocess.check_output(grep_command, shell=True, stderr=devnull)
                 output_lines = output.strip().split('\n')
-                line_match = re.search(line_regexp, output_lines[0], re.U)
+                line_match = re.search(LINE_REGEXP, output_lines[0], re.U)
                 (file_name, line) = line_match.groups()
                 result['match'] = 'full'
                 result['file_name'] = file_name
