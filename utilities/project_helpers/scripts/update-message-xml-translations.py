@@ -7,8 +7,8 @@ import lxml.etree as lxml
 
 from check_message_lib import find_language_file_name, get_xml_keys
 
-arg_parser = argparse.ArgumentParser(description="Add English XML messages missing in the language's messages, marked with @TODO=TRANSLATE.")
-arg_parser.add_argument('-lang', required=True, help='Language (as a 2-letter code) of the messages file')
+arg_parser = argparse.ArgumentParser(description="Add English XML messages missing in the language's messages, marked with @TODO=translate.")
+arg_parser.add_argument('lang', help='Language (as a 2-letter code) of the messages file')
 arguments = arg_parser.parse_args()
 language = arguments.lang
 

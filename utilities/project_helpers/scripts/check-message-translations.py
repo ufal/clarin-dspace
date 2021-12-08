@@ -7,11 +7,11 @@ import os
 from check_message_lib import find_language_file_name, get_js_keys, get_xml_keys
 
 arg_parser = argparse.ArgumentParser(description='Compare the XML and JS message keys for two languages.')
-arg_parser.add_argument('-lang1', required=True, help='First language as a 2-letter code')
-arg_parser.add_argument('-lang2', default='en', help='Second language as a 2-letter code (defaults to "en")')
+arg_parser.add_argument('lang', help='First language as a 2-letter code')
+arg_parser.add_argument('-base', required=False, default='en', help='Second language as a 2-letter code (defaults to "en")')
 arguments = arg_parser.parse_args()
-language1 = arguments.lang1
-language2 = arguments.lang2
+language1 = arguments.lang
+language2 = arguments.base
 
 script_directory = os.path.dirname(os.path.realpath(__file__))
 os.chdir(script_directory)

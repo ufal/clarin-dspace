@@ -11,7 +11,7 @@ import xml.etree.ElementTree as xml
 from check_message_lib import find_language_file_name, ROOT_DIRECTORY
 
 arg_parser = argparse.ArgumentParser(description='Check for usage of XML and JS message keys in code.')
-arg_parser.add_argument('-lang', required=True, help='Language (as a 2-letter code) of the messages file')
+arg_parser.add_argument('lang', help='Language (as a 2-letter code) of the messages file')
 arguments = arg_parser.parse_args()
 language = arguments.lang
 
