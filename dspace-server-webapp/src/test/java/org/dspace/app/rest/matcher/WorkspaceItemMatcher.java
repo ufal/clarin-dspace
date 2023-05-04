@@ -111,32 +111,8 @@ public class WorkspaceItemMatcher {
                         hasNoJsonPath("$.sections.traditionalpageone['dc.type'][0].value"),
                 // Check series as it appears (for type bind testing)
                 series != null ?
-                        hasJsonPath("$.sections.traditionalpageone['dc.relation.ispartofseries'][0].value",
-                                is(series)) :
-                        hasNoJsonPath("$.sections.traditionalpageone['dc.relation.ispartofseries'][0].value"),
-                matchLinks(witem)
-        );
-    }
-
-    /**
-     * Check that the workspace item has the expected type and series values
-     * (used in type bind evaluation)
-     * @param witem the workspace item
-     * @param type  the dc.type value eg. Technical Report
-     * @param series the series value eg. 11-23
-     * @return  Matcher result
-     */
-    public static Matcher matchItemWithTypeAndSeries(WorkspaceItem witem, String type, String series) {
-        return allOf(
-                // Check workspaceitem properties
-                matchProperties(witem),
-                // Check type appears or is null
-                type != null ?
-                        hasJsonPath("$.sections.traditionalpageone['dc.type'][0].value", is(type)) :
-                        hasNoJsonPath("$.sections.traditionalpageone['dc.type'][0].value"),
-                // Check series as it appears (for type bind testing)
-                series != null ?
-                hasJsonPath("$.sections.traditionalpageone['dc.relation.ispartofseries'][0].value", is(series)) :
+                hasJsonPath("$.sections.traditionalpageone['dc.relation.ispartofseries'][0].value",
+                        is(series)) :
                         hasNoJsonPath("$.sections.traditionalpageone['dc.relation.ispartofseries'][0].value"),
                 matchLinks(witem)
         );
