@@ -1317,5 +1317,10 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
         }
         return false;
     }
+
+    @Override
+    public boolean canChangePassword(Context context, EPerson ePerson, String currentPassword) {
+        return false;
+    }
 }
 

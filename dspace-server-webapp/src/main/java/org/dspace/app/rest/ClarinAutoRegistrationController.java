@@ -15,7 +15,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import org.apache.commons.lang3.StringUtils;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.Logger;
 import org.dspace.authenticate.clarin.ClarinShibAuthentication;
 import org.dspace.content.clarin.ClarinVerificationToken;
 import org.dspace.content.service.clarin.ClarinVerificationTokenService;
@@ -46,7 +46,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class ClarinAutoRegistrationController {
 
-    private static Logger log = Logger.getLogger(ClarinAutoRegistrationController.class);
+    private static Logger log = org.apache.logging.log4j.LogManager.getLogger(ClarinAutoRegistrationController.class);
 
     @Autowired
     ConfigurationService configurationService;

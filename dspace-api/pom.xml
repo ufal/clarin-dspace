@@ -519,10 +519,6 @@
             <artifactId>fontbox</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.apache.poi</groupId>
-            <artifactId>poi-scratchpad</artifactId>
-        </dependency>
-        <dependency>
             <groupId>xerces</groupId>
             <artifactId>xercesImpl</artifactId>
         </dependency>
@@ -534,12 +530,6 @@
         <dependency>
             <groupId>org.dspace</groupId>
             <artifactId>oclc-harvester2</artifactId>
-        </dependency>
-        <!-- Xalan is REQUIRED by 'oclc-harvester2' listed above (OAI harvesting fails without it).
-             Please do NOT use Xalan in DSpace codebase as it is not well maintained. -->
-        <dependency>
-            <groupId>xalan</groupId>
-            <artifactId>xalan</artifactId>
         </dependency>
         <dependency>
             <groupId>org.dspace</groupId>

@@ -7,7 +7,7 @@
     <version>7.5</version>
     <name>DSpace Parent Project</name>
     <description>
-   	DSpace open source software is a turnkey institutional repository application.
+        DSpace open source software is a turnkey institutional repository application.
     </description>
     <url>https://github.com/dspace/DSpace</url>
 
@@ -236,7 +236,7 @@
                         <excludes>
                             <exclude>**/Abstract*</exclude>
                         </excludes>
-                         <!-- Detailed logs in failsafe-reports/testName-output.txt instead of stdout -->
+                        <!-- Detailed logs in failsafe-reports/testName-output.txt instead of stdout -->
                         <redirectTestOutputToFile>true</redirectTestOutputToFile>
                         <!-- Ensure full stacktrace is logged (when errors occur) -->
                         <trimStackTrace>false</trimStackTrace>
@@ -853,38 +853,38 @@
             </modules>
         </profile>
 
-       <!-- REST Jersey (Deprecated REST API from DSpace 6.x or below) -->
-       <!-- As this module is deprecated, it only builds if you activate it via -Pdspace-rest -->
-       <profile>
-           <id>dspace-rest</id>
-           <activation>
-               <activeByDefault>false</activeByDefault>
-               <!-- Enable if we are doing a release (-Drelease), to tag/release this optional module -->
-               <property>
-                   <name>release</name>
-               </property>
-           </activation>
-           <modules>
-               <module>dspace-rest</module>
-           </modules>
-           <dependencyManagement>
-               <dependencies>
-                   <dependency>
-                       <groupId>org.dspace</groupId>
-                       <artifactId>dspace-rest</artifactId>
-                       <version>7.5</version>
-                       <type>jar</type>
-                       <classifier>classes</classifier>
-                   </dependency>
-                   <dependency>
-                       <groupId>org.dspace</groupId>
-                       <artifactId>dspace-rest</artifactId>
-                       <version>7.5</version>
-                       <type>war</type>
-                   </dependency>
-               </dependencies>
-           </dependencyManagement>
-       </profile>
+        <!-- REST Jersey (Deprecated REST API from DSpace 6.x or below) -->
+        <!-- As this module is deprecated, it only builds if you activate it via -Pdspace-rest -->
+        <profile>
+            <id>dspace-rest</id>
+            <activation>
+                <activeByDefault>false</activeByDefault>
+                <!-- Enable if we are doing a release (-Drelease), to tag/release this optional module -->
+                <property>
+                    <name>release</name>
+                </property>
+            </activation>
+            <modules>
+                <module>dspace-rest</module>
+            </modules>
+            <dependencyManagement>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.dspace</groupId>
+                        <artifactId>dspace-rest</artifactId>
+                        <version>7.5</version>
+                        <type>jar</type>
+                        <classifier>classes</classifier>
+                    </dependency>
+                    <dependency>
+                        <groupId>org.dspace</groupId>
+                        <artifactId>dspace-rest</artifactId>
+                        <version>7.5</version>
+                        <type>war</type>
+                    </dependency>
+                </dependencies>
+            </dependencyManagement>
+        </profile>
 
 
         <!--
@@ -921,7 +921,7 @@
         <!--
            Builds Server API webapp for DSpace
         -->
-		<profile>
+        <profile>
             <id>dspace-server-webapp</id>
             <activation>
                 <file>
@@ -1207,7 +1207,7 @@
             </dependency>
 
             <dependency>
-		    <artifactId>spring-jdbc</artifactId>
+                <artifactId>spring-jdbc</artifactId>
                 <groupId>org.springframework</groupId>
                 <version>${spring.version}</version>
             </dependency>
@@ -1227,12 +1227,6 @@
             <dependency>
                 <groupId>org.springframework</groupId>
                 <artifactId>spring-expression</artifactId>
-                <version>${spring.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.springframework</groupId>
-                <artifactId>spring-context-support</artifactId>
                 <version>${spring.version}</version>
             </dependency>
 
@@ -1365,7 +1359,7 @@
                 <groupId>net.handle</groupId>
                 <artifactId>handle</artifactId>
                 <version>9.3.0</version>
-		<exclusions>
+                <exclusions>
                     <!-- A later version is brought in by google-oauth-client -->
                     <exclusion>
                         <groupId>com.google.code.gson</groupId>
@@ -1645,9 +1639,9 @@
                 <version>4.5.13</version>
             </dependency>
             <dependency>
-              <groupId>org.apache.httpcomponents</groupId>
-              <artifactId>httpmime</artifactId>
-              <version>4.5.13</version>
+                <groupId>org.apache.httpcomponents</groupId>
+                <artifactId>httpmime</artifactId>
+                <version>4.5.13</version>
             </dependency>
             <dependency>
                 <groupId>org.slf4j</groupId>
@@ -1845,7 +1839,7 @@
             <url>https://raw.github.com/DSpace/DSpace/main/LICENSE</url>
             <distribution>repo</distribution>
             <comments>
-               A BSD 3-Clause license for the DSpace codebase.
+                A BSD 3-Clause license for the DSpace codebase.
             </comments>
         </license>
     </licenses>
@@ -1859,75 +1853,75 @@
         <mailingList>
             <name>DSpace Technical Users List</name>
             <subscribe>
-               https://groups.google.com/d/forum/dspace-tech
+                https://groups.google.com/d/forum/dspace-tech
             </subscribe>
             <unsubscribe>
-               https://groups.google.com/d/forum/dspace-tech
+                https://groups.google.com/d/forum/dspace-tech
             </unsubscribe>
             <post>dspace-tech AT googlegroups.com</post>
             <archive>
-               https://groups.google.com/d/forum/dspace-tech
+                https://groups.google.com/d/forum/dspace-tech
             </archive>
         </mailingList>
         <mailingList>
             <name>DSpace Developers List</name>
             <subscribe>
-               https://groups.google.com/d/forum/dspace-devel
+                https://groups.google.com/d/forum/dspace-devel
             </subscribe>
             <unsubscribe>
-               https://groups.google.com/d/forum/dspace-devel
+                https://groups.google.com/d/forum/dspace-devel
             </unsubscribe>
             <post>dspace-devel AT googlegroups.com</post>
             <archive>
-               https://groups.google.com/d/forum/dspace-devel
+                https://groups.google.com/d/forum/dspace-devel
             </archive>
         </mailingList>
         <mailingList>
             <name>DSpace Community List</name>
             <subscribe>
-               https://groups.google.com/d/forum/dspace-community
+                https://groups.google.com/d/forum/dspace-community
             </subscribe>
             <unsubscribe>
-               https://groups.google.com/d/forum/dspace-community
+                https://groups.google.com/d/forum/dspace-community
             </unsubscribe>
             <post>dspace-community AT googlegroups.com</post>
             <archive>
-               https://groups.google.com/d/forum/dspace-community
+                https://groups.google.com/d/forum/dspace-community
             </archive>
         </mailingList>
         <mailingList>
             <name>DSpace Commit Change-Log</name>
             <subscribe>
-               https://groups.google.com/d/forum/dspace-changelog
+                https://groups.google.com/d/forum/dspace-changelog
             </subscribe>
             <unsubscribe>
-               https://groups.google.com/d/forum/dspace-changelog
+                https://groups.google.com/d/forum/dspace-changelog
             </unsubscribe>
             <archive>
-               https://groups.google.com/d/forum/dspace-changelog
+                https://groups.google.com/d/forum/dspace-changelog
             </archive>
         </mailingList>
     </mailingLists>
 
     <developers>
         <developer>
-           <name>DSpace Committers</name>
-           <email>dspace-devel@googlegroups.com</email>
-           <url>https://wiki.lyrasis.org/display/DSPACE/DSpace+Committers</url>
-           <roles>
-             <role>committer</role>
-           </roles>
+            <name>DSpace Committers</name>
+            <email>dspace-devel@googlegroups.com</email>
+            <url>https://wiki.lyrasis.org/display/DSPACE/DSpace+Committers</url>
+            <roles>
+                <role>committer</role>
+            </roles>
         </developer>
     </developers>
 
     <contributors>
         <contributor>
-           <name>DSpace Contributors</name>
-           <email>dspace-tech@googlegroups.com</email>
-           <url>https://wiki.lyrasis.org/display/DSPACE/DSpaceContributors</url>
-           <roles>
-             <role>developer</role>
-           </roles>
+            <name>DSpace Contributors</name>
+            <email>dspace-tech@googlegroups.com</email>
+            <url>https://wiki.lyrasis.org/display/DSPACE/DSpaceContributors</url>
+            <roles>
+                <role>developer</role>
+            </roles>
         </contributor>
     </contributors>
 

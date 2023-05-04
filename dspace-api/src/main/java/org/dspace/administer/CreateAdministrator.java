@@ -217,7 +217,7 @@ public final class CreateAdministrator {
             password = line.getOptionValue("p").toCharArray();
         }
         // if we make it to here, we are ready to create an administrator
-        createAdministrator(email, firstName, lastName, language, String.valueOf(password));
+        createAdministrator(email, firstName, lastName, language, String.valueOf(password), "");
 
     }
 

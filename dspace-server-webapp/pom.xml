@@ -548,6 +548,12 @@
           <groupId>javax.annotation</groupId>
           <artifactId>javax.annotation-api</artifactId>
         </dependency>
+
+        <dependency>
+            <groupId>org.json</groupId>
+            <artifactId>json</artifactId>
+            <version>20180130</version>
+        </dependency>
     </dependencies>
 
 </project>
