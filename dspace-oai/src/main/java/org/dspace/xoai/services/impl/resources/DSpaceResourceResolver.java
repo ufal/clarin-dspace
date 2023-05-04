@@ -40,6 +40,7 @@ import org.dspace.xoai.services.impl.resources.functions.UriToMetaShareFn;
 import org.dspace.xoai.services.impl.resources.functions.UriToRestrictionsFn;
 
 public class DSpaceResourceResolver implements ResourceResolver {
+    // Requires usage of Saxon as OAI-PMH uses some XSLT 2 functions
     private static final TransformerFactory transformerFactory = TransformerFactory
             .newInstance("net.sf.saxon.TransformerFactoryImpl", null);
     static {
