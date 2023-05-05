@@ -42,8 +42,4 @@
 <!--        <property name="name" value="license"/>-->
 <!--    </bean>-->
 
-
-    <bean name="licenseValidation" class="org.dspace.app.rest.submit.step.validation.LicenseValidation">
-        <property name="name" value="license"/>
-    </bean>
 </beans>
