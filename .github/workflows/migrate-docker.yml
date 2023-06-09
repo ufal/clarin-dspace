@@ -1,5 +1,5 @@
 # DSpace Docker image build for hub.docker.com
-name: Docker images
+name: Migrate 7.5. Docker
 
 # Run this Build for all pushes to dtq-dev branch
 # Also run for PRs to ensure PR doesn't break Docker build process
