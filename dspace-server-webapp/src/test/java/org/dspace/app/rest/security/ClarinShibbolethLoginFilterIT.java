@@ -199,9 +199,7 @@ public class ClarinShibbolethLoginFilterIT extends AbstractControllerIntegration
         assertEquals(ePerson.getEmail(), email);
 
         // The user is registered now log him
-        getClient().perform(get("/api/authn/shibboleth")
-                        .header("Shib-Identity-Provider", idp)
-                        .header("SHIB-NETID", netId)
+        getClient().perform(post("/api/authn/shibboleth")
                         .header("verification-token", clarinVerificationToken.getToken()))
                 .andExpect(status().isOk());
 
