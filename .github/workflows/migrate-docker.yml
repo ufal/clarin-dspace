@@ -25,8 +25,7 @@ jobs:
       # For a new commit on other branches, use the branch name as the tag for Docker image.
       # For a new tag, copy that tag name as the tag for Docker image.
       IMAGE_TAGS: |
-        type=raw,value=migrate-to-7.5,
-        type=raw,value=dtq-dev-7.5
+        type=raw,value=migrate-to-7.5
       # Define default tag "flavor" for docker/metadata-action per
       # https://github.com/docker/metadata-action#flavor-input
       # We turn off 'latest' tag by default.
