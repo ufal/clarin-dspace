@@ -8,6 +8,7 @@
 package org.dspace.app.rest.security;
 
 import static org.dspace.app.rest.security.ShibbolethLoginFilterIT.PASS_ONLY;
+import static org.dspace.app.rest.security.clarin.ClarinShibbolethLoginFilter.VERIFICATION_TOKEN_HEADER;
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -200,7 +201,7 @@ public class ClarinShibbolethLoginFilterIT extends AbstractControllerIntegration
 
         // The user is registered now log him
         getClient().perform(post("/api/authn/shibboleth")
-                        .header("verification-token", clarinVerificationToken.getToken()))
+                        .header(VERIFICATION_TOKEN_HEADER, clarinVerificationToken.getToken()))
                 .andExpect(status().isOk());
 
         // Try to sign in the user by the email if the eperson exist

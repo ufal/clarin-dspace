@@ -76,6 +76,8 @@ public class ClarinShibbolethLoginFilter extends StatelessLoginFilter {
     public static final String MISSING_HEADERS_FROM_IDP = "MissingHeadersFromIpd";
     private static final String AUTHORIZATION_HEADER = "Authorization";
 
+    public static final String VERIFICATION_TOKEN_HEADER = "Verification-Token";
+
     private static final Logger log = LogManager.getLogger(org.dspace.app.rest.security.ShibbolethLoginFilter.class);
 
     /**
@@ -122,7 +124,7 @@ public class ClarinShibbolethLoginFilter extends StatelessLoginFilter {
         }
 
         // If the verification token is not null the user wants to login.
-        String verificationToken = req.getHeader("verification-token");
+        String verificationToken = req.getHeader(VERIFICATION_TOKEN_HEADER);
         ClarinVerificationToken clarinVerificationToken;
         try {
             clarinVerificationToken = clarinVerificationTokenService.findByToken(context, verificationToken);
@@ -200,7 +202,7 @@ public class ClarinShibbolethLoginFilter extends StatelessLoginFilter {
         // Auth token is only used in the Header from that point forward.
         restAuthenticationService.addAuthenticationDataForUser(req, res, dSpaceAuthentication, true);
 
-        String verificationToken = req.getHeader("verification-token");
+        String verificationToken = req.getHeader(VERIFICATION_TOKEN_HEADER);
         if (StringUtils.isEmpty(verificationToken)) {
             // redirect user after completing Shibboleth authentication, sending along the temporary auth cookie
             redirectAfterSuccess(req, res);
