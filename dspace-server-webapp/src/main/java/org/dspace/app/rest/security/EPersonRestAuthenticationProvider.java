@@ -11,8 +11,8 @@ import static org.dspace.app.rest.security.WebSecurityConfiguration.ADMIN_GRANT;
 import static org.dspace.app.rest.security.WebSecurityConfiguration.AUTHENTICATED_GRANT;
 
 import java.sql.SQLException;
-import java.util.Collections;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
