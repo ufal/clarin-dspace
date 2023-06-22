@@ -18,6 +18,7 @@ import com.amazonaws.AmazonClientException;
 import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.client.builder.AwsClientBuilder;
 import com.amazonaws.regions.Region;
 import com.amazonaws.regions.Regions;
 import com.amazonaws.services.s3.AmazonS3;
@@ -88,11 +89,13 @@ public class S3BitStoreService extends BaseBitStoreService {
     protected static final int directoryLevels = 3;
 
     private boolean enabled = false;
-
     private String awsAccessKey;
     private String awsSecretKey;
     private String awsRegionName;
     private boolean useRelativePath;
+
+    private String endpoint;
+    private boolean pathStyleAccessEnabled;
 
     /**
      * container for all the assets
@@ -119,7 +122,7 @@ public class S3BitStoreService extends BaseBitStoreService {
             = DSpaceServicesFactory.getInstance().getConfigurationService();
 
     /**
-     * Utility method for generate AmazonS3 builder
+     * Utility method for generate AmazonS3 builder with specific region
      *
      * @param regions wanted regions in client
      * @param awsCredentials credentials of the client
@@ -135,6 +138,24 @@ public class S3BitStoreService extends BaseBitStoreService {
                 .build();
     }
 
+    /**
+     * Utility method for generate AmazonS3 builder with specific endpoint
+     *
+     * @param endpointConfiguration configuration of endpoint
+     * @param awsCredentials credentials of the client
+     * @param pathStyleAccessEnabled enable path style access to S3 service
+     * @return builder with the specified parameters
+     */
+    protected static Supplier<AmazonS3> amazonClientBuilderBy(
+            @NotNull AwsClientBuilder.EndpointConfiguration endpointConfiguration,
+            @NotNull AWSCredentials awsCredentials,
+            @NotNull boolean pathStyleAccessEnabled
+    ) {
+        return () -> AmazonS3ClientBuilder.standard()
+                .withPathStyleAccessEnabled( pathStyleAccessEnabled)
+                .withEndpointConfiguration(endpointConfiguration)
+                .withCredentials(new AWSStaticCredentialsProvider(awsCredentials)).build();
+    }
     public S3BitStoreService() {}
 
     /**
@@ -168,7 +189,16 @@ public class S3BitStoreService extends BaseBitStoreService {
         }
 
         try {
-            if (StringUtils.isNotBlank(getAwsAccessKey()) && StringUtils.isNotBlank(getAwsSecretKey())) {
+            if (StringUtils.isNotBlank(getEndpoint())) {
+                log.info("Creating s3service from different endpoint than amazon: " + getEndpoint());
+                BasicAWSCredentials credentials = new BasicAWSCredentials(getAwsAccessKey(), getAwsSecretKey());
+                AwsClientBuilder.EndpointConfiguration ec =
+                        new AwsClientBuilder.EndpointConfiguration(getEndpoint(), "");
+                s3Service = FunctionalUtils.getDefaultOrBuild(
+                        this.s3Service,
+                        amazonClientBuilderBy(ec, credentials, getPathStyleAccessEnabled())
+                );
+            } else if (StringUtils.isNotBlank(getAwsAccessKey()) && StringUtils.isNotBlank(getAwsSecretKey())) {
                 log.warn("Use local defined S3 credentials");
                 // region
                 Regions regions = Regions.DEFAULT_REGION;
@@ -205,7 +235,7 @@ public class S3BitStoreService extends BaseBitStoreService {
             }
 
             try {
-                if (!s3Service.doesBucketExist(bucketName)) {
+                if (!s3Service.doesBucketExistV2(bucketName)) {
                     s3Service.createBucket(bucketName);
                     log.info("Creating new S3 Bucket: " + bucketName);
                 }
@@ -446,6 +476,22 @@ public class S3BitStoreService extends BaseBitStoreService {
     @Autowired(required = true)
     public void setAwsAccessKey(String awsAccessKey) {
         this.awsAccessKey = awsAccessKey;
+    }
+
+    @Autowired(required = true)
+    public void setPathStyleAccessEnabled(boolean pathStyleAccessEnabled) {
+        this.pathStyleAccessEnabled = pathStyleAccessEnabled;
+    }
+
+    public boolean getPathStyleAccessEnabled() {
+        return this.pathStyleAccessEnabled;
+    }
+    public void setEndpoint(String endpoint) {
+        this.endpoint = endpoint;
+    }
+
+    public String getEndpoint() {
+        return this.endpoint;
     }
 
     public String getAwsSecretKey() {

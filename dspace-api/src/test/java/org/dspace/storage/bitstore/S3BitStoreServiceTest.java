@@ -71,7 +71,7 @@ public class S3BitStoreServiceTest extends AbstractUnitTest {
 
     @Before
     public void setUp() throws Exception {
-        this.s3BitStoreService = new S3BitStoreService(s3Service, tm);
+            this.s3BitStoreService = new S3BitStoreService(s3Service, tm);
     }
 
     private Supplier<AmazonS3> mockedServiceSupplier() {
@@ -82,13 +82,13 @@ public class S3BitStoreServiceTest extends AbstractUnitTest {
     public void givenBucketWhenInitThenUsesSameBucket() throws IOException {
         String bucketName = "Bucket0";
         s3BitStoreService.setBucketName(bucketName);
-        when(this.s3Service.doesBucketExist(bucketName)).thenReturn(false);
+        when(this.s3Service.doesBucketExistV2(bucketName)).thenReturn(false);
 
         assertThat(s3BitStoreService.getAwsRegionName(), isEmptyOrNullString());
 
         this.s3BitStoreService.init();
 
-        verify(this.s3Service).doesBucketExist(bucketName);
+        verify(this.s3Service).doesBucketExistV2(bucketName);
         verify(this.s3Service, Mockito.times(1)).createBucket(bucketName);
         assertThat(s3BitStoreService.getAwsAccessKey(), isEmptyOrNullString());
         assertThat(s3BitStoreService.getAwsSecretKey(), isEmptyOrNullString());
@@ -98,7 +98,7 @@ public class S3BitStoreServiceTest extends AbstractUnitTest {
     @Test
     public void givenEmptyBucketWhenInitThenUsesDefaultBucket() throws IOException {
         assertThat(s3BitStoreService.getBucketName(), isEmptyOrNullString());
-        when(this.s3Service.doesBucketExist(startsWith(S3BitStoreService.DEFAULT_BUCKET_PREFIX))).thenReturn(false);
+        when(this.s3Service.doesBucketExistV2(startsWith(S3BitStoreService.DEFAULT_BUCKET_PREFIX))).thenReturn(false);
         assertThat(s3BitStoreService.getAwsRegionName(), isEmptyOrNullString());
 
         this.s3BitStoreService.init();
@@ -116,7 +116,7 @@ public class S3BitStoreServiceTest extends AbstractUnitTest {
         assertThat(s3BitStoreService.getAwsSecretKey(), isEmptyOrNullString());
         assertThat(s3BitStoreService.getBucketName(), isEmptyOrNullString());
         assertThat(s3BitStoreService.getAwsRegionName(), isEmptyOrNullString());
-        when(this.s3Service.doesBucketExist(startsWith(S3BitStoreService.DEFAULT_BUCKET_PREFIX))).thenReturn(false);
+        when(this.s3Service.doesBucketExistV2(startsWith(S3BitStoreService.DEFAULT_BUCKET_PREFIX))).thenReturn(false);
 
         final String awsAccessKey = "ACCESS_KEY";
         final String awsSecretKey = "SECRET_KEY";
