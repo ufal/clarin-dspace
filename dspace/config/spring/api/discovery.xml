@@ -170,7 +170,7 @@
             <list>
                 <ref bean="searchFilterAuthor" />
                 <ref bean="searchFilterSubject" />
-                <ref bean="searchFilterIssued" />
+<!--                <ref bean="searchFilterIssued" />-->
                 <ref bean="searchFilterRights" />
                 <ref bean="searchFilterLanguage" />
                 <ref bean="searchFilterContentInOriginalBundle"/>
@@ -186,7 +186,7 @@
                 <ref bean="searchFilterTitle" />
                 <ref bean="searchFilterAuthor" />
                 <ref bean="searchFilterSubject" />
-                <ref bean="searchFilterIssued" />
+<!--                <ref bean="searchFilterIssued" />-->
                 <ref bean="searchFilterContentInOriginalBundle"/>
                 <ref bean="searchFilterFileNameInOriginalBundle" />
                 <ref bean="searchFilterFileDescriptionInOriginalBundle" />
