@@ -98,7 +98,7 @@ public class ClarinLicenseImportRestController {
         for (JsonNode jsonLicenseLabel : licenseLabels) {
             if (jsonLicenseLabel.has("label_id") && !jsonLicenseLabel.get("label_id").isNull()) {
                 if (jsonLicenseLabel.has("label") && jsonLicenseLabel.has("title")
-                    && jsonLicenseLabel.has("is_extended")) {
+                        && jsonLicenseLabel.has("is_extended")) {
 
                     Integer id = jsonLicenseLabel.get("label_id").asInt();
                     String label = jsonLicenseLabel.get("label").isNull() ?
@@ -148,8 +148,8 @@ public class ClarinLicenseImportRestController {
     @RequestMapping(method = RequestMethod.POST, value = "/extendedMapping")
     @PreAuthorize("hasAuthority('ADMIN')")
     public ResponseEntity importLicenseLabelExtendedMapping(@RequestBody(required = false) List<JsonNode>
-                                                                        licenseLabelExtendedMappings,
-                                          HttpServletRequest request, HttpServletResponse response) {
+                                                                    licenseLabelExtendedMappings,
+                                                            HttpServletRequest request, HttpServletResponse response) {
 
         if (Objects.isNull(licenseLabelExtendedMappings) || CollectionUtils.isEmpty(licenseLabelExtendedMappings)) {
             throw new BadRequestException("The new license label extended mappings should be included as " +
@@ -226,7 +226,7 @@ public class ClarinLicenseImportRestController {
     @RequestMapping(method = RequestMethod.POST, value = "/licenses")
     @PreAuthorize("hasAuthority('ADMIN')")
     public ResponseEntity importLicenses(@RequestBody(required = false) List<JsonNode> licenses,
-                                               HttpServletRequest request, HttpServletResponse response)
+                                         HttpServletRequest request, HttpServletResponse response)
             throws SQLException, AuthorizeException {
 
         if (Objects.isNull(licenses) || CollectionUtils.isEmpty(licenses)) {
