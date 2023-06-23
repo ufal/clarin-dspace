@@ -71,7 +71,7 @@ public class ClarinLicenseImportRestController {
      *
      * @param licenseLabels Array of json nodes
      * @param request The response object
-     * @param request The request object
+     * @param response The request object
      * @return Response entity with status
      * @throws SQLException
      * @throws AuthorizeException
@@ -142,7 +142,7 @@ public class ClarinLicenseImportRestController {
      *
      * @param licenseLabelExtendedMappings Array of json nodes
      * @param request The response object
-     * @param request The request object
+     * @param response The request object
      * @return Response entity with status
      */
     @RequestMapping(method = RequestMethod.POST, value = "/extendedMapping")
@@ -218,7 +218,7 @@ public class ClarinLicenseImportRestController {
      *
      * @param licenses Array of json nodes
      * @param request The response object
-     * @param request The request object
+     * @param response The request object
      * @return Response entity with status
      * @throws SQLException
      * @throws AuthorizeException

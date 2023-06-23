@@ -10,6 +10,7 @@ package org.dspace.handle;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
 import java.util.regex.Matcher;
@@ -215,17 +216,17 @@ public class HandleServiceImpl implements HandleService {
     @Override
     public void unbindHandle(Context context, DSpaceObject dso)
         throws SQLException {
-        List<Handle> handles = getInternalHandles(context, dso);
-        if (CollectionUtils.isNotEmpty(handles)) {
-            for (Handle handle : handles) {
+        Iterator<Handle> handles = dso.getHandles().iterator();
+        if (handles.hasNext()) {
+            while (handles.hasNext()) {
+                final Handle handle = handles.next();
+                handles.remove();
                 //Only set the "resouce_id" column to null when unbinding a handle.
                 // We want to keep around the "resource_type_id" value, so that we
                 // can verify during a restore whether the same *type* of resource
                 // is reusing this handle!
                 handle.setDSpaceObject(null);
 
-                //Also remove the handle from the DSO list to keep a consistent model
-                dso.getHandles().remove(handle);
 
                 handleDAO.save(context, handle);
 
@@ -260,7 +261,7 @@ public class HandleServiceImpl implements HandleService {
     @Override
     public String findHandle(Context context, DSpaceObject dso)
         throws SQLException {
-        List<Handle> handles = getInternalHandles(context, dso);
+        List<Handle> handles = dso.getHandles();
         if (CollectionUtils.isEmpty(handles)) {
             return null;
         } else {
@@ -332,20 +333,6 @@ public class HandleServiceImpl implements HandleService {
     ////////////////////////////////////////
     // Internal methods
     ////////////////////////////////////////
-
-    /**
-     * Return the handle for an Object, or null if the Object has no handle.
-     *
-     * @param context DSpace context
-     * @param dso     DSpaceObject for which we require our handles
-     * @return The handle for object, or null if the object has no handle.
-     * @throws SQLException If a database error occurs
-     */
-    protected List<Handle> getInternalHandles(Context context, DSpaceObject dso)
-        throws SQLException {
-        return handleDAO.getHandlesByDSpaceObject(context, dso);
-    }
-
     /**
      * Find the database row corresponding to handle.
      *
@@ -470,7 +457,7 @@ public class HandleServiceImpl implements HandleService {
         }
 
         // Check additional prefixes supported in the config file
-        String[] additionalPrefixes = configurationService.getArrayProperty("handle.additional.prefixes");
+        String[] additionalPrefixes = getAdditionalPrefixes();
         for (String additionalPrefix : additionalPrefixes) {
             if (identifier.startsWith(additionalPrefix + "/")) {
                 // prefix is the equivalent of 123456789 in 123456789/???; don't strip
@@ -479,5 +466,10 @@ public class HandleServiceImpl implements HandleService {
         }
 
         return null;
+    }
+
+    @Override
+    public String[] getAdditionalPrefixes() {
+        return configurationService.getArrayProperty("handle.additional.prefixes");
     }
 }

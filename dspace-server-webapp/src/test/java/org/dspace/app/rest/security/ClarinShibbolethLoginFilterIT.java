@@ -7,8 +7,8 @@
  */
 package org.dspace.app.rest.security;
 
-import static org.dspace.app.rest.security.clarin.ClarinShibbolethLoginFilter.MISSING_HEADERS_FROM_IDP;
-import static org.dspace.app.rest.security.clarin.ClarinShibbolethLoginFilter.USER_WITHOUT_EMAIL_EXCEPTION;
+import static org.dspace.app.rest.security.ShibbolethLoginFilterIT.PASS_ONLY;
+import static org.dspace.app.rest.security.clarin.ClarinShibbolethLoginFilter.VERIFICATION_TOKEN_HEADER;
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -114,8 +114,8 @@ public class ClarinShibbolethLoginFilterIT extends AbstractControllerIntegration
         // but the user will be redirected to the page where he will fill in the user email.
         getClient().perform(get("/api/authn/shibboleth")
                         .header("SHIB-NETID", netId))
-                .andExpect(status().isUnauthorized())
-                .andExpect(status().reason(MISSING_HEADERS_FROM_IDP));
+                .andExpect(status().isFound())
+                .andExpect(redirectedUrl("http://localhost:4000/login/missing-headers"));
     }
 
     /**
@@ -129,8 +129,8 @@ public class ClarinShibbolethLoginFilterIT extends AbstractControllerIntegration
         // but the user will be redirected to the page where he will fill in the user email.
         getClient().perform(get("/api/authn/shibboleth")
                         .header("Shib-Identity-Provider", idp))
-                .andExpect(status().isUnauthorized())
-                .andExpect(status().reason(MISSING_HEADERS_FROM_IDP));
+                .andExpect(status().isFound())
+                .andExpect(redirectedUrl("http://localhost:4000/login/missing-headers"));
     }
 
     /**
@@ -139,6 +139,7 @@ public class ClarinShibbolethLoginFilterIT extends AbstractControllerIntegration
      * The request headers passed by IdP are stored into the `verification_token` table the `shib_headers` column.
      * The user is redirected to the page when he must fill his email.
      */
+    // HERE
     @Test
     public void shouldReturnUserWithoutEmailException() throws Exception {
         String netId = "123456";
@@ -149,8 +150,8 @@ public class ClarinShibbolethLoginFilterIT extends AbstractControllerIntegration
         getClient().perform(get("/api/authn/shibboleth")
                         .header("SHIB-NETID", netId)
                         .header("Shib-Identity-Provider", idp))
-                .andExpect(status().isUnauthorized())
-                .andExpect(status().reason(USER_WITHOUT_EMAIL_EXCEPTION + "," + netId));
+                .andExpect(status().isFound())
+                .andExpect(redirectedUrl("http://localhost:4000/login/auth-failed?netid=" + netId));
     }
 
     /**
@@ -167,19 +168,15 @@ public class ClarinShibbolethLoginFilterIT extends AbstractControllerIntegration
     public void userFillInEmailAndShouldBeRegisteredByVerificationToken() throws Exception {
         String netId = "123456";
         String email = "test@mail.epic";
-        String firstname = "Test";
-        String lastname = "Buddy";
         String idp = "Test Idp";
 
         // Try to authenticate but the Shibboleth doesn't send the email in the header, so the user won't be registered
         // but the user will be redirected to the page where he will fill in the user email.
         getClient().perform(get("/api/authn/shibboleth")
                         .header("Shib-Identity-Provider", idp)
-                        .header("SHIB-NETID", netId)
-                        .header("SHIB-GIVENNAME", firstname)
-                        .header("SHIB-SURNAME", lastname))
-                .andExpect(status().isUnauthorized())
-                .andExpect(status().reason(USER_WITHOUT_EMAIL_EXCEPTION + "," + netId));
+                        .header("SHIB-NETID", netId))
+                .andExpect(status().isFound())
+                .andExpect(redirectedUrl("http://localhost:4000/login/auth-failed?netid=" + netId));
 
         // Send the email with the verification token.
         String tokenAdmin = getAuthToken(admin.getEmail(), password);
@@ -201,31 +198,23 @@ public class ClarinShibbolethLoginFilterIT extends AbstractControllerIntegration
         EPerson ePerson = ePersonService.findByNetid(context, netId);
         assertTrue(Objects.nonNull(ePerson));
         assertEquals(ePerson.getEmail(), email);
-        assertEquals(ePerson.getFirstName(), firstname);
-        assertEquals(ePerson.getLastName(), lastname);
 
         // The user is registered now log him
-        getClient().perform(get("/api/authn/shibboleth")
-                        .header("Shib-Identity-Provider", idp)
-                        .header("SHIB-NETID", netId)
-                        .header("verification-token", clarinVerificationToken.getToken()))
+        getClient().perform(post("/api/authn/shibboleth")
+                        .header(VERIFICATION_TOKEN_HEADER, clarinVerificationToken.getToken()))
                 .andExpect(status().isOk());
 
         // Try to sign in the user by the email if the eperson exist
         getClient().perform(get("/api/authn/shibboleth")
                         .header("Shib-Identity-Provider", idp)
                         .header("SHIB-NETID", netId)
-                        .header("SHIB-GIVENNAME", firstname)
-                        .header("SHIB-SURNAME", lastname)
                         .header("SHIB-MAIL", email))
                 .andExpect(status().isFound());
 
         // Try to sign in the user by the netid if the eperson exist
         getClient().perform(get("/api/authn/shibboleth")
                         .header("Shib-Identity-Provider", idp)
-                        .header("SHIB-NETID", netId)
-                        .header("SHIB-GIVENNAME", firstname)
-                        .header("SHIB-SURNAME", lastname))
+                        .header("SHIB-NETID", netId))
                 .andExpect(status().isFound());
 
         // Delete created eperson - clean after the test
@@ -323,6 +312,80 @@ public class ClarinShibbolethLoginFilterIT extends AbstractControllerIntegration
                 .andExpect(jsonPath("$.page.totalElements", is(0)))
                 .andExpect(jsonPath("$._embedded").doesNotExist());
 
+    }
+
+    // This test is copied from the `AuthenticationRestControllerIT` and modified following the Clarin updates.
+    @Test
+    public void testShibbolethEndpointCannotBeUsedWithShibDisabled() throws Exception {
+        // Enable only password login
+        configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod", PASS_ONLY);
+
+        String uiURL = configurationService.getProperty("dspace.ui.url");
+
+        // Verify /api/authn/shibboleth endpoint does not work
+        // NOTE: this is the same call as in testStatusShibAuthenticatedWithCookie())
+        String token = getClient().perform(get("/api/authn/shibboleth")
+                        .header("Referer", "https://myshib.example.com")
+                        .param("redirectUrl", uiURL)
+                        .requestAttr("SHIB-MAIL", eperson.getEmail())
+                        .requestAttr("SHIB-SCOPED-AFFILIATION", "faculty;staff"))
+                .andExpect(status().isFound())
+                .andReturn().getResponse().getHeader("Authorization");
+
+        getClient(token).perform(get("/api/authn/status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.authenticated", is(false)))
+                .andExpect(jsonPath("$.authenticationMethod").doesNotExist());
+
+        getClient(token).perform(
+                        get("/api/authz/authorizations/search/object")
+                                .param("embed", "feature")
+                                .param("feature", feature)
+                                .param("uri", utils.linkToSingleResource(ePersonRest, "self").getHref()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements", is(0)))
+                .andExpect(jsonPath("$._embedded").doesNotExist());
+    }
+
+    // This test is copied from the `ShibbolethLoginFilterIT` and modified following the Clarin updates.
+    @Test
+    public void testNoRedirectIfInvalidShibAttributes() throws Exception {
+        // In this request, we use a SHIB-MAIL attribute which does NOT match an EPerson.
+        getClient().perform(get("/api/authn/shibboleth")
+                        .requestAttr("SHIB-MAIL", "not-an-eperson@example.com"))
+                .andExpect(status().isFound());
+    }
+
+    // This test is copied from the `ShibbolethLoginFilterIT` and modified following the Clarin updates.
+    @Test
+    public void testNoRedirectIfShibbolethDisabled() throws Exception {
+        // Enable Password authentication ONLY
+        configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod", PASS_ONLY);
+
+        // Test redirecting to a trusted URL (same as previous test).
+        // This time we should be unauthorized as Shibboleth is disabled.
+        getClient().perform(get("/api/authn/shibboleth")
+                        .param("redirectUrl", "http://localhost:8080/server/api/authn/status")
+                        .requestAttr("SHIB-MAIL", eperson.getEmail()))
+                .andExpect(status().isFound());
+    }
+
+    // This test is copied from the `ShibbolethLoginFilterIT` and modified following the Clarin updates.
+    @Test
+    public void testRedirectRequiresShibAttributes2() throws Exception {
+        String token = getAuthToken(eperson.getEmail(), password);
+
+        // Verify this endpoint also doesn't work using a regular auth token (again if SHIB-* attributes missing)
+        getClient(token).perform(get("/api/authn/shibboleth"))
+                .andExpect(status().isFound());
+    }
+
+    // This test is copied from the `ShibbolethLoginFilterIT` and modified following the Clarin updates.
+    @Test
+    public void testRedirectRequiresShibAttributes() throws Exception {
+        // Verify this endpoint doesn't work if no SHIB-* attributes are set
+        getClient().perform(get("/api/authn/shibboleth"))
+                .andExpect(status().isFound());
     }
 
     // This test is copied from the `ShibbolethLoginFilterIT` and modified following the Clarin updates.

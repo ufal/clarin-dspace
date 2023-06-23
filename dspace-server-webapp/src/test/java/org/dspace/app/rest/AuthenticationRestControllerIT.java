@@ -46,11 +46,13 @@ import org.dspace.app.rest.converter.EPersonConverter;
 import org.dspace.app.rest.matcher.AuthenticationStatusMatcher;
 import org.dspace.app.rest.matcher.AuthorizationMatcher;
 import org.dspace.app.rest.matcher.EPersonMatcher;
+import org.dspace.app.rest.matcher.GroupMatcher;
 import org.dspace.app.rest.matcher.HalMatcher;
 import org.dspace.app.rest.model.EPersonRest;
 import org.dspace.app.rest.projection.DefaultProjection;
 import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
 import org.dspace.app.rest.utils.Utils;
+import org.dspace.authenticate.OrcidAuthenticationBean;
 import org.dspace.builder.BitstreamBuilder;
 import org.dspace.builder.BundleBuilder;
 import org.dspace.builder.CollectionBuilder;
@@ -64,6 +66,8 @@ import org.dspace.content.Collection;
 import org.dspace.content.Item;
 import org.dspace.eperson.EPerson;
 import org.dspace.eperson.Group;
+import org.dspace.orcid.client.OrcidConfiguration;
+import org.dspace.orcid.model.OrcidTokenResponseDTO;
 import org.dspace.services.ConfigurationService;
 import org.hamcrest.Matchers;
 import org.junit.Before;
@@ -92,10 +96,17 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
     private AuthorizationFeatureService authorizationFeatureService;
 
     @Autowired
+    private OrcidConfiguration orcidConfiguration;
+
+    @Autowired
+    private OrcidAuthenticationBean orcidAuthentication;
+
+    @Autowired
     private Utils utils;
 
     public static final String[] PASS_ONLY = {"org.dspace.authenticate.PasswordAuthentication"};
     public static final String[] SHIB_ONLY = {"org.dspace.authenticate.ShibAuthentication"};
+    public static final String[] ORCID_ONLY = { "org.dspace.authenticate.OrcidAuthentication" };
     public static final String[] SHIB_AND_PASS = {
         "org.dspace.authenticate.ShibAuthentication",
         "org.dspace.authenticate.PasswordAuthentication"
@@ -104,6 +115,10 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
         "org.dspace.authenticate.IPAuthentication",
         "org.dspace.authenticate.ShibAuthentication"
     };
+    public static final String[] PASS_AND_IP = {
+            "org.dspace.authenticate.PasswordAuthentication",
+            "org.dspace.authenticate.IPAuthentication"
+        };
 
     // see proxies.trusted.ipranges in local.cfg
     public static final String TRUSTED_IP = "7.7.7.7";
@@ -111,6 +126,7 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
 
     private Authorization authorization;
     private EPersonRest ePersonRest;
+    private EPersonRest adminRest;
     private final String feature = CanChangePasswordFeature.NAME;
 
 
@@ -129,6 +145,10 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
     @Test
     public void testStatusAuthenticatedAsAdmin() throws Exception {
         String token = getAuthToken(admin.getEmail(), password);
+
+        AuthorizationFeature canChangePasswordFeature = authorizationFeatureService.find(CanChangePasswordFeature.NAME);
+        adminRest = ePersonConverter.convert(context.reloadEntity(admin), DefaultProjection.DEFAULT);
+        authorization = new Authorization(admin, canChangePasswordFeature, adminRest);
 
         getClient(token).perform(get("/api/authn/status").param("projection", "full"))
                         .andExpect(status().isOk())
@@ -156,6 +176,101 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
         // Logout
         getClient(token).perform(post("/api/authn/logout"))
                         .andExpect(status().isNoContent());
+    }
+
+    /**
+     * This test verifies:
+     * - that a logged in via password user finds the expected specialGroupPwd in _embedded.specialGroups;
+     * - that a logged in via password and specific IP user finds the expected specialGroupPwd and specialGroupIP
+     *   in _embedded.specialGroups;
+     * - that a not logged in user with a specific IP finds the expected specialGroupIP in _embedded.specialGroups;
+     * @throws Exception
+     */
+    @Test
+    public void testStatusGetSpecialGroups() throws Exception {
+        context.turnOffAuthorisationSystem();
+
+        Group specialGroupPwd = GroupBuilder.createGroup(context)
+                .withName("specialGroupPwd")
+                .build();
+        Group specialGroupIP = GroupBuilder.createGroup(context)
+               .withName("specialGroupIP")
+               .build();
+
+        configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod", PASS_AND_IP);
+        configurationService.setProperty("authentication-password.login.specialgroup","specialGroupPwd");
+        configurationService.setProperty("authentication-ip.specialGroupIP", "123.123.123.123");
+        context.restoreAuthSystemState();
+
+        String token = getAuthToken(eperson.getEmail(), password);
+
+        getClient(token).perform(get("/api/authn/status").param("projection", "full"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$", AuthenticationStatusMatcher.matchFullEmbeds()))
+            .andExpect(jsonPath("$", AuthenticationStatusMatcher.matchLinks()))
+            .andExpect(content().contentType(contentType))
+            .andExpect(jsonPath("$.okay", is(true)))
+            .andExpect(jsonPath("$.authenticated", is(true)))
+            .andExpect(jsonPath("$.authenticationMethod", is("password")))
+            .andExpect(jsonPath("$.type", is("status")))
+            .andExpect(jsonPath("$._links.specialGroups.href", startsWith(REST_SERVER_URL)))
+            .andExpect(jsonPath("$._embedded.specialGroups._embedded.specialGroups",
+                Matchers.containsInAnyOrder(
+                        GroupMatcher.matchGroupWithName("specialGroupPwd"))));
+
+        // try the special groups link endpoint in the same scenario than above
+        getClient(token).perform(get("/api/authn/status/specialGroups").param("projection", "full"))
+            .andExpect(status().isOk())
+            .andExpect(content().contentType(contentType))
+            .andExpect(jsonPath("$._embedded.specialGroups",
+                Matchers.containsInAnyOrder(
+                        GroupMatcher.matchGroupWithName("specialGroupPwd"))));
+
+        getClient(token).perform(get("/api/authn/status").param("projection", "full")
+                .with(ip("123.123.123.123")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$", AuthenticationStatusMatcher.matchFullEmbeds()))
+            .andExpect(jsonPath("$", AuthenticationStatusMatcher.matchLinks()))
+            .andExpect(content().contentType(contentType))
+            .andExpect(jsonPath("$.okay", is(true)))
+            .andExpect(jsonPath("$.authenticated", is(true)))
+            .andExpect(jsonPath("$.authenticationMethod", is("password")))
+            .andExpect(jsonPath("$.type", is("status")))
+            .andExpect(jsonPath("$._links.specialGroups.href", startsWith(REST_SERVER_URL)))
+            .andExpect(jsonPath("$._embedded.specialGroups._embedded.specialGroups",
+                    Matchers.containsInAnyOrder(
+                            GroupMatcher.matchGroupWithName("specialGroupPwd"),
+                            GroupMatcher.matchGroupWithName("specialGroupIP"))));
+
+        // try the special groups link endpoint in the same scenario than above
+        getClient(token).perform(get("/api/authn/status/specialGroups").param("projection", "full")
+                .with(ip("123.123.123.123")))
+            .andExpect(status().isOk())
+            .andExpect(content().contentType(contentType))
+            .andExpect(jsonPath("$._embedded.specialGroups",
+                Matchers.containsInAnyOrder(
+                        GroupMatcher.matchGroupWithName("specialGroupPwd"),
+                        GroupMatcher.matchGroupWithName("specialGroupIP"))));
+
+        getClient().perform(get("/api/authn/status").param("projection", "full").with(ip("123.123.123.123")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$", AuthenticationStatusMatcher.matchFullEmbeds()))
+            // fails due to bug https://github.com/DSpace/DSpace/issues/8274
+            //.andExpect(jsonPath("$", AuthenticationStatusMatcher.matchLinks()))
+            .andExpect(content().contentType(contentType))
+            .andExpect(jsonPath("$.okay", is(true)))
+            .andExpect(jsonPath("$.authenticated", is(false)))
+            .andExpect(jsonPath("$._embedded.specialGroups._embedded.specialGroups",
+                    Matchers.containsInAnyOrder(GroupMatcher.matchGroupWithName("specialGroupIP"))));
+
+        // try the special groups link endpoint in the same scenario than above
+        getClient().perform(get("/api/authn/status/specialGroups").param("projection", "full")
+                .with(ip("123.123.123.123")))
+            .andExpect(status().isOk())
+            .andExpect(content().contentType(contentType))
+            .andExpect(jsonPath("$._embedded.specialGroups",
+                Matchers.containsInAnyOrder(
+                        GroupMatcher.matchGroupWithName("specialGroupIP"))));
     }
 
     @Test
@@ -336,37 +451,40 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
 //                        .andExpect(status().isNoContent());
 //    }
 
-    @Test
-    public void testShibbolethEndpointCannotBeUsedWithShibDisabled() throws Exception {
-        // Enable only password login
-        configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod", PASS_ONLY);
-
-        String uiURL = configurationService.getProperty("dspace.ui.url");
-
-        // Verify /api/authn/shibboleth endpoint does not work
-        // NOTE: this is the same call as in testStatusShibAuthenticatedWithCookie())
-        String token = getClient().perform(get("/api/authn/shibboleth")
-                .header("Referer", "https://myshib.example.com")
-                .param("redirectUrl", uiURL)
-                .requestAttr("SHIB-MAIL", eperson.getEmail())
-                .requestAttr("SHIB-SCOPED-AFFILIATION", "faculty;staff"))
-                .andExpect(status().isUnauthorized())
-                .andReturn().getResponse().getHeader("Authorization");
-
-        getClient(token).perform(get("/api/authn/status"))
-                        .andExpect(status().isOk())
-                        .andExpect(jsonPath("$.authenticated", is(false)))
-                        .andExpect(jsonPath("$.authenticationMethod").doesNotExist());
-
-        getClient(token).perform(
-                get("/api/authz/authorizations/search/object")
-                        .param("embed", "feature")
-                        .param("feature", feature)
-                        .param("uri", utils.linkToSingleResource(ePersonRest, "self").getHref()))
-                   .andExpect(status().isOk())
-                   .andExpect(jsonPath("$.page.totalElements", is(0)))
-                   .andExpect(jsonPath("$._embedded").doesNotExist());
-    }
+    // Note: This test was commented because the Shibboleth Authentication was customized following the Clarin
+    // requirements. This test was copied and updated following the Clarin updates to the
+    // `ClarinAuthenticationRestControllerIT#testShibbolethEndpointCannotBeUsedWithShibDisabled` method.
+//    @Test
+//    public void testShibbolethEndpointCannotBeUsedWithShibDisabled() throws Exception {
+//        // Enable only password login
+//        configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod", PASS_ONLY);
+//
+//        String uiURL = configurationService.getProperty("dspace.ui.url");
+//
+//        // Verify /api/authn/shibboleth endpoint does not work
+//        // NOTE: this is the same call as in testStatusShibAuthenticatedWithCookie())
+//        String token = getClient().perform(get("/api/authn/shibboleth")
+//                .header("Referer", "https://myshib.example.com")
+//                .param("redirectUrl", uiURL)
+//                .requestAttr("SHIB-MAIL", eperson.getEmail())
+//                .requestAttr("SHIB-SCOPED-AFFILIATION", "faculty;staff"))
+//                .andExpect(status().isUnauthorized())
+//                .andReturn().getResponse().getHeader("Authorization");
+//
+//        getClient(token).perform(get("/api/authn/status"))
+//                        .andExpect(status().isOk())
+//                        .andExpect(jsonPath("$.authenticated", is(false)))
+//                        .andExpect(jsonPath("$.authenticationMethod").doesNotExist());
+//
+//        getClient(token).perform(
+//                get("/api/authz/authorizations/search/object")
+//                        .param("embed", "feature")
+//                        .param("feature", feature)
+//                        .param("uri", utils.linkToSingleResource(ePersonRest, "self").getHref()))
+//                   .andExpect(status().isOk())
+//                   .andExpect(jsonPath("$.page.totalElements", is(0)))
+//                   .andExpect(jsonPath("$._embedded").doesNotExist());
+//    }
 
     // NOTE: This test is similar to testStatusShibAuthenticatedWithCookie(), but proves the same process works
     // for Password Authentication in theory (NOTE: at this time, there's no way to create an auth cookie via the
@@ -1279,64 +1397,6 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
     }
 
     @Test
-    public void testShortLivedTokenUsingGet() throws Exception {
-        String token = getAuthToken(eperson.getEmail(), password);
-
-        // Verify the main session salt doesn't change
-        String salt = eperson.getSessionSalt();
-
-        getClient(token).perform(
-            get("/api/authn/shortlivedtokens")
-                .with(ip(TRUSTED_IP))
-        )
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.token", notNullValue()))
-            .andExpect(jsonPath("$.type", is("shortlivedtoken")))
-            .andExpect(jsonPath("$._links.self.href", Matchers.containsString("/api/authn/shortlivedtokens")))
-            // Verify generating short-lived token doesn't change our CSRF token
-            // (so, neither the CSRF cookie nor header are sent back)
-            .andExpect(cookie().doesNotExist("DSPACE-XSRF-COOKIE"))
-            .andExpect(header().doesNotExist("DSPACE-XSRF-TOKEN"));
-
-        assertEquals(salt, eperson.getSessionSalt());
-
-        // Logout, invalidating token
-        getClient(token).perform(post("/api/authn/logout"))
-                .andExpect(status().isNoContent());
-    }
-
-    @Test
-    public void testShortLivedTokenUsingGetFromUntrustedIpShould403() throws Exception {
-        String token = getAuthToken(eperson.getEmail(), password);
-
-        getClient(token).perform(
-            get("/api/authn/shortlivedtokens")
-                .with(ip(UNTRUSTED_IP))
-        )
-            .andExpect(status().isForbidden());
-
-        // Logout, invalidating token
-        getClient(token).perform(post("/api/authn/logout"))
-                .andExpect(status().isNoContent());
-    }
-
-    @Test
-    public void testShortLivedTokenUsingGetFromUntrustedIpWithForwardHeaderShould403() throws Exception {
-        String token = getAuthToken(eperson.getEmail(), password);
-
-        getClient(token).perform(
-            get("/api/authn/shortlivedtokens")
-                .with(ip(UNTRUSTED_IP))
-                .header("X-Forwarded-For", TRUSTED_IP) // this should not affect the test result
-        )
-            .andExpect(status().isForbidden());
-
-        // Logout, invalidating token
-        getClient(token).perform(post("/api/authn/logout"))
-                .andExpect(status().isNoContent());
-    }
-
-    @Test
     public void testShortLivedTokenWithCSRFSentViaParam() throws Exception {
         String token = getAuthToken(eperson.getEmail(), password);
 
@@ -1357,15 +1417,6 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
     @Test
     public void testShortLivedTokenNotAuthenticated() throws Exception {
         getClient().perform(post("/api/authn/shortlivedtokens"))
-            .andExpect(status().isUnauthorized());
-    }
-
-    @Test
-    public void testShortLivedTokenNotAuthenticatedUsingGet() throws Exception {
-        getClient().perform(
-            get("/api/authn/shortlivedtokens")
-                .with(ip(TRUSTED_IP))
-        )
             .andExpect(status().isUnauthorized());
     }
 
@@ -1482,20 +1533,117 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
                 .andExpect(status().isNoContent());
     }
 
+    // Note: This test was commented because the Shibboleth Authentication was customized following the Clarin
+    // requirements. This test was copied and updated following the Clarin updates to the
+    // `ClarinAuthenticationRestControllerIT#testStatusShibAuthenticatedWithCookie` method.
+//    @Test
+//    public void testStatusOrcidAuthenticatedWithCookie() throws Exception {
+//
+//        configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod", ORCID_ONLY);
+//
+//        String uiURL = configurationService.getProperty("dspace.ui.url");
+//
+//        context.turnOffAuthorisationSystem();
+//
+//        String orcid = "0000-1111-2222-3333";
+//        String code = "123456";
+//        String orcidAccessToken = "c41e37e5-c2de-4177-91d6-ed9e9d1f31bf";
+//
+//        EPersonBuilder.createEPerson(context)
+//            .withEmail("test@email.it")
+//            .withNetId(orcid)
+//            .withNameInMetadata("Test", "User")
+//            .withCanLogin(true)
+//            .build();
+//
+//        context.restoreAuthSystemState();
+//
+//        OrcidClient orcidClientMock = mock(OrcidClient.class);
+//        when(orcidClientMock.getAccessToken(code)).thenReturn(buildOrcidTokenResponse(orcid, orcidAccessToken));
+//
+//        OrcidClient originalOrcidClient = orcidAuthentication.getOrcidClient();
+//        orcidAuthentication.setOrcidClient(orcidClientMock);
+//
+//        Cookie authCookie = null;
+//
+//        try {
+//
+//            authCookie = getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/orcid")
+//                .param("redirectUrl", uiURL)
+//                .param("code", code))
+//                .andExpect(status().is3xxRedirection())
+//                .andExpect(redirectedUrl(uiURL))
+//                .andExpect(cookie().doesNotExist("DSPACE-XSRF-COOKIE"))
+//                .andExpect(header().doesNotExist("DSPACE-XSRF-TOKEN"))
+//                .andExpect(cookie().exists(AUTHORIZATION_COOKIE))
+//                .andReturn().getResponse().getCookie(AUTHORIZATION_COOKIE);
+//
+//        } finally {
+//            orcidAuthentication.setOrcidClient(originalOrcidClient);
+//        }
+//
+//        assertNotNull(authCookie);
+//        String token = authCookie.getValue();
+//
+//        getClient().perform(get("/api/authn/status").header("Origin", uiURL)
+//            .secure(true)
+//            .cookie(authCookie))
+//            .andExpect(status().isOk())
+//            .andExpect(content().contentType(contentType))
+//            .andExpect(jsonPath("$.okay", is(true)))
+//            .andExpect(jsonPath("$.authenticated", is(true)))
+//            .andExpect(jsonPath("$.authenticationMethod", is("orcid")))
+//            .andExpect(jsonPath("$.type", is("status")))
+//            .andExpect(cookie().doesNotExist("DSPACE-XSRF-COOKIE"))
+//            .andExpect(header().doesNotExist("DSPACE-XSRF-TOKEN"));
+//
+//        String headerToken = getClient().perform(post("/api/authn/login").header("Origin", uiURL)
+//            .secure(true)
+//            .cookie(authCookie))
+//            .andExpect(status().isOk())
+//            .andExpect(cookie().value(AUTHORIZATION_COOKIE, ""))
+//            .andExpect(header().exists(AUTHORIZATION_HEADER))
+//            .andExpect(cookie().exists("DSPACE-XSRF-COOKIE"))
+//            .andExpect(header().exists("DSPACE-XSRF-TOKEN"))
+//            .andReturn().getResponse()
+//            .getHeader(AUTHORIZATION_HEADER).replace(AUTHORIZATION_TYPE, "");
+//
+//        assertTrue("Check tokens " + token + " and " + headerToken + " have same claims",
+//            tokenClaimsEqual(token, headerToken));
+//
+//        getClient(headerToken).perform(get("/api/authn/status").header("Origin", uiURL))
+//            .andExpect(status().isOk())
+//            .andExpect(content().contentType(contentType))
+//            .andExpect(jsonPath("$.okay", is(true)))
+//            .andExpect(jsonPath("$.authenticated", is(true)))
+//            .andExpect(jsonPath("$.authenticationMethod", is("orcid")))
+//            .andExpect(jsonPath("$.type", is("status")));
+//
+//        getClient(headerToken).perform(post("/api/authn/logout").header("Origin", uiURL))
+//            .andExpect(status().isNoContent());
+//    }
+
     @Test
-    public void testGenerateShortLivedTokenWithShortLivedTokenUsingGet() throws Exception {
-        String token = getAuthToken(eperson.getEmail(), password);
-        String shortLivedToken = getShortLivedToken(token);
+    public void testOrcidLoginURL() throws Exception {
 
-        getClient().perform(
-            get("/api/authn/shortlivedtokens?authentication-token=" + shortLivedToken)
-                .with(ip(TRUSTED_IP))
-        )
-            .andExpect(status().isForbidden());
+        configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod", ORCID_ONLY);
 
-        // Logout, invalidating token
-        getClient(token).perform(post("/api/authn/logout"))
-                .andExpect(status().isNoContent());
+        String originalClientId = orcidConfiguration.getClientId();
+        orcidConfiguration.setClientId("CLIENT-ID");
+
+        try {
+
+            getClient().perform(post("/api/authn/login"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(header().string("WWW-Authenticate",
+                    "orcid realm=\"DSpace REST API\", " +
+                        "location=\"https://sandbox.orcid.org/oauth/authorize?client_id=CLIENT-ID&response_type=code"
+                        + "&scope=/authenticate+/read-limited+/activities/update+/person/update&redirect_uri"
+                        + "=http%3A%2F%2Flocalhost%2Fapi%2Fauthn%2Forcid\""));
+
+        } finally {
+            orcidConfiguration.setClientId(originalClientId);
+        }
     }
 
     // Get a short-lived token based on an active login token
@@ -1593,6 +1741,16 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
         } catch (ParseException e) {
             return false;
         }
+    }
+
+    private OrcidTokenResponseDTO buildOrcidTokenResponse(String orcid, String accessToken) {
+        OrcidTokenResponseDTO token = new OrcidTokenResponseDTO();
+        token.setAccessToken(accessToken);
+        token.setOrcid(orcid);
+        token.setTokenType("Bearer");
+        token.setName("Test User");
+        token.setScope(String.join(" ", new String[] { "FirstScope", "SecondScope" }));
+        return token;
     }
 }
 
