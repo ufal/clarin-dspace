@@ -17,6 +17,7 @@ import javax.servlet.http.HttpServletResponse;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
 import org.dspace.authenticate.clarin.ClarinShibAuthentication;
+import org.dspace.authenticate.clarin.ShibHeaders;
 import org.dspace.content.clarin.ClarinVerificationToken;
 import org.dspace.content.service.clarin.ClarinVerificationTokenService;
 import org.dspace.core.Context;
@@ -91,7 +92,6 @@ public class ClarinAutoRegistrationController {
 
         // Generate token and create ClarinVerificationToken record with the token and user email.
         String verificationToken = Utils.generateHexKey();
-        clarinVerificationToken.setePersonNetID(netid);
         clarinVerificationToken.setEmail(email);
         clarinVerificationToken.setToken(verificationToken);
         clarinVerificationTokenService.update(context, clarinVerificationToken);
@@ -150,6 +150,13 @@ public class ClarinAutoRegistrationController {
             return null;
         }
         context.commit();
+
+        // Get organization string because of formatting netid.
+        ShibHeaders shibHeaders = new ShibHeaders(clarinVerificationToken.getShibHeaders());
+        String org = shibHeaders.get_idp();
+        if (StringUtils.isBlank(org)) {
+            log.error("Organization string is null, probably the eperson object won't be found by the netId.");
+        }
 
         // If the Authentication was successful the Eperson should be found.
         EPerson ePerson = ePersonService.findByNetid(context, clarinVerificationToken.getePersonNetID());
