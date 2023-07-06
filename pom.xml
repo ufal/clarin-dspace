@@ -524,7 +524,7 @@
                 </property>
             </activation>
             <properties>
-                <test.argLine>-Xmx1024m</test.argLine>
+                <test.argLine>-Xmx1024m -Dfile.encoding=UTF-8</test.argLine>
             </properties>
         </profile>
 

@@ -28,7 +28,6 @@ import javax.ws.rs.NotFoundException;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.dspace.app.rest.model.BitstreamRest;
 import org.dspace.app.rest.model.ClarinUserMetadataRest;
@@ -95,19 +94,6 @@ public class ClarinUserMetadataRestController {
             return null;
         }
 
-        // Get ClarinUserMetadataRest Array from the request body
-        ClarinUserMetadataRest[] clarinUserMetadataRestArray =
-                new ObjectMapper().readValue(request.getInputStream(), ClarinUserMetadataRest[].class);
-        if (ArrayUtils.isEmpty(clarinUserMetadataRestArray)) {
-            return null;
-        }
-
-        // Convert Array to the List
-        List<ClarinUserMetadataRest> clarinUserMetadataRestList = Arrays.asList(clarinUserMetadataRestArray);
-        if (CollectionUtils.isEmpty(clarinUserMetadataRestList)) {
-            return null;
-        }
-
         // Get mapping between clarin license and the bitstream
         ClarinLicenseResourceMapping clarinLicenseResourceMapping =
                 this.getLicenseResourceMapping(context, bitstreamUUID);
@@ -115,6 +101,17 @@ public class ClarinUserMetadataRestController {
             throw new NotFoundException("Cannot find the license resource mapping between clarin license" +
                     " and the bitstream");
         }
+
+        // Get ClarinUserMetadataRest Array from the request body
+        ClarinUserMetadataRest[] clarinUserMetadataRestArray =
+                new ObjectMapper().readValue(request.getInputStream(), ClarinUserMetadataRest[].class);
+        if (Objects.isNull(clarinUserMetadataRestArray)) {
+            throw new RuntimeException("The clarinUserMetadataRestArray cannot be null. It could be empty, but" +
+                    " not null");
+        }
+
+        // Convert Array to the List
+        List<ClarinUserMetadataRest> clarinUserMetadataRestList = Arrays.asList(clarinUserMetadataRestArray);
 
         // Get current user from the context to find out if the user is signed in
         EPerson currentUser = context.getCurrentUser();
@@ -204,7 +201,7 @@ public class ClarinUserMetadataRestController {
         return email;
     }
 
-    public void processSignedInUser(Context context, EPerson currentUser,
+    public List<ClarinUserMetadata> processSignedInUser(Context context, EPerson currentUser,
                                               List<ClarinUserMetadataRest> clarinUserMetadataRestList,
                                               ClarinLicenseResourceMapping clarinLicenseResourceMapping,
                                               UUID bitstreamUUID, String downloadToken)
@@ -275,6 +272,7 @@ public class ClarinUserMetadataRestController {
             clarinUserMetadata.setTransaction(clrua);
             clarinUserMetadataService.update(context, clarinUserMetadata);
         }
+        return newClarinUserMetadataList;
     }
 
     private ClarinLicenseResourceUserAllowance createClrua(Context context,
@@ -298,7 +296,7 @@ public class ClarinUserMetadataRestController {
         return clrua;
     }
 
-    private void processNonSignedInUser(Context context,
+    public List<ClarinUserMetadata> processNonSignedInUser(Context context,
                                                   List<ClarinUserMetadataRest> clarinUserMetadataRestList,
                                                   ClarinLicenseResourceMapping clarinLicenseResourceMapping,
                                                   UUID bitstreamUUID,
@@ -309,14 +307,21 @@ public class ClarinUserMetadataRestController {
                 clarinUserMetadataRestList);
 
         // Create ClarinResourceUserAllowance record to generate token.
-        this.createClrua(context, clarinLicenseResourceMapping, clarinUserMetadataList, downloadToken, null);
+        ClarinLicenseResourceUserAllowance clrua = this.createClrua(context, clarinLicenseResourceMapping,
+                clarinUserMetadataList, downloadToken, null);
+        // Add Clarin License Resource Allowance to the user metadata records
+        for (ClarinUserMetadata clarinUserMetadata : clarinUserMetadataList) {
+            clarinUserMetadata.setTransaction(clrua);
+            clarinUserMetadataService.update(context, clarinUserMetadata);
+        }
+        return clarinUserMetadataList;
     }
 
     private String generateToken() {
         return UUID.randomUUID().toString();
     }
 
-    private ClarinLicenseResourceMapping getLicenseResourceMapping(Context context, UUID bitstreamUUID)
+    public ClarinLicenseResourceMapping getLicenseResourceMapping(Context context, UUID bitstreamUUID)
             throws SQLException {
         // Get ClarinLicense to check if it needs to generate the token
         List<ClarinLicenseResourceMapping> clarinLicenseResourceMappingList =
@@ -359,6 +364,9 @@ public class ClarinUserMetadataRestController {
         }
 
         // If the required info contains the key work `SEND_TOKEN` it should generate the token.
+        if (StringUtils.isBlank(clarinLicense.getRequiredInfo())) {
+            return false;
+        }
         return clarinLicense.getRequiredInfo().contains(SEND_TOKEN);
     }
 

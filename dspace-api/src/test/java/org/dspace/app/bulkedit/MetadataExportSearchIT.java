@@ -169,15 +169,17 @@ public class MetadataExportSearchIT extends AbstractIntegrationTestWithDatabase 
         checkItemsPresentInFile(filename, itemsSubject1);
     }
 
-    @Test
-    public void exportMetadataSearchFilterDate() throws Exception {
-        int result = runDSpaceScript(
-            "metadata-export-search", "-f", "dateIssued,equals=[2000 TO 2020]", "-n", filename
-        );
-
-        assertEquals(0, result);
-        checkItemsPresentInFile(filename, itemsSubject1);
-    }
+    // CLARIN - CLARIN-DSpace doesn't use DateIssues search filter (commented in the discovery.xml), so this test
+    // is failing
+//    @Test
+//    public void exportMetadataSearchFilterDate() throws Exception {
+//        int result = runDSpaceScript(
+//            "metadata-export-search", "-f", "dateIssued,equals=[2000 TO 2020]", "-n", filename
+//        );
+//
+//        assertEquals(0, result);
+//        checkItemsPresentInFile(filename, itemsSubject1);
+//    }
 
     @Test
     public void exportMetadataSearchMultipleFilters() throws Exception {

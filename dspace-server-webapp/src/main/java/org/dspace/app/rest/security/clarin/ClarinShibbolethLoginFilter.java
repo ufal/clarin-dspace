@@ -85,10 +85,18 @@ public class ClarinShibbolethLoginFilter extends StatelessLoginFilter {
      */
     private boolean isMissingHeadersFromIdp = false;
 
+    // If the user is already associated with a different user and the IdP doesn't send netId shibboleth header.
+    private boolean isEmailIsAssociated = false;
+
     /**
      * The netId of the user for which IdP send required information, but without Email.
      */
     private String netId = "";
+
+    /**
+     * If is duplicate user error send the redirect request with email param. Store that email into this variable.
+     */
+    private String email = "";
 
     private ConfigurationService configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
     private ClarinVerificationTokenService clarinVerificationTokenService = ClarinServiceFactory.getInstance()
@@ -105,7 +113,9 @@ public class ClarinShibbolethLoginFilter extends StatelessLoginFilter {
                                                 HttpServletResponse res) throws AuthenticationException {
         // Reset properties in every login request
         this.setMissingHeadersFromIdp(false);
+        this.setEmailIsAssociated(false);
         this.netId = "";
+        this.email = "";
 
         // First, if Shibboleth is not enabled, throw an immediate ProviderNotFoundException
         // This tells Spring Security that authentication failed
@@ -150,11 +160,17 @@ public class ClarinShibbolethLoginFilter extends StatelessLoginFilter {
         String email = Objects.isNull(clarinVerificationToken) ?
                 shib_headers.get_single(emailHeader) : clarinVerificationToken.getEmail();
 
-        // If email is null and netid exist try to find the eperson by netid and load its email
-        if (StringUtils.isEmpty(email) && StringUtils.isNotEmpty(netid)) {
+        EPerson ePerson = null;
+        if (StringUtils.isNotEmpty(netid)) {
             try {
-                EPerson ePerson = ePersonService.findByNetid(context, netid);
-                email = Objects.isNull(email) ? this.getEpersonEmail(ePerson) : null;
+                // If email is null and netid exist try to find the eperson by netid and load its email
+                if (StringUtils.isEmpty(email)) {
+                    ePerson = ePersonService.findByNetid(context, netid);
+                    email = Objects.isNull(email) ? this.getEpersonEmail(ePerson) : null;
+                } else {
+                    // Try to get user by the email because of possible duplicate of the user email
+                    ePerson = ePersonService.findByEmail(context, email);
+                }
             } catch (SQLException ignored) {
                 //
             }
@@ -164,6 +180,12 @@ public class ClarinShibbolethLoginFilter extends StatelessLoginFilter {
             if (StringUtils.isEmpty(netid) || StringUtils.isEmpty(idp)) {
                 log.error("Cannot load the netid or idp from the request headers.");
                 this.setMissingHeadersFromIdp(true);
+            }
+
+            if (ePerson != null && ePerson.getNetid() != null && Objects.isNull(clarinVerificationToken)) {
+                log.error("The users email is already associated with a different user");
+                this.setEmailIsAssociated(true);
+                this.email = email;
             }
 
             // The Idp hasn't sent the email - the user will be redirected to the page where he must fill in that
@@ -244,10 +266,13 @@ public class ClarinShibbolethLoginFilter extends StatelessLoginFilter {
 
         String missingHeadersUrl = "missing-headers";
         String userWithoutEmailUrl = "auth-failed";
+        String duplicateUser = "duplicate-user";
 
         // Compose the redirect URL
         if (this.isMissingHeadersFromIdp) {
             redirectUrl += missingHeadersUrl;
+        } else if (this.isEmailIsAssociated) {
+            redirectUrl += duplicateUser + "?email=" + this.email;
         } else if (StringUtils.isNotEmpty(this.netId)) {
             // netId is set if the user doesn't have the email
             redirectUrl += userWithoutEmailUrl + "?netid=" + this.netId;
@@ -303,6 +328,10 @@ public class ClarinShibbolethLoginFilter extends StatelessLoginFilter {
      */
     protected void setMissingHeadersFromIdp(boolean value) {
         this.isMissingHeadersFromIdp = value;
+    }
+
+    protected void setEmailIsAssociated(boolean isEmailIsAssociated) {
+        this.isEmailIsAssociated = isEmailIsAssociated;
     }
 
     /**
