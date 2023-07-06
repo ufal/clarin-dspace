@@ -168,7 +168,7 @@ jobs:
           # Use tags / labels provided by 'docker/metadata-action' above
           tags: ${{ steps.meta_build_cli.outputs.tags }}
           labels: ${{ steps.meta_build_cli.outputs.labels }}
-          
+
       - name: redeploy
         if: '!cancelled()'
         run: |
