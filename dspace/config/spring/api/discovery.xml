@@ -20,7 +20,7 @@
            http://www.springframework.org/schema/context/spring-context-3.0.xsd
            http://www.springframework.org/schema/util
            http://www.springframework.org/schema/util/spring-util-3.0.xsd"
-    default-autowire-candidates="*Service,*DAO,javax.sql.DataSource,*Plugin" default-lazy-init="true">
+       default-autowire-candidates="*Service,*DAO,javax.sql.DataSource,*Plugin" default-lazy-init="true">
 
     <context:annotation-config /> <!-- allows us to use spring annotations in beans -->
 
@@ -40,9 +40,6 @@
 
     <!-- Additional indexing plugin enables searching by filenames and by file descriptions for files in ORIGINAL bundle -->
     <bean id="solrServiceFileInfoPlugin" class="org.dspace.discovery.SolrServiceFileInfoPlugin"/>
-
-    <!-- Additional indexing plugin enables searching by Items communities. -->
-    <bean id="itemsOwningCommunityPlugin" class="org.dspace.discovery.ClarinSolrItemsCommunityIndexPlugin"/>
 
     <!-- Additional indexing plugin enables searching by supervised (true,false) -->
     <bean id="solrServiceSupervisionOrderIndexingPlugin" class="org.dspace.discovery.SolrServiceSupervisionOrderIndexingPlugin"/>
@@ -170,12 +167,9 @@
             <list>
                 <ref bean="searchFilterAuthor" />
                 <ref bean="searchFilterSubject" />
-<!--                <ref bean="searchFilterIssued" />-->
-                <ref bean="searchFilterRights" />
-                <ref bean="searchFilterLanguage" />
+                <ref bean="searchFilterIssued" />
                 <ref bean="searchFilterContentInOriginalBundle"/>
                 <ref bean="searchFilterEntityType"/>
-                <ref bean="searchFilterItemsCommunity"/>
             </list>
         </property>
         <!-- Set TagCloud configuration per discovery configuration -->
@@ -196,10 +190,6 @@
                 <ref bean="searchFilterIsOrgUnitOfPublicationRelation"/>
                 <ref bean="searchFilterIsPublicationOfJournalIssueRelation"/>
                 <ref bean="searchFilterIsJournalOfPublicationRelation"/>
-                <ref bean="searchFilterRights" />
-                <ref bean="searchFilterLanguage" />
-                <ref bean="searchFilterItemsCommunity"/>
-                <ref bean="searchFilterType"/>
             </list>
         </property>
         <!--The sort filters for the discovery search-->
@@ -827,22 +817,22 @@
                             <property name="field" value="dc.title"/>
                             <property name="snippets" value="5"/>
                         </bean>
-                         <!-- By default, full text snippets are disabled, as snippets of embargoed/restricted bitstreams
-                             may appear in search results when the Item is public. See DS-3498
-                        <bean class="org.dspace.discovery.configuration.DiscoveryHitHighlightFieldConfiguration">
-                            <property name="field" value="project.identifier.status"/>
-                            <property name="snippets" value="5"/>
-                        </bean>
-                        <bean class="org.dspace.discovery.configuration.DiscoveryHitHighlightFieldConfiguration">
-                            <property name="field" value="orgunit.identifier.name"/>
-                            <property name="snippets" value="5"/>
-                        </bean>
-                        <bean class="org.dspace.discovery.configuration.DiscoveryHitHighlightFieldConfiguration">
-                            <property name="field" value="orgunit.identifier.description"/>
-                            <property name="maxSize" value="250"/>
-                            <property name="snippets" value="5"/>
-                        </bean>
-                        -->
+                        <!-- By default, full text snippets are disabled, as snippets of embargoed/restricted bitstreams
+                            may appear in search results when the Item is public. See DS-3498
+                       <bean class="org.dspace.discovery.configuration.DiscoveryHitHighlightFieldConfiguration">
+                           <property name="field" value="project.identifier.status"/>
+                           <property name="snippets" value="5"/>
+                       </bean>
+                       <bean class="org.dspace.discovery.configuration.DiscoveryHitHighlightFieldConfiguration">
+                           <property name="field" value="orgunit.identifier.name"/>
+                           <property name="snippets" value="5"/>
+                       </bean>
+                       <bean class="org.dspace.discovery.configuration.DiscoveryHitHighlightFieldConfiguration">
+                           <property name="field" value="orgunit.identifier.description"/>
+                           <property name="maxSize" value="250"/>
+                           <property name="snippets" value="5"/>
+                       </bean>
+                       -->
                     </list>
                 </property>
             </bean>
@@ -853,8 +843,8 @@
 
     <!--The workspace configuration settings for discovery -->
     <bean id="workspaceConfiguration"
-        class="org.dspace.discovery.configuration.DiscoveryConfiguration"
-        scope="prototype">
+          class="org.dspace.discovery.configuration.DiscoveryConfiguration"
+          scope="prototype">
         <property name="id" value="workspace" />
         <!--Which sidebar facets are to be displayed -->
         <property name="sidebarFacets">
@@ -999,8 +989,8 @@
 
     <!--The workflow configuration settings for discovery -->
     <bean id="workflowConfiguration"
-        class="org.dspace.discovery.configuration.DiscoveryConfiguration"
-        scope="prototype">
+          class="org.dspace.discovery.configuration.DiscoveryConfiguration"
+          scope="prototype">
         <property name="id" value="workflow" />
         <!--Which sidebar facets are to be displayed -->
         <property name="sidebarFacets">
@@ -1074,8 +1064,8 @@
 
     <!--The workflowAdmin configuration settings for discovery -->
     <bean id="workflowAdminConfiguration"
-        class="org.dspace.discovery.configuration.DiscoveryConfiguration"
-        scope="prototype">
+          class="org.dspace.discovery.configuration.DiscoveryConfiguration"
+          scope="prototype">
         <property name="id" value="workflowAdmin" />
         <!--Which sidebar facets are to be displayed -->
         <property name="sidebarFacets">
@@ -2254,7 +2244,7 @@
         </property>
     </bean>
 
-     <!--TagCloud configuration bean for default discovery configuration-->
+    <!--TagCloud configuration bean for default discovery configuration-->
     <bean id="defaultTagCloudFacetConfiguration" class="org.dspace.discovery.configuration.TagCloudFacetConfiguration">
         <!-- Actual configuration of the tagcloud (colors, sorting, etc.) -->
         <property name="tagCloudConfiguration" ref="tagCloudConfiguration"/>
@@ -2440,54 +2430,6 @@
         <property name="exposeMinAndMaxValue" value="true"/>
     </bean>
 
-    <bean id="searchFilterRights" class="org.dspace.discovery.configuration.DiscoverySearchFilterFacet">
-        <property name="indexFieldName" value="rights"/>
-        <property name="metadataFields">
-            <list>
-                <value>dc.rights.label</value>
-            </list>
-        </property>
-        <property name="type" value="standard"/>
-        <property name="facetLimit" value="5"/>
-        <property name="sortOrderSidebar" value="COUNT"/>
-        <property name="sortOrderFilterPage" value="COUNT"/>
-    </bean>
-
-    <bean id="searchFilterLanguage" class="org.dspace.discovery.configuration.DiscoverySearchFilterFacet">
-        <property name="indexFieldName" value="language"/>
-        <property name="metadataFields">
-            <list>
-                <value>dc.language.iso</value>
-            </list>
-        </property>
-        <property name="facetLimit" value="5"/>
-        <property name="sortOrderSidebar" value="COUNT"/>
-        <property name="sortOrderFilterPage" value="COUNT"/>
-        <property name="type" value="standard"/>
-    </bean>
-
-    <bean id="searchFilterItemsCommunity" class="org.dspace.discovery.configuration.DiscoverySearchFilterFacet">
-        <property name="indexFieldName" value="items_owning_community"/>
-        <property name="metadataFields">
-            <list/>
-        </property>
-        <property name="facetLimit" value="5"/>
-        <property name="type" value="standard"/>
-        <property name="sortOrderSidebar" value="COUNT"/>
-        <property name="sortOrderFilterPage" value="COUNT"/>
-    </bean>
-
-    <bean id="searchFilterType" class="org.dspace.discovery.configuration.DiscoverySearchFilterFacet">
-        <property name="indexFieldName" value="itemtype"/>
-        <property name="metadataFields">
-            <list>
-                <value>dc.type</value>
-            </list>
-        </property>
-        <property name="sortOrderSidebar" value="COUNT"/>
-        <property name="sortOrderFilterPage" value="COUNT"/>
-    </bean>
-
     <bean id="searchFilterEntityType" class="org.dspace.discovery.configuration.DiscoverySearchFilterFacet">
         <property name="indexFieldName" value="entityType"/>
         <property name="metadataFields">
@@ -2561,6 +2503,15 @@
         </property>
     </bean>
 
+    <bean id="searchFilterType" class="org.dspace.discovery.configuration.DiscoverySearchFilterFacet">
+        <property name="indexFieldName" value="itemtype" />
+        <property name="metadataFields">
+            <list>
+                <value>dc.type</value>
+            </list>
+        </property>
+    </bean>
+
     <bean id="searchFilterIdentifier" class="org.dspace.discovery.configuration.DiscoverySearchFilterFacet">
         <property name="indexFieldName" value="itemidentifier" />
         <property name="metadataFields">
@@ -2571,7 +2522,7 @@
     </bean>
 
     <bean id="searchFilterObjectType"
-        class="org.dspace.discovery.configuration.DiscoverySearchFilterFacet">
+          class="org.dspace.discovery.configuration.DiscoverySearchFilterFacet">
         <property name="indexFieldName" value="resourcetype" />
         <property name="metadataFields">
             <list>
@@ -2581,7 +2532,7 @@
     </bean>
 
     <bean id="searchFilterObjectNamedType"
-        class="org.dspace.discovery.configuration.DiscoverySearchFilterFacet">
+          class="org.dspace.discovery.configuration.DiscoverySearchFilterFacet">
         <property name="indexFieldName" value="namedresourcetype" />
         <property name="type" value="authority" />
         <property name="metadataFields">
@@ -2919,7 +2870,7 @@
 
     <!-- Used only to READ "submitter" facets (managed programmatically at SolrServiceImpl) -->
     <bean id="searchFilterSubmitter"
-        class="org.dspace.discovery.configuration.DiscoverySearchFilterFacet">
+          class="org.dspace.discovery.configuration.DiscoverySearchFilterFacet">
         <property name="indexFieldName" value="submitter" />
         <property name="type" value="authority" />
         <property name="metadataFields">
