@@ -19,6 +19,13 @@
     <submission-map>
         <!-- Default submission process -->
         <name-map collection-handle="default" submission-name="traditional"/>
+        <name-map collection-handle="000/2" submission-name="vskp" />
+        <name-map collection-handle="000/3" submission-name="vskp" />
+        <name-map collection-handle="000/4" submission-name="vskp" />
+        <name-map collection-handle="000/5" submission-name="vskp" />
+        <name-map collection-handle="000/6" submission-name="vskp" />
+        <name-map collection-handle="000/7" submission-name="vskp" />
+        <name-map collection-handle="000/8" submission-name="vskp" />
 <!--        <name-map collection-handle="123456789/1127" submission-name="clariah"/>-->
         <!-- Sample Entities Collection configuration based on the demo Entities dataset available at:
              https://github.com/DSpace-Labs/AIP-Files/releases/tag/demo-entities-data
