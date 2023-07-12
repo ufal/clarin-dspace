@@ -76,6 +76,8 @@ import org.springframework.http.MediaType;
  *
  * @author Milan Majchrak (milan.majchrak at dataquest.sk)
  */
+// Ignore for the TUL customer
+@Ignore
 public class ClarinDiscoveryRestControllerIT extends AbstractControllerIntegrationTest {
     @Autowired
     ConfigurationService configurationService;

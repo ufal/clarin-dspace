@@ -75,7 +75,6 @@ import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 
-@Ignore
 public class DiscoveryRestControllerIT extends AbstractControllerIntegrationTest {
     @Autowired
     ConfigurationService configurationService;

@@ -49,6 +49,7 @@ import org.dspace.content.service.clarin.ClarinLicenseResourceMappingService;
 import org.dspace.content.service.clarin.ClarinLicenseService;
 import org.dspace.services.ConfigurationService;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -57,6 +58,8 @@ import org.springframework.beans.factory.annotation.Autowired;
  *
  * @author Milan Majchrak (milan.majchrak at dataquest.sk)
  */
+// Ignore for TUL customer
+@Ignore
 public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerIntegrationTest {
 
     public static final String REST_SERVER_URL = "http://localhost/api/";
