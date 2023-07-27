@@ -17,6 +17,7 @@
             <Format ref="etdms"/>
             <Format ref="mods"/>
             <Format ref="qdc"/>
+            <Format ref="qdc_tul"/>
             <Format ref="marc"/>
             <Format ref="uketd_dc"/>
             <!--<Format ref="junii2" />-->
@@ -154,6 +155,12 @@
         <Format id="qdc">
             <Prefix>qdc</Prefix>
             <XSLT>metadataFormats/qdc.xsl</XSLT>
+            <Namespace>http://purl.org/dc/terms/</Namespace>
+            <SchemaLocation>http://dublincore.org/schemas/xmls/qdc/2006/01/06/dcterms.xsd</SchemaLocation>
+        </Format>
+        <Format id="qdc_tul">
+            <Prefix>qdc_tul</Prefix>
+            <XSLT>metadataFormats/qdc_tul.xsl</XSLT>
             <Namespace>http://purl.org/dc/terms/</Namespace>
             <SchemaLocation>http://dublincore.org/schemas/xmls/qdc/2006/01/06/dcterms.xsd</SchemaLocation>
         </Format>
