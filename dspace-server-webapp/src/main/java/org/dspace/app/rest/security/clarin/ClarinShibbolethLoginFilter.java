@@ -177,9 +177,9 @@ public class ClarinShibbolethLoginFilter extends StatelessLoginFilter {
         }
 
         // logging
-        log.debug("Shib-Identity-Provider: " + idp);
-        log.debug("authentication-shibboleth.netid-header: " + netidHeader + " with value: " + netid);
-        log.debug("authentication-shibboleth.email-header: " + emailHeader + " with value: " + email);
+        log.info("Shib-Identity-Provider: " + idp);
+        log.info("authentication-shibboleth.netid-header: " + netidHeader + " with value: " + netid);
+        log.info("authentication-shibboleth.email-header: " + emailHeader + " with value: " + email);
 
         try {
             if (StringUtils.isEmpty(netid) || StringUtils.isEmpty(idp)) {
