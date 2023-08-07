@@ -6,7 +6,7 @@ name: Docker images
 on:
   push:
     branches:
-      - customer/TUL
+      - dtq-dev
   pull_request:
   workflow_dispatch:
 
@@ -170,11 +170,11 @@ jobs:
           labels: ${{ steps.meta_build_cli.outputs.labels }}
 
       - name: redeploy
-        if: '!cancelled()'
+        if: 'false'
         run: |
           curl -H "Accept: application/vnd.github.everest-preview+json" \
           -H "Authorization: token ${{ secrets.DEPLOY_DEV5_GH_ACTION_DISPATCH }}" \
           --request POST \
           https://api.github.com/repos/dataquest-dev/\
           dspace-angular/actions/workflows/deploy.yml/dispatches \
-          --data "{\"ref\":\"refs/heads/customer/TUL\"}"
+          --data "{\"ref\":\"refs/heads/dtq-dev\"}"
