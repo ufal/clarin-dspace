@@ -53,7 +53,8 @@ public class ClarinDiscoJuiceFeedsUpdateScheduler implements InitializingBean {
         if (!isAllowed) {
             return;
         }
-        log.debug("CRON Job - going to download the discojuice feeds.");
+
+        log.info("CRON Job - going to download the discojuice feeds.");
         String newFeedsContent = clarinDiscoJuiceFeedsDownloadService.createFeedsContent();
         if (isNotBlank(newFeedsContent)) {
             feedsContent = newFeedsContent;
