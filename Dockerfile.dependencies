@@ -11,9 +11,7 @@ FROM maven:3-openjdk-${JDK_VERSION}-slim as build
 ARG TARGET_DIR=dspace-installer
 WORKDIR /app
 # Create the 'dspace' user account & home directory
-RUN useradd dspace \
-    && mkdir -p /home/dspace \
-    && chown -Rv dspace: /home/dspace
+RUN useradd -m -u 1234 dspace
 RUN chown -Rv dspace: /app
 # Need git to support buildnumber-maven-plugin, which lets us know what version of DSpace is being run.
 RUN apt-get update \
