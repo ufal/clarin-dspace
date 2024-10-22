@@ -146,6 +146,7 @@
                     <label>Subject</label>
                     <input-type>tag</input-type>
                     <hint>Subject, keyword, classification code, or key phrase describing the resource</hint>
+		    <vocabulary closed="false">euroscivoc</vocabulary>
                 </field>
             </row>
             <row>
