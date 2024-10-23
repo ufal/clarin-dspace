@@ -8,13 +8,17 @@
 package org.dspace.administer;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.mockserver.model.HttpRequest.request;
 import static org.mockserver.model.HttpResponse.response;
+
+import java.util.List;
 
 import org.dspace.AbstractIntegrationTestWithDatabase;
 import org.dspace.builder.CollectionBuilder;
 import org.dspace.builder.CommunityBuilder;
 import org.dspace.builder.ItemBuilder;
+import org.dspace.content.Bitstream;
 import org.dspace.content.Collection;
 import org.dspace.content.Community;
 import org.dspace.content.Item;
@@ -24,6 +28,7 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.mockserver.junit.MockServerRule;
+
 
 public class FileDownloaderIT extends AbstractIntegrationTestWithDatabase {
 
@@ -57,6 +62,7 @@ public class FileDownloaderIT extends AbstractIntegrationTestWithDatabase {
         ).respond(
                 response()
                         .withStatusCode(200)
+                        .withHeader("Content-Disposition", "attachment; filename=\"test.txt\"")
                         .withBody("test")
         );
     }
@@ -95,7 +101,10 @@ public class FileDownloaderIT extends AbstractIntegrationTestWithDatabase {
 
 
         assertEquals(1, item.getBundles().size());
-        assertEquals(1, item.getBundles().get(0).getBitstreams().size());
+        List<Bitstream> bs = item.getBundles().get(0).getBitstreams();
+        assertEquals(1, bs.size());
+        assertNotNull("Expecting name to be defined", bs.get(0).getName());
+
     }
 
 }

@@ -17,6 +17,7 @@ import java.net.http.HttpResponse;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import org.apache.commons.cli.ParseException;
 import org.dspace.authorize.AuthorizeException;
@@ -46,6 +47,7 @@ public class FileDownloader extends DSpaceRunnable<FileDownloaderConfiguration> 
     private UUID itemUUID;
     private URI uri;
     private String epersonMail;
+    private String bitstreamName;
     private EPersonService epersonService;
     private ItemService itemService;
     private BitstreamService bitstreamService;
@@ -105,6 +107,10 @@ public class FileDownloader extends DSpaceRunnable<FileDownloaderConfiguration> 
         itemUUID = UUID.fromString(commandLine.getOptionValue("i"));
 
         epersonMail = commandLine.getOptionValue("e");
+
+        if (commandLine.hasOption("n")) {
+            bitstreamName = commandLine.getOptionValue("n");
+        }
     }
 
     /**
@@ -143,14 +149,24 @@ public class FileDownloader extends DSpaceRunnable<FileDownloaderConfiguration> 
             throw new IllegalArgumentException("The provided URL returned a status code of " + response.statusCode());
         }
 
+        //use the provided value, the content-disposition header, the last part of the uri
+        if (bitstreamName == null) {
+            bitstreamName = response.headers().firstValue("Content-Disposition")
+                    .filter(value -> value.contains("filename=")).flatMap(value -> Stream.of(value.split(";"))
+                            .filter(v -> v.contains("filename="))
+                            .findFirst()
+                            .map(fvalue -> fvalue.replaceFirst("filename=", "").replaceAll("\"", "")))
+                    .orElse(uri.getPath().substring(uri.getPath().lastIndexOf('/') + 1));
+        }
+
         try (InputStream is = response.body()) {
-            saveFileToItem(context, item, is);
+            saveFileToItem(context, item, is, bitstreamName);
         }
 
         context.commit();
     }
 
-    private void saveFileToItem(Context context, Item item, InputStream is)
+    private void saveFileToItem(Context context, Item item, InputStream is, String name)
             throws SQLException, AuthorizeException, IOException {
         log.debug("Saving file to item {}", item.getID());
         List<Bundle> originals = item.getBundles("ORIGINAL");
@@ -161,6 +177,7 @@ public class FileDownloader extends DSpaceRunnable<FileDownloaderConfiguration> 
             Bundle bundle = originals.get(0);
             b = bitstreamService.create(context, bundle, is);
         }
+        b.setName(context, name);
         //now guess format of the bitstream
         BitstreamFormat bf = bitstreamFormatService.guessFormat(context, b);
         b.setFormat(context, bf);
