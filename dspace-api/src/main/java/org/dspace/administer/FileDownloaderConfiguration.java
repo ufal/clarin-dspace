@@ -56,6 +56,9 @@ public class FileDownloaderConfiguration extends ScriptConfiguration<FileDownloa
             options.addOption("e", "eperson", true, "eperson email");
             options.getOption("e").setRequired(false);
 
+            options.addOption("n", "name", true, "name of the file/bitstream");
+            options.getOption("n").setRequired(false);
+
             super.options = options;
         }
         return options;
