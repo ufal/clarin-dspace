@@ -281,6 +281,24 @@
                     <hint>Information about financial support (funding) for the resource</hint>
                 </field>
             </row>
+
+            <row>
+              <field>
+                <dc-schema>local</dc-schema>
+                <dc-element>bitstream</dc-element>
+                <dc-qualifier>redirectToURL</dc-qualifier>
+                <repeatable>false</repeatable>
+                <label>Big file URL</label>
+                <input-type>onebox</input-type>
+                <hint>The maximum filesize for users is 10GB. To add a file bigger than that,
+                an admin can add the file to the server and provide its path here.
+                Then click on the 'Save' button and the file will start to upload.
+                </hint>
+                <required/>
+                <acl>policy=deny,action=read,grantee-type=user,grantee-id=*</acl>
+              </field>
+            </row>
+
         </form>
 
         <!-- Form which defines the first page/section of the "traditional" DSpace submission process,
