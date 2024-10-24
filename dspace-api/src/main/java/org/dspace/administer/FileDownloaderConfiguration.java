@@ -7,6 +7,7 @@
  */
 package org.dspace.administer;
 
+import org.apache.commons.cli.OptionGroup;
 import org.apache.commons.cli.Options;
 import org.dspace.scripts.configuration.ScriptConfiguration;
 
@@ -44,14 +45,20 @@ public class FileDownloaderConfiguration extends ScriptConfiguration<FileDownloa
         if (options == null) {
 
             Options options = new Options();
+            OptionGroup ids = new OptionGroup();
 
             options.addOption("h", "help", false, "help");
 
             options.addOption("u", "url", true, "source url");
             options.getOption("u").setRequired(true);
 
-            options.addOption("i", "item", true, "item uuid");
-            options.getOption("i").setRequired(true);
+            options.addOption("i", "uuid", true, "item uuid");
+            options.addOption("w", "wsid", true, "workspace id");
+            options.addOption("p", "pid", true, "item pid (e.g. handle or doi)");
+            ids.addOption(options.getOption("i"));
+            ids.addOption(options.getOption("w"));
+            ids.addOption(options.getOption("p"));
+            ids.setRequired(true);
 
             options.addOption("e", "eperson", true, "eperson email");
             options.getOption("e").setRequired(false);
