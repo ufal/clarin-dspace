@@ -86,7 +86,7 @@ public class FileDownloaderIT extends AbstractIntegrationTestWithDatabase {
             assertEquals(oldBitCount, newBitCount);
             return;
         }
-        assertEquals(0, 1);
+        assertEquals("Not expecting to get here", 0, 1);
     }
 
 

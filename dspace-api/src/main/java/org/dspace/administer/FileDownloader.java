@@ -24,15 +24,21 @@ import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.Bitstream;
 import org.dspace.content.BitstreamFormat;
 import org.dspace.content.Bundle;
+import org.dspace.content.DSpaceObject;
 import org.dspace.content.Item;
 import org.dspace.content.factory.ContentServiceFactory;
 import org.dspace.content.service.BitstreamFormatService;
 import org.dspace.content.service.BitstreamService;
 import org.dspace.content.service.ItemService;
+import org.dspace.content.service.WorkspaceItemService;
 import org.dspace.core.Context;
 import org.dspace.eperson.EPerson;
 import org.dspace.eperson.factory.EPersonServiceFactory;
 import org.dspace.eperson.service.EPersonService;
+import org.dspace.identifier.IdentifierNotFoundException;
+import org.dspace.identifier.IdentifierNotResolvableException;
+import org.dspace.identifier.factory.IdentifierServiceFactory;
+import org.dspace.identifier.service.IdentifierService;
 import org.dspace.scripts.DSpaceRunnable;
 import org.dspace.scripts.configuration.ScriptConfiguration;
 import org.dspace.utils.DSpace;
@@ -45,11 +51,15 @@ public class FileDownloader extends DSpaceRunnable<FileDownloaderConfiguration> 
     private static final Logger log = LoggerFactory.getLogger(FileDownloader.class);
     private boolean help = false;
     private UUID itemUUID;
+    private int workspaceID;
+    private String pid;
     private URI uri;
     private String epersonMail;
     private String bitstreamName;
     private EPersonService epersonService;
     private ItemService itemService;
+    private  WorkspaceItemService workspaceItemService;
+    private IdentifierService identifierService;
     private BitstreamService bitstreamService;
     private BitstreamFormatService bitstreamFormatService;
     private final HttpClient httpClient = HttpClient.newBuilder()
@@ -85,8 +95,8 @@ public class FileDownloader extends DSpaceRunnable<FileDownloaderConfiguration> 
             throw new ParseException("No URL option has been provided");
         }
 
-        if (!commandLine.hasOption("i")) {
-            throw new ParseException("No item option has been provided");
+        if (!commandLine.hasOption("i") && !commandLine.hasOption("w") && !commandLine.hasOption("p")) {
+            throw new ParseException("No item id option has been provided");
         }
 
         if (getEpersonIdentifier() == null && !commandLine.hasOption("e")) {
@@ -96,15 +106,24 @@ public class FileDownloader extends DSpaceRunnable<FileDownloaderConfiguration> 
 
         this.epersonService = EPersonServiceFactory.getInstance().getEPersonService();
         this.itemService = ContentServiceFactory.getInstance().getItemService();
+        this.workspaceItemService = ContentServiceFactory.getInstance().getWorkspaceItemService();
         this.bitstreamService = ContentServiceFactory.getInstance().getBitstreamService();
         this.bitstreamFormatService = ContentServiceFactory.getInstance().getBitstreamFormatService();
+        this.identifierService = IdentifierServiceFactory.getInstance().getIdentifierService();
 
         try {
             uri = new URI(commandLine.getOptionValue("u"));
         } catch (URISyntaxException e) {
             throw new ParseException("The provided URL is not a valid URL");
         }
-        itemUUID = UUID.fromString(commandLine.getOptionValue("i"));
+
+        if (commandLine.hasOption("i")) {
+            itemUUID = UUID.fromString(commandLine.getOptionValue("i"));
+        } else if (commandLine.hasOption("w")) {
+            workspaceID = Integer.parseInt(commandLine.getOptionValue("w"));
+        } else if (commandLine.hasOption("p")) {
+            pid = commandLine.getOptionValue("p");
+        }
 
         epersonMail = commandLine.getOptionValue("e");
 
@@ -130,13 +149,10 @@ public class FileDownloader extends DSpaceRunnable<FileDownloaderConfiguration> 
         Context context = new Context();
         context.setCurrentUser(getEperson(context));
 
-        // Download the file from the given url
-        // and save it to the item with the given UUID
-
-        //find the item by the given uuid
-        Item item = itemService.find(context, itemUUID);
+        //find the item by the given id
+        Item item = findItem(context);
         if (item == null) {
-            throw new IllegalArgumentException("No item found for the given UUID");
+            throw new IllegalArgumentException("No item found for the given ID");
         }
 
         HttpRequest request = HttpRequest.newBuilder()
@@ -164,6 +180,25 @@ public class FileDownloader extends DSpaceRunnable<FileDownloaderConfiguration> 
         }
 
         context.commit();
+    }
+
+    private Item findItem(Context context) throws SQLException {
+        if (itemUUID != null) {
+            return itemService.find(context, itemUUID);
+        } else if (workspaceID != 0) {
+            return workspaceItemService.find(context, workspaceID).getItem();
+        } else {
+            try {
+                DSpaceObject dso = identifierService.resolve(context, pid);
+                if (dso instanceof Item) {
+                    return (Item) dso;
+                } else {
+                    throw new IllegalArgumentException("The provided identifier does not resolve to an item");
+                }
+            } catch (IdentifierNotFoundException | IdentifierNotResolvableException e) {
+                throw new IllegalArgumentException(e);
+            }
+        }
     }
 
     private void saveFileToItem(Context context, Item item, InputStream is, String name)
