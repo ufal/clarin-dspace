@@ -7,13 +7,12 @@
 ARG JDK_VERSION=11
 
 # Step 1 - Run Maven Build
-FROM maven:3-openjdk-${JDK_VERSION}-slim as build
+FROM maven:3-openjdk-${JDK_VERSION}-slim AS build
 ARG TARGET_DIR=dspace-installer
 WORKDIR /app
 # Create the 'dspace' user account & home directory
-RUN useradd dspace \
-    && mkdir -p /home/dspace \
-    && chown -Rv dspace: /home/dspace
+RUN groupadd -g 10002 dspace && \
+    useradd -m  -u 10001 -g dspace dspace
 RUN chown -Rv dspace: /app
 # Need git to support buildnumber-maven-plugin, which lets us know what version of DSpace is being run.
 RUN apt-get update \
@@ -22,10 +21,10 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Switch to dspace user & run below commands as that user
-USER dspace
+USER 10001
 
 # Copy the DSpace source code (from local machine) into the workdir (excluding .dockerignore contents)
-ADD --chown=dspace . /app/
+ADD --chown=10001:10002 . /app/
 
 # Trigger the installation of all maven dependencies (hide download progress messages)
 RUN mvn --no-transfer-progress package
