@@ -1776,6 +1776,9 @@
                     <required>Please give us a description</required>
                 </field>
             </row>
+            <!-- When you configure special field for the `type-bind` you must update it in the `submit.type-bind.field`
+            configuration property like this: `<INPUT_METADATA_FIELD>=><TYPE_BIND_FIELD>`
+            e.g. `dc.language.iso=>edm.type`-->
             <row>
                 <field>
                     <dc-schema>dc</dc-schema>
@@ -1783,7 +1786,7 @@
                     <dc-qualifier>iso</dc-qualifier>
                     <repeatable>true</repeatable>
                     <label>Pick the languages of the TEXT</label>
-                    <type-bind>TEXT</type-bind>
+                    <type-bind field="edm.type">TEXT</type-bind>
                     <input-type>autocomplete</input-type>
                     <hint>Select the language of the main content of the item. Multiple languages are possible. Start
                         typing the language and use autocomplete form that will appear if applicable. Better to list all the languages then to use the 'mul' iso code (if there are too many, contact support).
@@ -1798,7 +1801,7 @@
                     <dc-qualifier>iso</dc-qualifier>
                     <repeatable>true</repeatable>
                     <label>Language</label>
-                    <type-bind>VIDEO,IMAGE,SOUND,3D</type-bind>
+                    <type-bind field="edm.type">VIDEO,IMAGE,SOUND,3D</type-bind>
                     <input-type>autocomplete</input-type>
                     <hint>Optionally, select the language of the main content
                         of the item. Multiple languages are possible. Start
@@ -2023,7 +2026,9 @@
                     <dc-qualifier/>
                     <repeatable>false</repeatable>
                     <label>The type of the resource</label>
+                    <style>d-none</style>
                     <input-type value-pairs-name="teaching_materials">dropdown</input-type>
+                    <default-value>teachingMaterials</default-value>
                     <hint>This is here to autofill a value. The value should not be changed.</hint>
                     <required>Please select a resource type for your submission.</required>
                 </field>
@@ -2085,6 +2090,52 @@
                         identification numbers	or codes associated with it, please enter the types and the actual numbers or codes.
                     </hint>
                     <required/>
+                </field>
+            </row>
+        </form>
+
+        <form name="specialFields">
+            <row>
+                <field>
+                    <dc-schema>local</dc-schema>
+                    <dc-element>submission</dc-element>
+                    <dc-qualifier>note</dc-qualifier>
+                    <repeatable>false</repeatable>
+                    <label>Note</label>
+                    <input-type>textarea</input-type>
+                    <hint>Leave a note for the editors/reviewers</hint>
+                    <required></required>
+                </field>
+            </row>
+
+          <row>
+                <!-- DC.Relation.Replaces -->
+                <field>
+                    <dc-schema>dc</dc-schema>
+                    <dc-element>relation</dc-element>
+                    <dc-qualifier>replaces</dc-qualifier>
+                    <repeatable>true</repeatable>
+                    <label>Replaces</label>
+                    <input-type>onebox</input-type>
+                    <hint>URL to a related resource that is supplanted, displaced, or superseded by the described resource. If the replaced resource is in this repository start typing its name or handle and select the resource from the autocomplete popup.</hint>
+                    <required/>
+                </field>
+            </row>
+
+            <row>
+                <!-- DC.Relation.IsReplacedBy -->
+                <field>
+                    <dc-schema>dc</dc-schema>
+                    <dc-element>relation</dc-element>
+                    <dc-qualifier>isreplacedby</dc-qualifier>
+                    <repeatable>true</repeatable>
+                    <label>Is replaced by</label>
+                    <input-type>onebox</input-type>
+                    <hint>A related resource that supplants, displaces, or supersedes the described resource.</hint>
+                    <required/>
+                    <acl>
+                        policy=deny,action=read,grantee-type=user,grantee-id=*
+                    </acl>
                 </field>
             </row>
         </form>

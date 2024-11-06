@@ -7,6 +7,7 @@
  */
 package org.dspace.app.rest.submit.step;
 
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
@@ -35,12 +36,14 @@ import org.dspace.app.rest.submit.AbstractProcessingStep;
 import org.dspace.app.rest.submit.SubmissionService;
 import org.dspace.app.rest.submit.factory.PatchOperationFactory;
 import org.dspace.app.rest.submit.factory.impl.PatchOperation;
+import org.dspace.app.rest.utils.ContextUtil;
 import org.dspace.app.util.DCInput;
 import org.dspace.app.util.DCInputSet;
 import org.dspace.app.util.DCInputsReader;
 import org.dspace.app.util.DCInputsReaderException;
 import org.dspace.app.util.SubmissionStepConfig;
 import org.dspace.content.InProgressSubmission;
+import org.dspace.content.Item;
 import org.dspace.content.MetadataValue;
 import org.dspace.content.RelationshipMetadataService;
 import org.dspace.content.factory.ContentServiceFactory;
@@ -48,6 +51,7 @@ import org.dspace.core.Context;
 import org.dspace.core.Utils;
 import org.dspace.services.ConfigurationService;
 import org.dspace.services.factory.DSpaceServicesFactory;
+import org.springframework.util.CollectionUtils;
 import org.springframework.util.ObjectUtils;
 
 /**
@@ -58,6 +62,8 @@ import org.springframework.util.ObjectUtils;
  * @author Andrea Bollini (andrea.bollini at 4science.it)
  */
 public class DescribeStep extends AbstractProcessingStep {
+
+    public static final String KEY_VALUE_SEPARATOR = "=>";
 
     private static final Logger log = org.apache.logging.log4j.LogManager.getLogger(DescribeStep.class);
 
@@ -89,15 +95,34 @@ public class DescribeStep extends AbstractProcessingStep {
 
     private void readField(InProgressSubmission obj, SubmissionStepConfig config, DataDescribe data,
                            DCInputSet inputConfig) throws DCInputsReaderException {
-        String documentTypeValue = "";
-        List<MetadataValue> documentType = itemService.getMetadataByMetadataString(obj.getItem(),
-                configurationService.getProperty("submit.type-bind.field", "dc.type"));
-        if (documentType.size() > 0) {
-            documentTypeValue = documentType.get(0).getValue();
+        List<String> documentTypeValueList = new ArrayList<>();
+        List<String> typeBindFields = Arrays.asList(
+                configurationService.getArrayProperty("submit.type-bind.field", new String[0]));
+
+        for (String typeBindField : typeBindFields) {
+            String typeBFKey = typeBindField;
+            if (typeBindField.contains(KEY_VALUE_SEPARATOR)) {
+                String[] parts = typeBindField.split(KEY_VALUE_SEPARATOR);
+                // Get the second part of the split - the metadata field
+                typeBFKey = parts[1];
+            }
+            List<MetadataValue> documentType = itemService.getMetadataByMetadataString(obj.getItem(), typeBFKey);
+            if (documentType.size() > 0) {
+                documentTypeValueList.add(documentType.get(0).getValue());
+            }
         }
 
         // Get list of all field names (including qualdrop names) allowed for this dc.type
-        List<String> allowedFieldNames = inputConfig.populateAllowedFieldNames(documentTypeValue);
+        List<String> allowedFieldNames = new ArrayList<>();
+
+        if (CollectionUtils.isEmpty(documentTypeValueList)) {
+            // If no dc.type is set, we allow all fields
+            allowedFieldNames.addAll(inputConfig.populateAllowedFieldNames(null));
+        } else {
+            documentTypeValueList.forEach(documentTypeValue -> {
+                allowedFieldNames.addAll(inputConfig.populateAllowedFieldNames(documentTypeValue));
+            });
+        }
 
         // Loop input rows and process submitted metadata
         for (DCInput[] row : inputConfig.getFields()) {
@@ -118,6 +143,19 @@ public class DescribeStep extends AbstractProcessingStep {
                 for (String fieldName : fieldsName) {
                     List<MetadataValue> mdv = itemService.getMetadataByMetadataString(obj.getItem(),
                                                                                       fieldName);
+                    // Use default value if the input type is dropdown and has defined a default value
+                    if (CollectionUtils.isEmpty(mdv) && input.isDropdownValue() && input.hasDefaultValue()) {
+                        Context context = ContextUtil.obtainCurrentRequestContext();
+                        try {
+                            MetadataValue mv = itemService.addMetadata(context, obj.getItem(), input.getSchema(),
+                                    input.getElement(), input.getQualifier(), Item.ANY, input.getDefaultValue());
+                            mdv.add(mv);
+                        } catch (SQLException e) {
+                            log.error("Cannot create a metadata value object with the default value, because: " +
+                                    "{}", e.getMessage());
+                            throw new RuntimeException(e);
+                        }
+                    }
                     for (MetadataValue md : mdv) {
                         MetadataValueRest dto = new MetadataValueRest();
                         dto.setAuthority(md.getAuthority());

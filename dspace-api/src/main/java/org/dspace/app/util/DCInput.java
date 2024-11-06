@@ -25,6 +25,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.util.CollectionUtils;
 import org.springframework.util.ObjectUtils;
 import org.xml.sax.SAXException;
 
@@ -163,6 +164,11 @@ public class DCInput {
      */
     private ComplexDefinition complexDefinition = null;
 
+    /**
+     * the dropdown input type could have defined a default value
+     */
+    private String defaultValue = "";
+
     private boolean isRelationshipField = false;
     private boolean isMetadataField = false;
     private String relationshipType = null;
@@ -244,12 +250,11 @@ public class DCInput {
         // parsing of the <type-bind> element (using the colon as split separator)
         typeBind = new ArrayList<String>();
         String typeBindDef = fieldMap.get("type-bind");
-        if (typeBindDef != null && typeBindDef.trim().length() > 0) {
-            String[] types = typeBindDef.split(",");
-            for (String type : types) {
-                typeBind.add(type.trim());
-            }
-        }
+        this.insertToTypeBind(typeBindDef);
+        String typeBindField = fieldMap.get(DCInputsReader.TYPE_BIND_FIELD_ATTRIBUTE);
+        this.insertToTypeBind(typeBindField);
+
+
         style = fieldMap.get("style");
         isRelationshipField = fieldMap.containsKey("relationship-type");
         isMetadataField = fieldMap.containsKey("dc-schema");
@@ -264,7 +269,17 @@ public class DCInput {
                 externalSources.add(StringUtils.trim(source));
             }
         }
+        defaultValue = fieldMap.get("default-value");
 
+    }
+
+    private void insertToTypeBind(String typeBindDef) {
+        if (StringUtils.isNotEmpty(typeBindDef)) {
+            String[] types = typeBindDef.split(",");
+            for (String type : types) {
+                typeBind.add(type.trim());
+            }
+        }
     }
 
     protected void initRegex(String regex) {
@@ -553,6 +568,21 @@ public class DCInput {
         return typeBind.contains(typeName);
     }
 
+    /**
+     * Decides if this field is valid for the document type
+     * Check if one of the typeName is in the typeBind list
+     *
+     * @param typeNames List of document type names e.g. ["VIDEO"]
+     * @return true when there is no type restriction or typeName is allowed
+     */
+    public boolean isAllowedFor(List<String> typeNames) {
+        if (typeBind.isEmpty()) {
+            return true;
+        }
+
+        return CollectionUtils.containsAny(typeBind, typeNames);
+    }
+
     public String getScope() {
         return visibility;
     }
@@ -606,6 +636,24 @@ public class DCInput {
     public ComplexDefinition getComplexDefinition() {
         return this.complexDefinition;
     }
+
+    public String getDefaultValue() {
+        return defaultValue;
+    }
+
+    public void setDefaultValue(String defaultValue) {
+        this.defaultValue = defaultValue;
+    }
+
+    public boolean hasDefaultValue() {
+        return StringUtils.isNotEmpty(this.getDefaultValue());
+    }
+
+    public boolean isDropdownValue() {
+        return "dropdown".equals(getInputType());
+    }
+
+
 
     /**
      * Convert complex definition HashMap to the ordered JSON string

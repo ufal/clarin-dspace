@@ -104,6 +104,11 @@
             <processing-class>org.dspace.app.rest.submit.step.ClarinNoticeStep</processing-class>
             <type>clarin-notice</type>
         </step-definition>
+        <step-definition id="note">
+            <heading>submit.progressbar.describe.stepone</heading>
+            <processing-class>org.dspace.app.rest.submit.step.DescribeStep</processing-class>
+            <type>submission-form</type>
+        </step-definition>
         <!-- The following set of DescribeStep <step-definition>s all point to forms (of the same name) which are
              defined in submission-forms.xml -->
         <step-definition id="traditionalpageone" mandatory="true">
@@ -275,6 +280,11 @@
             <processing-class>org.dspace.app.rest.submit.step.DescribeStep</processing-class>
             <type>submission-form</type>
         </step-definition>
+        <step-definition id="specialFields" mandatory="true">
+            <heading>submit.progressbar.describe.stepone</heading>
+            <processing-class>org.dspace.app.rest.submit.step.DescribeStep</processing-class>
+            <type>submission-form</type>
+        </step-definition>
     </step-definitions>
 
     <!-- The submission-definitions map lays out the detailed definition of -->
@@ -323,6 +333,7 @@
             <!--Step will be to Sign off on the required DSpace License agreement -->
             <step id="license"/>
             <step id="clarin-license"/>
+            <step id="specialFields"/>
         </submission-process>
 
         <!--
@@ -442,6 +453,7 @@
             <step id="upload"/>
             <step id="license"/>
             <step id="clarin-license"/>
+            <step id="specialFields"/>
         </submission-process>
 
         <submission-process name="clariahSubmissions">
@@ -453,6 +465,7 @@
             <step id="upload"/>
             <step id="license"/>
             <step id="clarin-license"/>
+            <step id="specialFields"/>
         </submission-process>
 
         <submission-process name="teachingSubmissions">
@@ -464,6 +477,7 @@
             <step id="upload"/>
             <step id="license"/>
             <step id="clarin-license"/>
+            <step id="specialFields"/>
         </submission-process>
     </submission-definitions>
 

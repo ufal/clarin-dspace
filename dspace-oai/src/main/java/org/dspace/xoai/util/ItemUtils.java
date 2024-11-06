@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.lyncode.xoai.dataprovider.xml.xoai.Element;
 import com.lyncode.xoai.dataprovider.xml.xoai.Metadata;
@@ -29,13 +30,18 @@ import org.dspace.content.Item;
 import org.dspace.content.MetadataField;
 import org.dspace.content.MetadataValue;
 import org.dspace.content.authority.Choices;
+import org.dspace.content.clarin.ClarinLicenseResourceMapping;
+import org.dspace.content.factory.ClarinServiceFactory;
 import org.dspace.content.factory.ContentServiceFactory;
 import org.dspace.content.service.BitstreamService;
 import org.dspace.content.service.ItemService;
 import org.dspace.content.service.RelationshipService;
+import org.dspace.content.service.clarin.ClarinLicenseResourceMappingService;
 import org.dspace.core.Constants;
 import org.dspace.core.Context;
 import org.dspace.core.Utils;
+import org.dspace.core.factory.CoreServiceFactory;
+import org.dspace.core.service.LicenseService;
 import org.dspace.services.ConfigurationService;
 import org.dspace.services.factory.DSpaceServicesFactory;
 import org.dspace.xoai.data.DSpaceItem;
@@ -45,6 +51,10 @@ import org.dspace.xoai.data.DSpaceItem;
  */
 @SuppressWarnings("deprecation")
 public class ItemUtils {
+
+
+    private static final ClarinLicenseResourceMappingService clarinLicenseResourceMappingService
+            = ClarinServiceFactory.getInstance().getClarinLicenseResourceMappingService();
     private static final Logger log = LogManager.getLogger(ItemUtils.class);
 
     private static final MetadataExposureService metadataExposureService
@@ -64,6 +74,9 @@ public class ItemUtils {
 
     private static final AuthorizeService authorizeService
         = AuthorizeServiceFactory.getInstance().getAuthorizeService();
+
+
+    private static final LicenseService licenseService = CoreServiceFactory.getInstance().getLicenseService();
 
     /**
      * Default constructor
@@ -94,7 +107,8 @@ public class ItemUtils {
         return e;
     }
 
-    private static Element createBundlesElement(Context context, Item item) throws SQLException {
+    private static Element createBundlesElement(Context context, Item item, AtomicBoolean restricted)
+            throws SQLException {
         Element bundles = create("bundles");
 
         List<Bundle> bs;
@@ -124,13 +138,24 @@ public class ItemUtils {
                 // get handle of parent Item of this bitstream, if there
                 // is one:
                 List<Bundle> bn = bit.getBundles();
-                if (!bn.isEmpty()) {
+                if (bn.size() > 0) {
                     List<Item> bi = bn.get(0).getItems();
-                    if (!bi.isEmpty()) {
+                    if (bi.size() > 0) {
                         handle = bi.get(0).getHandle();
                     }
                 }
-                url = baseUrl + "/bitstreams/" + bit.getID().toString() + "/download";
+                if (bsName == null) {
+                    List<String> ext = bit.getFormat(context).getExtensions();
+                    bsName = "bitstream_" + sid + (ext.size() > 0 ? ext.get(0) : "");
+                }
+                if (handle != null && baseUrl != null) {
+                    url = baseUrl + "/bitstream/"
+                            + handle + "/"
+                            + sid + "/"
+                            + URLUtils.encode(bsName);
+                } else {
+                    url = URLUtils.encode(bsName);
+                }
 
                 String cks = bit.getChecksum();
                 String cka = bit.getChecksumAlgorithm();
@@ -153,6 +178,18 @@ public class ItemUtils {
                 bitstream.getField().add(createValue("checksum", cks));
                 bitstream.getField().add(createValue("checksumAlgorithm", cka));
                 bitstream.getField().add(createValue("sid", bit.getSequenceID() + ""));
+                bitstream.getField().add(createValue("id", bit.getID().toString()));
+                if (!restricted.get()) {
+                    List<ClarinLicenseResourceMapping> clarinLicenseResourceMappingList =
+                            clarinLicenseResourceMappingService.findByBitstreamUUID(context, bit.getID());
+                    for (ClarinLicenseResourceMapping clrm : clarinLicenseResourceMappingList) {
+                        if (clrm.getLicense().getRequiredInfo() != null
+                                && clrm.getLicense().getRequiredInfo().length() > 0) {
+                            restricted.set( true);
+                            break;
+                        }
+                    }
+                }
             }
         }
 
@@ -277,8 +314,12 @@ public class ItemUtils {
 
         // Done! Metadata has been read!
         // Now adding bitstream info
+
+        //indicate restricted bitstreams -> restricted access
+        AtomicBoolean restricted = new AtomicBoolean(false);
+
         try {
-            Element bundles = createBundlesElement(context, item);
+            Element bundles = createBundlesElement(context, item, restricted);
             metadata.getElement().add(bundles);
         } catch (SQLException e) {
             log.warn(e.getMessage(), e);
@@ -290,6 +331,15 @@ public class ItemUtils {
         other.getField().add(createValue("handle", item.getHandle()));
         other.getField().add(createValue("identifier", DSpaceItem.buildIdentifier(item.getHandle())));
         other.getField().add(createValue("lastModifyDate", item.getLastModified().toString()));
+
+        if (restricted.get()) {
+            other.getField().add(createValue("restrictedAccess", "true"));
+        }
+        // Because we reindex Solr, which is not done in vanilla
+        // The owning collection for workspace items is null
+        other.getField().add(createValue("owningCollection",
+                item.getOwningCollection() != null ? item.getOwningCollection().getName() : null));
+        other.getField().add(createValue("itemId", item.getID().toString()));
         metadata.getElement().add(other);
 
         // Repository Info

@@ -12,25 +12,30 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Hashtable;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.servlet.http.HttpServletRequest;
 import javax.xml.parsers.ParserConfigurationException;
 
 import org.apache.commons.compress.archivers.ArchiveException;
-import org.apache.commons.compress.archivers.ArchiveInputStream;
-import org.apache.commons.compress.archivers.ArchiveStreamFactory;
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
 import org.dspace.app.rest.Parameter;
@@ -51,9 +56,11 @@ import org.dspace.content.Bitstream;
 import org.dspace.content.Bundle;
 import org.dspace.content.DSpaceObject;
 import org.dspace.content.Item;
+import org.dspace.content.PreviewContent;
 import org.dspace.content.Thumbnail;
 import org.dspace.content.service.BitstreamService;
 import org.dspace.content.service.ItemService;
+import org.dspace.content.service.PreviewContentService;
 import org.dspace.content.service.clarin.ClarinLicenseResourceMappingService;
 import org.dspace.core.Constants;
 import org.dspace.core.Context;
@@ -76,6 +83,11 @@ import org.xml.sax.SAXException;
 @Component(MetadataBitstreamWrapperRest.CATEGORY + "." + MetadataBitstreamWrapperRest.NAME)
 public class MetadataBitstreamRestRepository extends DSpaceRestRepository<MetadataBitstreamWrapperRest, Integer> {
     private static Logger log = org.apache.logging.log4j.LogManager.getLogger(MetadataBitstreamRestRepository.class);
+    private final String ARCHIVE_TYPE_ZIP = "zip";
+    private final String ARCHIVE_TYPE_TAR = "tar";
+    // This constant is used to limit the length of the preview content stored in the database to prevent
+    // the database from being overloaded with large amounts of data.
+    private static final int MAX_PREVIEW_COUNT_LENGTH = 2000;
 
     @Autowired
     HandleService handleService;
@@ -104,6 +116,9 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
 
     @Autowired
     ConfigurationService configurationService;
+
+    @Autowired
+    PreviewContentService previewContentService;
 
     // Configured ZIP file preview limit (default: 1000) - if the ZIP file contains more files, it will be truncated
     @Value("${file.preview.zip.limit.length:1000}")
@@ -157,7 +172,23 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
                 List<FileInfo> fileInfos = new ArrayList<>();
                 boolean canPreview = findOutCanPreview(context, bitstream);
                 if (canPreview) {
-                    fileInfos = getFilePreviewContent(context, bitstream, fileInfos);
+                    List<PreviewContent> prContents = previewContentService.findRootByBitstream(context,
+                            bitstream.getID());
+                    // Generate new content if we didn't find any
+                    if (prContents.isEmpty()) {
+                        fileInfos = getFilePreviewContent(context, bitstream, fileInfos);
+                        // Do not store HTML content in the database because it could be longer than the limit
+                        // of the database column
+                        if (!StringUtils.equals("text/html", bitstream.getFormat(context).getMIMEType())) {
+                            for (FileInfo fi : fileInfos) {
+                                createPreviewContent(context, bitstream, fi);
+                            }
+                        }
+                    } else {
+                        for (PreviewContent pc : prContents) {
+                            fileInfos.add(createFileInfo(pc));
+                        }
+                    }
                 }
                 MetadataBitstreamWrapper bts = new MetadataBitstreamWrapper(bitstream, fileInfos,
                         bitstream.getFormat(context).getMIMEType(),
@@ -165,6 +196,7 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
                 metadataValueWrappers.add(bts);
                 rs.add(metadataBitstreamWrapperConverter.convert(bts, utils.obtainProjection()));
             }
+            context.commit();
         }
 
         return new PageImpl<>(rs, pageable, rs.size());
@@ -221,6 +253,58 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
     }
 
     /**
+     * Define the hierarchy organization for preview content and file info.
+     * The hierarchy is established by the sub map.
+     * If a content item contains a sub map, it is considered a directory; if not, it is a file.
+     * @param sourceMap  sub map that is used as a pattern
+     * @param creator    creator function
+     * @return           created sub map
+     */
+    private <T, U> Hashtable<String, T> createSubMap(Map<String, U> sourceMap, Function<U, T> creator) {
+        if (sourceMap == null) {
+            return null;
+        }
+
+        Hashtable<String, T> sub = new Hashtable<>();
+        for (Map.Entry<String, U> entry : sourceMap.entrySet()) {
+            sub.put(entry.getKey(), creator.apply(entry.getValue()));
+        }
+        return sub;
+    }
+
+    /**
+     * Create file info from preview content.
+     * @param pc  preview content
+     * @return    created file info
+     */
+    private FileInfo createFileInfo(PreviewContent pc) {
+        Hashtable<String, FileInfo> sub = createSubMap(pc.sub, this::createFileInfo);
+        return new FileInfo(pc.name, pc.content, pc.size, pc.isDirectory, sub);
+    }
+
+    /**
+     * Create preview content from file info for bitstream.
+     * @param context   DSpace context object
+     * @param bitstream bitstream
+     * @param fi        file info
+     * @return          created preview content
+     * @throws SQLException If database error is occurred
+     */
+    private PreviewContent createPreviewContent(Context context, Bitstream bitstream, FileInfo fi) throws SQLException {
+        Hashtable<String, PreviewContent> sub = createSubMap(fi.sub, value -> {
+            try {
+                return createPreviewContent(context, bitstream, value);
+            } catch (SQLException e) {
+                String msg = "Database error occurred while creating new preview content " +
+                        "for bitstream with ID = " + bitstream.getID() + " Error msg: " + e.getMessage();
+                log.error(msg, e);
+                throw new RuntimeException(msg, e);
+            }
+        });
+        return previewContentService.create(context, bitstream, fi.name, fi.content, fi.isDirectory, fi.size, sub);
+    }
+
+    /**
      * Convert InputStream of the ZIP file into FileInfo classes.
      *
      * @param context DSpace context object
@@ -238,19 +322,28 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
                                                            List<FileInfo> fileInfos, InputStream inputStream)
             throws IOException, SQLException, ParserConfigurationException, SAXException, ArchiveException {
         String bitstreamMimeType = bitstream.getFormat(context).getMIMEType();
-        if (bitstreamMimeType.equals("text/plain") || bitstreamMimeType.equals("text/html")) {
-            String data = getFileContent(inputStream);
+        if (bitstreamMimeType.equals("text/plain")) {
+            String data = getFileContent(inputStream, true);
+            fileInfos.add(new FileInfo(data, false));
+        } else if (bitstreamMimeType.equals("text/html")) {
+            String data = getFileContent(inputStream, false);
             fileInfos.add(new FileInfo(data, false));
         } else {
             String data = "";
-            if (bitstream.getFormat(context).getExtensions().contains("zip")) {
-                data = extractFile(inputStream, "zip");
-                fileInfos = FileTreeViewGenerator.parse(data);
-            } else if (bitstream.getFormat(context).getExtensions().contains("tar")) {
-                ArchiveInputStream is = new ArchiveStreamFactory().createArchiveInputStream(ArchiveStreamFactory.TAR,
-                        inputStream);
-                data = extractFile(is, "tar");
-                fileInfos = FileTreeViewGenerator.parse(data);
+            if (bitstream.getFormat(context).getMIMEType().equals("application/zip")) {
+                data = extractFile(inputStream, ARCHIVE_TYPE_ZIP);
+                try {
+                    fileInfos = FileTreeViewGenerator.parse(data);
+                } catch (Exception e) {
+                    log.error("Cannot extract file content because: {}", e.getMessage());
+                }
+            } else if (bitstream.getFormat(context).getMIMEType().equals("application/x-tar")) {
+                data = extractFile(inputStream, ARCHIVE_TYPE_TAR);
+                try {
+                    fileInfos = FileTreeViewGenerator.parse(data);
+                } catch (Exception e) {
+                    log.error("Cannot extract file content because: {}", e.getMessage());
+                }
             }
         }
         return fileInfos;
@@ -293,76 +386,108 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
         return url;
     }
 
+    /**
+     * Creates a temporary file with the appropriate extension based on the specified file type.
+     * @param fileType the type of file for which to create a temporary file
+     * @return a Path object representing the temporary file
+     * @throws IOException if an I/O error occurs while creating the file
+     */
+    private Path createTempFile(String fileType) throws IOException {
+        String extension = ARCHIVE_TYPE_TAR.equals(fileType) ?
+                String.format(".%s", ARCHIVE_TYPE_TAR) : String.format(".%s", ARCHIVE_TYPE_ZIP);
+        return Files.createTempFile("temp", extension);
+    }
 
     /**
-     * Convert ZIP file into structured String.
-     * @param inputStream Input stream with ZIP content
-     * @param fileType ZIP/TAR
-     * @return structured String
+     * Adds a file path and its size to the list of file paths.
+     * If the path represents a directory, appends a "/" to the path.
+     * @param filePaths the list of file paths to add to
+     * @param path the file or directory path
+     * @param size the size of the file or directory
      */
-    public String extractFile(InputStream inputStream, String fileType) {
-        List<String> filePaths = new ArrayList<>();
-        Path tempFile = null;
-        FileSystem zipFileSystem = null;
+    private void addFilePath(List<String> filePaths, String path, long size) {
+        String fileInfo = (Files.isDirectory(Paths.get(path))) ? path + "/|" + size : path + "|" + size;
+        filePaths.add(fileInfo);
+    }
 
-        try {
-            switch (fileType) {
-                case "tar":
-                    tempFile = Files.createTempFile("temp", ".tar");
-                    break;
-                default:
-                    tempFile = Files.createTempFile("temp", ".zip");
-
-            }
-
-            Files.copy(inputStream, tempFile, StandardCopyOption.REPLACE_EXISTING);
-
-            zipFileSystem = FileSystems.newFileSystem(tempFile, (ClassLoader) null);
-            Path root = zipFileSystem.getPath("/");
-            Files.walk(root)
-                    .forEach(path -> {
-                        try {
-                            long fileSize = Files.size(path);
-                            if (Files.isDirectory(path)) {
-                                filePaths.add(path.toString().substring(1) + "/|" + fileSize );
-                            } else {
-                                filePaths.add(path.toString().substring(1) + "|" + fileSize );
-                            }
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        }
-                    });
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
-            if (zipFileSystem != null) {
-                try {
-                    zipFileSystem.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-
-            if (tempFile != null) {
-                try {
-                    Files.delete(tempFile);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+    /**
+     * Processes a TAR file, extracting its entries and adding their paths to the provided list.
+     * @param filePaths the list to populate with the extracted file paths
+     * @param tempFile  the temporary TAR file to process
+     * @throws IOException if an I/O error occurs while reading the TAR file
+     */
+    private void processTarFile(List<String> filePaths, Path tempFile) throws IOException {
+        try (InputStream fi = Files.newInputStream(tempFile);
+             TarArchiveInputStream tis = new TarArchiveInputStream(fi)) {
+            TarArchiveEntry entry;
+            while ((entry = tis.getNextTarEntry()) != null) {
+                addFilePath(filePaths, entry.getName(), entry.getSize());
             }
         }
+    }
 
+    /**
+     * Processes a ZIP file, extracting its entries and adding their paths to the provided list.
+     * @param filePaths      the list to populate with the extracted file paths
+     * @param zipFileSystem  the FileSystem object representing the ZIP file
+     * @throws IOException if an I/O error occurs while reading the ZIP file
+     */
+    private void processZipFile(List<String> filePaths, FileSystem zipFileSystem) throws IOException {
+        Path root = zipFileSystem.getPath("/");
+        Files.walk(root).forEach(path -> {
+            try {
+                long fileSize = Files.size(path);
+                addFilePath(filePaths, path.toString().substring(1), fileSize);
+            } catch (IOException e) {
+                log.error("An error occurred while getting the size of the zip file.", e);
+            }
+        });
+    }
+
+    /**
+     * Closes the specified FileSystem resource if it is not null.
+     * @param zipFileSystem the FileSystem to close
+     */
+    private void closeFileSystem(FileSystem zipFileSystem) {
+        if (Objects.nonNull(zipFileSystem)) {
+            try {
+                zipFileSystem.close();
+            } catch (IOException e) {
+                log.error("An error occurred while closing the zip file.", e);
+            }
+        }
+    }
+
+    /**
+     * Deletes the specified temporary file if it is not null.
+     * @param tempFile the Path object representing the temporary file to delete
+     */
+    private void deleteTempFile(Path tempFile) {
+        if (Objects.nonNull(tempFile)) {
+            try {
+                Files.delete(tempFile);
+            } catch (IOException e) {
+                log.error("An error occurred while deleting temp file.", e);
+            }
+        }
+    }
+
+    /**
+     * Builds an XML response string based on the provided list of file paths.
+     * @param filePaths the list of file paths to include in the XML response
+     * @return an XML string representation of the file paths
+     */
+    private String buildXmlResponse(List<String> filePaths) {
         // Is a folder regex
         String folderRegex = "/|\\d+";
         Pattern pattern = Pattern.compile(folderRegex);
 
         StringBuilder sb = new StringBuilder();
-        sb.append(("<root>"));
+        sb.append("<root>");
         Iterator<String> iterator = filePaths.iterator();
         int fileCounter = 0;
-        while ((iterator.hasNext() && fileCounter < maxPreviewCount)) {
+        while (iterator.hasNext() && fileCounter < maxPreviewCount) {
             String filePath = iterator.next();
-
             // Check if the file is a folder
             Matcher matcher = pattern.matcher(filePath);
             if (!matcher.matches()) {
@@ -375,8 +500,44 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
         if (fileCounter > maxPreviewCount) {
             sb.append("<element>...too many files...|0</element>");
         }
-        sb.append(("</root>"));
+        sb.append("</root>");
         return sb.toString();
+    }
+
+    /**
+     * Extracts files from an InputStream, processes them based on the specified file type (tar or zip),
+     * and returns an XML representation of the file paths.
+     * @param inputStream the InputStream containing the file data
+     * @param fileType    the type of file to extract ("tar" or "zip")
+     * @return an XML string representing the extracted file paths
+     */
+    public String extractFile(InputStream inputStream, String fileType) {
+        List<String> filePaths = new ArrayList<>();
+        Path tempFile = null;
+        FileSystem zipFileSystem = null;
+
+        try {
+            // Create a temporary file based on the file type
+            tempFile = createTempFile(fileType);
+
+            // Copy the input stream to the temporary file
+            Files.copy(inputStream, tempFile, StandardCopyOption.REPLACE_EXISTING);
+
+            // Process the file based on its type
+            if (ARCHIVE_TYPE_TAR.equals(fileType)) {
+                processTarFile(filePaths, tempFile);
+            } else {
+                zipFileSystem = FileSystems.newFileSystem(tempFile, (ClassLoader) null);
+                processZipFile(filePaths, zipFileSystem);
+            }
+        } catch (IOException e) {
+            log.error(String.format("An error occurred while extracting file of type %s.", fileType), e);
+        } finally {
+            closeFileSystem(zipFileSystem);
+            deleteTempFile(tempFile);
+        }
+
+        return buildXmlResponse(filePaths);
     }
 
     /**
@@ -385,17 +546,44 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
      * @return content of the inputStream as a String
      * @throws IOException
      */
-    public String getFileContent(InputStream inputStream) throws IOException {
+    public String getFileContent(InputStream inputStream, boolean cutResult) throws IOException {
         StringBuilder content = new StringBuilder();
-        BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
-
-        String line;
-        while ((line = reader.readLine()) != null) {
-            content.append(line).append("\n");
+        // Generate the preview content in the UTF-8 encoding
+        BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8));
+        try {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                content.append(line).append("\n");
+            }
+        } catch (UnsupportedEncodingException e) {
+            log.error("UnsupportedEncodingException during creating the preview content because: ", e);
+        } catch (IOException e) {
+            log.error("IOException during creating the preview content because: ", e);
         }
 
         reader.close();
-        return content.toString();
+        return cutResult ? ensureMaxLength(content.toString()) : content.toString();
+    }
+
+    /**
+     * Trims the input string to ensure it does not exceed the maximum length for the database column.
+     * @param input The original string to be trimmed.
+     * @return A string that is truncated to the maximum length if necessary.
+     */
+    private static String ensureMaxLength(String input) {
+        if (input == null) {
+            return null;
+        }
+
+        // Check if the input string exceeds the maximum preview length
+        if (input.length() > MAX_PREVIEW_COUNT_LENGTH) {
+            // Truncate the string and append " . . ."
+            int previewLength = MAX_PREVIEW_COUNT_LENGTH - 6; // Subtract length of " . . ."
+            return input.substring(0, previewLength) + " . . .";
+        } else {
+            // Return the input string as is if it's within the preview length
+            return input;
+        }
     }
 
     /**
