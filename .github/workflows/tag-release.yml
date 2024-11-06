@@ -6,7 +6,7 @@ on:
       - '**'
 
 env:
-  IMAGE_BASE_NAME: dataquest/dspace
+  IMAGE_BASE_NAME: ufal/dspace
 
 jobs:
   retag-BE-image:

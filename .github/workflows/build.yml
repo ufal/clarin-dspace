@@ -7,7 +7,7 @@ name: Build
 on:
   push:
     branches:
-      - dtq-dev
+      - clarin-v7
       - customer/*
   pull_request:
 

@@ -1,12 +1,12 @@
 # DSpace Docker image build for hub.docker.com
 name: Docker images
 
-# Run this Build for all pushes to dtq-dev branch
+# Run this Build for all pushes to clarin-v7 branch
 # Also run for PRs to ensure PR doesn't break Docker build process
 on:
   push:
     branches:
-      - dtq-dev
+      - clarin-v7
       - customer/*
 
   pull_request:
@@ -17,34 +17,34 @@ permissions:
 
 jobs:
   ####################################################
-  # Build/Push the 'dataquest/dspace-dependencies' image.
+  # Build/Push the 'ufal/dspace-dependencies' image.
   # This image is used by all other DSpace build jobs.
   ####################################################
   dspace-dependencies:
-    # Ensure this job never runs on forked repos. It's only executed for 'dataquest/dspace'
-    if: github.repository == 'dataquest-dev/dspace'
+    # Ensure this job never runs on forked repos. It's only executed for 'ufal/dspace'
+    if: github.repository == 'ufal/clarin-dspace'
     secrets:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_ACCESS_TOKEN: ${{ secrets.DOCKER_ACCESS_TOKEN }}
     uses: ./.github/workflows/reusable-docker-build.yml
     with:
       build_id: dspace-dependencies
-      image_name: dataquest/dspace-dependencies
+      image_name: ufal/dspace-dependencies
       dockerfile_path: ./Dockerfile.dependencies
   
 
   #######################################
-  # Build/Push the 'dataquest/dspace' image
+  # Build/Push the 'ufal/dspace' image
   #######################################
   dspace:
-    # Ensure this job never runs on forked repos. It's only executed for 'dataquest/dspace'
-    if: github.repository == 'dataquest-dev/dspace'
+    # Ensure this job never runs on forked repos. It's only executed for 'ufal/dspace'
+    if: github.repository == 'ufal/clarin-dspace'
     # Must run after 'dspace-dependencies' job above
     needs: dspace-dependencies
     uses: ./.github/workflows/reusable-docker-build.yml
     with:
       build_id: dspace
-      image_name: dataquest/dspace
+      image_name: ufal/dspace
       dockerfile_path: ./Dockerfile
       run_python_version_script: true
       python_version_script_dest: dspace/config/VERSION_D.txt
@@ -57,37 +57,37 @@ jobs:
       REDEPLOY_DEMO_URL: ${{ secrets.REDEPLOY_DEMO_URL }}
 
   #############################################################
-  # Build/Push the 'dataquest/dspace' image ('-test' tag)
+  # Build/Push the 'ufal/dspace' image ('-test' tag)
   #############################################################
   dspace-test:
-    # Ensure this job never runs on forked repos. It's only executed for 'dataquest/dspace'
-    if: github.repository == 'dataquest-dev/dspace'
+    # Ensure this job never runs on forked repos. It's only executed for 'ufal/dspace'
+    if: github.repository == 'ufal/clarin-dspace'
         # Must run after 'dspace-dependencies' job above
     needs: dspace-dependencies
     uses: ./.github/workflows/reusable-docker-build.yml
     with:
       build_id: dspace-test
-      image_name: dataquest/dspace
+      image_name: ufal/dspace
       dockerfile_path: ./Dockerfile.test
       # As this is a test/development image, its tags are all suffixed with "-test". Otherwise, it uses the same
-      # tagging logic as the primary 'dataquest/dspace' image above.
+      # tagging logic as the primary 'ufal/dspace' image above.
       tags_flavor: suffix=-test
     secrets:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_ACCESS_TOKEN: ${{ secrets.DOCKER_ACCESS_TOKEN }}
 
   ###########################################
-  # Build/Push the 'dataquest/dspace-cli' image
+  # Build/Push the 'ufal/dspace-cli' image
   ###########################################
   dspace-cli:
-    # Ensure this job never runs on forked repos. It's only executed for 'dataquest/dspace'
-    if: github.repository == 'dataquest-dev/dspace'
+    # Ensure this job never runs on forked repos. It's only executed for 'ufal/dspace'
+    if: github.repository == 'ufal/clarin-dspace'
      # Must run after 'dspace-dependencies' job above
     needs: dspace-dependencies
     uses: ./.github/workflows/reusable-docker-build.yml
     with:
       build_id: dspace-cli
-      image_name: dataquest/dspace-cli
+      image_name: ufal/dspace-cli
       dockerfile_path: ./Dockerfile.cli
     secrets:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
@@ -95,15 +95,15 @@ jobs:
 
 
   ###########################################
-  # Build/Push the 'dataquest/dspace-solr' image
+  # Build/Push the 'ufal/dspace-solr' image
   ###########################################
   dspace-solr:
-    # Ensure this job never runs on forked repos. It's only executed for 'dataquest/dspace'
-    if: github.repository == 'dataquest-dev/dspace'
+    # Ensure this job never runs on forked repos. It's only executed for 'ufal/dspace'
+    if: github.repository == 'ufal/clarin-dspace'
     uses: ./.github/workflows/reusable-docker-build.yml
     with:
       build_id: dspace-solr
-      image_name: dataquest/dspace-solr
+      image_name: ufal/dspace-solr
       dockerfile_path: ./dspace/src/main/docker/dspace-solr/Dockerfile
       # Must pass solrconfigs to the Dockerfile so that it can find the required Solr config files
       dockerfile_additional_contexts: 'solrconfigs=./dspace/solr/'
@@ -117,15 +117,15 @@ jobs:
 
 
   ###########################################################
-  # Build/Push the 'dataquest/dspace-postgres-pgcrypto' image
+  # Build/Push the 'ufal/dspace-postgres-pgcrypto' image
   ###########################################################
   dspace-postgres-pgcrypto:
-    # Ensure this job never runs on forked repos. It's only executed for 'dataquest/dspace'
-    if: github.repository == 'dataquest-dev/dspace'
+    # Ensure this job never runs on forked repos. It's only executed for 'ufal/dspace'
+    if: github.repository == 'ufal/clarin-dspace'
     uses: ./.github/workflows/reusable-docker-build.yml
     with:
       build_id: dspace-postgres-pgcrypto
-      image_name: dataquest/dspace-postgres-pgcrypto
+      image_name: ufal/dspace-postgres-pgcrypto
       # Must build out of subdirectory to have access to install script for pgcrypto.
       # NOTE: this context will build the image based on the Dockerfile in the specified directory
       dockerfile_context: ./dspace/src/main/docker/dspace-postgres-pgcrypto/
@@ -134,37 +134,21 @@ jobs:
       DOCKER_ACCESS_TOKEN: ${{ secrets.DOCKER_ACCESS_TOKEN }}
 
   ########################################################################
-  # Build/Push the 'dataquest/dspace-postgres-pgcrypto' image (-loadsql tag)
+  # Build/Push the 'ufal/dspace-postgres-pgcrypto' image (-loadsql tag)
   ########################################################################
   dspace-postgres-pgcrypto-loadsql:
-    # Ensure this job never runs on forked repos. It's only executed for 'dataquest/dspace'
-    if: github.repository == 'dataquest-dev/dspace'
+    # Ensure this job never runs on forked repos. It's only executed for 'ufal/dspace'
+    if: github.repository == 'ufal/clarin-dspace'
     uses: ./.github/workflows/reusable-docker-build.yml
     with:
       build_id: dspace-postgres-pgcrypto-loadsql
-      image_name: dataquest/dspace-postgres-pgcrypto
+      image_name: ufal/dspace-postgres-pgcrypto
       # Must build out of subdirectory to have access to install script for pgcrypto.
       # NOTE: this context will build the image based on the Dockerfile in the specified directory
       dockerfile_context: ./dspace/src/main/docker/dspace-postgres-pgcrypto-curl/
       # Suffix all tags with "-loadsql". Otherwise, it uses the same
-      # tagging logic as the primary 'dataquest/dspace-postgres-pgcrypto' image above.
+      # tagging logic as the primary 'ufal/dspace-postgres-pgcrypto' image above.
       tags_flavor: suffix=-loadsql
     secrets:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_ACCESS_TOKEN: ${{ secrets.DOCKER_ACCESS_TOKEN }}
-
-
-  dspace-redeploy:
-    runs-on: ubuntu-latest
-    needs: dspace
-    if: false
-    steps:
-      - name: redeploy
-        if: '!cancelled()'
-        run: |
-          curl -H "Accept: application/vnd.github.everest-preview+json" \
-          -H "Authorization: token ${{ secrets.DEPLOY_DEV5_GH_ACTION_DISPATCH }}" \
-          --request POST \
-          https://api.github.com/repos/dataquest-dev/\
-          dspace-angular/actions/workflows/deploy.yml/dispatches \
-          --data "{\"ref\":\"refs/heads/dtq-dev\"}"
