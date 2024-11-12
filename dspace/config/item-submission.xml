@@ -18,9 +18,7 @@
     <!-- for handle "default". -->
     <submission-map>
         <!-- Default submission process -->
-        <name-map collection-handle="default" submission-name="traditional"/>
-        <name-map collection-handle="20.500.12800/3" submission-name="clariahSubmissions"/>
-        <name-map collection-handle="11234/5012" submission-name="teachingSubmissions"/>
+        <name-map collection-handle="default" submission-name="datacite"/>
         <!-- Sample Entities Collection configuration based on the demo Entities dataset available at:
              https://github.com/DSpace-Labs/AIP-Files/releases/tag/demo-entities-data
              This sets up the following Entity-based Collections in that dataset:
@@ -152,6 +150,23 @@
         </step-definition>
         <step-definition id="journalIssueStep" mandatory="true">
             <heading>submit.progressbar.describe.stepone</heading>
+            <processing-class>org.dspace.app.rest.submit.step.DescribeStep</processing-class>
+            <type>submission-form</type>
+        </step-definition>
+        <step-definition id="dataciterequired" mandatory="true">
+            <heading>submit.progressbar.describe.dataciterequired</heading>
+            <processing-class>org.dspace.app.rest.submit.step.DescribeStep</processing-class>
+            <type>submission-form</type>
+        </step-definition>
+        <!-- if mandatory is false; the submission form shows a "Add more +" button which can add the non mandatory
+        section. It's really hard to find even if you know there should be something to add other sections. -->
+        <step-definition id="dataciterecommended" mandatory="true">
+            <heading>submit.progressbar.describe.dataciterecommended</heading>
+            <processing-class>org.dspace.app.rest.submit.step.DescribeStep</processing-class>
+            <type>submission-form</type>
+        </step-definition>
+        <step-definition id="dataciteoptional" mandatory="true">
+            <heading>submit.progressbar.describe.dataciteoptional</heading>
             <processing-class>org.dspace.app.rest.submit.step.DescribeStep</processing-class>
             <type>submission-form</type>
         </step-definition>
@@ -333,6 +348,17 @@
             <step id="license"/>
             <step id="clarin-license"/>
             <step id="specialFields"/>
+        </submission-process>
+
+        <submission-process name="datacite">
+            <step id="collection"></step>
+            <step id="identifiers"/><!---->
+            <step id="dataciterequired"></step>
+            <step id="dataciterecommended"></step>
+            <step id="dataciteoptional"></step>
+            <step id="upload"/>
+            <step id="license"/>
+            <step id="clarin-license"/>
         </submission-process>
 
         <!--
