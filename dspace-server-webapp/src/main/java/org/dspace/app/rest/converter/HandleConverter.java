@@ -35,6 +35,7 @@ public class HandleConverter implements DSpaceConverter<Handle, HandleRest> {
         handleRest.setHandle(modelObject.getHandle());
         handleRest.setResourceTypeID(modelObject.getResourceTypeId());
         handleRest.setUrl(modelObject.getUrl());
+        handleRest.setResourceId(modelObject.getDSpaceObject().getID());
         return handleRest;
     }
 
