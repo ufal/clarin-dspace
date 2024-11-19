@@ -506,4 +506,21 @@ public final class Utils {
         ConfigurationService config = DSpaceServicesFactory.getInstance().getConfigurationService();
         return StringSubstitutor.replace(string, config.getProperties());
     }
+
+    /**
+     * Replace the last occurrence of a substring within a string.
+     *
+     * @param input The input string
+     * @param toReplace The substring to replace
+     * @param replacement The replacement substring
+     * @return Replaced input string or the original input string if the substring to replace is not found
+     */
+    public static String replaceLast(String input, String toReplace, String replacement) {
+        int lastIndex = input.lastIndexOf(toReplace);
+        if (lastIndex == -1) {
+            return input; // No replacement if not found
+        }
+
+        return input.substring(0, lastIndex) + replacement + input.substring(lastIndex + toReplace.length());
+    }
 }
