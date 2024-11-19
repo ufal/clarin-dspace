@@ -55,58 +55,28 @@
                  Uncomment it and the complex input will be showed in the submission UI. -->
             <row>
                 <field>
-                    <dc-schema>local</dc-schema>
-                    <dc-element>contact</dc-element>
-                    <dc-qualifier>person</dc-qualifier>
-                    <repeatable>true</repeatable>
-                    <label>Contact person</label>
-                    <style>col-sm-5</style>
-                    <input-type complex-definition-ref="contact_person">complex</input-type>
-                    <hint>This is contact person</hint>
-                    <required></required>
-                </field>
-            </row>
-            <row>
-                <field>
-                    <dc-schema>local</dc-schema>
-                    <dc-element>sponsor</dc-element>
-                    <repeatable>true</repeatable>
-                    <label>Funding</label>
-                    <style>col-sm-5</style>
-                    <input-type complex-definition-ref="funding">complex</input-type>
-                    <hint>This is funding</hint>
-                    <required></required>
-                </field>
-            </row>
-            <row>
-                <field>
                     <dc-schema>dc</dc-schema>
-                    <dc-element>contributor</dc-element>
-                    <dc-qualifier>author</dc-qualifier>
-                    <repeatable>true</repeatable>
-                    <label>Author</label>
-                    <input-type autocomplete-custom="solr-author_ac">autocomplete</input-type>
-                    <hint>Enter the author's name (Family name, Given names).</hint>
-                    <required></required>
-                    <!-- Example ACL field definition.
-                         Uncomment it and the Author input field will be showed only for the admin.
-                     policy=(allow|deny),action=(read|write),grantee-type=(user|group),grantee-id=(<UUID>)
-                    <acl>
-                        policy=deny,action=read,grantee-type=user,grantee-id=*
-                    </acl> -->
-                </field>
-            </row>
-            <row>
-                <field>
-                    <dc-schema>dc</dc-schema>
-                    <dc-element>title</dc-element>
+                    <dc-element>type</dc-element>
                     <dc-qualifier></dc-qualifier>
-                    <repeatable>false</repeatable>
-                    <label>Title</label>
-                    <input-type>onebox</input-type>
-                    <hint>Enter the main title of the item.</hint>
-                    <required>You must enter a main title for this item.</required>
+                    <repeatable>true</repeatable>
+                    <label>Type</label>
+                    <input-type value-pairs-name="common_types">dropdown</input-type>
+                    <hint>Select the type of content of the item.
+                    </hint>
+                    <required></required>
                 </field>
+            </row>
+            <row>
+            <field>
+                <dc-schema>dc</dc-schema>
+                <dc-element>title</dc-element>
+                <dc-qualifier></dc-qualifier>
+                <repeatable>false</repeatable>
+                <label>Title</label>
+                <input-type>onebox</input-type>
+                <hint>Enter the main title of the item in English.</hint>
+                <required>You must enter a main title for this item.</required>
+            </field>
             </row>
             <row>
                 <field>
@@ -153,78 +123,119 @@
                     <dc-element>date</dc-element>
                     <dc-qualifier>issued</dc-qualifier>
                     <repeatable>false</repeatable>
-                    <label>Date of Issue</label>
+                    <label>Date Issued</label>
                     <style>col-sm-4</style>
                     <input-type>date</input-type>
-                    <hint>Please give the date of previous publication or public distribution.
-                        You can leave out the day and/or month if they aren't applicable.
+                    <hint>Please give the date when the submission data were issued if any e.g., 2014-01-21 or at least
+                        the year.
                     </hint>
-                    <required>You must enter at least the year.</required>
+                    <required>You must enter the date or at least the year in a valid format.</required>
                 </field>
 
                 <field>
                     <dc-schema>dc</dc-schema>
                     <dc-element>publisher</dc-element>
                     <dc-qualifier></dc-qualifier>
-                    <repeatable>false</repeatable>
+                    <repeatable>true</repeatable>
                     <label>Publisher</label>
                     <style>col-sm-8</style>
                     <input-type autocomplete-custom="solr-publisher_ac">autocomplete</input-type>
-                    <hint>Enter the name of the publisher of the previously issued instance of this item.</hint>
+                    <hint>Enter the name of the publisher of the previously issued instance of this item, or your home
+                        institution. Start typing the publisher and use autocomplete form that will appear if
+                        applicable. End your input by pressing ESC if you don't want to use the preselected value.</hint>
+                    <required>You must enter the name of the publisher.</required>
+                </field>
+            </row>
+            <row>
+                <field>
+                    <dc-schema>local</dc-schema>
+                    <dc-element>hidden</dc-element>
+                    <dc-qualifier/>
+                    <repeatable>true</repeatable>
+                    <label>Should this item be hidden from browse/search? (Admin only field)</label>
+                    <style>col-sm-4</style>
+                    <input-type value-pairs-name="hidden_list">list</input-type>
+                    <hint>Indicate whether you want to hide this item from browse and search. Combine with "Upload cmdi"
+                        for weblicht submissions.</hint>
+                    <required/>
+                    <acl>
+                        policy=deny,action=read,grantee-type=user,grantee-id=*
+                    </acl>
+                </field>
+            </row>
+            <row>
+                <field>
+                    <dc-schema>local</dc-schema>
+                    <dc-element>hasCMDI</dc-element>
+                    <repeatable>true</repeatable>
+                    <label>Are you going to upload cmdi file? (Admin only field)</label>
+                    <input-type value-pairs-name="hasCMDI_checkbox">list</input-type>
+                    <hint>Indicate whether you will upload cmdi file in the next step. Combine with "hide" for weblicht
+                        submissions.</hint>
                     <required></required>
+                    <acl>
+                        policy=deny,action=read,grantee-type=user,grantee-id=*
+                    </acl>
                 </field>
             </row>
             <row>
                 <field>
                     <dc-schema>dc</dc-schema>
-                    <dc-element>identifier</dc-element>
-                    <dc-qualifier>citation</dc-qualifier>
+                    <dc-element>contributor</dc-element>
+                    <dc-qualifier>author</dc-qualifier>
+                    <repeatable>true</repeatable>
+                    <label>Authors</label>
+                    <input-type autocomplete-custom="solr-author_ac">autocomplete</input-type>
+                    <hint>Enter the names of the authors of this item. Start typing the author's last name and use
+                        autocomplete form that will appear if applicable. End your input by pressing ESC if you don't
+                        want to use the preselected value..</hint>
+                    <required>Please add author(s)</required>
+                    <!-- Example ACL field definition.
+                         Uncomment it and the Author input field will be showed only for the admin.
+                     policy=(allow|deny),action=(read|write),grantee-type=(user|group),grantee-id=(<UUID>)
+                    <acl>
+                        policy=deny,action=read,grantee-type=user,grantee-id=*
+                    </acl> -->
+                </field>
+            </row>
+            <row>
+                <field>
+                    <dc-schema>local</dc-schema>
+                    <dc-element>contact</dc-element>
+                    <dc-qualifier>person</dc-qualifier>
+                    <repeatable>true</repeatable>
+                    <label>Contact person</label>
+                    <style>col-sm-5</style>
+                    <input-type complex-definition-ref="contact_person">complex</input-type>
+                    <hint>Person to contact in case of any issues with this submission.</hint>
+                    <required>Please fill all the fields for the contact person.</required>
+                </field>
+            </row>
+            <row>
+                <field>
+                    <dc-schema>local</dc-schema>
+                    <dc-element>sponsor</dc-element>
+                    <repeatable>true</repeatable>
+                    <label>Funding</label>
+                    <style>col-sm-5</style>
+                    <input-type complex-definition-ref="funding">complex</input-type>
+                    <hint>Acknowledge sponsors and funding that supported work described by this submission.</hint>
+                    <required></required>
+                </field>
+            </row>
+        </form>
+
+        <form name="traditionalpagetwo">
+            <row>
+                <field>
+                    <dc-schema>dc</dc-schema>
+                    <dc-element>description</dc-element>
+                    <dc-qualifier></dc-qualifier>
                     <repeatable>false</repeatable>
-                    <label>Citation</label>
-                    <input-type>onebox</input-type>
-                    <hint>Enter the standard citation for the previously issued instance of this item.</hint>
-                    <required></required>
-                </field>
-            </row>
-            <row>
-                <field>
-                    <dc-schema>dc</dc-schema>
-                    <dc-element>relation</dc-element>
-                    <dc-qualifier>ispartofseries</dc-qualifier>
-                    <repeatable>true</repeatable>
-                    <label>Series/Report No.</label>
-                    <type-bind>Technical Report</type-bind>
-                    <input-type>series</input-type>
-                    <hint>Enter the series and number assigned to this item by your community.</hint>
-                    <required></required>
-                </field>
-            </row>
-            <row>
-                <field>
-                    <dc-schema>dc</dc-schema>
-                    <dc-element>identifier</dc-element>
-                    <dc-qualifier></dc-qualifier>
-                    <!-- An input-type of qualdrop_value MUST be marked as repeatable -->
-                    <repeatable>true</repeatable>
-                    <label>Identifiers</label>
-                    <input-type value-pairs-name="common_identifiers">qualdrop_value</input-type>
-                    <hint>If the item has any identification numbers or codes associated with
-                        it, please enter the types and the actual numbers or codes.
-                    </hint>
-                    <required></required>
-                </field>
-            </row>
-            <row>
-                <field>
-                    <dc-schema>dc</dc-schema>
-                    <dc-element>type</dc-element>
-                    <dc-qualifier></dc-qualifier>
-                    <repeatable>true</repeatable>
-                    <label>Type</label>
-                    <input-type value-pairs-name="common_types">dropdown</input-type>
-                    <hint>Select the type of content of the item.
-                    </hint>
-                    <required></required>
+                    <label>Description</label>
+                    <input-type>textarea</input-type>
+                    <hint>Enter a description of the submitted data.</hint>
+                    <required>Please give us a description</required>
                 </field>
             </row>
             <row>
@@ -258,6 +269,24 @@
             </row>
             <row>
                 <field>
+                    <dc-schema>dc</dc-schema>
+                    <dc-element>subject</dc-element>
+                    <dc-qualifier></dc-qualifier>
+                    <!-- An input-type of tag MUST be marked as repeatable -->
+                    <repeatable>true</repeatable>
+                    <label>Subject Keywords</label>
+                    <input-type>tag</input-type>
+                    <hint>Enter appropriate subject keyword or phrase and press the Add button. You can repeat it for
+                        multiple keywords or use separators i.e., comma and semicolon, which will split it accordingly.
+                        Start typing the keyword and use autocomplete form that will appear. End your input by pressing
+                        ESC if you don't want to use the preselected value.
+                    </hint>
+                    <required>Please enter at least one subject related to your submission</required>
+                    <vocabulary>srsc</vocabulary>
+                </field>
+            </row>
+            <row>
+                <field>
                     <dc-schema>local</dc-schema>
                     <dc-element>size</dc-element>
                     <dc-qualifier>info</dc-qualifier>
@@ -265,9 +294,11 @@
                     <label>Size</label>
                     <type-bind>corpus,languageDescription,lexicalConceptualResource</type-bind>
                     <input-type complex-definition-ref="sizeInfo">complex</input-type>
-                    <hint>You can state the extent of the submitted data, eg. the number of tokens.</hint>
+                    <hint>You can state the extent of the submitted data, e.g., the number of tokens.</hint>
                 </field>
             </row>
+
+            <!-- Help field... different values based on resource type -->
             <row>
                 <field>
                     <dc-schema>metashare</dc-schema>
@@ -298,8 +329,6 @@
                     <required>Media type is required</required>
                 </field>
             </row>
-
-            <!-- Help field... different values based on resource type -->
             <row>
                 <field>
                     <dc-schema>metashare</dc-schema>
@@ -357,46 +386,17 @@
             <row>
                 <field>
                     <dc-schema>local</dc-schema>
-                    <dc-element>hasCMDI</dc-element>
-                    <repeatable>true</repeatable>
-                    <label>Has CMDI file</label>
-                    <input-type value-pairs-name="hasCMDI_checkbox">list</input-type>
-                    <hint>Are you going to upload cmdi file?</hint>
-                    <required></required>
-                    <acl>
-                        policy=deny,action=read,grantee-type=user,grantee-id=*
-                    </acl>
-                </field>
-            </row>
-            <row>
-                <field>
-                    <dc-schema>local</dc-schema>
-                    <dc-element>hidden</dc-element>
-                    <dc-qualifier/>
-                    <repeatable>true</repeatable>
-                    <label>Hidden but harvestable</label>
-                    <style>col-sm-4</style>
-                    <input-type value-pairs-name="hidden_list">list</input-type>
-                    <hint>Should item be harvestable thru OAI-PMH but behave like private?</hint>
-                    <required/>
-                    <acl>
-                        policy=deny,action=read,grantee-type=user,grantee-id=*
-                    </acl>
-                </field>
-            </row>
-            <row>
-                <field>
-                    <dc-schema>local</dc-schema>
                     <dc-element>bitstream</dc-element>
                     <dc-qualifier>redirectToURL</dc-qualifier>
                     <repeatable>false</repeatable>
-                    <label>Big file URL</label>
+                    <label>Upload file from URI (Admin only field)</label>
                     <input-type>onebox</input-type>
                     <hint>
-                        The actual maximum upload size of the file is 4GB. To upload a file bigger than the
-                        maximum upload size, enter the URL of that large file. The admin must know the URL
-                        of that bitstream file. Then, click on the 'Save' button, and the file will start
-                        to upload. The file path must be an absolute path.
+                        Please enter the full path of the file, either from the local server or an HTTP location.
+                        The maximum upload size for a file is 4GB. To upload a file larger than this limit, provide the
+                        URL of the file. Ensure the admin is aware of the URL of the bitstream file.
+                        Once the file path or URL is entered, click the 'Save' button to begin the upload.
+                        Note: The file path must be an absolute path.
                     </hint>
                     <required></required>
                     <acl>
@@ -408,62 +408,6 @@
 
         <!-- Form which defines the second page/section of the "traditional" DSpace submission process,
              often used when depositing normal Items. -->
-        <form name="traditionalpagetwo">
-            <row>
-                <field>
-                    <dc-schema>dc</dc-schema>
-                    <dc-element>subject</dc-element>
-                    <dc-qualifier></dc-qualifier>
-                    <!-- An input-type of tag MUST be marked as repeatable -->
-                    <repeatable>true</repeatable>
-                    <label>Keywords</label>
-                    <input-type autocomplete-custom="solr-subject_ac">autocomplete</input-type>
-                    <hint>Enter appropriate subject keyword or phrase and press the Add button. You can repeat it for
-                        multiple keywords or use separators i.e., Enter and comma, which will split it accordingly.
-                        Start typing the keyword and use autocomplete form that will appear. End your input by pressing
-                        ESC if you don't want to use the preselected value.
-                    </hint>
-                    <required>Please enter at least one subject related to your submission</required>
-                    <vocabulary>srsc</vocabulary>
-                </field>
-            </row>
-            <row>
-                <field>
-                    <dc-schema>dc</dc-schema>
-                    <dc-element>description</dc-element>
-                    <dc-qualifier>abstract</dc-qualifier>
-                    <repeatable>false</repeatable>
-                    <label>Abstract</label>
-                    <input-type>textarea</input-type>
-                    <hint>Enter the abstract of the item.</hint>
-                    <required></required>
-                </field>
-            </row>
-            <row>
-                <field>
-                    <dc-schema>dc</dc-schema>
-                    <dc-element>description</dc-element>
-                    <dc-qualifier>sponsorship</dc-qualifier>
-                    <repeatable>false</repeatable>
-                    <label>Sponsors</label>
-                    <input-type>textarea</input-type>
-                    <hint>Enter the names of any sponsors and/or funding codes in the box.</hint>
-                    <required></required>
-                </field>
-            </row>
-            <row>
-                <field>
-                    <dc-schema>dc</dc-schema>
-                    <dc-element>description</dc-element>
-                    <dc-qualifier></dc-qualifier>
-                    <repeatable>false</repeatable>
-                    <label>Description</label>
-                    <input-type>textarea</input-type>
-                    <hint>Enter any other description or comments in this box.</hint>
-                    <required></required>
-                </field>
-            </row>
-        </form>
 
 
         <!-- Form which defines the *first* metadata page/section for depositing Publication Entities.
@@ -1650,7 +1594,7 @@
                     <dc-element>hidden</dc-element>
                     <dc-qualifier/>
                     <repeatable>false</repeatable>
-                    <label>Should this item be hidden from browse</label>
+                    <label>Should this item be hidden from browse/search? (Admin only field)</label>
                     <input-type value-pairs-name="hidden_list">list</input-type>
                     <hint>Indicate whether you want to hide this item from browse and search. Combine with "Upload cmdi"
                         for weblicht submissions.
@@ -1667,7 +1611,7 @@
                     <dc-element>hasMetadata</dc-element>
                     <dc-qualifier/>
                     <repeatable>false</repeatable>
-                    <label>Are you going to upload cmdi file?</label>
+                    <label>Are you going to upload cmdi file? (Admin only field)</label>
                     <input-type value-pairs-name="metashare_languageDependent">list</input-type>
                     <!-- true/false value -->
                     <hint>Indicate whether you will upload cmdi file in the next step. Combine with "hide" for weblicht
@@ -1721,7 +1665,7 @@
                     <label>Data provider</label>
                     <input-type autocomplete-custom="solr-dataProvider_ac">autocomplete</input-type>
                     <hint>This concerns the digital object (not the analog
-                        original). An institution from which the data come. Used e.g. to give proper attribution. Generally
+                        original). An institution from which the data come. Used e.g., to give proper attribution. Generally
                         different from publisher.</hint>
                     <required/>
                 </field>
@@ -1857,6 +1801,27 @@
                     <hint>You can state the extent of the submitted data, eg. the number of tokens.</hint>
                 </field>
             </row>
+            <row>
+                <field>
+                    <dc-schema>local</dc-schema>
+                    <dc-element>bitstream</dc-element>
+                    <dc-qualifier>redirectToURL</dc-qualifier>
+                    <repeatable>false</repeatable>
+                    <label>Upload file from URI (Admin only field)</label>
+                    <input-type>onebox</input-type>
+                    <hint>
+                        Please enter the full path of the file, either from the local server or an HTTP location.
+                        The maximum upload size for a file is 4GB. To upload a file larger than this limit, provide the
+                        URL of the file. Ensure the admin is aware of the URL of the bitstream file.
+                        Once the file path or URL is entered, click the 'Save' button to begin the upload.
+                        Note: The file path must be an absolute path.
+                    </hint>
+                    <required></required>
+                    <acl>
+                        policy=deny,action=read,grantee-type=user,grantee-id=*
+                    </acl>
+                </field>
+            </row>
         </form>
 
         <form name="teachingSubmissionsPageOne">
@@ -1925,7 +1890,7 @@
                     <dc-element>hidden</dc-element>
                     <dc-qualifier/>
                     <repeatable>false</repeatable>
-                    <label>Should this item be hidden from browse/search?</label>
+                    <label>Should this item be hidden from browse/search? (Admin only field)</label>
                     <input-type value-pairs-name="hidden_list">list</input-type>
                     <hint>Indicate whether you want to hide this item from browse and search. Combine with "Upload cmdi"
                         for weblicht submissions.
@@ -1942,7 +1907,7 @@
                     <dc-element>hasMetadata</dc-element>
                     <dc-qualifier/>
                     <repeatable>false</repeatable>
-                    <label>Are you going to upload cmdi file?</label>
+                    <label>Are you going to upload cmdi file? (Admin only field)</label>
                     <input-type value-pairs-name="metashare_languageDependent">list</input-type>
                     <!-- true/false value -->
                     <hint>Indicate whether you will upload cmdi file in the next step. Combine with "hide" for weblicht
@@ -2092,6 +2057,27 @@
                     <required/>
                 </field>
             </row>
+            <row>
+                <field>
+                    <dc-schema>local</dc-schema>
+                    <dc-element>bitstream</dc-element>
+                    <dc-qualifier>redirectToURL</dc-qualifier>
+                    <repeatable>false</repeatable>
+                    <label>Upload file from URI (Admin only field)</label>
+                    <input-type>onebox</input-type>
+                    <hint>
+                        Please enter the full path of the file, either from the local server or an HTTP location.
+                        The maximum upload size for a file is 4GB. To upload a file larger than this limit, provide the
+                        URL of the file. Ensure the admin is aware of the URL of the bitstream file.
+                        Once the file path or URL is entered, click the 'Save' button to begin the upload.
+                        Note: The file path must be an absolute path.
+                    </hint>
+                    <required></required>
+                    <acl>
+                        policy=deny,action=read,grantee-type=user,grantee-id=*
+                    </acl>
+                </field>
+            </row>
         </form>
 
         <form name="specialFields">
@@ -2129,7 +2115,7 @@
                     <dc-element>relation</dc-element>
                     <dc-qualifier>isreplacedby</dc-qualifier>
                     <repeatable>true</repeatable>
-                    <label>Is replaced by</label>
+                    <label>Is replaced by (Admin only field)</label>
                     <input-type autocomplete-custom="solr-handle_title_ac">autocomplete</input-type>
                     <hint>A related resource that supplants, displaces, or supersedes the described resource.</hint>
                     <required/>
@@ -3204,7 +3190,7 @@
         </value-pairs>
         <value-pairs value-pairs-name="hidden_list" dc-term="">
             <pair>
-                <displayed-value>Hidden</displayed-value>
+                <displayed-value>Yes</displayed-value>
                 <stored-value>hidden</stored-value>
             </pair>
         </value-pairs>
@@ -3222,15 +3208,15 @@
          Uncomment the example row of the complex input type definition to see this input in the submission UI. -->
     <form-complex-definitions>
         <definition name="contact_person">
-            <input name="givenname" input-type="text" label="Given name"/>
-            <input name="surname" input-type="text" label="Surname"/>
-            <input name="email" input-type="text" label="Email" regex="[^@]+@[^\.@]+\.[^@]+"/>
-            <input name="affiliation" input-type="autocomplete" label="Affiliation"/>
+            <input name="givenname" input-type="text" label="Contact person's given name" required="true"/>
+            <input name="surname" input-type="text" label="Contact person's surname" hint="Family name" required="true"/>
+            <input name="email" input-type="text" label="Contact person's email" regex="[^@]+@[^\.@]+\.[^@]+" required="true"/>
+            <input name="affiliation" input-type="autocomplete" label="Contact person's institution name" required="true"/>
         </definition>
 
         <definition name="funding">
             <input name="type" input-type="dropdown" label="Funding type" value-pairs-name="metashare_funding" required="true"/>
-            <input name="code"  input-type="autocomplete" label="Grant no. or funding project code" required="true"/>
+            <input name="code"  input-type="autocomplete" label="Grant no. or funding project code" placeholder="Start typing the name/number of the grant..." required="true"/>
             <input name="orgname" input-type="text" label="Funding organization" required="true"/>
             <input name="projname" input-type="autocomplete" label="Funding project name" required="true"/>
             <input name="openaire_id" input-type="text" label="EU Project Identifier (OpenAIRE)" readonly="true" placeholder="Filled out automatically..." mapped-to-if-not-default="dc.relation" required="true"/>
