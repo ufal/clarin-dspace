@@ -165,6 +165,11 @@ public class DCInput {
     private ComplexDefinition complexDefinition = null;
 
     /**
+     * give suggestions from this specific autocomplete solr index/file
+     */
+    private String autocompleteCustom = null;
+
+    /**
      * the dropdown input type could have defined a default value
      */
     private String defaultValue = "";
@@ -234,6 +239,9 @@ public class DCInput {
         }
         if ("complex".equals(inputType)) {
             complexDefinition = complexDefinitions.getByName((fieldMap.get(DCInputsReader.COMPLEX_DEFINITION_REF)));
+        }
+        if ("autocomplete".equals(inputType)) {
+            autocompleteCustom = fieldMap.get(DCInputsReader.AUTOCOMPLETE_CUSTOM);
         }
         hint = fieldMap.get("hint");
         warning = fieldMap.get("required");
@@ -723,6 +731,14 @@ public class DCInput {
      */
     public boolean isMetadataField() {
         return isMetadataField;
+    }
+
+    public String getAutocompleteCustom() {
+        return autocompleteCustom;
+    }
+
+    public void setAutocompleteCustom(String autocompleteCustom) {
+        this.autocompleteCustom = autocompleteCustom;
     }
 
     /**

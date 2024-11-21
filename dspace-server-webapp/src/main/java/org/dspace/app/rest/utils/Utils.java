@@ -48,6 +48,12 @@ import java.util.Scanner;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.annotation.Nullable;
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
@@ -1132,5 +1138,110 @@ public class Utils {
             }
         }
         return result.toString();
+    }
+
+    /**
+     * Update the solr DiscoverQuery because in some cases it won't search properly numbers and characters together.
+     * @param searchValue searching value
+     * @param searchField it could be special solr index or metadata field
+     * @return updated DiscoverQuery
+     */
+    public static String normalizeDiscoverQuery(String searchValue,
+                                                       String searchField) {
+        // regex if searchValue consist of numbers and characters
+        // \d - digit
+        String regexNumber = "(.)*(\\d)(.)*";
+        // \D - non digit
+        String regexString = "(.)*(\\D)(.)*";
+        Pattern patternNumber = Pattern.compile(regexNumber);
+        Pattern patternString = Pattern.compile(regexString);
+        // if the searchValue is mixed with numbers and characters the Solr ignore numbers by default
+        // divide the characters and numbers from searchValue to the separate queries and from separate queries
+        // create one complex query
+        if (patternNumber.matcher(searchValue).matches() && patternString.matcher(searchValue).matches()) {
+            List<String> characterList = extractCharacterListFromString(searchValue);
+            List<String> numberList = extractNumberListFromString(searchValue);
+            return composeQueryWithNumbersAndChars(searchField, characterList, numberList);
+        }
+        return null;
+    }
+
+    /**
+     * From searchValue get all number values which are separated by the number to the List of Strings.
+     * @param searchValue e.g. 'my1Search2'
+     * @return e.g. [1, 2]
+     */
+    private static List<String> extractNumberListFromString(String searchValue) {
+        List<String> numberList = new ArrayList<>();
+
+        // get numbers from searchValue as List
+        Pattern numberRegex = Pattern.compile("-?\\d+");
+        Matcher numberMatcher = numberRegex.matcher(searchValue);
+        while (numberMatcher.find()) {
+            numberList.add(numberMatcher.group());
+        }
+
+        return numberList;
+    }
+
+    /**
+     * From searchValue get all String values which are separated by the number to the List of Strings.
+     * @param searchValue e.g. 'my1Search2'
+     * @return e.g. [my, Search]
+     */
+    private static List<String> extractCharacterListFromString(String searchValue) {
+        List<String> characterList = null;
+        // get characters from searchValue as List
+        searchValue = searchValue.replaceAll("[0-9]", " ");
+        characterList = new LinkedList<>(Arrays.asList(searchValue.split(" ")));
+        // remove empty characters from the characterList
+        characterList.removeIf(characters -> characters == null || "".equals(characters));
+
+        return characterList;
+    }
+
+    /**
+     * From list of String and list of Numbers create a query for the SolrQuery.
+     * @param metadataField e.g. `dc.contributor.author`
+     * @param characterList e.g. [my, Search]
+     * @param numberList e.g. [1, 2]
+     * @return "dc.contributor.author:*my* AND dc.contributor.author:*Search* AND dc.contributor.author:*1* AND ..."
+     */
+    private static String composeQueryWithNumbersAndChars(String metadataField, List<String> characterList,
+                                                          List<String> numberList) {
+        addQueryTemplateToList(metadataField, characterList);
+        addQueryTemplateToList(metadataField, numberList);
+
+        String joinedChars = String.join(" AND ", characterList);
+        String joinedNumbers = String.join(" AND ", numberList);
+        return joinedChars + " AND " + joinedNumbers;
+
+    }
+
+    /**
+     * Add SolrQuery template to the every item of the List
+     * @param metadataField e.g. `dc.contributor.author`
+     * @param stringList could be List of String or List of Numbers which are in the String format because of Solr
+     *                   e.g. [my, Search]
+     * @return [dc.contributor.author:*my*, dc.contributor.author:*Search*]
+     */
+    private static List<String> addQueryTemplateToList(String metadataField, List<String> stringList) {
+        String template = metadataField + ":" + "*" + " " + "*";
+
+        AtomicInteger index = new AtomicInteger();
+        stringList.forEach(characters -> {
+            String queryString = template.replaceAll(" ", characters);
+            stringList.set(index.getAndIncrement(), queryString);
+        });
+        return stringList;
+    }
+
+    /**
+     * Filter unique values from the list and return list with unique values
+     * @return List with unique values
+     */
+    public static <T> Predicate<T> distinctByKey(Function<? super T, Object> keyExtractor) {
+        Map<Object, Boolean> map = new ConcurrentHashMap<>();
+        return t -> map.putIfAbsent(keyExtractor.apply(t), Boolean.TRUE) == null;
     }
 }

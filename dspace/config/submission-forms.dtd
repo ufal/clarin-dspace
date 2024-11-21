@@ -81,6 +81,7 @@
 
  <!ATTLIST input-type value-pairs-name CDATA  #IMPLIED>
  <!ATTLIST input-type complex-definition-ref CDATA  #IMPLIED>
+ <!ATTLIST input-type autocomplete-custom CDATA  #IMPLIED>
 
  <!ELEMENT vocabulary (#PCDATA) >
 
