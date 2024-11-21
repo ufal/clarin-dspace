@@ -606,6 +606,70 @@ public class ClarinShibbolethLoginFilterIT extends AbstractControllerIntegration
         deleteShibbolethUser(ePerson);
     }
 
+    //  mail=null, eppn=null, persistent-id=somestring
+    @Test
+    public void shouldAskForEmailWhenHasPersistentId() throws Exception {
+        String persistentId = "some pid";
+
+        // Try to log in a user without email, but with persistent id. The user should be redirected to the page where
+        // he will fill in the user email.
+        getClient().perform(get("/api/authn/shibboleth")
+                        .header("Shib-Identity-Provider", IDP_TEST_EPERSON)
+                        .header(NET_ID_PERSISTENT_ID, persistentId))
+                .andExpect(status().isFound())
+                .andExpect(redirectedUrl("http://localhost:4000/login/auth-failed?netid=" +
+                        Util.formatNetId(persistentId, IDP_TEST_EPERSON)));
+    }
+
+    // The user was registered and signed in with the verification token on the second attempt, after the email
+    // containing the verification token was sent.
+    @Test
+    public void shouldNotAuthenticateOnSecondAttemptWithoutVerificationTokenInRequest() throws Exception {
+        String email = "test@mail.epic";
+        String netId = email;
+        String idp = "Test Idp";
+
+        // Try to authenticate but the Shibboleth doesn't send the email in the header, so the user won't be registered
+        // but the user will be redirected to the page where he will fill in the user email.
+        getClient().perform(get("/api/authn/shibboleth")
+                        .header("Shib-Identity-Provider", idp)
+                        .header("SHIB-NETID", netId))
+                .andExpect(status().isFound())
+                .andExpect(redirectedUrl("http://localhost:4000/login/auth-failed?netid=" +
+                        Util.formatNetId(netId, idp)));
+
+        // Send the email with the verification token.
+        String tokenAdmin = getAuthToken(admin.getEmail(), password);
+        getClient(tokenAdmin).perform(post("/api/autoregistration?netid=" + netId + "&email=" + email)
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk());
+
+        // Load the created verification token.
+        ClarinVerificationToken clarinVerificationToken = clarinVerificationTokenService.findByNetID(context, netId);
+        assertTrue(Objects.nonNull(clarinVerificationToken));
+
+        // Try to authenticate the user again, and it should NOT to be automatically registered and signed in,
+        // because the verification token is not passed in the request header.
+        getClient().perform(get("/api/authn/shibboleth")
+                        .header("Shib-Identity-Provider", idp)
+                        .header("SHIB-NETID", netId))
+                .andExpect(status().isFound())
+                .andExpect(redirectedUrl("http://localhost:4000/login/auth-failed?netid=" +
+                        Util.formatNetId(netId, idp)));
+    }
+
+    @Test
+    public void shouldSendShibbolethAuthError() throws Exception {
+        String idp = "Test Idp";
+
+        // Try to authenticate but the Shibboleth doesn't send the email or netid in the header,
+        // so the user won't be registered but the user will be redirected to the login page with the error message.
+        getClient().perform(get("/api/authn/shibboleth")
+                        .header("Shib-Identity-Provider", idp))
+                .andExpect(status().isFound())
+                .andExpect(redirectedUrl("http://localhost:4000/login?error=shibboleth-authentication-failed"));
+    }
+
     private EPerson checkUserWasCreated(String netIdValue, String idpValue, String email, String name)
             throws SQLException {
         // Check if was created a user with such email and netid.

@@ -92,6 +92,13 @@ public class SubmissionFormFieldRest {
      * ComplexDefinition transformed to the JSON string
      */
     private String complexDefinition;
+
+    /**
+     * Autocomplete custom field. Give suggestions from this specific autocomplete solr index/file.
+     */
+    private String autocompleteCustom;
+
+
     /**
      * Getter for {@link #selectableMetadata}
      * 
@@ -297,5 +304,13 @@ public class SubmissionFormFieldRest {
 
     public String getComplexDefinition() {
         return this.complexDefinition;
+    }
+
+    public String getAutocompleteCustom() {
+        return autocompleteCustom;
+    }
+
+    public void setAutocompleteCustom(String autocompleteCustom) {
+        this.autocompleteCustom = autocompleteCustom;
     }
 }

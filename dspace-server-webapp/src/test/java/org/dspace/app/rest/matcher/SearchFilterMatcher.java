@@ -188,7 +188,7 @@ public class SearchFilterMatcher {
 
     public static Matcher<? super Object> clarinItemsTypeFilter() {
         return allOf(
-                hasJsonPath("$.filter", is("itemtype")),
+                hasJsonPath("$.filter", is("type")),
                 hasJsonPath("$.hasFacets", is(true)),
                 hasJsonPath("$.type", is("text")),
                 hasJsonPath("$.openByDefault", is(false)),
@@ -220,6 +220,16 @@ public class SearchFilterMatcher {
     public static Matcher<? super Object> clarinDataProviderFacet() {
         return allOf(
                 hasJsonPath("$.filter", is("dataProvider")),
+                hasJsonPath("$.hasFacets", is(false)),
+                hasJsonPath("$.type", is("text")),
+                hasJsonPath("$.openByDefault", is(false)),
+                checkOperators()
+        );
+    }
+
+    public static Matcher<? super Object> dcTypeFilter() {
+        return allOf(
+                hasJsonPath("$.filter", is("dctype")),
                 hasJsonPath("$.hasFacets", is(false)),
                 hasJsonPath("$.type", is("text")),
                 hasJsonPath("$.openByDefault", is(false)),

@@ -126,6 +126,7 @@
     <fieldType name="textgen" class="solr.TextField" positionIncrementGap="100">
       <analyzer type="index">
         <tokenizer class="solr.WhitespaceTokenizerFactory"/>
+        <filter class="solr.ASCIIFoldingFilterFactory"/>
         <filter class="solr.StopFilterFactory"
                 ignoreCase="true"
                 words="stopwords.txt" />
@@ -140,6 +141,7 @@
       </analyzer>
       <analyzer type="query">
         <tokenizer class="solr.WhitespaceTokenizerFactory"/>
+        <filter class="solr.ASCIIFoldingFilterFactory"/>
         <filter class="solr.SynonymFilterFactory" synonyms="synonyms.txt" ignoreCase="true" expand="true"/>
         <filter class="solr.StopFilterFactory"
                 ignoreCase="true"
@@ -181,7 +183,8 @@
             <tokenizer class="solr.KeywordTokenizerFactory"/>
 
             <!--Lower cases our values-->
-            <filter class="solr.LowerCaseFilterFactory" />
+            <!-- do not do this as we are using typeahead and we need real values
+            <filter class="solr.LowerCaseFilterFactory" /> -->
             <!--Discards common words.-->
             <filter class="solr.StopFilterFactory" />
             <!-- The TrimFilter removes any leading or trailing whitespace -->
@@ -194,8 +197,14 @@
             <!--Treats the entire field as a single token, regardless of its content-->
             <tokenizer class="solr.KeywordTokenizerFactory"/>
 
-            <!--<filter class="solr.LowerCaseFilterFactory" />-->
+            <filter class="solr.LowerCaseFilterFactory" />
             <filter class="solr.TrimFilterFactory" />
+        </analyzer>
+    </fieldType>
+
+    <fieldType name="noLowKeywordFilter" class="solr.TextField" sortMissingLast="true" omitNorms="true">
+        <analyzer>
+            <tokenizer class="solr.KeywordTokenizerFactory"/>
         </analyzer>
     </fieldType>
 
@@ -300,11 +309,11 @@
     <dynamicField name="*_stored" type="dspaceMetadataProjection" indexed="false" stored="true" multiValued="true"/>
 
     <!--Dynamic field used for search autocompletion-->
-    <dynamicField name="*_ac" type="keywordFilter" indexed="true" stored="true" omitNorms="true" multiValued="true"/>
+    <dynamicField name="*_ac" type="dspaceAutoComplete" indexed="true" stored="true" omitNorms="true" multiValued="true"/>
 	<dynamicField name="*_acid" type="keywordFilter" indexed="true" stored="true" omitNorms="true" multiValued="true"/>
 
     <!--Dynamic field used for sidebar filters & SOLR browse by value -->
-    <dynamicField name="*_filter" type="keywordFilter" indexed="true" stored="true" multiValued="true" omitNorms="true" />
+    <dynamicField name="*_filter" type="noLowKeywordFilter" indexed="true" stored="true" multiValued="true" omitNorms="true" />
     <!--Dynamic field used to index the facet/filter value, split on each word to end,
         so that the facet search can search all words in a facet-->
     <dynamicField name="*_prefix" type="keywordFilter" indexed="true" stored="true" multiValued="true" omitNorms="true" />
@@ -361,5 +370,21 @@
 
  <copyField source="*" dest="search_text"/>
  <copyField source="dspace.entity.type" dest="search.entitytype"/>
+ <copyField source="fulltext" dest="search_text"/>
+ <copyField source="handle" dest="search_text"/>
+ <copyField source="dc.publisher" dest="search_text"/>
+ <copyField source="dc.description" dest="search_text"/>
+ <copyField source="dc.description" dest="search_text"/>
+ <copyField source="dc.title*" dest="search_text"/>
+ <copyField source="dc.title*" dest="search_text"/>
+ <copyField source="dc.contributor.author" dest="search_text"/>
+ <copyField source="dc.contributor.other" dest="search_text"/>
+ <copyField source="dc.source*" dest="search_text"/>
+ <copyField source="dc.date*" dest="search_text"/>
+ <copyField source="dc.language*" dest="search_text"/>
+ <copyField source="dc.identifier*" dest="search_text"/>
+ <copyField source="dc.type" dest="search_text"/>
+ <copyField source="dc.subject*" dest="search_text"/>
+ <copyField source="dc.subject*" dest="search_text"/>
 
 </schema>
