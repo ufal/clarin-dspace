@@ -59,11 +59,14 @@
                     <dc-element>type</dc-element>
                     <dc-qualifier></dc-qualifier>
                     <repeatable>true</repeatable>
-                    <label>Type</label>
+                    <label>Select type of your resource</label>
                     <input-type value-pairs-name="common_types">dropdown</input-type>
-                    <hint>Select the type of content of the item.
+                    <hint>Type of the resource: "Corpus" refers to text, speech and multimodal corpora.
+                        "Lexical Conceptual Resource" includes lexica, ontologies, dictionaries, word lists etc.
+                        "language Description" covers language models and grammars.
+                        "Technology / Tool / Service" is used for tools, systems, system components etc.
                     </hint>
-                    <required></required>
+                    <required>Please select a resource type for your submission.</required>
                 </field>
             </row>
             <row>
@@ -142,7 +145,8 @@
                     <input-type autocomplete-custom="solr-publisher_ac">autocomplete</input-type>
                     <hint>Enter the name of the publisher of the previously issued instance of this item, or your home
                         institution. Start typing the publisher and use autocomplete form that will appear if
-                        applicable. End your input by pressing ESC if you don't want to use the preselected value.</hint>
+                        applicable. End your input by pressing ESC if you don't want to use the preselected value.
+                    </hint>
                     <required>You must enter the name of the publisher.</required>
                 </field>
             </row>
@@ -156,7 +160,8 @@
                     <style>col-sm-4</style>
                     <input-type value-pairs-name="hidden_list">list</input-type>
                     <hint>Indicate whether you want to hide this item from browse and search. Combine with "Upload cmdi"
-                        for weblicht submissions.</hint>
+                        for weblicht submissions.
+                    </hint>
                     <required/>
                     <acl>
                         policy=deny,action=read,grantee-type=user,grantee-id=*
@@ -171,7 +176,8 @@
                     <label>Are you going to upload cmdi file? (Admin only field)</label>
                     <input-type value-pairs-name="hasCMDI_checkbox">list</input-type>
                     <hint>Indicate whether you will upload cmdi file in the next step. Combine with "hide" for weblicht
-                        submissions.</hint>
+                        submissions.
+                    </hint>
                     <required></required>
                     <acl>
                         policy=deny,action=read,grantee-type=user,grantee-id=*
@@ -188,7 +194,8 @@
                     <input-type autocomplete-custom="solr-author_ac">autocomplete</input-type>
                     <hint>Enter the names of the authors of this item. Start typing the author's last name and use
                         autocomplete form that will appear if applicable. End your input by pressing ESC if you don't
-                        want to use the preselected value..</hint>
+                        want to use the preselected value.
+                    </hint>
                     <required>Please add author(s)</required>
                     <!-- Example ACL field definition.
                          Uncomment it and the Author input field will be showed only for the admin.
@@ -247,9 +254,8 @@
                     <label>Language</label>
                     <type-bind>corpus,lexicalConceptualResource,languageDescription</type-bind>
                     <input-type autocomplete-custom="json_static-iso_langs.json">autocomplete</input-type>
-                    <hint>Select the language of the main content of the item. If the language does not appear in the
-                        list, please select 'Other'. If the content does not really have a language (for example, if it
-                        is a dataset or an image) please select 'N/A'.
+                    <hint>Select the language of the main content of the item. Multiple languages are possible. Start
+                        typing the language and use autocomplete form that will appear if applicable. Better to list all the languages then to use the 'mul' iso code (if there are too many, contact support).
                     </hint>
                     <required>Please choose a language for the resource.</required>
                 </field>
@@ -263,7 +269,9 @@
                     <label>Language</label>
                     <type-bind>toolService</type-bind>
                     <input-type autocomplete-custom="json_static-iso_langs.json">autocomplete</input-type>
-                    <hint>If the tool/service is language dependent, select the appropriate language(s). Otherwise leave the field empty. Multiple languages are possible. Start typing the language and use autocomplete form that will appear.</hint>
+                    <hint>If the tool/service is language dependent, select the appropriate language(s). Otherwise leave the field empty. Multiple languages are possible. Start typing the language and use autocomplete
+                        form that will appear.
+                    </hint>
                     <required/>
                 </field>
             </row>
@@ -2103,7 +2111,10 @@
                     <repeatable>true</repeatable>
                     <label>Replaces</label>
                     <input-type autocomplete-custom="solr-handle_title_ac">autocomplete</input-type>
-                    <hint>URL to a related resource that is supplanted, displaced, or superseded by the described resource. If the replaced resource is in this repository start typing its name or handle and select the resource from the autocomplete popup.</hint>
+                    <hint>URL to a related resource that is supplanted, displaced, or superseded by the described
+                        resource. If the replaced resource is in this repository start typing its name or handle and select the
+                        resource from the autocomplete popup.
+                    </hint>
                     <required/>
                 </field>
             </row>
