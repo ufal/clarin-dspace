@@ -11,6 +11,10 @@ package org.dspace.utils;
 
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.sql.SQLException;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
 import java.util.Objects;
 import javax.xml.parsers.DocumentBuilder;
@@ -18,17 +22,27 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 
 import org.dspace.app.util.DCInput;
+import org.dspace.authorize.ResourcePolicy;
+import org.dspace.authorize.factory.AuthorizeServiceFactory;
+import org.dspace.authorize.service.ResourcePolicyService;
 import org.dspace.content.Bitstream;
+import org.dspace.content.Bundle;
 import org.dspace.content.DSpaceObject;
 import org.dspace.content.Item;
+import org.dspace.content.MetadataField;
 import org.dspace.content.MetadataValue;
+import org.dspace.content.factory.ClarinServiceFactory;
 import org.dspace.content.factory.ContentServiceFactory;
 import org.dspace.content.service.BitstreamService;
 import org.dspace.content.service.ItemService;
+import org.dspace.content.service.MetadataFieldService;
+import org.dspace.content.service.clarin.ClarinItemService;
 import org.dspace.core.Constants;
 import org.dspace.core.Context;
 import org.dspace.handle.factory.HandleServiceFactory;
 import org.dspace.handle.service.HandleService;
+import org.dspace.xoai.exceptions.InvalidMetadataFieldException;
+import org.dspace.xoai.services.impl.DSpaceFieldResolver;
 import org.springframework.stereotype.Component;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -263,6 +277,149 @@ public class SpecialItemService {
             }
             return doc;
         } catch (ParserConfigurationException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Retrieves the earliest available date for an item identified by the given identifier URI.
+     * This method checks for any embargo date first and then retrieves the "dc.date.available"
+     * metadata value as a fallback if no embargo date is found.
+     *
+     * @param identifierUri The identifier URI of the item whose available date is to be retrieved.
+     * @return A string representation of the earliest available date, or null if no date is found or an error occurs.
+     */
+    public static String getAvailable(String identifierUri) {
+        Context context = new Context();
+        // Find the metadata field for "dc.identifier.uri"
+        String mtdField = "dc.identifier.uri";
+        MetadataField metadataField = findMetadataField(context, mtdField);
+        if (Objects.isNull(metadataField)) {
+            log.error(String.format("Metadata field for %s not found.", mtdField));
+            return null;
+        }
+
+        // Retrieve the item using the handle
+        ClarinItemService clarinItemService = ClarinServiceFactory.getInstance().getClarinItemService();
+        Item item;
+        try {
+            List<Item> itemList = clarinItemService.findByHandle(context, metadataField, identifierUri);
+            item = itemList.isEmpty() ? null : itemList.get(0);
+        } catch (SQLException e) {
+            log.error("Error retrieving item by handle.", e);
+            return null;
+        }
+        if (Objects.isNull(item)) {
+            log.error(String.format("Item for handle %s doesn't exist!", identifierUri));
+            return null;
+        }
+
+        // Check if there is an embargo or get the earliest available date
+        Date startDate = getEmbargoDate(context, item);
+        if (Objects.isNull(startDate)) {
+            startDate = getAvailableDate(context, item);
+        }
+        return (Objects.nonNull(startDate)) ? startDate.toString() : null;
+    }
+
+    /**
+     * Finds the metadata field corresponding to the provided string.
+     *
+     * @param context The DSpace context
+     * @param mtd The metadata field string
+     * @return The MetadataField object, or null if not found.
+     */
+    private static MetadataField findMetadataField(Context context, String mtd) {
+        MetadataFieldService metadataFieldService = ContentServiceFactory.getInstance().getMetadataFieldService();
+        try {
+            return metadataFieldService.findByString(context, mtd, '.');
+        } catch (SQLException e) {
+            log.error(String.format("Error finding metadata field %s.", mtd), e);
+            return null;
+        }
+    }
+
+    /**
+     * Retrieves the embargo start date for the given item bitstreams.
+     * If an embargo has ended, the end date is returned.
+     *
+     * @param context The DSpace context
+     * @param item The item whose embargo date is to be retrieved.
+     * @return The start or end date of the embargo, or null if no embargo exists.
+     */
+    private static Date getEmbargoDate(Context context, Item item) {
+        ResourcePolicyService resPolicyService = AuthorizeServiceFactory.getInstance().getResourcePolicyService();
+        Date startDate = null;
+        for (Bundle bundle : item.getBundles()) {
+            for (Bitstream bitstream : bundle.getBitstreams()) {
+                List<ResourcePolicy> resPolList;
+                try {
+                    resPolList = resPolicyService.find(context, bitstream, Constants.READ);
+                } catch (SQLException e) {
+                    log.error(String.format("Error during finding resource policies READ for bitstream %s",
+                            bitstream.getID().toString()));
+                    return null;
+                }
+                for (ResourcePolicy resPol : resPolList) {
+                    Date date = resPol.getStartDate();
+                    // If the embargo has already ended, use the date of its end.
+                    if (Objects.nonNull(date) && Objects.nonNull(resPol.getEndDate())) {
+                        date = resPol.getEndDate();
+                    }
+                    if (Objects.isNull(startDate) || (Objects.nonNull(date) && date.compareTo(startDate) > 0)) {
+                        startDate = date;
+                    }
+                }
+            }
+        }
+        return startDate;
+    }
+
+    /**
+     * Retrieves the available date for the given item by checking the "dc.date.available" metadata.
+     *
+     * @param context The DSpace context
+     * @param item The item whose available date is to be retrieved.
+     * @return The available date, or null if no available date is found.
+     */
+    private static Date getAvailableDate(Context context, Item item) {
+        DSpaceFieldResolver dSpaceFieldResolver = new DSpaceFieldResolver();
+        List<MetadataValue> metadataValueList = item.getMetadata();
+        String mtdField = "dc.date.available";
+        int fieldID;
+        try {
+            fieldID = dSpaceFieldResolver.getFieldID(context, mtdField);
+        } catch (SQLException | InvalidMetadataFieldException e) {
+            log.error(String.format("Error during finding ID of metadata field %s.", mtdField));
+            return null;
+        }
+        Date startDate = null;
+        for (MetadataValue mtd : metadataValueList) {
+            if (mtd.getMetadataField().getID() == fieldID) {
+                Date availableDate = parseDate(mtd.getValue());
+                if (Objects.isNull(startDate) || (Objects.nonNull(availableDate)
+                        && availableDate.compareTo(startDate) > 0)) {
+                    startDate = availableDate;
+                }
+            }
+        }
+        return startDate;
+    }
+
+    /**
+     * Parses a date string in the format "yyyy-MM-dd" into a Date object.
+     *
+     * @param dateString The date string to be parsed.
+     * @return A Date object representing the parsed date, or null if parsing fails.
+     */
+    private static Date parseDate(String dateString) {
+        String format = "yyyy-MM-dd";
+        SimpleDateFormat dateFormat = new SimpleDateFormat(format); // Example format
+        dateFormat.setLenient(false); // Set lenient to false to avoid parsing incorrect dates
+        try {
+            return dateFormat.parse(dateString); // Attempt to parse the date
+        } catch (ParseException e) {
+            log.warn(String.format("Date %s cannot be parsed using the format %s.", dateString, format));
             return null;
         }
     }
