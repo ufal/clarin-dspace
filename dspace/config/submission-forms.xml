@@ -3222,7 +3222,7 @@
             <input name="givenname" input-type="text" label="Contact person's given name" required="true"/>
             <input name="surname" input-type="text" label="Contact person's surname" hint="Family name" required="true"/>
             <input name="email" input-type="text" label="Contact person's email" regex="[^@]+@[^\.@]+\.[^@]+" required="true"/>
-            <input name="affiliation" input-type="autocomplete" label="Contact person's institution name" required="true"/>
+            <input name="affiliation" input-type="text" label="Contact person's institution name" required="true"/>
         </definition>
 
         <definition name="funding">
@@ -3240,7 +3240,7 @@
 
         <definition name="clariahSizeInfo">
             <input name="size" input-type="text" regex="\d+\.?\d*" required="true"/>
-            <input name="unit" input-type="autocomplete" label="Unit"
+            <input name="unit" input-type="text" label="Unit"
                    required="true"/>
         </definition>
     </form-complex-definitions>
