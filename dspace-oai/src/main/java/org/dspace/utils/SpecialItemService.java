@@ -61,6 +61,7 @@ import org.xml.sax.InputSource;
  */
 public class SpecialItemService {
     private SpecialItemService() {}
+    private static final String FORMAT = "yyyy-MM-dd'T'HH:mm:ss'Z'";
     /** log4j logger */
     private static final org.apache.logging.log4j.Logger log = org.apache.logging.log4j
             .LogManager.getLogger(SpecialItemService.class);
@@ -319,7 +320,7 @@ public class SpecialItemService {
         if (Objects.isNull(startDate)) {
             startDate = getAvailableDate(context, item);
         }
-        return (Objects.nonNull(startDate)) ? startDate.toString() : null;
+        return (Objects.nonNull(startDate)) ? parseDateToString(startDate) : null;
     }
 
     /**
@@ -396,7 +397,7 @@ public class SpecialItemService {
         Date startDate = null;
         for (MetadataValue mtd : metadataValueList) {
             if (mtd.getMetadataField().getID() == fieldID) {
-                Date availableDate = parseDate(mtd.getValue());
+                Date availableDate = parseStringToDate(mtd.getValue());
                 if (Objects.isNull(startDate) || (Objects.nonNull(availableDate)
                         && availableDate.compareTo(startDate) > 0)) {
                     startDate = availableDate;
@@ -407,19 +408,28 @@ public class SpecialItemService {
     }
 
     /**
-     * Parses a date string in the format "yyyy-MM-dd" into a Date object.
+     * Converts date object to string formatted in the pattern.
      *
-     * @param dateString The date string to be parsed.
+     * @param date The date
+     * @return A string representation of the provided date
+     */
+    private static String parseDateToString(Date date) {
+        SimpleDateFormat dateFormat = new SimpleDateFormat(FORMAT);
+        return dateFormat.format(date);
+    }
+
+    /**
+     * Parses a date string in the format into a Date object.
+     *
+     * @param dateString date string to be parsed.
      * @return A Date object representing the parsed date, or null if parsing fails.
      */
-    private static Date parseDate(String dateString) {
-        String format = "yyyy-MM-dd";
-        SimpleDateFormat dateFormat = new SimpleDateFormat(format); // Example format
-        dateFormat.setLenient(false); // Set lenient to false to avoid parsing incorrect dates
+    private static Date parseStringToDate(String dateString) {
+        SimpleDateFormat dateFormat = new SimpleDateFormat(FORMAT);
         try {
-            return dateFormat.parse(dateString); // Attempt to parse the date
+            return dateFormat.parse(dateString);
         } catch (ParseException e) {
-            log.warn(String.format("Date %s cannot be parsed using the format %s.", dateString, format));
+            log.warn(String.format("Date %s cannot be parsed using the format %s.", dateString, FORMAT));
             return null;
         }
     }
