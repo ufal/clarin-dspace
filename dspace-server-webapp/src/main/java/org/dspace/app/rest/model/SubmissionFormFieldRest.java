@@ -98,6 +98,12 @@ public class SubmissionFormFieldRest {
      */
     private String autocompleteCustom;
 
+    /**
+     * The custom field to type bind. It is used to check that the custom type bind field is defined when
+     * it is defined in the configuration property `submit.type-bind.field`
+     */
+    private String typeBindField;
+
 
     /**
      * Getter for {@link #selectableMetadata}
@@ -312,5 +318,13 @@ public class SubmissionFormFieldRest {
 
     public void setAutocompleteCustom(String autocompleteCustom) {
         this.autocompleteCustom = autocompleteCustom;
+    }
+
+    public String getTypeBindField() {
+        return typeBindField;
+    }
+
+    public void setTypeBindField(String typeBindField) {
+        this.typeBindField = typeBindField;
     }
 }

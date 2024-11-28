@@ -170,6 +170,11 @@ public class DCInput {
     private String autocompleteCustom = null;
 
     /**
+     * the custom field for the type bind
+     */
+    private String typeBindField = null;
+
+    /**
      * the dropdown input type could have defined a default value
      */
     private String defaultValue = "";
@@ -259,7 +264,7 @@ public class DCInput {
         typeBind = new ArrayList<String>();
         String typeBindDef = fieldMap.get("type-bind");
         this.insertToTypeBind(typeBindDef);
-        String typeBindField = fieldMap.get(DCInputsReader.TYPE_BIND_FIELD_ATTRIBUTE);
+        typeBindField = fieldMap.get(DCInputsReader.TYPE_BIND_FIELD_ATTRIBUTE);
         this.insertToTypeBind(typeBindField);
 
 
@@ -739,6 +744,14 @@ public class DCInput {
 
     public void setAutocompleteCustom(String autocompleteCustom) {
         this.autocompleteCustom = autocompleteCustom;
+    }
+
+    public String getTypeBindField() {
+        return typeBindField;
+    }
+
+    public void setTypeBindField(String typeBindField) {
+        this.typeBindField = typeBindField;
     }
 
     /**
