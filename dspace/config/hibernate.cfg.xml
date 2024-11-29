@@ -28,7 +28,7 @@
         <property name="hibernate.javax.cache.provider">
                   org.ehcache.jsr107.EhcacheCachingProvider
         </property>
-        <property name="hibernate.generate_statistics">true</property>
+        <property name="hibernate.generate_statistics">false</property>
         <!-- hibernate.javax.cache.uri is defined in
                   config/spring/api/core-hibernate.xml so that we can use
                   property substitution. -->
