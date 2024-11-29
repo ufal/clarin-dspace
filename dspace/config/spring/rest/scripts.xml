@@ -69,4 +69,9 @@
         <property name="dspaceRunnableClass" value="org.dspace.app.bulkaccesscontrol.BulkAccessControl"/>
     </bean>
 
+    <bean id="file-downloader" class="org.dspace.administer.FileDownloaderConfiguration" primary="true">
+        <property name="description" value="Download a files from the provided URL and add it to item"/>
+        <property name="dspaceRunnableClass" value="org.dspace.administer.FileDownloader"/>
+    </bean>
+
 </beans>

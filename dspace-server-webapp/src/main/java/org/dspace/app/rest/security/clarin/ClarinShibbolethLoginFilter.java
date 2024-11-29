@@ -167,7 +167,7 @@ public class ClarinShibbolethLoginFilter extends StatelessLoginFilter {
 
         EPerson ePerson = null;
         try {
-            ePerson = ClarinShibAuthentication.findEpersonByNetId(shib_headers.getNetIdHeaders(), shib_headers, ePerson,
+            ePerson = ClarinShibAuthentication.findEpersonByNetId(shib_headers.getNetIdHeaders(), shib_headers,
                     ePersonService, context, false);
         } catch (SQLException e) {
             // It is logged in the ClarinShibAuthentication class.
