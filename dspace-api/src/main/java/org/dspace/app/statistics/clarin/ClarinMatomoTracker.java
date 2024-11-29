@@ -7,14 +7,14 @@
  */
 package org.dspace.app.statistics.clarin;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.Calendar;
 import java.util.Objects;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
+import java.util.concurrent.CompletableFuture;
 import javax.servlet.http.HttpServletRequest;
 
 import org.apache.commons.lang3.StringUtils;
-import org.apache.http.HttpResponse;
 import org.apache.logging.log4j.Logger;
 import org.dspace.content.Item;
 import org.dspace.content.factory.ClarinServiceFactory;
@@ -23,6 +23,7 @@ import org.dspace.services.ConfigurationService;
 import org.dspace.services.factory.DSpaceServicesFactory;
 import org.matomo.java.tracking.MatomoException;
 import org.matomo.java.tracking.MatomoRequest;
+import org.matomo.java.tracking.parameters.AcceptLanguage;
 
 /**
  * The statistics Tracker for Matomo. This class prepare and send the track GET request to the `/matomo.php`
@@ -99,13 +100,13 @@ public class ClarinMatomoTracker {
      */
     protected void preTrack(Context context, MatomoRequest matomoRequest, Item item, HttpServletRequest request) {
         if (StringUtils.isNotBlank(request.getHeader("referer"))) {
-            matomoRequest.setHeaderUserAgent(request.getHeader("referer"));
+            matomoRequest.setReferrerUrl(request.getHeader("referer"));
         }
         if (StringUtils.isNotBlank(request.getHeader("user-agent"))) {
             matomoRequest.setHeaderUserAgent(request.getHeader("user-agent"));
         }
         if (StringUtils.isNotBlank(request.getHeader("accept-language"))) {
-            matomoRequest.setHeaderUserAgent(request.getHeader("accept-language"));
+            matomoRequest.setHeaderAcceptLanguage(AcceptLanguage.fromHeader(request.getHeader("accept-language")));
         }
 
         // Creating a calendar using getInstance method
@@ -134,18 +135,13 @@ public class ClarinMatomoTracker {
      * @param matomoRequest prepared MatomoRequest for sending
      */
     public void sendTrackingRequest(MatomoRequest matomoRequest) {
-        try {
-            Future<HttpResponse> response = tracker.sendRequestAsync(matomoRequest);
-            // usually not needed:
-            HttpResponse httpResponse = response.get();
-            int statusCode = httpResponse.getStatusLine().getStatusCode();
-            if (statusCode > 399) {
-                // problem
-                log.error("Matomo tracker error the response has status code: " + statusCode);
+        CompletableFuture<MatomoRequest> completableFuture = tracker.sendRequestAsync(matomoRequest);
+
+        completableFuture.whenComplete((result, exception) -> {
+            if (exception != null) {
+                log.error("Matomo tracker error - the response exception message: {}", exception.getMessage());
             }
-        } catch (ExecutionException | InterruptedException e) {
-            e.printStackTrace();
-        }
+        });
     }
 
     protected String getFullURL(HttpServletRequest request) {
@@ -164,21 +160,35 @@ public class ClarinMatomoTracker {
     }
 
     /**
-     * Get IpAddress of the current user which throws this statistic event
+     * Get IpAddress of the current user which throws this statistic event. Return only the first valid IPv4 address
+     * because the Matomo tracker has a problem with IPv6 addresses.
      *
      * @param request current request
-     * @return
+     * @return only the first valid IPv4 address
      */
     protected String getIpAddress(HttpServletRequest request) {
-        String ip = "";
         String header = request.getHeader("X-Forwarded-For");
         if (header == null) {
             header = request.getRemoteAddr();
         }
         if (header != null) {
             String[] ips = header.split(", ");
-            ip = ips.length > 0 ? ips[0] : "";
+            for (String candidateIp : ips) {
+                // Validate if it's an IPv4 address
+                if (isIPv4Address(candidateIp)) {
+                    return candidateIp;
+                }
+            }
         }
-        return ip;
+        return null;
+    }
+
+    private boolean isIPv4Address(String ip) {
+        try {
+            InetAddress inetAddress = InetAddress.getByName(ip);
+            return inetAddress.getHostAddress().equals(ip) && inetAddress instanceof java.net.Inet4Address;
+        } catch (UnknownHostException e) {
+            return false; // Not a valid IP address
+        }
     }
 }
