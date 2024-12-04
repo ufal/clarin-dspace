@@ -41,7 +41,7 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * This Shibboleth Authentication process is tested in ClarinShibbolethLoginFilterIT.
  *
- * @author Milan Majchrak (milan.majchrak at dataquest.sk)
+ * @author Milan Majchrak (dspace at dataquest.sk)
  */
 @RequestMapping(value = "/api/autoregistration")
 @RestController
