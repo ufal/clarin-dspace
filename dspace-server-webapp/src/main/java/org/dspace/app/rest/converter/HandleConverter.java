@@ -7,6 +7,8 @@
  */
 package org.dspace.app.rest.converter;
 
+import java.util.Objects;
+
 import org.dspace.app.rest.model.HandleRest;
 import org.dspace.app.rest.projection.Projection;
 import org.dspace.handle.Handle;
@@ -35,6 +37,11 @@ public class HandleConverter implements DSpaceConverter<Handle, HandleRest> {
         handleRest.setHandle(modelObject.getHandle());
         handleRest.setResourceTypeID(modelObject.getResourceTypeId());
         handleRest.setUrl(modelObject.getUrl());
+        if (Objects.nonNull(modelObject.getDSpaceObject())) {
+            handleRest.setResourceId(modelObject.getDSpaceObject().getID());
+        } else {
+            handleRest.setResourceId(null);
+        }
         return handleRest;
     }
 

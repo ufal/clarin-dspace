@@ -141,19 +141,10 @@
             <date dateType="Accepted">
                 <xsl:value-of select="doc:metadata/doc:element[@name='dc']/doc:element[@name='date']/doc:element[@name='accessioned']/doc:element/doc:field[@name='value']"/>
             </date>
-            <xsl:choose>
-                <xsl:when test="doc:metadata/doc:element[@name='dc']/doc:element[@name='date']/doc:element[@name='available']/doc:element/doc:field[@name='value']">
-                    <date dateType="Available">
-                        <xsl:value-of select="doc:metadata/doc:element[@name='dc']/doc:element[@name='date']/doc:element[@name='available']/doc:element/doc:field[@name='value']"/>
-                    </date>
-                </xsl:when>
-                <xsl:otherwise>
-                    <!-- empty available means embargo. item will be available on the embargo date -->
-                    <date dateType="Available">
-                        <xsl:value-of select="doc:metadata/doc:element[@name='local']/doc:element[@name='embargo']/doc:element[@name='termslift']/doc:element/doc:field[@name='value']"/>
-                    </date>
-                </xsl:otherwise>
-            </xsl:choose>
+            <date dateType="Available">
+                <xsl:variable name="handle" select="doc:metadata/doc:element[@name='dc']/doc:element[@name='identifier']/doc:element/doc:element/doc:field[@name='value']"/>
+                <xsl:value-of select="fn:getAvailable($handle)"/>
+            </date>
         </dates>
     </xsl:template>
 
