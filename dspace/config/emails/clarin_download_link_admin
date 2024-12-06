@@ -9,7 +9,7 @@
 ##
 ## See org.dspace.core.Email for information on the format of this file.
 ##
-#set($subject = "${config.get('dspace.name.short')}: New File Download Request (CC)")
+#set($subject = "${config.get('dspace.shortname')}: New File Download Request (CC)")
 
 This is an information for administrators and other configured people about a new download request.
 
@@ -26,10 +26,10 @@ The file is distributed under specific license:
 Extra information filled by the user:
 	${params[5]}
 
-${config.get('dspace.name.short')} Team
+${config.get('dspace.shortname')} Team
 
 _____________________________________
 ${config.get('dspace.name')},
-WWW: ${config.get('dspace.url')}
-Email: ${config.get('help.mail')}
-Tel.: ${config.get('help.phone')}
+WWW: ${config.get('dspace.ui.url')}
+Email: ${config.get('lr.help.mail')}
+Tel.: ${config.get('lr.help.phone')}

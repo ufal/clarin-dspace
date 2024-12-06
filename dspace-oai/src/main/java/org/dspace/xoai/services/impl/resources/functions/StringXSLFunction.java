@@ -74,7 +74,6 @@ public abstract class StringXSLFunction implements ExtensionFunction {
             log.warn("Empty value in call of function of StringXslFunction type");
             val = "";
         }
-
         return new XdmAtomicValue(checks(getStringResult(val)));
     }
 

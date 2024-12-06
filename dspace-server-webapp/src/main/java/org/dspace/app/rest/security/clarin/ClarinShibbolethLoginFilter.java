@@ -126,7 +126,6 @@ public class ClarinShibbolethLoginFilter extends StatelessLoginFilter {
 
         // If the Idp doesn't send the email in the request header, send the redirect order to the FE for the user
         // to fill in the email.
-        String netidHeader = configurationService.getProperty("authentication-shibboleth.netid-header");
         String emailHeader = configurationService.getProperty("authentication-shibboleth.email-header");
 
         Context context = ContextUtil.obtainContext(req);
@@ -154,33 +153,33 @@ public class ClarinShibbolethLoginFilter extends StatelessLoginFilter {
             shib_headers = new ShibHeaders(req);
         }
 
-        // Retrieve the netid and email values from the header.
-        String netid = shib_headers.get_single(netidHeader);
         String idp = shib_headers.get_idp();
         // If the clarin verification object is not null load the email from there otherwise from header.
-        String email = Objects.isNull(clarinVerificationToken) ?
-                shib_headers.get_single(emailHeader) : clarinVerificationToken.getEmail();
-
-        EPerson ePerson = null;
-        if (StringUtils.isNotEmpty(netid)) {
-            try {
-                // If email is null and netid exist try to find the eperson by netid and load its email
-                if (StringUtils.isEmpty(email)) {
-                    ePerson = ePersonService.findByNetid(context, netid);
-                    email = Objects.isNull(email) ? this.getEpersonEmail(ePerson) : null;
-                } else {
-                    // Try to get user by the email because of possible duplicate of the user email
-                    ePerson = ePersonService.findByEmail(context, email);
-                }
-            } catch (SQLException ignored) {
-                //
+        String email;
+        if (Objects.isNull(clarinVerificationToken)) {
+            email = shib_headers.get_single(emailHeader);
+            if (StringUtils.isNotEmpty(email)) {
+                email = ClarinShibAuthentication.sortEmailsAndGetFirst(email);
             }
+        } else {
+            email = clarinVerificationToken.getEmail();
         }
 
-        // logging
-        log.info("Shib-Identity-Provider: " + idp);
-        log.info("authentication-shibboleth.netid-header: " + netidHeader + " with value: " + netid);
-        log.info("authentication-shibboleth.email-header: " + emailHeader + " with value: " + email);
+        EPerson ePerson = null;
+        try {
+            ePerson = ClarinShibAuthentication.findEpersonByNetId(shib_headers.getNetIdHeaders(), shib_headers,
+                    ePersonService, context, false);
+        } catch (SQLException e) {
+            // It is logged in the ClarinShibAuthentication class.
+        }
+
+        if (Objects.isNull(ePerson) && StringUtils.isNotEmpty(email)) {
+            try {
+                ePerson = ePersonService.findByEmail(context, email);
+            } catch (SQLException e) {
+                // It is logged in the ClarinShibAuthentication class.
+            }
+        }
 
         try {
             if (StringUtils.isEmpty(idp)) {
@@ -262,6 +261,7 @@ public class ClarinShibbolethLoginFilter extends StatelessLoginFilter {
         String missingHeadersUrl = "missing-headers";
         String userWithoutEmailUrl = "auth-failed";
         String duplicateUser = "duplicate-user";
+        String cannotAuthenticate = "shibboleth-authentication-failed";
 
         // Compose the redirect URL
         if (this.isMissingHeadersFromIdp) {
@@ -271,6 +271,11 @@ public class ClarinShibbolethLoginFilter extends StatelessLoginFilter {
         } else if (StringUtils.isNotEmpty(this.netId)) {
             // netId is set if the user doesn't have the email
             redirectUrl += userWithoutEmailUrl + "?netid=" + this.netId;
+        } else {
+            // Remove the last slash from the URL `login/`
+            String redirectUrlWithoutSlash = redirectUrl.endsWith("/") ?
+                    Utils.replaceLast(redirectUrl, "/", "") : redirectUrl;
+            redirectUrl = redirectUrlWithoutSlash + "?error=" + cannotAuthenticate;
         }
 
         response.sendRedirect(redirectUrl);
@@ -307,7 +312,12 @@ public class ClarinShibbolethLoginFilter extends StatelessLoginFilter {
 
         if (StringUtils.equalsAnyIgnoreCase(redirectHostName, allowedHostNames.toArray(new String[0]))) {
             log.debug("Shibboleth redirecting to " + redirectUrl);
-            response.sendRedirect(redirectUrl);
+            // Encode the UTF-8 characters from redirect URL to UTF-8, to ensure it's properly encoded for the browser
+            String encodedRedirectUrl = org.dspace.app.rest.utils.Utils.encodeNonAsciiCharacters(redirectUrl);
+            if (StringUtils.isEmpty(encodedRedirectUrl)) {
+                log.error("Invalid Encoded Shibboleth redirectURL=" + redirectUrl + ". URL is empty!");
+            }
+            response.sendRedirect(encodedRedirectUrl);
         } else {
             log.error("Invalid Shibboleth redirectURL=" + redirectUrl +
                     ". URL doesn't match hostname of server or UI!");
@@ -340,23 +350,21 @@ public class ClarinShibbolethLoginFilter extends StatelessLoginFilter {
         Context context = ContextUtil.obtainContext(req);
         String authenticateHeaderValue = restAuthenticationService.getWwwAuthenticateHeaderValue(req, res);
 
-        // Load header keys from cfg
-        String netidHeader = configurationService.getProperty("authentication-shibboleth.netid-header");
-
         // Store the header which the Idp has sent to the ShibHeaders object and save that header into the table
         // `verification_token` because after successful authentication the Idp headers will be showed for the user in
         // the another page.
         // Store header values in the ShibHeaders because of String issues.
         ShibHeaders shib_headers = new ShibHeaders(req);
-        String netid = shib_headers.get_single(netidHeader);
+        String[] netIdHeaders = shib_headers.getNetIdHeaders();
+        String netId = getNetIdFromShibHeaders(netIdHeaders, shib_headers);
 
         // Store the Idp headers associated with the current netid.
+        ClarinVerificationToken clarinVerificationToken;
         try {
-            ClarinVerificationToken clarinVerificationToken =
-                    clarinVerificationTokenService.findByNetID(context, netid);
+            clarinVerificationToken = clarinVerificationTokenService.findByNetID(context, netId);
             if (Objects.isNull(clarinVerificationToken)) {
                 clarinVerificationToken = clarinVerificationTokenService.create(context);
-                clarinVerificationToken.setePersonNetID(netid);
+                clarinVerificationToken.setePersonNetID(netId);
             }
             clarinVerificationToken.setShibHeaders(shib_headers.toString());
             clarinVerificationTokenService.update(context, clarinVerificationToken);
@@ -366,7 +374,7 @@ public class ClarinShibbolethLoginFilter extends StatelessLoginFilter {
                     + e.getMessage());
         }
 
-        this.netId = netid;
+        this.netId = netId;
     }
 
     private String getEpersonEmail(EPerson ePerson) {
@@ -374,6 +382,21 @@ public class ClarinShibbolethLoginFilter extends StatelessLoginFilter {
             return null;
         }
         return ePerson.getEmail();
+    }
+
+    /**
+     * Get the netId from the ShibHeaders object. The netId is stored in the headers which are defined in the
+     * `authentication-shibboleth.netid-headers` property.
+     * @return netId or null
+     */
+    private String getNetIdFromShibHeaders(String[] netIdHeaders, ShibHeaders shibHeaders) {
+        for (String netidHeader : netIdHeaders) {
+            String netID = shibHeaders.get_single(netidHeader);
+            if (StringUtils.isNotEmpty(netID)) {
+                return netID;
+            }
+        }
+        return null;
     }
 }
 

@@ -132,4 +132,24 @@ public class UtilsTest extends AbstractUnitTest {
         // remove the config we added
         configurationService.setProperty(configName, null);
     }
+
+    // Replace the last occurrence of a substring
+    @Test
+    public void testReplaceLast_SingleOccurrence() {
+        String input = "/login/";
+        String result = Utils.replaceLast(input, "/", "replacement");
+
+        // Expected output: "/loginreplacement"
+        assertEquals("/loginreplacement", result);
+    }
+
+    // No replacement when the substring is not found
+    @Test
+    public void testReplaceLast_NoMatch() {
+        String input = "/login";
+        String result = Utils.replaceLast(input, "/", "replacement");
+
+        // Expected output: "/login"
+        assertEquals("replacementlogin", result);
+    }
 }

@@ -12,6 +12,8 @@ import java.sql.DatabaseMetaData;
 import java.sql.SQLException;
 import javax.sql.DataSource;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.dspace.authorize.ResourcePolicy;
 import org.dspace.content.Bitstream;
 import org.dspace.content.Bundle;
@@ -29,9 +31,11 @@ import org.hibernate.Transaction;
 import org.hibernate.engine.spi.SessionFactoryImplementor;
 import org.hibernate.proxy.HibernateProxyHelper;
 import org.hibernate.resource.transaction.spi.TransactionStatus;
+import org.hibernate.stat.Statistics;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.orm.hibernate5.SessionFactoryUtils;
+import org.springframework.scheduling.annotation.Scheduled;
 
 /**
  * Hibernate implementation of the DBConnection.
@@ -63,6 +67,8 @@ public class HibernateDBConnection implements DBConnection<Session> {
 
     private boolean batchModeEnabled = false;
     private boolean readOnlyEnabled = false;
+
+    private static final Logger log = LogManager.getLogger(HibernateDBConnection.class);
 
     /**
      * Retrieves the current Session from Hibernate (per our settings, Hibernate is configured to create one Session
@@ -100,6 +106,13 @@ public class HibernateDBConnection implements DBConnection<Session> {
      */
     protected Transaction getTransaction() {
         return sessionFactory.getCurrentSession().getTransaction();
+    }
+
+    // This method will run every 10 seconds
+    @Scheduled(fixedRate = 10000) // Fixed rate in milliseconds
+    public void logConnectionMetrics() {
+        logHibernateStatistics();
+        logDatabaseMetaData();
     }
 
     /**
@@ -350,4 +363,53 @@ public class HibernateDBConnection implements DBConnection<Session> {
             getSession().flush();
         }
     }
+
+
+    /**
+     * Log the Hibernate statistics (e.g. open sessions, closed sessions, transactions, connections obtained)
+     */
+    private void logHibernateStatistics() {
+        if (sessionFactory != null) {
+            log.info(getHibernateStatistics());
+        } else {
+            log.warn(getHibernateStatistics());
+        }
+    }
+
+    /**
+     * Log the database metadata (URL, User, Driver, Product, Version)
+     */
+    private void logDatabaseMetaData() {
+        try (Session session = sessionFactory.openSession()) {
+            // Use doReturningWork to safely interact with the JDBC Connection
+            session.doReturningWork(connection -> {
+                try {
+                    DatabaseMetaData metaData = connection.getMetaData();
+                    log.info("Database Metadata - URL: {}, User: {}, Driver: {}, Product: {} {}"
+                            , metaData.getURL(), metaData.getUserName(), metaData.getDriverName(),
+                            metaData.getDatabaseProductName(), metaData.getDatabaseProductVersion());
+                } catch (SQLException e) {
+                    log.warn("Failed to retrieve database metadata: {}", e.getMessage());
+                }
+                return null; // Returning null as no specific result is needed
+            });
+        } catch (Exception e) {
+            log.warn("Failed to log database metadata: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Get Hibernate statistics as a string
+     */
+    public String getHibernateStatistics() {
+        if (sessionFactory != null) {
+            Statistics stats = sessionFactory.getStatistics();
+            return "Hibernate Statistics - Open Sessions: " + stats.getSessionOpenCount() + ", Closed Sessions: " +
+                    stats.getSessionCloseCount() + ", Transactions: " + stats.getTransactionCount() +
+                    ", Connections Obtained: " + stats.getConnectCount();
+        } else {
+            return "SessionFactory is not available for logging Hibernate statistics.";
+        }
+    }
 }
+

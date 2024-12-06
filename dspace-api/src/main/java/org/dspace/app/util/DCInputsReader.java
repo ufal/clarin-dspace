@@ -74,6 +74,12 @@ public class DCInputsReader {
      * Keyname for storing the name of the complex input type
      */
     static final String COMPLEX_DEFINITION_REF = "complex-definition-ref";
+    public static final String TYPE_BIND_FIELD_ATTRIBUTE = "field";
+
+    /**
+     * Keyname for storing the name of the custom autocomplete input type
+     */
+    static final String AUTOCOMPLETE_CUSTOM = "autocomplete-custom";
 
 
     /**
@@ -495,6 +501,11 @@ public class DCInputsReader {
                             handleInputTypeTagName(formName, field, nestedNode, nestedValue);
                         }
                     }
+                } else if (StringUtils.equals(tagName, "type-bind")) {
+                    String customField = getAttribute(nd, TYPE_BIND_FIELD_ATTRIBUTE);
+                    if (customField != null) {
+                        field.put(TYPE_BIND_FIELD_ATTRIBUTE, customField);
+                    }
                 }
             }
         }
@@ -541,15 +552,23 @@ public class DCInputsReader {
             } else {
                 field.put(PAIR_TYPE_NAME, pairTypeName);
             }
-        } else if (value.equals("complex")) {
-            String definitionName = getAttribute(nd, COMPLEX_DEFINITION_REF);
-            if (definitionName == null) {
-                throw new SAXException("Form " + formName
-                        + ", field " + field.get("dc-element")
-                        + "." + field.get("dc-qualifier")
-                        + " has no linked definition");
-            } else {
-                field.put(COMPLEX_DEFINITION_REF, definitionName);
+        } else  {
+            if (value.equals("complex")) {
+                String definitionName = getAttribute(nd, COMPLEX_DEFINITION_REF);
+                if (definitionName == null) {
+                    throw new SAXException("Form " + formName
+                            + ", field " + field.get("dc-element")
+                            + "." + field.get("dc-qualifier")
+                            + " has no linked definition");
+                } else {
+                    field.put(COMPLEX_DEFINITION_REF, definitionName);
+                }
+            }
+            if (value.equals("autocomplete")) {
+                String definitionName = getAttribute(nd, AUTOCOMPLETE_CUSTOM);
+                if (definitionName != null) {
+                    field.put(AUTOCOMPLETE_CUSTOM, definitionName);
+                }
             }
         }
     }

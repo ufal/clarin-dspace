@@ -976,4 +976,16 @@ public class Context implements AutoCloseable {
                                                            .getGroupService()
                                                            .findByName(this, Group.ADMIN) : adminGroup;
     }
+
+    /**
+     * Get the Hibernate statistics for this context.
+     * Only available when using HibernateDBConnection.
+     * @return the Hibernate statistics as a String
+     */
+    public String getHibernateStatistics() {
+        if (dbConnection instanceof HibernateDBConnection) {
+            return ((HibernateDBConnection) dbConnection).getHibernateStatistics();
+        }
+        return "Hibernate statistics are not available for this database connection";
+    }
 }

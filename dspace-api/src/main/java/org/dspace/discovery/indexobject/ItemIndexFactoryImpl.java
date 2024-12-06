@@ -605,6 +605,28 @@ public class ItemIndexFactoryImpl extends DSpaceObjectIndexFactoryImpl<Indexable
         }
 
 
+
+        // process item metadata
+        // just add _comp to local*
+        List<MetadataValue> mds = itemService.getMetadata(item, "local", Item.ANY, Item.ANY, Item.ANY);
+        for (MetadataValue meta : mds) {
+            String field = "local" + "." + meta.getMetadataField().getElement();
+            String value = meta.getValue();
+            if (value == null) {
+                continue;
+            }
+            String qualifier = meta.getMetadataField().getQualifier();
+            if (qualifier != null && !qualifier.isEmpty()) {
+                field += "." + qualifier;
+            }
+            doc.addField(field + "_comp", value);
+        }
+
+        // create handle_title_ac field
+        String title = item.getName();
+        String handle = item.getHandle();
+        doc.addField("handle_title_ac", handle + ":" + title);
+
         log.debug("  Added Metadata");
 
         try {

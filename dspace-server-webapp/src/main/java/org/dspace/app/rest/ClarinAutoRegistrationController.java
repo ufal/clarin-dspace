@@ -41,7 +41,7 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * This Shibboleth Authentication process is tested in ClarinShibbolethLoginFilterIT.
  *
- * @author Milan Majchrak (milan.majchrak at dataquest.sk)
+ * @author Milan Majchrak (dspace at dataquest.sk)
  */
 @RequestMapping(value = "/api/autoregistration")
 @RestController
@@ -89,18 +89,14 @@ public class ClarinAutoRegistrationController {
         String helpDeskEmail = configurationService.getProperty("lr.help.mail", "");
         String helpDeskPhoneNum = configurationService.getProperty("lr.help.phone", "");
         String dspaceName = configurationService.getProperty("dspace.name", "");
-        String dspaceNameShort = configurationService.getProperty("dspace.name.short", "");
+        String dspaceNameShort = configurationService.getProperty("dspace.shortname", "");
 
         if (StringUtils.isEmpty(uiUrl)) {
             log.error("Cannot load the `dspace.ui.url` property from the cfg.");
             throw new RuntimeException("Cannot load the `dspace.ui.url` property from the cfg.");
         }
-        // Generate token and create ClarinVerificationToken record with the token and user email.
+        // Generate token
         String verificationToken = Utils.generateHexKey();
-        clarinVerificationToken.setEmail(email);
-        clarinVerificationToken.setToken(verificationToken);
-        clarinVerificationTokenService.update(context, clarinVerificationToken);
-        context.commit();
 
         // Compose the url with the verification token. The user will be redirected to the UI.
         String autoregistrationURL = uiUrl + "/login/autoregistration?verification-token=" + verificationToken;
@@ -120,6 +116,13 @@ public class ClarinAutoRegistrationController {
             response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Cannot send the email");
             return null;
         }
+
+        // Add ClarinVerificationToken record with the token and user email to the database only if the
+        // email was successfully send.
+        clarinVerificationToken.setEmail(email);
+        clarinVerificationToken.setToken(verificationToken);
+        clarinVerificationTokenService.update(context, clarinVerificationToken);
+        context.commit();
 
         return ResponseEntity.ok().build();
     }
