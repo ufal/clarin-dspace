@@ -25,7 +25,7 @@ LOGDIR=$DSPACEDIR/log
 #Allow user to specify java options through JAVA_OPTS variable
 if [ "$JAVA_OPTS_HANDLE" = "" ]; then
   #Default Java to use 256MB of memory
-  $JAVA_OPTS_HANDLE=-Xmx256m
+  JAVA_OPTS_HANDLE=-Xmx256m
 fi
 
 # Remove lock file, in case the old Handle server did not shut down properly
