@@ -31,6 +31,7 @@ import org.dspace.content.service.RelationshipService;
 import org.dspace.content.service.RelationshipTypeService;
 import org.dspace.content.service.SiteService;
 import org.dspace.content.service.WorkspaceItemService;
+import org.dspace.core.ProvenanceService;
 import org.dspace.eperson.service.SubscribeService;
 import org.dspace.handle.service.HandleClarinService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -92,6 +93,9 @@ public class ContentServiceFactoryImpl extends ContentServiceFactory {
 
     @Autowired(required = true)
     private HandleClarinService handleClarinService;
+
+    @Autowired(required = true)
+    private ProvenanceService provenanceService;
 
     @Override
     public List<DSpaceObjectService<? extends DSpaceObject>> getDSpaceObjectServices() {
@@ -171,6 +175,11 @@ public class ContentServiceFactoryImpl extends ContentServiceFactory {
     @Override
     public PreviewContentService getPreviewContentService() {
         return previewContentService;
+    }
+
+    @Override
+    public ProvenanceService getProvenanceService() {
+        return provenanceService;
     }
 
     @Override

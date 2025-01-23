@@ -34,6 +34,7 @@ import org.dspace.content.service.RelationshipService;
 import org.dspace.content.service.RelationshipTypeService;
 import org.dspace.content.service.SiteService;
 import org.dspace.content.service.WorkspaceItemService;
+import org.dspace.core.ProvenanceService;
 import org.dspace.eperson.service.SubscribeService;
 import org.dspace.handle.service.HandleClarinService;
 import org.dspace.services.factory.DSpaceServicesFactory;
@@ -77,6 +78,7 @@ public abstract class ContentServiceFactory {
     public abstract SiteService getSiteService();
 
     public abstract SubscribeService getSubscribeService();
+
     public abstract PreviewContentService getPreviewContentService();
 
     /**
@@ -122,6 +124,13 @@ public abstract class ContentServiceFactory {
      * @return the HandleClarinService
      */
     public abstract HandleClarinService getHandleClarinService();
+
+    /**
+     * Return the implementation of the ProvenanceService interface
+     *
+     * @return the ProvenanceService
+     */
+    public abstract ProvenanceService getProvenanceService();
 
     public InProgressSubmissionService getInProgressSubmissionService(InProgressSubmission inProgressSubmission) {
         if (inProgressSubmission instanceof WorkspaceItem) {
