@@ -5,6 +5,8 @@ name: Build
 
 # Run this Build for pushes to our main and all PRs
 on:
+  schedule:
+    - cron: '0 */4 * * *'
   push:
     branches:
       - dtq-dev
