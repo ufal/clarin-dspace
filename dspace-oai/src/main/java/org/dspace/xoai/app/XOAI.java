@@ -431,8 +431,8 @@ public class XOAI {
         if (!discoverable && item.isHidden()) {
             discoverable = true;
         }
-        doc.addField("item.deleted",
-                (item.isWithdrawn() || (!discoverable) || (isEmbargoed ? isPublic : false)));
+        boolean isDeleted = item.isWithdrawn() || (!discoverable) || (isEmbargoed && isPublic);
+        doc.addField("item.deleted", isDeleted);
 
         /*
          * An item that is embargoed will potentially not be harvested by incremental
