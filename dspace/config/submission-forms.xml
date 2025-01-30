@@ -58,7 +58,7 @@
                     <dc-schema>dc</dc-schema>
                     <dc-element>type</dc-element>
                     <dc-qualifier></dc-qualifier>
-                    <repeatable>true</repeatable>
+                    <repeatable>false</repeatable>
                     <label>Select type of your resource</label>
                     <input-type value-pairs-name="common_types">dropdown</input-type>
                     <hint>Type of the resource: "Corpus" refers to text, speech and multimodal corpora.
