@@ -58,7 +58,7 @@ public class HealthReport extends DSpaceRunnable<HealthReportScriptConfiguration
     /**
      * `-e`: Email, send report to specified email address.
      */
-    private String email;
+    private String[] emails;
 
     /**
      * `-c`: Check, perform only specific check by index (0-`getNumberOfChecks()`).
@@ -93,8 +93,8 @@ public class HealthReport extends DSpaceRunnable<HealthReportScriptConfiguration
 
         // `-e`: Email, send report to specified email address.
         if (commandLine.hasOption('e')) {
-            email = commandLine.getOptionValue('e');
-            handler.logInfo("\nReport sent to this email address: " + email);
+            emails = commandLine.getOptionValues('e');
+            handler.logInfo("\nReport sent to this email address: " + String.join(", ", emails));
         }
 
         // `-c`: Check, perform only specific check by index (0-`getNumberOfChecks()`).
@@ -171,10 +171,12 @@ public class HealthReport extends DSpaceRunnable<HealthReportScriptConfiguration
         }
 
         // send email to email address from argument
-        if (email != null) {
+        if (emails != null && emails.length > 0) {
             try {
                 Email e = Email.getEmail(I18nUtil.getEmailFilename(Locale.getDefault(), "healthcheck"));
-                e.addRecipient(email);
+                for (String recipient : emails) {
+                    e.addRecipient(recipient);
+                }
                 e.addArgument(sbReport.toString());
                 e.send();
             } catch (IOException | MessagingException e) {
