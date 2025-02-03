@@ -3234,14 +3234,13 @@
         </definition>
 
         <definition name="sizeInfo">
-            <input name="size" input-type="text" regex="\d+\.?\d*" required="true"/>
+            <input name="size" input-type="text" regex="\d+\.?\d*" label="Size" required="true"/>
             <input name="unit" input-type="dropdown" value-pairs-name="metashare_sizeunit" label="Unit" required="true"/>
         </definition>
 
         <definition name="clariahSizeInfo">
-            <input name="size" input-type="text" regex="\d+\.?\d*" required="true"/>
-            <input name="unit" input-type="text" label="Unit"
-                   required="true"/>
+            <input name="size" input-type="text" regex="\d+\.?\d*" label="Size" required="true"/>
+            <input name="unit" input-type="text" label="Unit" required="true"/>
         </definition>
     </form-complex-definitions>
 </input-forms>
