@@ -99,7 +99,22 @@ public class StatelessAuthenticationFilter extends BasicAuthenticationFilter {
         if (authentication != null) {
             SecurityContextHolder.getContext().setAuthentication(authentication);
         }
-        chain.doFilter(req, res);
+
+        try {
+            chain.doFilter(req, res);
+        } finally {
+            // Complete the context to avoid transactions getting stuck in the connection pool in the
+            // `idle in transaction` state.
+            Context context = (Context) req.getAttribute(ContextUtil.DSPACE_CONTEXT);
+            // Ensure the context is cleared after the request is done
+            if (context != null && context.isValid()) {
+                try {
+                    context.abort();
+                } catch (Exception e) {
+                    log.error("{} occurred while trying to close", e.getMessage(), e);
+                }
+            }
+        }
     }
 
     /**

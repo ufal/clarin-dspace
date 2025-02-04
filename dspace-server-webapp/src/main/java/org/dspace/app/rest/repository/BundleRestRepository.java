@@ -35,6 +35,7 @@ import org.dspace.content.service.BundleService;
 import org.dspace.content.service.ItemService;
 import org.dspace.core.Constants;
 import org.dspace.core.Context;
+import org.dspace.core.ProvenanceService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -68,6 +69,9 @@ public class BundleRestRepository extends DSpaceObjectRestRepository<Bundle, Bun
 
     @Autowired
     private BitstreamFormatService bitstreamFormatService;
+
+    @Autowired
+    private ProvenanceService provenanceService;
 
     public BundleRestRepository(BundleService dsoService) {
         super(dsoService);
@@ -140,6 +144,7 @@ public class BundleRestRepository extends DSpaceObjectRestRepository<Bundle, Bun
                 itemService.update(context, item);
             }
             bundleService.update(context, bundle);
+            provenanceService.uploadBitstream(context, bundle);
             context.commit();
         } catch (AuthorizeException | IOException | SQLException e) {
             String message = "Something went wrong with trying to create the single bitstream for file with filename: "

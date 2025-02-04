@@ -11,10 +11,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.ws.rs.core.MediaType;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.Assert;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -24,6 +27,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * Utility class for performing metadata patch tests sourced from a common json file (see constructor).
  */
 public class MetadataPatchSuite {
+    static String PROVENANCE = "dc.description.provenance";
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final JsonNode suite;
 
@@ -34,6 +38,16 @@ public class MetadataPatchSuite {
      */
     public MetadataPatchSuite() throws Exception {
         suite = objectMapper.readTree(getClass().getResourceAsStream("metadata-patch-suite.json"));
+    }
+
+    /**
+     * Initializes the suite by parsing the json file of tests.
+     *
+     * @param name  name of resource
+     * @throws Exception if there is an error reading the file.
+     */
+    public MetadataPatchSuite(String name) throws Exception {
+        suite = objectMapper.readTree(getClass().getResourceAsStream(name));
     }
 
     /**
@@ -78,13 +92,32 @@ public class MetadataPatchSuite {
                 .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
                 .andExpect(status().is(expectedStatus));
         if (expectedStatus >= 200 && expectedStatus < 300) {
-          String responseBody = resultActions.andReturn().getResponse().getContentAsString();
-          JsonNode responseJson =  objectMapper.readTree(responseBody);
-          String responseMetadata = responseJson.get("metadata").toString();
-          if (!responseMetadata.equals(expectedMetadata)) {
-              Assert.fail("Expected metadata in " + verb + " response: " + expectedMetadata
-                      + "\nGot metadata in " + verb + " response: " + responseMetadata);
-          }
+            String responseBody = resultActions.andReturn().getResponse().getContentAsString();
+            JsonNode responseJson =  objectMapper.readTree(responseBody);
+            JsonNode responseMetadataJson = responseJson.get("metadata");
+            if (responseMetadataJson.get(PROVENANCE) != null) {
+                // In the provenance metadata, there is a timestamp indicating when they were added.
+                // To ensure accurate comparison, remove that date.
+                String rspProvenance = responseMetadataJson.get(PROVENANCE).toString();
+                // Regex to match the date pattern
+                String datePattern = "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z";
+                Pattern pattern = Pattern.compile(datePattern);
+                Matcher matcher = pattern.matcher(rspProvenance);
+                String rspModifiedProvenance = rspProvenance;
+                while (matcher.find()) {
+                    String dateString = matcher.group(0);
+                    rspModifiedProvenance = rspModifiedProvenance.replaceAll(dateString, "");
+                }
+                ObjectMapper objectMapper = new ObjectMapper();
+                JsonNode jsonNodePrv = objectMapper.readTree(rspModifiedProvenance);
+                // Replace the origin metadata with a value with the timestamp removed
+                ((ObjectNode) responseJson.get("metadata")).put(PROVENANCE, jsonNodePrv);
+            }
+            String responseMetadata = responseJson.get("metadata").toString();
+            if (!responseMetadata.equals(expectedMetadata)) {
+                Assert.fail("Expected metadata in " + verb + " response: " + expectedMetadata
+                        + "\nGot metadata in " + verb + " response: " + responseMetadata);
+            }
         }
     }
 }

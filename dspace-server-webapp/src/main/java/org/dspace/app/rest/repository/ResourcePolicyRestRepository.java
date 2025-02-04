@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import javax.servlet.http.HttpServletRequest;
 
@@ -26,11 +27,13 @@ import org.dspace.app.rest.model.ResourcePolicyRest;
 import org.dspace.app.rest.model.patch.Patch;
 import org.dspace.app.rest.repository.patch.ResourcePatch;
 import org.dspace.app.rest.utils.DSpaceObjectUtils;
+import org.dspace.app.rest.utils.SolrOAIReindexer;
 import org.dspace.app.rest.utils.Utils;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.authorize.ResourcePolicy;
 import org.dspace.authorize.service.ResourcePolicyService;
 import org.dspace.content.DSpaceObject;
+import org.dspace.content.Item;
 import org.dspace.core.Constants;
 import org.dspace.core.Context;
 import org.dspace.eperson.EPerson;
@@ -75,6 +78,9 @@ public class ResourcePolicyRestRepository extends DSpaceRestRepository<ResourceP
 
     @Autowired
     DiscoverableEndpointsService discoverableEndpointsService;
+
+    @Autowired
+    private SolrOAIReindexer solrOAIReindexer;
 
     @Override
     @PreAuthorize("hasPermission(#id, 'resourcepolicy', 'READ')")
@@ -275,6 +281,7 @@ public class ResourcePolicyRestRepository extends DSpaceRestRepository<ResourceP
             } catch (SQLException excSQL) {
                 throw new RuntimeException(excSQL.getMessage(), excSQL);
             }
+            reindexSolrOAI(resourcePolicy.getdSpaceObject());
             return converter.toRest(resourcePolicy, utils.obtainProjection());
         } else {
             try {
@@ -288,6 +295,7 @@ public class ResourcePolicyRestRepository extends DSpaceRestRepository<ResourceP
             } catch (SQLException excSQL) {
                 throw new RuntimeException(excSQL.getMessage(), excSQL);
             }
+            reindexSolrOAI(resourcePolicy.getdSpaceObject());
             return converter.toRest(resourcePolicy, utils.obtainProjection());
         }
     }
@@ -296,15 +304,20 @@ public class ResourcePolicyRestRepository extends DSpaceRestRepository<ResourceP
     @PreAuthorize("hasAuthority('ADMIN')")
     protected void delete(Context context, Integer id) throws AuthorizeException {
         ResourcePolicy resourcePolicy = null;
+        DSpaceObject dso = null;
         try {
             resourcePolicy = resourcePolicyService.find(context, id);
             if (resourcePolicy == null) {
                 throw new ResourceNotFoundException(
                     ResourcePolicyRest.CATEGORY + "." + ResourcePolicyRest.NAME + " with id: " + id + " not found");
             }
+            dso = resourcePolicy.getdSpaceObject();
             resourcePolicyService.delete(context, resourcePolicy);
         } catch (SQLException e) {
             throw new RuntimeException("Unable to delete ResourcePolicy with id = " + id, e);
+        }
+        if (Objects.nonNull(dso) && dso instanceof Item) {
+            solrOAIReindexer.deleteItem((Item) dso);
         }
     }
 
@@ -319,6 +332,7 @@ public class ResourcePolicyRestRepository extends DSpaceRestRepository<ResourceP
         }
         resourcePatch.patch(obtainContext(), resourcePolicy, patch.getOperations());
         resourcePolicyService.update(context, resourcePolicy);
+        reindexSolrOAI(resourcePolicy.getdSpaceObject());
     }
 
     @Override
@@ -326,5 +340,12 @@ public class ResourcePolicyRestRepository extends DSpaceRestRepository<ResourceP
         discoverableEndpointsService.register(this, Arrays.asList(
                       Link.of("/api/" + ResourcePolicyRest.CATEGORY + "/" + ResourcePolicyRest.PLURAL_NAME + "/search",
                                          ResourcePolicyRest.PLURAL_NAME + "-search")));
+    }
+
+    private void reindexSolrOAI(DSpaceObject dso) {
+        // reindex solr only if dso is item
+        if (Objects.nonNull(dso) && dso instanceof Item) {
+            solrOAIReindexer.reindexItem((Item) dso);
+        }
     }
 }

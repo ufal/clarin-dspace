@@ -8,6 +8,7 @@
 package org.dspace.builder;
 
 import java.sql.SQLException;
+import java.util.Objects;
 
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.clarin.ClarinLicenseResourceMapping;
@@ -35,6 +36,20 @@ public class ClarinLicenseResourceMappingBuilder extends AbstractBuilder<ClarinL
             return handleException(e);
         }
         return this;
+    }
+
+    public static void delete(Integer id) throws Exception {
+        if (Objects.isNull(id)) {
+            return;
+        }
+        try (Context c = new Context()) {
+            ClarinLicenseResourceMapping clarinLicense = clarinLicenseResourceMappingService.find(c, id);
+
+            if (clarinLicense != null) {
+                clarinLicenseResourceMappingService.delete(c, clarinLicense);
+            }
+            c.complete();
+        }
     }
 
     @Override

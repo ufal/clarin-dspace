@@ -179,5 +179,7 @@
     <bean class="org.dspace.app.statistics.clarin.ClarinMatomoBitstreamTracker"/>
     <bean class="org.dspace.app.statistics.clarin.ClarinMatomoOAITracker"/>
 
+    <bean class="org.dspace.core.ProvenanceServiceImpl"/>
+
 </beans>
 

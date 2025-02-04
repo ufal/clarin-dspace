@@ -86,7 +86,8 @@ public class MetadataValueRestRepositoryIT extends AbstractControllerIntegration
         // Get title metadata from the item
         MetadataValue titleMetadataValue = this.getTitleMetadataValue();
 
-        getClient().perform(get("/api/core/metadatavalues")
+        String token = getAuthToken(eperson.getEmail(), password);
+        getClient(token).perform(get("/api/core/metadatavalues")
                         .param("size", String.valueOf(100)))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(contentType))
@@ -105,7 +106,8 @@ public class MetadataValueRestRepositoryIT extends AbstractControllerIntegration
         // Get title metadata from the item
         MetadataValue titleMetadataValue = this.getTitleMetadataValue();
 
-        getClient().perform(get("/api/core/metadatavalues/" + titleMetadataValue.getID()))
+        String token = getAuthToken(eperson.getEmail(), password);
+        getClient(token).perform(get("/api/core/metadatavalues/" + titleMetadataValue.getID()))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(contentType))
                 .andExpect(jsonPath("$", Matchers.is(
@@ -160,7 +162,8 @@ public class MetadataValueRestRepositoryIT extends AbstractControllerIntegration
         String metadataQualifier = titleMetadataValue.getMetadataField().getQualifier();
         String searchValue = titleMetadataValue.getValue();
 
-        getClient().perform(get(SEARCH_BYVALUE_ENDPOINT)
+        String token = getAuthToken(eperson.getEmail(), password);
+        getClient(token).perform(get(SEARCH_BYVALUE_ENDPOINT)
                         .param("schema", metadataSchema)
                         .param("element", metadataElement)
                         .param("qualifier", metadataQualifier)
@@ -197,7 +200,8 @@ public class MetadataValueRestRepositoryIT extends AbstractControllerIntegration
         String metadataQualifier = titleMetadataValue.getMetadataField().getQualifier();
         String searchValue = titleMetadataValue.getValue();
 
-        getClient().perform(get(SEARCH_BYVALUE_ENDPOINT)
+        String token = getAuthToken(eperson.getEmail(), password);
+        getClient(token).perform(get(SEARCH_BYVALUE_ENDPOINT)
                         .param("schema", metadataSchema)
                         .param("element", metadataElement)
                         .param("qualifier", metadataQualifier)
@@ -234,7 +238,8 @@ public class MetadataValueRestRepositoryIT extends AbstractControllerIntegration
         String metadataQualifier = titleMetadataValue.getMetadataField().getQualifier();
         String searchValue = titleMetadataValue.getValue();
 
-        getClient().perform(get(SEARCH_BYVALUE_ENDPOINT)
+        String token = getAuthToken(eperson.getEmail(), password);
+        getClient(token).perform(get(SEARCH_BYVALUE_ENDPOINT)
                         .param("schema", metadataSchema)
                         .param("element", metadataElement)
                         .param("qualifier", metadataQualifier)
@@ -260,7 +265,8 @@ public class MetadataValueRestRepositoryIT extends AbstractControllerIntegration
         String metadataQualifier = titleMetadataValue.getMetadataField().getQualifier();
         String searchValue = titleMetadataValue.getValue();
 
-        getClient().perform(get(SEARCH_BYVALUE_ENDPOINT)
+        String token = getAuthToken(eperson.getEmail(), password);
+        getClient(token).perform(get(SEARCH_BYVALUE_ENDPOINT)
                         .param("schema", metadataSchema)
                         .param("element",metadataElement)
                         .param("qualifier",metadataQualifier)
@@ -312,7 +318,8 @@ public class MetadataValueRestRepositoryIT extends AbstractControllerIntegration
         String metadataQualifier = titleMetadataValue.getMetadataField().getQualifier();
         String searchValue = titleMetadataValue.getValue();
 
-        getClient().perform(get(SEARCH_BYVALUE_ENDPOINT)
+        String token = getAuthToken(eperson.getEmail(), password);
+        getClient(token).perform(get(SEARCH_BYVALUE_ENDPOINT)
                         .param("schema", metadataSchema)
                         .param("element",metadataElement)
                         .param("qualifier",metadataQualifier)
