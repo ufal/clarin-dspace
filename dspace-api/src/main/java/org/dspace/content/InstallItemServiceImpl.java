@@ -9,13 +9,20 @@ package org.dspace.content;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.dspace.authorize.AuthorizeException;
+import org.dspace.authorize.ResourcePolicy;
+import org.dspace.authorize.service.ResourcePolicyService;
 import org.dspace.content.factory.ContentServiceFactory;
 import org.dspace.content.logic.Filter;
 import org.dspace.content.logic.FilterUtils;
@@ -26,10 +33,12 @@ import org.dspace.core.Constants;
 import org.dspace.core.Context;
 import org.dspace.discovery.IsoLangCodes;
 import org.dspace.embargo.service.EmbargoService;
+import org.dspace.eperson.EPerson;
 import org.dspace.event.Event;
 import org.dspace.identifier.Identifier;
 import org.dspace.identifier.IdentifierException;
 import org.dspace.identifier.service.IdentifierService;
+import org.dspace.services.ConfigurationService;
 import org.dspace.supervision.SupervisionOrder;
 import org.dspace.supervision.service.SupervisionOrderService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,6 +66,9 @@ public class InstallItemServiceImpl implements InstallItemService {
     @Autowired(required = true)
     protected SupervisionOrderService supervisionOrderService;
     @Autowired(required = false)
+    private ResourcePolicyService resourcePolicyService;
+    @Autowired(required = true)
+    protected ConfigurationService configurationService;
 
     Logger log = LogManager.getLogger(InstallItemServiceImpl.class);
 
@@ -105,6 +117,12 @@ public class InstallItemServiceImpl implements InstallItemService {
         // submitter item policies created during deposit and replace them with
         // the default policies from the collection.
         itemService.inheritCollectionDefaultPolicies(c, item, collection, false);
+
+        //Allow submitter to edit item
+        if (isCollectionAllowedForSubmitterEditing(item.getOwningCollection()) &&
+                isInSubmitGroup(c.getCurrentUser(), item.getOwningCollection().getID())) {
+            createResourcePolicy(c, item, Constants.WRITE);
+        }
 
         return item;
     }
@@ -337,4 +355,66 @@ public class InstallItemServiceImpl implements InstallItemService {
             itemService.addMetadata(c, item, "local", "language", "name", null, langName);
         }
     }
+
+    /**
+     * Checks if the provided collection is allowed for submitter metadata editing.
+     *
+     * This method retrieves a list of allowed collection names and IDs from the system configuration,
+     * and checks if the given collection's name or ID matches any of the allowed values.
+     *
+     * @param collection The collection to be checked.
+     * @return True if the collection's name or ID is in the allowed list for submitter editing, false otherwise.
+     * @throws SQLException If there is an issue retrieving the configuration or querying the database.
+     */
+    private boolean isCollectionAllowedForSubmitterEditing(Collection collection) throws SQLException {
+        if (Objects.isNull(collection)) {
+            return false;
+        }
+        // Retrieve the allowed collections for submitter edition as an array
+        String[] editableCollections = configurationService.getArrayProperty("allow.edit.metadata", new String[] {});
+
+        if (Objects.isNull(editableCollections) || editableCollections.length == 0) {
+            return false;
+        }
+
+        Set<String> allowedNamesOrIds = new HashSet<>(Arrays.asList(editableCollections));
+
+        // Check if the provided collection's name or ID is in the allowed set
+        return allowedNamesOrIds.contains(collection.getName()) ||
+                allowedNamesOrIds.contains(collection.getID().toString());
+    }
+
+    /**
+     * Checks if the given EPerson is in a submitter of the collection.
+     * A submit group is identified by the name containing "SUBMIT" and the collection UUID.
+     *
+     * @param eperson      the EPerson whose is checked
+     * @param collectionUUID the UUID of the collection to check group names
+     * @return true if the EPerson is in a submitter, false otherwise
+     */
+    private boolean isInSubmitGroup(EPerson eperson, UUID collectionUUID) {
+        return eperson.getGroups().stream()
+                .anyMatch(group -> group.getName().contains("SUBMIT") &&
+                        group.getName().contains(collectionUUID.toString()));
+    }
+
+    /**
+     * Creates a resource policy for an item, granting the specified action to the current user.
+     *
+     * @param context The current DSpace context.
+     * @param item The item for which the resource policy is being created.
+     * @param action The action to be assigned to the resource policy (e.g., write, read).
+     * @throws SQLException If there is an issue interacting with the database.
+     * @throws AuthorizeException If the current user does not have sufficient authorization
+     *                            to create the resource policy.
+     */
+    private void createResourcePolicy(Context context, Item item, int action) throws SQLException, AuthorizeException {
+        context.turnOffAuthorisationSystem();
+        ResourcePolicy resPol = resourcePolicyService.create(context);
+        resPol.setAction(action);
+        resPol.setdSpaceObject(item);
+        resPol.setEPerson(item.getSubmitter());
+        context.restoreAuthSystemState();
+    }
+
 }
