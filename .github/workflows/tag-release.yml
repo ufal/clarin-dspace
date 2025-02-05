@@ -22,26 +22,25 @@ jobs:
 
       - name: retag image
         run: |
-          docker pull dataquest/dspace:61a9166a898b028c0d3668d67ff918db5014dab2
-          docker tag dataquest/dspace:61a9166a898b028c0d3668d67ff918db5014dab2 dataquest/dspace:lindat-2025.02.13138173196
+          docker pull ${{ env.IMAGE_BASE_NAME }}:${{ github.sha }}
+          docker tag ${{ env.IMAGE_BASE_NAME }}:${{ github.sha }} ${{ env.IMAGE_BASE_NAME }}:${{ github.ref_name }}
+
+          docker pull ${{ env.IMAGE_BASE_NAME }}-cli:${{ github.sha }}
+          docker tag ${{ env.IMAGE_BASE_NAME }}-cli:${{ github.sha }} ${{ env.IMAGE_BASE_NAME }}-cli:${{ github.ref_name }}
+
+          docker pull ${{ env.IMAGE_BASE_NAME }}-solr:${{ github.sha }}
+          docker tag ${{ env.IMAGE_BASE_NAME }}-solr:${{ github.sha }} ${{ env.IMAGE_BASE_NAME }}-solr:${{ github.ref_name }}
           
-          docker pull dataquest/dspace-cli:61a9166a898b028c0d3668d67ff918db5014dab2
-          docker tag dataquest/dspace-cli:61a9166a898b028c0d3668d67ff918db5014dab2 dataquest/dspace-cli:lindat-2025.02.13138173196
-          
-          docker pull dataquest/dspace-solr:61a9166a898b028c0d3668d67ff918db5014dab2
-          docker tag dataquest/dspace-solr:61a9166a898b028c0d3668d67ff918db5014dab2 dataquest/dspace-solr:lindat-2025.02.13138173196
-          
-          docker pull dataquest/dspace-postgres-pgcrypto:61a9166a898b028c0d3668d67ff918db5014dab2
-          docker tag dataquest/dspace-postgres-pgcrypto:61a9166a898b028c0d3668d67ff918db5014dab2 dataquest/dspace-postgres-pgcrypto:lindat-2025.02.13138173196
-          
-          docker pull dataquest/dspace-dependencies:61a9166a898b028c0d3668d67ff918db5014dab2
-          docker tag dataquest/dspace-dependencies:61a9166a898b028c0d3668d67ff918db5014dab2 dataquest/dspace-dependencies:lindat-2025.02.13138173196
+          docker pull ${{ env.IMAGE_BASE_NAME }}-postgres-pgcrypto:${{ github.sha }}
+          docker tag ${{ env.IMAGE_BASE_NAME }}-postgres-pgcrypto:${{ github.sha }} ${{ env.IMAGE_BASE_NAME }}-postgres-pgcrypto:${{ github.ref_name }}
+
+          docker pull ${{ env.IMAGE_BASE_NAME }}-dependencies:${{ github.sha }}
+          docker tag ${{ env.IMAGE_BASE_NAME }}-dependencies:${{ github.sha }} ${{ env.IMAGE_BASE_NAME }}-dependencies:${{ github.ref_name }}
 
       - name: push image
         run: |
-          docker push dataquest/dspace:lindat-2025.02.13138173196
-          docker push dataquest/dspace-solr:lindat-2025.02.13138173196
-          docker push dataquest/dspace-cli:lindat-2025.02.13138173196
-          docker push dataquest/dspace-postgres-pgcrypto:lindat-2025.02.13138173196
-          docker push dataquest/dspace-dependencies:lindat-2025.02.13138173196
-
+          docker push ${{ env.IMAGE_BASE_NAME }}:${{ github.ref_name }}
+          docker push ${{ env.IMAGE_BASE_NAME }}-cli:${{ github.ref_name }}
+          docker push ${{ env.IMAGE_BASE_NAME }}-solr:${{ github.ref_name }}
+          docker push ${{ env.IMAGE_BASE_NAME }}-postgres-pgcrypto:${{ github.ref_name }}
+          docker push ${{ env.IMAGE_BASE_NAME }}-dependencies:${{ github.ref_name }}
