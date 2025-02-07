@@ -120,7 +120,7 @@ public class InstallItemServiceImpl implements InstallItemService {
 
         //Allow submitter to edit item
         if (isCollectionAllowedForSubmitterEditing(item.getOwningCollection()) &&
-                isInSubmitGroup(c.getCurrentUser(), item.getOwningCollection().getID())) {
+                isInSubmitGroup(item.getSubmitter(), item.getOwningCollection().getID())) {
             createResourcePolicy(c, item, Constants.WRITE);
         }
 
