@@ -1616,7 +1616,7 @@
             <row>
                 <field>
                     <dc-schema>local</dc-schema>
-                    <dc-element>hasMetadata</dc-element>
+                    <dc-element>hasCMDI</dc-element>
                     <dc-qualifier/>
                     <repeatable>false</repeatable>
                     <label>Are you going to upload cmdi file? (Admin only field)</label>
@@ -1912,7 +1912,7 @@
             <row>
                 <field>
                     <dc-schema>local</dc-schema>
-                    <dc-element>hasMetadata</dc-element>
+                    <dc-element>hasCMDI</dc-element>
                     <dc-qualifier/>
                     <repeatable>false</repeatable>
                     <label>Are you going to upload cmdi file? (Admin only field)</label>
