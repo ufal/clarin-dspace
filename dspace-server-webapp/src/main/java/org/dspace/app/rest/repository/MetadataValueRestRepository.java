@@ -112,43 +112,32 @@ public class MetadataValueRestRepository extends DSpaceRestRepository<MetadataVa
             searchValue = searchValue.replace(":", "");
         }
 
-        // Find matches in Solr Search core
-        DiscoverQuery discoverQuery =
-                this.createDiscoverQuery(metadataField, searchValue);
-
-        if (ObjectUtils.isEmpty(discoverQuery)) {
-            throw new IllegalArgumentException("Cannot create a DiscoverQuery from the arguments.");
-        }
-
-        String normalizedQuery = Utils.normalizeDiscoverQuery(searchValue, metadataField);
-        if (StringUtils.isNotBlank(normalizedQuery)) {
-            discoverQuery.setQuery(normalizedQuery);
-        }
-
         List<MetadataValueWrapper> metadataValueWrappers = new ArrayList<>();
-        try {
-            DiscoverResult searchResult = searchService.search(context, discoverQuery);
-            for (IndexableObject object : searchResult.getIndexableObjects()) {
-                if (object instanceof IndexableItem) {
-                    // Get the item which has the metadata with the search value
-                    List<MetadataValue> metadataValues = itemService.getMetadataByMetadataString(
-                            ((IndexableItem) object).getIndexedObject(), metadataField);
+        // Perform a search, but only retrieve the total count of results, not the actual objects
+        DiscoverResult searchResult = createAndRunDiscoverResult(context, metadataField, searchValue, 0);
+        long totalResultsLong = searchResult.getTotalSearchResults();
+        // Safe conversion from long to int
+        int totalResults =  (totalResultsLong > Integer.MAX_VALUE) ?
+                Integer.MAX_VALUE : (int) totalResultsLong;
+        // Perform the search again, this time retrieving the actual results based on the total count
+        searchResult = createAndRunDiscoverResult(context, metadataField, searchValue, totalResults);
+        for (IndexableObject object : searchResult.getIndexableObjects()) {
+            if (object instanceof IndexableItem) {
+                // Get the item which has the metadata with the search value
+                List<MetadataValue> metadataValues = itemService.getMetadataByMetadataString(
+                        ((IndexableItem) object).getIndexedObject(), metadataField);
 
-                    // The Item could have more metadata than the metadata with searching value, filter that metadata
-                    String finalSearchValue = searchValue;
-                    List<MetadataValue> filteredMetadataValues = metadataValues.stream()
-                            .filter(metadataValue -> metadataValue.getValue().contains(finalSearchValue))
-                            .collect(Collectors.toList());
+                // The Item could have more metadata than the metadata with searching value, filter that metadata
+                String finalSearchValue = searchValue;
+                List<MetadataValue> filteredMetadataValues = metadataValues.stream()
+                        .filter(metadataValue -> metadataValue.getValue().contains(finalSearchValue))
+                        .collect(Collectors.toList());
 
-                    // convert metadata values to the wrapper
-                    List<MetadataValueWrapper> metadataValueWrapperList =
-                            this.convertMetadataValuesToWrappers(filteredMetadataValues);
-                    metadataValueWrappers.addAll(metadataValueWrapperList);
-                }
+                // convert metadata values to the wrapper
+                List<MetadataValueWrapper> metadataValueWrapperList =
+                        this.convertMetadataValuesToWrappers(filteredMetadataValues);
+                metadataValueWrappers.addAll(metadataValueWrapperList);
             }
-        } catch (SearchServiceException e) {
-            log.error("Error while searching with Discovery", e);
-            throw new IllegalArgumentException("Error while searching with Discovery: " + e.getMessage());
         }
 
         // filter eu sponsor -> do not return eu sponsor suggestions for items where eu sponsor is used.
@@ -159,6 +148,31 @@ public class MetadataValueRestRepository extends DSpaceRestRepository<MetadataVa
         metadataValueWrappers = distinctMetadataValues(metadataValueWrappers);
 
         return converter.toRestPage(metadataValueWrappers, pageable, utils.obtainProjection());
+    }
+
+    /**
+     * Create a discover query and retrieve the results from the Solr Search core.
+     */
+    private DiscoverResult createAndRunDiscoverResult(Context context, String metadataField,
+                                                      String searchValue, int maxResults) {
+        // Find matches in Solr Search core
+        DiscoverQuery discoverQuery =
+                this.createDiscoverQuery(metadataField, searchValue, maxResults);
+
+        if (ObjectUtils.isEmpty(discoverQuery)) {
+            throw new IllegalArgumentException("Cannot create a DiscoverQuery from the arguments.");
+        }
+
+        String normalizedQuery = Utils.normalizeDiscoverQuery(searchValue, metadataField);
+        if (StringUtils.isNotBlank(normalizedQuery)) {
+            discoverQuery.setQuery(normalizedQuery);
+        }
+        try {
+            return searchService.search(context, discoverQuery);
+        } catch (SearchServiceException e) {
+            log.error("Error while searching with Discovery", e);
+            throw new IllegalArgumentException("Error while searching with Discovery: " + e.getMessage());
+        }
     }
 
     public List<MetadataValueWrapper> filterEUSponsors(List<MetadataValueWrapper> metadataWrappers) {
@@ -172,11 +186,10 @@ public class MetadataValueRestRepository extends DSpaceRestRepository<MetadataVa
                 .collect( Collectors.toList() );
     }
 
-    private DiscoverQuery createDiscoverQuery(String metadataField, String searchValue) {
+    private DiscoverQuery createDiscoverQuery(String metadataField, String searchValue, int maxResults) {
         DiscoverQuery discoverQuery = new DiscoverQuery();
         discoverQuery.setQuery(metadataField + ":" + "*" + searchValue + "*");
-        discoverQuery.setMaxResults(500);
-        // return only metadata field values
+        discoverQuery.setMaxResults(maxResults);
         discoverQuery.addSearchField(metadataField);
         discoverQuery.addFilterQueries("search.resourcetype:" + IndexableItem.TYPE);
 
@@ -195,7 +208,7 @@ public class MetadataValueRestRepository extends DSpaceRestRepository<MetadataVa
 
 
     @Override
-    @PreAuthorize("permitAll()")
+    @PreAuthorize("hasAuthority('AUTHENTICATED')")
     public MetadataValueWrapperRest findOne(Context context, Integer id) {
         MetadataValueWrapper metadataValueWrapper = new MetadataValueWrapper();
         try {

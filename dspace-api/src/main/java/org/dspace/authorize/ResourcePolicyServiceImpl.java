@@ -24,6 +24,7 @@ import org.dspace.content.DSpaceObject;
 import org.dspace.content.factory.ContentServiceFactory;
 import org.dspace.core.Constants;
 import org.dspace.core.Context;
+import org.dspace.core.ProvenanceService;
 import org.dspace.eperson.EPerson;
 import org.dspace.eperson.Group;
 import org.dspace.eperson.service.GroupService;
@@ -51,6 +52,12 @@ public class ResourcePolicyServiceImpl implements ResourcePolicyService {
     @Autowired
     private GroupService groupService;
 
+    @Autowired
+    ProvenanceService provenanceService;
+
+    @Autowired
+    ResourcePolicyService resourcePolicyService;
+
     protected ResourcePolicyServiceImpl() {
     }
 
@@ -71,14 +78,22 @@ public class ResourcePolicyServiceImpl implements ResourcePolicyService {
      * Create a new ResourcePolicy
      *
      * @param context DSpace context object
+     * @param ePerson
+     * @param group
      * @return ResourcePolicy
      * @throws SQLException if database error
      */
     @Override
-    public ResourcePolicy create(Context context) throws SQLException {
+    public ResourcePolicy create(Context context, EPerson ePerson, Group group) throws SQLException {
         // FIXME: Check authorisation
         // Create a table row
-        ResourcePolicy resourcePolicy = resourcePolicyDAO.create(context, new ResourcePolicy());
+        ResourcePolicy policyToBeCreated = new ResourcePolicy();
+        if (ePerson == null && group == null) {
+            throw new IllegalArgumentException("A resource policy must contain a valid eperson or group");
+        }
+        policyToBeCreated.setEPerson(ePerson);
+        policyToBeCreated.setGroup(group);
+        ResourcePolicy resourcePolicy = resourcePolicyDAO.create(context, policyToBeCreated);
         return resourcePolicy;
     }
 
@@ -205,9 +220,7 @@ public class ResourcePolicyServiceImpl implements ResourcePolicyService {
     @Override
     public ResourcePolicy clone(Context context, ResourcePolicy resourcePolicy)
         throws SQLException, AuthorizeException {
-        ResourcePolicy clone = create(context);
-        clone.setGroup(resourcePolicy.getGroup());
-        clone.setEPerson(resourcePolicy.getEPerson());
+        ResourcePolicy clone = create(context, resourcePolicy.getEPerson(), resourcePolicy.getGroup());
         clone.setStartDate((Date) ObjectUtils.clone(resourcePolicy.getStartDate()));
         clone.setEndDate((Date) ObjectUtils.clone(resourcePolicy.getEndDate()));
         clone.setRpType((String) ObjectUtils.clone(resourcePolicy.getRpType()));
@@ -233,12 +246,17 @@ public class ResourcePolicyServiceImpl implements ResourcePolicyService {
     }
 
     @Override
-    public void removePolicies(Context c, DSpaceObject o, String type, int action)
-        throws SQLException, AuthorizeException {
+        public void removePolicies(Context c, DSpaceObject o, String type, int action)
+            throws SQLException, AuthorizeException {
+        // Get all read policies of the dso before removing them
+        List<ResourcePolicy> resPolicies = resourcePolicyService.find(c, o, type);
+
         resourcePolicyDAO.deleteByDsoAndTypeAndAction(c, o, type, action);
         c.turnOffAuthorisationSystem();
         contentServiceFactory.getDSpaceObjectService(o).updateLastModified(c, o);
         c.restoreAuthSystemState();
+
+        provenanceService.removeReadPolicies(c, o, resPolicies);
     }
 
     @Override

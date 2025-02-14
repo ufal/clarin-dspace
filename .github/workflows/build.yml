@@ -5,6 +5,8 @@ name: Build
 
 # Run this Build for pushes to our main and all PRs
 on:
+  schedule:
+    - cron: '0 */4 * * *'
   push:
     branches:
       - clarin-v7
@@ -50,7 +52,7 @@ jobs:
     steps:
       # https://github.com/actions/checkout
       - name: Checkout codebase
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       # https://github.com/actions/setup-java
       - name: Install JDK ${{ matrix.java }}
@@ -79,14 +81,14 @@ jobs:
       # (This artifact is downloadable at the bottom of any job's summary page)
       - name: Upload Results of ${{ matrix.type }} to Artifact
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.type }} results
           path: ${{ matrix.resultsdir }}
 
       # Upload code coverage report to artifact, so that it can be shared with the 'codecov' job (see below)
       - name: Upload code coverage report to Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.type }} coverage report
           path: 'dspace/target/site/jacoco-aggregate/jacoco.xml'

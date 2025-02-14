@@ -96,4 +96,9 @@
         <property name="dspaceRunnableClass" value="org.dspace.administer.FileDownloader"/>
     </bean>
 
+    <bean id="health-report" class="org.dspace.app.healthreport.HealthReportScriptConfiguration" primary="true">
+        <property name="description" value="Get report about DSpace health"/>
+        <property name="dspaceRunnableClass" value="org.dspace.app.healthreport.HealthReport"/>
+    </bean>
+
 </beans>

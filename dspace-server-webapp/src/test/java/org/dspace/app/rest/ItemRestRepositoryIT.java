@@ -40,8 +40,10 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.ws.rs.core.MediaType;
@@ -63,6 +65,8 @@ import org.dspace.app.rest.model.patch.ReplaceOperation;
 import org.dspace.app.rest.repository.ItemRestRepository;
 import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
 import org.dspace.app.rest.test.MetadataPatchSuite;
+import org.dspace.authorize.ResourcePolicy;
+import org.dspace.authorize.service.ResourcePolicyService;
 import org.dspace.builder.BitstreamBuilder;
 import org.dspace.builder.BundleBuilder;
 import org.dspace.builder.CollectionBuilder;
@@ -87,6 +91,7 @@ import org.dspace.content.Relationship;
 import org.dspace.content.RelationshipType;
 import org.dspace.content.WorkspaceItem;
 import org.dspace.content.service.CollectionService;
+import org.dspace.content.service.ItemService;
 import org.dspace.core.Constants;
 import org.dspace.eperson.EPerson;
 import org.dspace.eperson.Group;
@@ -120,6 +125,11 @@ public class ItemRestRepositoryIT extends AbstractControllerIntegrationTest {
 
     @Autowired
     private ConfigurationService configurationService;
+
+    @Autowired
+    private ResourcePolicyService resourcePolicyService;
+    @Autowired
+    private ItemService itemService;
 
     private Item publication1;
     private Item author1;
@@ -2439,7 +2449,8 @@ public class ItemRestRepositoryIT extends AbstractControllerIntegrationTest {
         context.restoreAuthSystemState();
         String token = getAuthToken(asUser.getEmail(), password);
 
-        new MetadataPatchSuite().runWith(getClient(token), "/api/core/items/" + item.getID(), expectedStatus);
+        new MetadataPatchSuite("item-metadata-patch-suite.json").runWith(getClient(token),
+                "/api/core/items/" + item.getID(), expectedStatus);
     }
 
     /**
@@ -2582,6 +2593,259 @@ public class ItemRestRepositoryIT extends AbstractControllerIntegrationTest {
                                     .andExpect(status().isForbidden());
         } finally {
             ItemBuilder.deleteItem(UUID.fromString(itemUuidString));
+        }
+    }
+
+    @Test
+    public void createItemAsSubmitterRestPolicyCorrectCollectionIDTest() throws Exception {
+        context.turnOffAuthorisationSystem();
+        Item item = null;
+        //disable file upload mandatory
+        configurationService.setProperty("webui.submit.upload.required", false);
+        try {
+            //** GIVEN **
+            //1. A community with one collection.
+            parentCommunity = CommunityBuilder.createCommunity(context)
+                    .withName("Parent Community")
+                    .build();
+
+            //2. create a normal user to use as submitter
+            EPerson submitter = EPersonBuilder.createEPerson(context)
+                    .withEmail("submitter@example.com")
+                    .withPassword("dspace")
+                    .build();
+
+            Collection col1 = CollectionBuilder.createCollection(context, parentCommunity).withName("Collection 1")
+                    .withSubmitterGroup(submitter).build();
+            //Set property
+            configurationService.setProperty("allow.edit.metadata", col1.getID().toString());
+            context.setCurrentUser(submitter);
+
+            //4. a workspace item
+            WorkspaceItem wsitem = WorkspaceItemBuilder.createWorkspaceItem(context, col1)
+                    .withTitle("Submission Item")
+                    .withIssueDate("2017-10-17")
+                    .grantLicense()
+                    .build();
+            context.restoreAuthSystemState();
+
+            // get the submitter auth token
+            String authToken = getAuthToken(submitter.getEmail(), "dspace");
+
+            // submit the workspaceitem to start the workflow - archived Item
+            getClient(authToken)
+                    .perform(post(BASE_REST_SERVER_URL + "/api/workflow/workflowitems")
+                            .content("/api/submission/workspaceitems/" + wsitem.getID())
+                            .contentType(textUriContentType));
+
+            // Find created item
+            Iterator<Item> it = itemService.findByCollection(context, col1);
+            item = it.hasNext() ? it.next() : null;
+
+            // Find all resource policy
+            List<ResourcePolicy> list = resourcePolicyService.find(context, item);
+            boolean found = list.stream()
+                    .anyMatch(resPol -> resPol.getAction() == Constants.WRITE &&
+                            resPol.getEPerson() != null &&
+                            resPol.getEPerson().getID().equals(submitter.getID()));
+            // submitter is a member of the submit group, collection ID is in property
+            // the resource policy was created
+            assert found;
+        } finally {
+            if (Objects.nonNull(item)) {
+                // remove the item if any
+                ItemBuilder.deleteItem(item.getID());
+            }
+        }
+    }
+
+    @Test
+    public void createItemAsSubmitterCollectionNameNotInConfigTest() throws Exception {
+        context.turnOffAuthorisationSystem();
+        Item item = null;
+        //disable file upload mandatory
+        configurationService.setProperty("webui.submit.upload.required", false);
+        try {
+            //** GIVEN **
+            //1. A community with one collection.
+            parentCommunity = CommunityBuilder.createCommunity(context)
+                    .withName("Parent Community")
+                    .build();
+
+            //2. create a normal user to use as submitter
+            EPerson submitter = EPersonBuilder.createEPerson(context)
+                    .withEmail("submitter@example.com")
+                    .withPassword("dspace")
+                    .build();
+
+            Collection col1 = CollectionBuilder.createCollection(context, parentCommunity).withName("Collection 1")
+                    .withSubmitterGroup(submitter).build();
+            context.setCurrentUser(submitter);
+
+            //4. a workspace item
+            WorkspaceItem wsitem = WorkspaceItemBuilder.createWorkspaceItem(context, col1)
+                    .withTitle("Submission Item")
+                    .withIssueDate("2017-10-17")
+                    .grantLicense()
+                    .build();
+            context.restoreAuthSystemState();
+
+            // get the submitter auth token
+            String authToken = getAuthToken(submitter.getEmail(), "dspace");
+
+            // submit the workspaceitem to start the workflow - archived Item
+            getClient(authToken)
+                    .perform(post(BASE_REST_SERVER_URL + "/api/workflow/workflowitems")
+                            .content("/api/submission/workspaceitems/" + wsitem.getID())
+                            .contentType(textUriContentType));
+
+            // Find created item
+            Iterator<Item> it = itemService.findByCollection(context, col1);
+            item = it.hasNext() ? it.next() : null;
+
+            // Find all resource policy
+            List<ResourcePolicy> list = resourcePolicyService.find(context, item);
+            boolean found = list.stream()
+                    .anyMatch(resPol -> resPol.getAction() == Constants.WRITE &&
+                            resPol.getEPerson() != null &&
+                            resPol.getEPerson().getID().equals(submitter.getID()));
+            // submission is member of submit group, collection name is not in property
+            // the resource policy was not created
+            assert !found;
+        } finally {
+            if (Objects.nonNull(item)) {
+                // remove the item if any
+                ItemBuilder.deleteItem(item.getID());
+            }
+        }
+    }
+
+    @Test
+    public void createItemAsAdminRestPolicyTest() throws Exception {
+        context.turnOffAuthorisationSystem();
+        Item item = null;
+        //disable file upload mandatory
+        configurationService.setProperty("webui.submit.upload.required", false);
+        try {
+            //** GIVEN **
+            //1. A community with one collection.
+            parentCommunity = CommunityBuilder.createCommunity(context)
+                    .withName("Parent Community")
+                    .build();
+
+            //2. create a normal user to use as submitter
+            EPerson user = EPersonBuilder.createEPerson(context)
+                    .withEmail("submitter@example.com")
+                    .withPassword("dspace")
+                    .build();
+
+            Collection col1 = CollectionBuilder.createCollection(context, parentCommunity).withName("Collection 1")
+                    .withAdminGroup(user).build();
+            //Set property
+            configurationService.setProperty("allow.edit.metadata", col1.getID().toString());
+
+            context.setCurrentUser(user);
+
+            //4. a workspace item
+            WorkspaceItem wsitem = WorkspaceItemBuilder.createWorkspaceItem(context, col1)
+                    .withTitle("Submission Item")
+                    .withIssueDate("2017-10-17")
+                    .grantLicense()
+                    .build();
+            context.restoreAuthSystemState();
+
+            // get the submitter auth token
+            String authToken = getAuthToken(user.getEmail(), "dspace");
+
+            // submit the workspaceitem to start the workflow - archived Item
+            getClient(authToken)
+                    .perform(post(BASE_REST_SERVER_URL + "/api/workflow/workflowitems")
+                            .content("/api/submission/workspaceitems/" + wsitem.getID())
+                            .contentType(textUriContentType));
+
+            // Find created item
+            Iterator<Item> it = itemService.findByCollection(context, col1);
+            item = it.hasNext() ? it.next() : null;
+
+            // Find all resource policy
+            List<ResourcePolicy> list = resourcePolicyService.find(context, item);
+            boolean found = list.stream()
+                    .anyMatch(resPol -> resPol.getAction() == Constants.WRITE &&
+                            resPol.getEPerson() != null &&
+                            resPol.getEPerson().getID().equals(user.getID()));
+            // submitter is not a member of the submit group
+            // the resource policy was not created
+            assert !found;
+        } finally {
+            if (Objects.nonNull(item)) {
+                // remove the item if any
+                ItemBuilder.deleteItem(item.getID());
+            }
+        }
+    }
+
+    @Test
+    public void createItemAsSubmitterRestPolicyCorrectCollectionNameTest() throws Exception {
+        context.turnOffAuthorisationSystem();
+        Item item = null;
+        //Set property
+        String colName = "Collection 1";
+        configurationService.setProperty("allow.edit.metadata", colName);
+        //disable file upload mandatory
+        configurationService.setProperty("webui.submit.upload.required", false);
+        try {
+            //** GIVEN **
+            //1. A community with one collection.
+            parentCommunity = CommunityBuilder.createCommunity(context)
+                    .withName("Parent Community")
+                    .build();
+
+            //2. create a normal user to use as submitter
+            EPerson submitter = EPersonBuilder.createEPerson(context)
+                    .withEmail("submitter@example.com")
+                    .withPassword("dspace")
+                    .build();
+
+            Collection col1 = CollectionBuilder.createCollection(context, parentCommunity).withName(colName)
+                    .withSubmitterGroup(submitter).build();
+
+            context.setCurrentUser(submitter);
+
+            //4. a workspace item
+            WorkspaceItem wsitem = WorkspaceItemBuilder.createWorkspaceItem(context, col1)
+                    .withTitle("Submission Item")
+                    .withIssueDate("2017-10-17")
+                    .grantLicense()
+                    .build();
+            context.restoreAuthSystemState();
+
+            // get the submitter auth token
+            String authToken = getAuthToken(submitter.getEmail(), "dspace");
+
+            // submit the workspaceitem to start the workflow - archived Item
+            getClient(authToken)
+                    .perform(post(BASE_REST_SERVER_URL + "/api/workflow/workflowitems")
+                            .content("/api/submission/workspaceitems/" + wsitem.getID())
+                            .contentType(textUriContentType));
+
+            // Find created item
+            Iterator<Item> it = itemService.findByCollection(context, col1);
+            item = it.hasNext() ? it.next() : null;
+
+            // Find all resource policy
+            List<ResourcePolicy> list = resourcePolicyService.find(context, item);
+            boolean found = list.stream()
+                    .anyMatch(resPol -> resPol.getAction() == Constants.WRITE &&
+                            resPol.getEPerson() != null &&
+                            resPol.getEPerson().getID().equals(submitter.getID()));
+            // submitter is a member of the submit group, collection name is in property
+            // the resource policy was created
+            assert found;
+        } finally {
+            if (Objects.nonNull(item)) {
+                // remove the item if any
+                ItemBuilder.deleteItem(item.getID());
+            }
         }
     }
 
@@ -2936,7 +3200,7 @@ public class ItemRestRepositoryIT extends AbstractControllerIntegrationTest {
                        BitstreamMatcher.matchBitstreamEntryWithoutEmbed(bitstream2.getID(), bitstream2.getSizeBytes())
                    )))
                    .andExpect(jsonPath("$._embedded.owningCollection._embedded.mappedItems." +
-                                           "_embedded.mappedItems[0]_embedded.relationships").doesNotExist())
+                                           "_embedded.mappedItems[0]._embedded.relationships").doesNotExist())
                    .andExpect(jsonPath("$._embedded.owningCollection._embedded.mappedItems" +
                                            "._embedded.mappedItems[0]._embedded.bundles._embedded.bundles[0]." +
                                            "_embedded.primaryBitstream").doesNotExist())
@@ -3013,8 +3277,7 @@ public class ItemRestRepositoryIT extends AbstractControllerIntegrationTest {
         context.restoreAuthSystemState();
 
 
-        ResourcePolicyBuilder.createResourcePolicy(context)
-                             .withUser(eperson)
+        ResourcePolicyBuilder.createResourcePolicy(context, eperson, null)
                              .withAction(WRITE)
                              .withDspaceObject(item)
                              .build();
@@ -3046,8 +3309,7 @@ public class ItemRestRepositoryIT extends AbstractControllerIntegrationTest {
         context.restoreAuthSystemState();
 
 
-        ResourcePolicyBuilder.createResourcePolicy(context)
-            .withUser(eperson)
+        ResourcePolicyBuilder.createResourcePolicy(context, eperson, null)
             .withAction(READ)
             .withDspaceObject(item)
             .build();

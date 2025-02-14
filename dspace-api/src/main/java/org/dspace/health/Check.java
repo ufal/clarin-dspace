@@ -50,4 +50,15 @@ public abstract class Check {
         }
     }
 
+    public String getErrors() {
+        return errors_;
+    }
+
+    public String getReport() {
+        return report_;
+    }
+
+    public long getTook() {
+        return took_;
+    }
 }

@@ -4,6 +4,8 @@ on:
   push:
     tags:      
       - '**'
+  workflow_dispatch:
+
 
 env:
   IMAGE_BASE_NAME: ufal/dspace
@@ -26,8 +28,19 @@ jobs:
           docker pull ${{ env.IMAGE_BASE_NAME }}-cli:${{ github.sha }}
           docker tag ${{ env.IMAGE_BASE_NAME }}-cli:${{ github.sha }} ${{ env.IMAGE_BASE_NAME }}-cli:${{ github.ref_name }}
 
+          docker pull ${{ env.IMAGE_BASE_NAME }}-solr:${{ github.sha }}
+          docker tag ${{ env.IMAGE_BASE_NAME }}-solr:${{ github.sha }} ${{ env.IMAGE_BASE_NAME }}-solr:${{ github.ref_name }}
+          
+          docker pull ${{ env.IMAGE_BASE_NAME }}-postgres-pgcrypto:${{ github.sha }}
+          docker tag ${{ env.IMAGE_BASE_NAME }}-postgres-pgcrypto:${{ github.sha }} ${{ env.IMAGE_BASE_NAME }}-postgres-pgcrypto:${{ github.ref_name }}
+
+          docker pull ${{ env.IMAGE_BASE_NAME }}-dependencies:${{ github.sha }}
+          docker tag ${{ env.IMAGE_BASE_NAME }}-dependencies:${{ github.sha }} ${{ env.IMAGE_BASE_NAME }}-dependencies:${{ github.ref_name }}
+
       - name: push image
         run: |
           docker push ${{ env.IMAGE_BASE_NAME }}:${{ github.ref_name }}
           docker push ${{ env.IMAGE_BASE_NAME }}-cli:${{ github.ref_name }}
-
+          docker push ${{ env.IMAGE_BASE_NAME }}-solr:${{ github.ref_name }}
+          docker push ${{ env.IMAGE_BASE_NAME }}-postgres-pgcrypto:${{ github.ref_name }}
+          docker push ${{ env.IMAGE_BASE_NAME }}-dependencies:${{ github.ref_name }}
