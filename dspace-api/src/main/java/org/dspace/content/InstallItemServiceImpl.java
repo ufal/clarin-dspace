@@ -410,10 +410,9 @@ public class InstallItemServiceImpl implements InstallItemService {
      */
     private void createResourcePolicy(Context context, Item item, int action) throws SQLException, AuthorizeException {
         context.turnOffAuthorisationSystem();
-        ResourcePolicy resPol = resourcePolicyService.create(context);
+        ResourcePolicy resPol = resourcePolicyService.create(context, item.getSubmitter(), null);
         resPol.setAction(action);
         resPol.setdSpaceObject(item);
-        resPol.setEPerson(item.getSubmitter());
         context.restoreAuthSystemState();
     }
 
