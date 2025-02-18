@@ -12,6 +12,7 @@ on:
       - dtq-dev
       - customer/*
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read  #  to fetch code (actions/checkout)
