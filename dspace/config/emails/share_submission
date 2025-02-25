@@ -12,7 +12,7 @@ If you have trouble please contact
 ${config.get('lr.help.mail')} or call us at ${config.get('lr.help.phone')}
 
 
-${config.get('dspace.name.short')} Team
+${config.get('dspace.shortname')} Team
 
 _____________________________________
 ${config.get('dspace.name')},

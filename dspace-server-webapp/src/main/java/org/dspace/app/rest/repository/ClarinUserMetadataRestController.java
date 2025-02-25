@@ -283,7 +283,7 @@ public class ClarinUserMetadataRestController {
         String helpDeskEmail = configurationService.getProperty("lr.help.mail", "");
         String helpDeskPhoneNum = configurationService.getProperty("lr.help.phone", "");
         String dspaceName = configurationService.getProperty("dspace.name", "");
-        String dspaceNameShort = configurationService.getProperty("dspace.name.short", "");
+        String dspaceNameShort = configurationService.getProperty("dspace.shortname", "");
 
         if (StringUtils.isEmpty(uiUrl)) {
             log.error("Cannot load the `dspace.ui.url` property from the cfg.");

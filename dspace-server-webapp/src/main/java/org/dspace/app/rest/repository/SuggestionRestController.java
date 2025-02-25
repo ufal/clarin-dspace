@@ -29,11 +29,12 @@ import org.dspace.app.rest.model.VocabularyEntryRest;
 import org.dspace.app.rest.model.hateoas.VocabularyEntryResource;
 import org.dspace.app.rest.utils.Utils;
 import org.dspace.core.Context;
+import org.dspace.discovery.DiscoverFacetField;
 import org.dspace.discovery.DiscoverQuery;
 import org.dspace.discovery.DiscoverResult;
 import org.dspace.discovery.SearchService;
 import org.dspace.discovery.SearchServiceException;
-import org.dspace.discovery.indexobject.IndexableItem;
+import org.dspace.discovery.configuration.DiscoveryConfigurationParameters;
 import org.dspace.services.ConfigurationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
@@ -230,8 +231,12 @@ public class SuggestionRestController extends AbstractDSpaceRestRepository {
         DiscoverQuery discoverQuery = new DiscoverQuery();
         // Process the custom query if it contains the specific query parameter `?query=`
         autocompleteCustom = updateAutocompleteAndQuery(autocompleteCustom, discoverQuery);
-        // TODO - search facets and process facet results instead of indexable objects
-        discoverQuery.setMaxResults(500);
+        DiscoverFacetField facetField = new DiscoverFacetField(autocompleteCustom,
+                DiscoveryConfigurationParameters.TYPE_STANDARD,
+                -1,                                   // no limit (get all facet values)
+                DiscoveryConfigurationParameters.SORT.VALUE   // sorting order
+        );
+        discoverQuery.addFacetField(facetField);
         // return only metadata field values
         discoverQuery.addSearchField(autocompleteCustom);
 
@@ -255,30 +260,17 @@ public class SuggestionRestController extends AbstractDSpaceRestRepository {
      */
     private void processSolrSearchResults(DiscoverResult searchResult, String autocompleteCustom, String searchValue,
                                           List<VocabularyEntryRest> results) {
-        searchResult.getIndexableObjects().forEach(object -> {
-            if (!(object instanceof IndexableItem)) {
-                return;
-            }
-            IndexableItem item = (IndexableItem) object;
-            // Get all search documents for the item.
-            searchResult.getSearchDocument(item).forEach((searchDocument) -> {
+        searchResult.getFacetResult(autocompleteCustom).forEach(facetResult -> {
+            String displayedValue = facetResult.getDisplayedValue();
+            if (displayedValue.contains(searchValue)) {
+                // Create a new VocabularyEntryRest object
                 VocabularyEntryRest vocabularyEntryRest = new VocabularyEntryRest();
-                // All values from Item's specific index - it could contain values we are not looking for.
-                // The must be filtered out.
-                List<String> docValues = searchDocument.getSearchFieldValues(autocompleteCustom);
+                vocabularyEntryRest.setDisplay(displayedValue);
+                vocabularyEntryRest.setValue(displayedValue);
 
-                // Filter values that contain searchValue
-                List<String> filteredValues = docValues.stream()
-                        .filter(value -> value.contains(searchValue))
-                        .collect(Collectors.toList());
-
-                // Add filtered values to the results. It contains only values that contain searchValue.
-                filteredValues.forEach(value -> {
-                    vocabularyEntryRest.setDisplay(value);
-                    vocabularyEntryRest.setValue(value);
-                    results.add(vocabularyEntryRest);
-                });
-            });
+                // Add the filtered value to the results
+                results.add(vocabularyEntryRest);
+            }
         });
     }
 

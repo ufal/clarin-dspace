@@ -41,6 +41,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.dspace.services.ConfigurationService;
 import org.dspace.services.factory.DSpaceServicesFactory;
+import org.hibernate.Session;
+import org.hibernate.SessionFactory;
+import org.hibernate.query.NativeQuery;
 
 /**
  * Utility functions for DSpace.
@@ -522,5 +525,27 @@ public final class Utils {
         }
 
         return input.substring(0, lastIndex) + replacement + input.substring(lastIndex + toReplace.length());
+    }
+
+    /**
+     * Get the current transaction's PID from PostgreSQL
+
+     * @return PID of the current transaction
+     */
+    public static Integer getTransactionPid(SessionFactory sessionFactory) {
+        Integer pid = -1;
+        try {
+            Session session = sessionFactory.getCurrentSession(); // Get the current session
+            String sql = "SELECT pg_backend_pid()"; // SQL query to get the PID
+
+            // Execute the query and get the PID
+            NativeQuery<Integer> query = session.createNativeQuery(sql);
+            pid = query.getSingleResult();  // Get the single result
+
+            log.info("Current transaction PID: " + pid); // Optional logging
+        } catch (Exception e) {
+            log.error("Cannot get PID because: " + e.getMessage());
+        }
+        return pid;
     }
 }

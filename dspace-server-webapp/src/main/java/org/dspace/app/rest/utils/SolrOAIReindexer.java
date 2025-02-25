@@ -28,6 +28,7 @@ import com.lyncode.xoai.dataprovider.xml.xoai.Metadata;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.common.SolrDocumentList;
@@ -188,12 +189,14 @@ public class SolrOAIReindexer {
          * invisible embargoed items, because this will override the item.public
          * flag.
          */
-        boolean deleted = false;
-        if (!item.isHidden()) {
-            deleted = (item.isWithdrawn() || !item.isDiscoverable() || (isEmbargoed && isPublic));
+        boolean discoverable = item.isDiscoverable();
+        // The Item is not deleted when it has local metadata `local.hidden = hidden`.
+        // Without this, the item is not discoverable and harvestable; however, it should be harvestable via OAI-PMH.
+        if (!discoverable && item.isHidden()) {
+            discoverable = true;
         }
-        doc.addField("item.deleted", deleted);
-
+        boolean isDeleted = item.isWithdrawn() || (!discoverable) || (isEmbargoed && isPublic);
+        doc.addField("item.deleted", isDeleted);
 
         /*
          * An item that is embargoed will potentially not be harvested by
@@ -307,9 +310,12 @@ public class SolrOAIReindexer {
             return;
         }
         try {
+            // Before reindexing delete item
+            deleteItemByQuery(item);
+            SolrClient server = solrServerResolver.getServer();
             SolrInputDocument solrInput = index(item);
-            solrServerResolver.getServer().add(solrInput);
-            solrServerResolver.getServer().commit();
+            server.add(solrInput);
+            server.commit();
             cacheService.deleteAll();
             itemCacheService.deleteAll();
         } catch (IOException | XMLStreamException | SQLException | WritingXmlException | SolrServerException e) {
@@ -326,8 +332,7 @@ public class SolrOAIReindexer {
 
     public void deleteItem(Item item) {
         try {
-            solrServerResolver.getServer().deleteByQuery("item.id:" + item.getID().toString());
-            solrServerResolver.getServer().commit();
+            deleteItemByQuery(item);
             cacheService.deleteAll();
             itemCacheService.deleteAll();
         } catch (SolrServerException | IOException e) {
@@ -355,5 +360,14 @@ public class SolrOAIReindexer {
         }
 
         return false;
+    }
+
+    /**
+     * Delete the item from Solr by the ID of the item
+     */
+    private void deleteItemByQuery(Item item) throws SolrServerException, IOException {
+        SolrClient solrClient = solrServerResolver.getServer();
+        solrClient.deleteByQuery("item.id:" + item.getID().toString());
+        solrClient.commit();
     }
 }
