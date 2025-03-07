@@ -24,7 +24,6 @@ import org.apache.logging.log4j.Logger;
 import org.dspace.AbstractIntegrationTestWithDatabase;
 import org.dspace.app.requestitem.RequestItem;
 import org.dspace.authorize.AuthorizeException;
-import org.dspace.authorize.ResourcePolicy;
 import org.dspace.builder.BitstreamBuilder;
 import org.dspace.builder.CollectionBuilder;
 import org.dspace.builder.CommunityBuilder;
@@ -496,8 +495,7 @@ public class ItemServiceTest extends AbstractIntegrationTestWithDatabase {
 
     @Test
     public void testFindAndCountItemsWithEditEPerson() throws Exception {
-        ResourcePolicy rp = ResourcePolicyBuilder.createResourcePolicy(context)
-            .withUser(eperson)
+        ResourcePolicyBuilder.createResourcePolicy(context, eperson, null)
             .withDspaceObject(item)
             .withAction(Constants.WRITE)
             .build();
@@ -510,8 +508,7 @@ public class ItemServiceTest extends AbstractIntegrationTestWithDatabase {
 
     @Test
     public void testFindAndCountItemsWithAdminEPerson() throws Exception {
-         ResourcePolicy rp = ResourcePolicyBuilder.createResourcePolicy(context)
-            .withUser(eperson)
+         ResourcePolicyBuilder.createResourcePolicy(context, eperson, null)
             .withDspaceObject(item)
             .withAction(Constants.ADMIN)
             .build();
@@ -530,8 +527,7 @@ public class ItemServiceTest extends AbstractIntegrationTestWithDatabase {
             .build();
         context.restoreAuthSystemState();
 
-        ResourcePolicy rp = ResourcePolicyBuilder.createResourcePolicy(context)
-            .withGroup(group)
+        ResourcePolicyBuilder.createResourcePolicy(context, eperson, group)
             .withDspaceObject(item)
             .withAction(Constants.WRITE)
             .build();
@@ -550,8 +546,7 @@ public class ItemServiceTest extends AbstractIntegrationTestWithDatabase {
             .build();
         context.restoreAuthSystemState();
 
-        ResourcePolicy rp = ResourcePolicyBuilder.createResourcePolicy(context)
-            .withGroup(group)
+        ResourcePolicyBuilder.createResourcePolicy(context, eperson, group)
             .withDspaceObject(item)
             .withAction(Constants.ADMIN)
             .build();

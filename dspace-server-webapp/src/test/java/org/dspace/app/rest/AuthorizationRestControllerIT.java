@@ -121,9 +121,8 @@ public class AuthorizationRestControllerIT extends AbstractControllerIntegration
         Bitstream bitstream = item.getBundles().get(0).getBitstreams().get(0);
 
         // Create resource policy to allow anonymous user download the bitstream
-        ResourcePolicyBuilder.createResourcePolicy(context).withUser(ePerson2)
+        ResourcePolicyBuilder.createResourcePolicy(context, ePerson2, anonymousGroup)
                 .withAction(Constants.READ)
-                .withGroup(anonymousGroup)
                 .withDspaceObject(bitstream).build();
 
         // Create clarin license with clarin license label

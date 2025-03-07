@@ -1789,7 +1789,8 @@ public class ItemImportServiceImpl implements ItemImportService, InitializingBea
                     } else {
                         logInfo("\tSetting special permissions for "
                             + bitstreamName);
-                        setPermission(c, myGroup, actionID, bs);
+                        String rpType = useWorkflow ? ResourcePolicy.TYPE_SUBMISSION : ResourcePolicy.TYPE_INHERITED;
+                        setPermission(c, myGroup, rpType, actionID, bs);
                     }
                 }
 
@@ -1847,24 +1848,25 @@ public class ItemImportServiceImpl implements ItemImportService, InitializingBea
      *
      * @param c        DSpace Context
      * @param g        Dspace Group
+     * @param rpType   resource policy type string
      * @param actionID action identifier
      * @param bs       Bitstream
      * @throws SQLException       if database error
      * @throws AuthorizeException if authorization error
      * @see org.dspace.core.Constants
      */
-    protected void setPermission(Context c, Group g, int actionID, Bitstream bs)
+    protected void setPermission(Context c, Group g, String rpType, int actionID, Bitstream bs)
         throws SQLException, AuthorizeException {
         if (!isTest) {
             // remove the default policy
             authorizeService.removeAllPolicies(c, bs);
 
             // add the policy
-            ResourcePolicy rp = resourcePolicyService.create(c);
+            ResourcePolicy rp = resourcePolicyService.create(c, null, g);
 
             rp.setdSpaceObject(bs);
             rp.setAction(actionID);
-            rp.setGroup(g);
+            rp.setRpType(rpType);
 
             resourcePolicyService.update(c, rp);
         } else {

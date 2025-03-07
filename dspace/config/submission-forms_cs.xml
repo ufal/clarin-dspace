@@ -58,7 +58,7 @@
                     <dc-schema>dc</dc-schema>
                     <dc-element>type</dc-element>
                     <dc-qualifier></dc-qualifier>
-                    <repeatable>true</repeatable>
+                    <repeatable>false</repeatable>
                     <label>Zvolte typ dat</label>
                     <input-type value-pairs-name="common_types">dropdown</input-type>
                     <hint>"Corpus" označuje textové, řečové i multimodální korpusy.
@@ -1585,7 +1585,7 @@
             <row>
                 <field>
                     <dc-schema>local</dc-schema>
-                    <dc-element>hasMetadata</dc-element>
+                    <dc-element>hasCMDI</dc-element>
                     <dc-qualifier/>
                     <repeatable>false</repeatable>
                     <label>Chystáte se nahrát cmdi soubor? (Admin only field)</label>
@@ -1872,7 +1872,7 @@
             <row>
                 <field>
                     <dc-schema>local</dc-schema>
-                    <dc-element>hasMetadata</dc-element>
+                    <dc-element>hasCMDI</dc-element>
                     <dc-qualifier/>
                     <repeatable>false</repeatable>
                     <label>Chystáte se nahrát cmdi soubor? (Admin only field)</label>
