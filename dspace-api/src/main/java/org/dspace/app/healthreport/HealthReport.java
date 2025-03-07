@@ -41,8 +41,9 @@ import org.dspace.utils.DSpace;
  * @author Milan Majchrak (dspace at dataquest.sk)
  */
 public class HealthReport extends DSpaceRunnable<HealthReportScriptConfiguration> {
-    ConfigurationService configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
     private static final Logger log = LogManager.getLogger(HealthReport.class);
+
+    private ConfigurationService configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
     private EPersonService ePersonService;
 
     /**

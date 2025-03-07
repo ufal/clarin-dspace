@@ -79,4 +79,9 @@
         <property name="dspaceRunnableClass" value="org.dspace.app.healthreport.HealthReport"/>
     </bean>
 
+    <bean id="file-preview" class="org.dspace.scripts.filepreview.FilePreviewConfiguration" primary="true">
+        <property name="description" value="Generate the file preview"/>
+        <property name="dspaceRunnableClass" value="org.dspace.scripts.filepreview.FilePreview"/>
+    </bean>
+
 </beans>

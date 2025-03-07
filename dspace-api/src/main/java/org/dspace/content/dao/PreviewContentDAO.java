@@ -11,6 +11,7 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.UUID;
 
+import org.dspace.content.Bitstream;
 import org.dspace.content.PreviewContent;
 import org.dspace.core.Context;
 import org.dspace.core.GenericDAO;
@@ -36,9 +37,9 @@ public interface PreviewContentDAO extends GenericDAO<PreviewContent> {
      *  Find all preview content based on bitstream that are the root directory.
      *
      * @param context       DSpace context
-     * @param bitstreamId   The bitstream ID
+     * @param bitstream     The bitstream to get bitstream UUID
      * @return              List of found preview content
      * @throws SQLException If a database error occurs
      */
-    List<PreviewContent> findRootByBitstream(Context context, UUID bitstreamId) throws SQLException;
+    List<PreviewContent> hasPreview(Context context, Bitstream bitstream) throws SQLException;
 }
