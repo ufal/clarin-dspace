@@ -21,6 +21,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -518,7 +519,7 @@ public class HandleServiceImpl implements HandleService {
     private Event getClarinSetOwningCollectionEvent(Context context) {
         int index = -1;
         LinkedList<Event> allEvents = context.getEvents();
-        for (Event event: allEvents) {
+        for (Event event: ListUtils.emptyIfNull(allEvents)) {
             index++;
             if (StringUtils.isBlank(event.getDetail())) {
                 continue;
