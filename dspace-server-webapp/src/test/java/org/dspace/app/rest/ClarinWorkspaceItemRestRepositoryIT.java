@@ -8,6 +8,7 @@
 package org.dspace.app.rest;
 
 import static org.dspace.app.rest.repository.ClarinLicenseRestRepository.OPERATION_PATH_LICENSE_RESOURCE;
+import static org.dspace.content.InstallItemServiceImpl.SET_OWNING_COLLECTION_EVENT_DETAIL;
 import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -49,6 +50,8 @@ import org.dspace.content.service.InstallItemService;
 import org.dspace.content.service.clarin.ClarinLicenseLabelService;
 import org.dspace.content.service.clarin.ClarinLicenseResourceMappingService;
 import org.dspace.content.service.clarin.ClarinLicenseService;
+import org.dspace.core.Constants;
+import org.dspace.event.Event;
 import org.dspace.handle.PIDConfiguration;
 import org.dspace.services.ConfigurationService;
 import org.junit.Assert;
@@ -865,6 +868,10 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
                 .withTitle("Item with custom handle")
                 .withIssueDate("2017-10-17")
                 .build();
+
+        // Add event here, because the `build()` remove all events.
+        context.addEvent(new Event(Event.MODIFY, Constants.ITEM, wItem.getItem().getID(),
+                SET_OWNING_COLLECTION_EVENT_DETAIL + col.getID()));
 
         Item installedItem = installItemService.installItem(context, wItem);
         context.restoreAuthSystemState();

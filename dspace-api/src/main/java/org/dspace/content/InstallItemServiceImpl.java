@@ -88,12 +88,6 @@ public class InstallItemServiceImpl implements InstallItemService {
         Item item = is.getItem();
         Collection collection = is.getCollection();
 
-        // CLARIN
-        // The owning collection is needed for getting owning community and creating configured handle.
-        c.addEvent(new Event(Event.MODIFY, Constants.ITEM, item.getID(),
-                SET_OWNING_COLLECTION_EVENT_DETAIL + collection.getID()));
-        // CLARIN
-
         // Get map of filters to use for identifier types.
         Map<Class<? extends Identifier>, Filter> filters = FilterUtils.getIdentifierFilters(false);
         try {
