@@ -123,7 +123,7 @@ public class FilePreview extends DSpaceRunnable<FilePreviewConfiguration> {
             return;
         }
 
-        List<Bundle> bundles = item.getBundles();
+        List<Bundle> bundles = item.getBundles("ORIGINAL");
         for (Bundle bundle : bundles) {
             List<Bitstream> bitstreams = bundle.getBitstreams();
             for (Bitstream bitstream : bitstreams) {

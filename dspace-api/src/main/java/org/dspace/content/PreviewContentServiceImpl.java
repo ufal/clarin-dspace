@@ -21,6 +21,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Hashtable;
 import java.util.Iterator;
 import java.util.List;
@@ -196,6 +197,11 @@ public class PreviewContentServiceImpl implements PreviewContentService {
         List<FileInfo> fileInfos = new ArrayList<>();
         String bitstreamMimeType = bitstream.getFormat(context).getMIMEType();
         if (bitstreamMimeType.equals("text/plain")) {
+            if (!validateBitstreamNameWithType(bitstream, "zip,tar,gz,tar.gz,tar.bz2")) {
+                throw new IOException("he file has an incorrect type according to the MIME type stored in the " +
+                        "database. This could cause the ZIP file to be previewed as a text file, potentially leading" +
+                        " to a database error.");
+            }
             String data = getFileContent(inputStream, true);
             fileInfos.add(new FileInfo(data, false));
         } else if (bitstreamMimeType.equals("text/html")) {
@@ -252,6 +258,22 @@ public class PreviewContentServiceImpl implements PreviewContentService {
 
         url += "&isAllowed=" + isAllowed;
         return url;
+    }
+
+    /**
+     * Validate the bitstream name with the specified type. Check if the ZIP file is not previewed as a text file.
+     * @param bitstream
+     * @param forbiddenTypes "in the form of 'type1,type2,type3'"
+     * @return
+     */
+    private boolean validateBitstreamNameWithType(Bitstream bitstream, String forbiddenTypes) {
+        ArrayList<String> forbiddenTypesList = new ArrayList(Arrays.asList(forbiddenTypes.split(",")));
+        for (String forbiddenType : forbiddenTypesList) {
+            if (bitstream.getName().endsWith(forbiddenType)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
