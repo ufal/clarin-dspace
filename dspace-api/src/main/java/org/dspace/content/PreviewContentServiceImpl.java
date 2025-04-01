@@ -152,7 +152,7 @@ public class PreviewContentServiceImpl implements PreviewContentService {
 
     @Override
     public List<FileInfo> getFilePreviewContent(Context context, Bitstream bitstream)
-            throws SQLException, AuthorizeException, IOException {
+            throws Exception {
         InputStream inputStream = null;
         List<FileInfo> fileInfos = null;
         try {
@@ -160,11 +160,7 @@ public class PreviewContentServiceImpl implements PreviewContentService {
         } catch (MissingLicenseAgreementException e) { /* Do nothing */ }
 
         if (Objects.nonNull(inputStream)) {
-            try {
-                fileInfos = processInputStreamToFilePreview(context, bitstream, inputStream);
-            } catch (IllegalStateException e) {
-                log.error("Cannot process Input Stream to file preview because: " + e.getMessage());
-            }
+            fileInfos = processInputStreamToFilePreview(context, bitstream, inputStream);
         }
         return fileInfos;
     }
@@ -193,7 +189,7 @@ public class PreviewContentServiceImpl implements PreviewContentService {
     @Override
     public List<FileInfo> processInputStreamToFilePreview(Context context, Bitstream bitstream,
                                                           InputStream inputStream)
-            throws SQLException, IOException {
+            throws Exception {
         List<FileInfo> fileInfos = new ArrayList<>();
         String bitstreamMimeType = bitstream.getFormat(context).getMIMEType();
         if (bitstreamMimeType.equals("text/plain")) {
@@ -216,12 +212,8 @@ public class PreviewContentServiceImpl implements PreviewContentService {
 
             String mimeType = bitstream.getFormat(context).getMIMEType();
             if (archiveTypes.containsKey(mimeType)) {
-                try {
-                    data = extractFile(inputStream, archiveTypes.get(mimeType));
-                    fileInfos = FileTreeViewGenerator.parse(data);
-                } catch (Exception e) {
-                    log.error("Cannot extract file content because: {}", e.getMessage());
-                }
+                data = extractFile(inputStream, archiveTypes.get(mimeType));
+                fileInfos = FileTreeViewGenerator.parse(data);
             }
         }
         return fileInfos;
@@ -420,7 +412,7 @@ public class PreviewContentServiceImpl implements PreviewContentService {
      * @param fileType    the type of file to extract ("tar" or "zip")
      * @return an XML string representing the extracted file paths
      */
-    private String extractFile(InputStream inputStream, String fileType) {
+    private String extractFile(InputStream inputStream, String fileType) throws Exception {
         List<String> filePaths = new ArrayList<>();
         Path tempFile = null;
         FileSystem zipFileSystem = null;
@@ -439,8 +431,6 @@ public class PreviewContentServiceImpl implements PreviewContentService {
                 zipFileSystem = FileSystems.newFileSystem(tempFile, (ClassLoader) null);
                 processZipFile(filePaths, zipFileSystem);
             }
-        } catch (IOException e) {
-            log.error(String.format("An error occurred while extracting file of type %s.", fileType), e);
         } finally {
             closeFileSystem(zipFileSystem);
             deleteTempFile(tempFile);
