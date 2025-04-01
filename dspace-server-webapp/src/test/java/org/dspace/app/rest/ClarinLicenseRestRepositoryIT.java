@@ -10,6 +10,7 @@ package org.dspace.app.rest;
 import static com.jayway.jsonpath.JsonPath.read;
 import static org.apache.commons.codec.CharEncoding.UTF_8;
 import static org.apache.commons.io.IOUtils.toInputStream;
+import static org.dspace.app.rest.utils.Utils.DEFAULT_PAGE_SIZE;
 import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -541,7 +542,7 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
                 .andExpect(content().contentType(contentType))
                 .andExpect(jsonPath("$._embedded").doesNotExist())
                 .andExpect(jsonPath("$._links.self.href", Matchers.containsString(BASE_URI)))
-                .andExpect(jsonPath("$.page.size", Matchers.equalTo(20)))
+                .andExpect(jsonPath("$.page.size", Matchers.equalTo(DEFAULT_PAGE_SIZE)))
                 .andExpect(jsonPath("$.page.totalElements", Matchers.equalTo(expectedTotal)))
                 .andExpect(jsonPath("$.page.totalPages", Matchers.equalTo(1)))
                 .andExpect(jsonPath("$.page.number", Matchers.equalTo(pageNumber)));
