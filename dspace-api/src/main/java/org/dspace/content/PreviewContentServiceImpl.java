@@ -209,16 +209,15 @@ public class PreviewContentServiceImpl implements PreviewContentService {
             fileInfos.add(new FileInfo(data, false));
         } else {
             String data = "";
-            if (bitstream.getFormat(context).getMIMEType().equals("application/zip")) {
-                data = extractFile(inputStream, ARCHIVE_TYPE_ZIP);
+            Map<String, String> archiveTypes = Map.of(
+                    "application/zip", ARCHIVE_TYPE_ZIP,
+                    "application/x-tar", ARCHIVE_TYPE_TAR
+            );
+
+            String mimeType = bitstream.getFormat(context).getMIMEType();
+            if (archiveTypes.containsKey(mimeType)) {
                 try {
-                    fileInfos = FileTreeViewGenerator.parse(data);
-                } catch (Exception e) {
-                    log.error("Cannot extract file content because: {}", e.getMessage());
-                }
-            } else if (bitstream.getFormat(context).getMIMEType().equals("application/x-tar")) {
-                data = extractFile(inputStream, ARCHIVE_TYPE_TAR);
-                try {
+                    data = extractFile(inputStream, archiveTypes.get(mimeType));
                     fileInfos = FileTreeViewGenerator.parse(data);
                 } catch (Exception e) {
                     log.error("Cannot extract file content because: {}", e.getMessage());
