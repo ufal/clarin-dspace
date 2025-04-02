@@ -285,28 +285,31 @@ public class DSpaceApiExceptionControllerAdvice extends ResponseEntityExceptionH
             }
         }
 
+        String errorMessage;
         // We don't want to fill logs with bad/invalid REST API requests.
         if (HttpStatus.valueOf(statusCode).is5xxServerError() || LOG_AS_ERROR.contains(statusCode)) {
             // Log the full error and status code
-            log.error("{} (status:{})", message, statusCode, ex);
+            errorMessage = message;
+            log.error("{} (status:{})", errorMessage, statusCode, ex);
         } else if (HttpStatus.valueOf(statusCode).is4xxClientError()) {
             // Log the error as a single-line WARN
             String location;
-            String exceptionMessage;
             if (null == ex) {
-                exceptionMessage = "none";
+                errorMessage = "none";
                 location = "unknown";
             } else {
-                exceptionMessage = ex.getMessage();
+                errorMessage = ex.getMessage();
                 StackTraceElement[] trace = ex.getStackTrace();
                 location = trace.length <= 0 ? "unknown" : trace[0].toString();
             }
             log.warn("{} (status:{} exception: {} at: {})", message, statusCode,
-                    exceptionMessage, location);
+                    errorMessage, location);
+        } else {
+            errorMessage = message;
         }
 
         //Exception properties will be set by org.springframework.boot.web.support.ErrorPageFilter
-        response.sendError(statusCode, message);
+        response.sendError(statusCode, errorMessage);
     }
 
 }

@@ -18,13 +18,13 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.servlet.http.HttpServletRequest;
-import javax.ws.rs.BadRequestException;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
+import org.dspace.app.rest.exception.DSpaceBadRequestException;
 import org.dspace.app.rest.model.VocabularyEntryRest;
 import org.dspace.app.rest.model.hateoas.VocabularyEntryResource;
 import org.dspace.app.rest.utils.Utils;
@@ -118,7 +118,7 @@ public class SuggestionRestController extends AbstractDSpaceRestRepository {
         if (!isAllowedSearching(autocompleteCustom)) {
             String errorMessage = "Searching for autocompleteCustom: " + autocompleteCustom + " is not allowed";
             log.warn(errorMessage);
-            throw new BadRequestException(errorMessage);
+            throw new DSpaceBadRequestException(errorMessage);
         }
 
         Pageable pageable = utils.getPageable(optionalPageable);
