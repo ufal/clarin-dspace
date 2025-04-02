@@ -246,8 +246,48 @@ public class DSpaceApiExceptionControllerAdvice extends ResponseEntityExceptionH
         } else {
             returnCode = HttpServletResponse.SC_INTERNAL_SERVER_ERROR;
         }
-        sendErrorResponse(request, response, ex, "An exception has occurred", returnCode);
+        if ((HttpStatus.valueOf(returnCode).is4xxClientError())) {
+            sendClientErrorResponse(request, response, ex, returnCode);
+        } else {
+            sendErrorResponse(request, response, ex, "An exception has occurred", returnCode);
+        }
 
+    }
+
+    /**
+     * Send the client (4xx) error to the response.
+     * 4xx errors will be logged as WARN without a stack trace. Specific 4xx errors where
+     * an ERROR log with full stack trace is more appropriate are configured
+     * using property {@code logging.server.include-stacktrace-for-httpcode}
+     * (see {@link DSpaceApiExceptionControllerAdvice#P_LOG_AS_ERROR}
+     * and {@link DSpaceApiExceptionControllerAdvice#LOG_AS_ERROR_DEFAULT}).
+     *
+     * @param request current request
+     * @param response current response
+     * @param ex 4xx Exception thrown
+     * @param statusCode status code to send in response
+     */
+    private void sendClientErrorResponse(final HttpServletRequest request,
+                                         final HttpServletResponse response,
+                                         final Exception ex,
+                                         final int statusCode)
+            throws IOException {
+        //Make sure Spring picks up this exception
+        request.setAttribute(EXCEPTION_ATTRIBUTE, ex);
+
+        final Set<Integer> statusCodesLoggedAsErrors = getStatusCodesLoggedAsErrors();
+
+        String message = ex.getMessage();
+        if (statusCodesLoggedAsErrors.contains(statusCode)) {
+            log.error("{} (status:{})", message, statusCode, ex);
+        } else {
+            // Log the error as a single-line WARN
+            StackTraceElement[] trace = ex.getStackTrace();
+            String location = trace.length <= 0 ? "unknown" : trace[0].toString();
+            log.warn("{} (status:{} exception: {} at: {})", message, statusCode, message, location);
+        }
+
+        response.sendError(statusCode, message);
     }
 
     /**
@@ -256,14 +296,14 @@ public class DSpaceApiExceptionControllerAdvice extends ResponseEntityExceptionH
      * will be logged as WARN without a stack trace. Specific 4xx errors where
      * an ERROR log with full stack trace is more appropriate are configured
      * using property {@code logging.server.include-stacktrace-for-httpcode}
-     * (see {@link P_LOG_AS_ERROR} and {@link LOG_AS_ERROR_DEFAULT}).
+     * (see {@link DSpaceApiExceptionControllerAdvice#P_LOG_AS_ERROR}
+     * and {@link DSpaceApiExceptionControllerAdvice#LOG_AS_ERROR_DEFAULT}).
      *
      * @param request current request
      * @param response current response
      * @param ex Exception thrown
      * @param message message to log or send in response
      * @param statusCode status code to send in response
-     * @throws IOException
      */
     private void sendErrorResponse(final HttpServletRequest request,
             final HttpServletResponse response,
@@ -272,44 +312,50 @@ public class DSpaceApiExceptionControllerAdvice extends ResponseEntityExceptionH
         //Make sure Spring picks up this exception
         request.setAttribute(EXCEPTION_ATTRIBUTE, ex);
 
-        // Which status codes should be treated as ERROR?
-        final Set<Integer> LOG_AS_ERROR = new HashSet<>();
+        final Set<Integer> LOG_AS_ERROR = getStatusCodesLoggedAsErrors();
+
+        // We don't want to fill logs with bad/invalid REST API requests.
+        if (HttpStatus.valueOf(statusCode).is5xxServerError() || LOG_AS_ERROR.contains(statusCode)) {
+            // Log the full error and status code
+            log.error("{} (status:{})", message, statusCode, ex);
+        } else if (HttpStatus.valueOf(statusCode).is4xxClientError()) {
+            // Log the error as a single-line WARN
+            String location;
+            String exceptionMessage;
+            if (null == ex) {
+                exceptionMessage = "none";
+                location = "unknown";
+            } else {
+                exceptionMessage = ex.getMessage();
+                StackTraceElement[] trace = ex.getStackTrace();
+                location = trace.length <= 0 ? "unknown" : trace[0].toString();
+            }
+            log.warn("{} (status:{} exception: {} at: {})", message, statusCode,
+                    exceptionMessage, location);
+        }
+
+        //Exception properties will be set by org.springframework.boot.web.support.ErrorPageFilter
+        response.sendError(statusCode, message);
+    }
+
+    /**
+     * Get set of status codes that should be treated as errors.
+     *
+     * @return set of status codes that should be treated as errors
+     */
+    private Set<Integer> getStatusCodesLoggedAsErrors() {
+        final Set<Integer> statusCodesLoggedAsErrors = new HashSet<>();
         String[] error_codes = configurationService.getArrayProperty(
                 P_LOG_AS_ERROR, LOG_AS_ERROR_DEFAULT);
         for (String code : error_codes) {
             try {
-                LOG_AS_ERROR.add(Integer.valueOf(code));
+                statusCodesLoggedAsErrors.add(Integer.valueOf(code));
             } catch (NumberFormatException e) {
                 log.warn("Non-integer HTTP status code {} in {}", code, P_LOG_AS_ERROR);
                 // And continue
             }
         }
-
-        String errorMessage;
-        // We don't want to fill logs with bad/invalid REST API requests.
-        if (HttpStatus.valueOf(statusCode).is5xxServerError() || LOG_AS_ERROR.contains(statusCode)) {
-            // Log the full error and status code
-            errorMessage = message;
-            log.error("{} (status:{})", errorMessage, statusCode, ex);
-        } else if (HttpStatus.valueOf(statusCode).is4xxClientError()) {
-            // Log the error as a single-line WARN
-            String location;
-            if (null == ex) {
-                errorMessage = "none";
-                location = "unknown";
-            } else {
-                errorMessage = ex.getMessage();
-                StackTraceElement[] trace = ex.getStackTrace();
-                location = trace.length <= 0 ? "unknown" : trace[0].toString();
-            }
-            log.warn("{} (status:{} exception: {} at: {})", message, statusCode,
-                    errorMessage, location);
-        } else {
-            errorMessage = message;
-        }
-
-        //Exception properties will be set by org.springframework.boot.web.support.ErrorPageFilter
-        response.sendError(statusCode, errorMessage);
+        return statusCodesLoggedAsErrors;
     }
 
 }
