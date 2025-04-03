@@ -139,4 +139,14 @@ public class HandleClarinServiceImplIT extends AbstractIntegrationTestWithDataba
         boolean isDead = handleClarinService.isDead(context, itemHandle.getHandle());
         Assert.assertTrue(isDead);
     }
+
+    @Test
+    public void resolveToUrlWithPartsIdentifier() throws SQLException {
+        String url = handleClarinService.resolveToURL(context, itemHandle.getHandle() + "@format=cmdi");
+        //Part identifier on handle should be added to URL
+        //eg. `@format=cmdi` should be added as `?format=cmdi` in the URL
+        Assert.assertTrue("URL of handle with parts identifier should contain query string. But was " + url,
+                url.contains("?format=cmdi"));
+
+    }
 }

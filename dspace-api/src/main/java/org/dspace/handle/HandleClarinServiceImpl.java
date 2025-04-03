@@ -255,6 +255,7 @@ public class HandleClarinServiceImpl implements HandleClarinService {
         }
 
         // <UFAL>
+        String partIdentifier = extractPartIdentifier(handleStr);
         handleStr = stripPartIdentifier(handleStr);
 
         // Find handle
@@ -275,7 +276,6 @@ public class HandleClarinServiceImpl implements HandleClarinService {
             // External handle
             url = handle.getUrl();
         }
-        String partIdentifier = extractPartIdentifier(handleStr);
         url = appendPartIdentifierToUrl(url, partIdentifier);
 
         log.debug("Resolved {} to {}", handle, url);
