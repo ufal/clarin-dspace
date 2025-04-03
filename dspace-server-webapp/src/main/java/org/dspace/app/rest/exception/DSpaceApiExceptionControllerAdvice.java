@@ -247,7 +247,7 @@ public class DSpaceApiExceptionControllerAdvice extends ResponseEntityExceptionH
             returnCode = HttpServletResponse.SC_INTERNAL_SERVER_ERROR;
         }
         if ((HttpStatus.valueOf(returnCode).is4xxClientError())) {
-            sendClientErrorResponse(request, response, ex, returnCode);
+            sendErrorResponseFromException(request, response, ex, returnCode);
         } else {
             sendErrorResponse(request, response, ex, "An exception has occurred", returnCode);
         }
@@ -255,22 +255,24 @@ public class DSpaceApiExceptionControllerAdvice extends ResponseEntityExceptionH
     }
 
     /**
-     * Send the client (4xx) error to the response.
-     * 4xx errors will be logged as WARN without a stack trace. Specific 4xx errors where
-     * an ERROR log with full stack trace is more appropriate are configured
+     * Send the error to the response. The error message is taken from exception message.
+     * This method is mainly appropriate for 4xx errors,
+     * where the exception message should be exposed to REST API clients in response body.
+     * This method also logs the ERROR log, containing the first line from the exception stack trace.
+     * Specific errors where an ERROR log with full stack trace is more appropriate are configured
      * using property {@code logging.server.include-stacktrace-for-httpcode}
      * (see {@link DSpaceApiExceptionControllerAdvice#P_LOG_AS_ERROR}
      * and {@link DSpaceApiExceptionControllerAdvice#LOG_AS_ERROR_DEFAULT}).
      *
      * @param request current request
      * @param response current response
-     * @param ex 4xx Exception thrown
+     * @param ex Exception causing the error response
      * @param statusCode status code to send in response
      */
-    private void sendClientErrorResponse(final HttpServletRequest request,
-                                         final HttpServletResponse response,
-                                         final Exception ex,
-                                         final int statusCode)
+    private void sendErrorResponseFromException(final HttpServletRequest request,
+                                                final HttpServletResponse response,
+                                                final Exception ex,
+                                                final int statusCode)
             throws IOException {
         //Make sure Spring picks up this exception
         request.setAttribute(EXCEPTION_ATTRIBUTE, ex);
