@@ -121,8 +121,8 @@ public class AuthorizationBitstreamUtils {
         ClarinLicense clarinLicense = Objects.requireNonNull(clarinLicenseResourceMappings.get(0)).getLicense();
         // ALLOW_ANONYMOUS - Allow download for anonymous users, but with license confirmation
         // NOT_REQUIRED - License confirmation is not required
-        if (clarinLicense.getConfirmation() == Confirmation.ALLOW_ANONYMOUS ||
-                clarinLicense.getConfirmation() == Confirmation.NOT_REQUIRED) {
+        if ((clarinLicense.getConfirmation() == Confirmation.ALLOW_ANONYMOUS) ||
+                (clarinLicense.getConfirmation() == Confirmation.NOT_REQUIRED)) {
             return true;
         }
         return false;

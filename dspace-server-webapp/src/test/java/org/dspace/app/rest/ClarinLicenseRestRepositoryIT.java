@@ -261,7 +261,7 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
         ClarinLicenseRest clarinLicenseRest = new ClarinLicenseRest();
         clarinLicenseRest.setName("name");
         clarinLicenseRest.setBitstreams(0);
-        clarinLicenseRest.setConfirmation(4);
+        clarinLicenseRest.setConfirmation(0);
         clarinLicenseRest.setRequiredInfo("Not required");
         clarinLicenseRest.setDefinition("definition");
         clarinLicenseConverter.setExtendedClarinLicenseLabels(clarinLicenseRest, firstCLicense.getLicenseLabels(),
@@ -340,7 +340,7 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
         ClarinLicense clarinLicenseUpdated = ClarinLicenseBuilder.createClarinLicense(context).build();
         clarinLicenseUpdated.setName("updated name");
         clarinLicenseUpdated.setDefinition("updated definition");
-        clarinLicenseUpdated.setConfirmation(null);
+        clarinLicenseUpdated.setConfirmation(ClarinLicense.Confirmation.ALLOW_ANONYMOUS);
         clarinLicenseUpdated.setRequiredInfo("updated info");
 
         Set<ClarinLicenseLabel> clarinLicenseLabelUpdated = new HashSet<>();

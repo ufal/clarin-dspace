@@ -111,7 +111,7 @@ public class ClarinLicenseImportControllerIT extends AbstractControllerIntegrati
         ClarinLicenseRest clarinLicenseRest = new ClarinLicenseRest();
         clarinLicenseRest.setName("name");
         clarinLicenseRest.setBitstreams(0);
-        clarinLicenseRest.setConfirmation(4);
+        clarinLicenseRest.setConfirmation(0);
         clarinLicenseRest.setRequiredInfo("Not required");
         clarinLicenseRest.setDefinition("definition");
         clarinLicenseConverter.setExtendedClarinLicenseLabels(clarinLicenseRest, firstCLicense.getLicenseLabels(),

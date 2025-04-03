@@ -127,7 +127,7 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
 
     @Test
     public void notAuthorizedUser_shouldReturnToken() throws Exception {
-        this.prepareEnvironment("NAME", Confirmation.NOT_REQUIRED);
+        this.prepareEnvironment("NAME", Confirmation.ALLOW_ANONYMOUS);
         ObjectMapper mapper = new ObjectMapper();
         ClarinUserMetadataRest clarinUserMetadata1 = new ClarinUserMetadataRest();
         clarinUserMetadata1.setMetadataKey("NAME");
@@ -159,7 +159,7 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
 
     @Test
     public void notAuthorizedUser_shouldSendEmail() throws Exception {
-        this.prepareEnvironment("SEND_TOKEN", Confirmation.NOT_REQUIRED);
+        this.prepareEnvironment("SEND_TOKEN", Confirmation.ALLOW_ANONYMOUS);
         ObjectMapper mapper = new ObjectMapper();
         ClarinUserMetadataRest clarinUserMetadata1 = new ClarinUserMetadataRest();
         clarinUserMetadata1.setMetadataKey("NAME");
