@@ -82,7 +82,7 @@ public class ClarinLicenseImportControllerIT extends AbstractControllerIntegrati
         // create ClarinLicenses
         firstCLicense = ClarinLicenseBuilder.createClarinLicense(context).build();
         firstCLicense.setName("CL Name1");
-        firstCLicense.setConfirmation(0);
+        firstCLicense.setConfirmation(ClarinLicense.Confirmation.NOT_REQUIRED);
         firstCLicense.setDefinition("CL Definition1");
         firstCLicense.setRequiredInfo("CL Req1");
         // add ClarinLicenseLabels to the ClarinLicense

@@ -7,6 +7,8 @@
  */
 package org.dspace.authorize;
 
+import static org.dspace.content.clarin.ClarinLicense.Confirmation;
+
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Objects;
@@ -117,10 +119,10 @@ public class AuthorizationBitstreamUtils {
 
         // Bitstream should have only one type of the Clarin license, so we could get first record
         ClarinLicense clarinLicense = Objects.requireNonNull(clarinLicenseResourceMappings.get(0)).getLicense();
-        // 3 - Allow download for anonymous users, but with license confirmation
-        // 0 - License confirmation is not required
-        if (Objects.equals(clarinLicense.getConfirmation(), 3) ||
-                Objects.equals(clarinLicense.getConfirmation(), 0)) {
+        // ALLOW_ANONYMOUS - Allow download for anonymous users, but with license confirmation
+        // NOT_REQUIRED - License confirmation is not required
+        if (clarinLicense.getConfirmation() == Confirmation.ALLOW_ANONYMOUS ||
+                clarinLicense.getConfirmation() == Confirmation.NOT_REQUIRED) {
             return true;
         }
         return false;

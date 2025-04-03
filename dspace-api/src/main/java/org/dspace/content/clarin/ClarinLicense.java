@@ -83,7 +83,7 @@ public class ClarinLicense implements ReloadableEntity<Integer> {
     private String definition = null;
 
     @Column(name = "confirmation")
-    private Integer confirmation = 0;
+    private Confirmation confirmation = Confirmation.NOT_REQUIRED;
 
     @Column(name = "required_info")
     private String requiredInfo = null;
@@ -111,11 +111,11 @@ public class ClarinLicense implements ReloadableEntity<Integer> {
         this.definition = definition;
     }
 
-    public Integer getConfirmation() {
+    public Confirmation getConfirmation() {
         return confirmation;
     }
 
-    public void setConfirmation(Integer confirmation) {
+    public void setConfirmation(Confirmation confirmation) {
         this.confirmation = confirmation;
     }
 
@@ -190,5 +190,25 @@ public class ClarinLicense implements ReloadableEntity<Integer> {
 
     public void setEperson(ClarinUserRegistration eperson) {
         this.eperson = eperson;
+    }
+
+    public enum Confirmation {
+
+        NOT_REQUIRED(0), ASK_ONLY_ONCE(1), ASK_ALWAYS(2), ALLOW_ANONYMOUS(3);
+
+        private final int value;
+
+        Confirmation(int value) {
+            this.value = value;
+        }
+
+        public int getValue() {
+            return value;
+        }
+
+        public static Confirmation getConfirmation(int value) {
+            return Arrays.stream(values()).filter(v -> v.getValue() == value).findFirst().orElse(null);
+        }
+
     }
 }

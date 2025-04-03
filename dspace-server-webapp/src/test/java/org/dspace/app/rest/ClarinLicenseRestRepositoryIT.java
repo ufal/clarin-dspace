@@ -110,7 +110,7 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
         // create ClarinLicenses
         firstCLicense = ClarinLicenseBuilder.createClarinLicense(context).build();
         firstCLicense.setName("CL Name1");
-        firstCLicense.setConfirmation(0);
+        firstCLicense.setConfirmation(ClarinLicense.Confirmation.NOT_REQUIRED);
         firstCLicense.setDefinition("CL Definition1");
         firstCLicense.setRequiredInfo("CL Req1");
         // add ClarinLicenseLabels to the ClarinLicense
@@ -123,7 +123,7 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
 
         secondCLicense = ClarinLicenseBuilder.createClarinLicense(context).build();
         secondCLicense.setName("CL Name2");
-        secondCLicense.setConfirmation(1);
+        secondCLicense.setConfirmation(ClarinLicense.Confirmation.ASK_ONLY_ONCE);
         secondCLicense.setDefinition("CL Definition2");
         secondCLicense.setRequiredInfo("CL Req2");
         // add ClarinLicenseLabels to the ClarinLicense
@@ -328,7 +328,7 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
         ClarinLicense clarinLicense = ClarinLicenseBuilder.createClarinLicense(context).build();
         clarinLicense.setName("default name");
         clarinLicense.setDefinition("default definition");
-        clarinLicense.setConfirmation(0);
+        clarinLicense.setConfirmation(ClarinLicense.Confirmation.NOT_REQUIRED);
         clarinLicense.setRequiredInfo("default info");
 
         Set<ClarinLicenseLabel> clarinLicenseLabels = new HashSet<>();
@@ -340,7 +340,7 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
         ClarinLicense clarinLicenseUpdated = ClarinLicenseBuilder.createClarinLicense(context).build();
         clarinLicenseUpdated.setName("updated name");
         clarinLicenseUpdated.setDefinition("updated definition");
-        clarinLicenseUpdated.setConfirmation(4);
+        clarinLicenseUpdated.setConfirmation(null);
         clarinLicenseUpdated.setRequiredInfo("updated info");
 
         Set<ClarinLicenseLabel> clarinLicenseLabelUpdated = new HashSet<>();
@@ -376,7 +376,7 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
 
         clarinLicense.setName("default name");
         clarinLicense.setDefinition("default definition");
-        clarinLicense.setConfirmation(0);
+        clarinLicense.setConfirmation(ClarinLicense.Confirmation.NOT_REQUIRED);
         clarinLicense.setRequiredInfo("default info");
 
         Set<ClarinLicenseLabel> clarinLicenseLabels = new HashSet<>();
@@ -403,7 +403,7 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
 
         clarinLicense.setName("default name");
         clarinLicense.setDefinition("default definition");
-        clarinLicense.setConfirmation(0);
+        clarinLicense.setConfirmation(ClarinLicense.Confirmation.NOT_REQUIRED);
         clarinLicense.setRequiredInfo("default info");
 
         Set<ClarinLicenseLabel> clarinLicenseLabels = new HashSet<>();
