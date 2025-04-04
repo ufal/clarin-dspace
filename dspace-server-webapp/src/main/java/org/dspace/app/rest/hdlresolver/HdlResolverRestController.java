@@ -88,7 +88,7 @@ public class HdlResolverRestController {
      * </br>
      * Example:
      *      <ul>
-     *          <li>Request: GET - http://{dspace.url}/hdlresolver/handleIdExample/1</li>
+     *          <li>Request: GET - http://{dspace.ui.url}/hdlresolver/handleIdExample/1</li>
      *          <li>Response: 200 - ["http://localhost/handle/hanldeIdExample1"]
      *      </ul>
      *
@@ -118,7 +118,7 @@ public class HdlResolverRestController {
      * </br>
      * Example:
      *      <ul>
-     *          <li>Request: GET - http://{dspace.url}/listprefixes</li>
+     *          <li>Request: GET - http://{dspace.ui.url}/listprefixes</li>
      *          <li>Response: 200 - ["123456789","prefix1","prefix2"]
      *      </ul>
      *
@@ -144,7 +144,7 @@ public class HdlResolverRestController {
      * </br>
      * Example:
      *      <ul>
-     *          <li>Request: GET - http://{dspace.url}/listhandles/prefix</li>
+     *          <li>Request: GET - http://{dspace.ui.url}/listhandles/prefix</li>
      *          <li>Response: 200 - ["prefix/zero","prefix1/one","prefix2/two"]
      *      </ul>
      *
