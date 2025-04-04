@@ -7,7 +7,6 @@
  */
 package org.dspace.content.service;
 
-import java.io.IOException;
 import java.io.InputStream;
 import java.sql.SQLException;
 import java.util.List;
@@ -116,8 +115,7 @@ public interface PreviewContentService {
      * @param bitstream ZIP file bitstream
      * @return List of FileInfo classes where is wrapped ZIP file content
      */
-    List<FileInfo> getFilePreviewContent(Context context, Bitstream bitstream)
-            throws SQLException, AuthorizeException, IOException;
+    List<FileInfo> getFilePreviewContent(Context context, Bitstream bitstream) throws Exception;
 
     /**
      * Create preview content from file info for bitstream.
@@ -153,5 +151,5 @@ public interface PreviewContentService {
      * @return List of FileInfo classes where is wrapped ZIP file content
      */
     List<FileInfo> processInputStreamToFilePreview(Context context, Bitstream bitstream, InputStream inputStream)
-            throws SQLException, IOException;
+            throws Exception;
 }

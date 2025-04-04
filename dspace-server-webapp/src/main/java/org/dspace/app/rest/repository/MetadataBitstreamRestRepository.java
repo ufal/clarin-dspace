@@ -7,16 +7,12 @@
  */
 package org.dspace.app.rest.repository;
 
-import java.io.IOException;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import javax.servlet.http.HttpServletRequest;
-import javax.xml.parsers.ParserConfigurationException;
 
-import org.apache.commons.compress.archivers.ArchiveException;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
 import org.dspace.app.rest.Parameter;
@@ -26,7 +22,6 @@ import org.dspace.app.rest.exception.DSpaceBadRequestException;
 import org.dspace.app.rest.exception.UnprocessableEntityException;
 import org.dspace.app.rest.model.MetadataBitstreamWrapperRest;
 import org.dspace.app.rest.model.wrapper.MetadataBitstreamWrapper;
-import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.Bitstream;
 import org.dspace.content.Bundle;
 import org.dspace.content.DSpaceObject;
@@ -43,7 +38,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Component;
-import org.xml.sax.SAXException;
 
 /**
  * This controller returns content of the bitstream to the `Preview` box in the Item View.
@@ -68,8 +62,7 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
     public Page<MetadataBitstreamWrapperRest> findByHandle(@Parameter(value = "handle", required = true) String handle,
                                                            @Parameter(value = "fileGrpType") String fileGrpType,
                                                            Pageable pageable)
-            throws SQLException, ParserConfigurationException, IOException, SAXException, AuthorizeException,
-            ArchiveException {
+            throws Exception {
         if (StringUtils.isBlank(handle)) {
             throw new DSpaceBadRequestException("handle cannot be null!");
         }
@@ -109,25 +102,30 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
 
             for (Bitstream bitstream : bitstreams) {
                 String url = previewContentService.composePreviewURL(context, item, bitstream, contextPath);
-                List<FileInfo> fileInfos = null;
+                List<FileInfo> fileInfos = new ArrayList<>();
                 boolean canPreview = previewContentService.canPreview(context, bitstream);
                 if (canPreview) {
-                    List<PreviewContent> prContents = previewContentService.hasPreview(context, bitstream);
-                    // Generate new content if we didn't find any
-                    if (prContents.isEmpty()) {
-                        fileInfos = previewContentService.getFilePreviewContent(context, bitstream);
-                        // Do not store HTML content in the database because it could be longer than the limit
-                        // of the database column
-                        if (!StringUtils.equals("text/html", bitstream.getFormat(context).getMIMEType())) {
-                            for (FileInfo fi : fileInfos) {
-                                previewContentService.createPreviewContent(context, bitstream, fi);
+                    try {
+                        List<PreviewContent> prContents = previewContentService.hasPreview(context, bitstream);
+                        // Generate new content if we didn't find any
+                        if (prContents.isEmpty()) {
+                            fileInfos = previewContentService.getFilePreviewContent(context, bitstream);
+                            // Do not store HTML content in the database because it could be longer than the limit
+                            // of the database column
+                            if (!StringUtils.equals("text/html", bitstream.getFormat(context).getMIMEType())) {
+                                for (FileInfo fi : fileInfos) {
+                                    previewContentService.createPreviewContent(context, bitstream, fi);
+                                }
+                            }
+                        } else {
+                            fileInfos = new ArrayList<>();
+                            for (PreviewContent pc : prContents) {
+                                fileInfos.add(previewContentService.createFileInfo(pc));
                             }
                         }
-                    } else {
-                        fileInfos = new ArrayList<>();
-                        for (PreviewContent pc : prContents) {
-                            fileInfos.add(previewContentService.createFileInfo(pc));
-                        }
+                    } catch (Exception e) {
+                        log.error("Cannot create preview content for bitstream: {} because: {}",
+                                bitstream.getID(), e.getMessage(), e);
                     }
                 }
                 MetadataBitstreamWrapper bts = new MetadataBitstreamWrapper(bitstream, fileInfos,

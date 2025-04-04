@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.dspace.AbstractUnitTest;
+import org.dspace.api.DSpaceApi;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.Collection;
 import org.dspace.content.Community;
@@ -99,9 +100,9 @@ public class PIDConfigurationTest extends AbstractUnitTest {
         // now check that we have 2 community configurations in the test local.cfg
         assertEquals(2, pidConfiguration.getPIDCommunityConfigurations().size());
     }
-//
+
     @Test
-    public  void testInitCommunityConfigSubprefix() {
+    public void testInitCommunityConfigSubprefix() {
         PIDConfiguration pidConfiguration = PIDConfiguration.getInstance();
         // get the first one and check the subprefix is 1
         PIDCommunityConfiguration pidCommunityConfiguration = pidConfiguration.getPIDCommunityConfiguration(
@@ -110,7 +111,7 @@ public class PIDConfigurationTest extends AbstractUnitTest {
     }
 
     @Test
-    public  void testInitCommunityConfigMapShouldNotBeShared() throws NoSuchFieldException, IllegalAccessException {
+    public void testInitCommunityConfigMapShouldNotBeShared() throws NoSuchFieldException, IllegalAccessException {
         PIDConfiguration pidConfiguration = PIDConfiguration.getInstance();
         PIDCommunityConfiguration pidCommunityConfiguration1 =
                 pidConfiguration.getPIDCommunityConfiguration(
@@ -124,5 +125,27 @@ public class PIDConfigurationTest extends AbstractUnitTest {
         Map<String, String> configMap = (Map<String, String>) field.get(pidCommunityConfiguration1);
         configMap.put("type", "epic");
         assertEquals("Com2 should still have local type", "local", pidCommunityConfiguration2.getType());
+    }
+
+    @Test
+    public void testGeneratingItemURL() {
+        String repositoryUrl = "http://localhost:4000/";
+        String expectedUrl = repositoryUrl + "items/" + publicItem.getID();
+
+        String url = DSpaceApi.generateItemURLWithUUID(repositoryUrl, publicItem);
+        assertEquals(expectedUrl, url);
+
+        // Test with no trailing slash
+        repositoryUrl = "http://localhost:4000";
+
+        url = DSpaceApi.generateItemURLWithUUID(repositoryUrl, publicItem);
+        assertEquals(expectedUrl, url);
+
+        // Test with namespace
+        repositoryUrl = "http://localhost:4000/namespace";
+        expectedUrl = repositoryUrl + "/items/" + publicItem.getID();
+
+        url = DSpaceApi.generateItemURLWithUUID(repositoryUrl, publicItem);
+        assertEquals(expectedUrl, url);
     }
 }
