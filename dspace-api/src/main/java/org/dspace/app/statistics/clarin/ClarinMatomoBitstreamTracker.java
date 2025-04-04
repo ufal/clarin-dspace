@@ -7,12 +7,17 @@
  */
 package org.dspace.app.statistics.clarin;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.text.MessageFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import javax.servlet.http.HttpServletRequest;
+import javax.ws.rs.BadRequestException;
+import javax.ws.rs.NotFoundException;
 
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.BooleanUtils;
@@ -21,6 +26,7 @@ import org.apache.logging.log4j.Logger;
 import org.dspace.content.Bitstream;
 import org.dspace.content.Item;
 import org.dspace.content.MetadataValue;
+import org.dspace.content.service.BitstreamService;
 import org.dspace.content.service.ItemService;
 import org.dspace.content.service.clarin.ClarinItemService;
 import org.dspace.core.Context;
@@ -51,6 +57,9 @@ public class ClarinMatomoBitstreamTracker extends ClarinMatomoTracker {
     @Autowired
     ClarinItemService clarinItemService;
 
+    @Autowired
+    BitstreamService bitstreamService;
+
     /**
      * Site ID for the Bitstream downloading statistics
      */
@@ -79,15 +88,25 @@ public class ClarinMatomoBitstreamTracker extends ClarinMatomoTracker {
             // Set PageURL to handle identifier
             String bitstreamUrl = getFullURL(request);
             try {
+                // Get the Bitstream UUID from the URL
                 String bitstreamId = Utils.fetchUUIDFromUrl(matomoRequest.getActionUrl());
+                if (StringUtils.isBlank(bitstreamId)) {
+                    throw new BadRequestException("The Bitstream UUID is blank.");
+                }
+                // Get the bitstream using its UUID
+                Bitstream bitstream = bitstreamService.find(context, UUID.fromString(bitstreamId));
+                if (Objects.isNull(bitstream)) {
+                    throw new NotFoundException("The Bitstream with the UUID " + bitstreamId + " was not found.");
+                }
+
                 bitstreamUrl = configurationService.getProperty("dspace.ui.url") + "/bitstream/handle/" +
-                        item.getHandle() + "/" + bitstreamId;
-            } catch (IllegalArgumentException e) {
+                        item.getHandle() + "/" + URLEncoder.encode(bitstream.getName(), StandardCharsets.UTF_8);
+            } catch (IllegalArgumentException | BadRequestException | NotFoundException | SQLException e) {
                 log.error("Cannot get the Bitstream UUID from the URL {}: {}", matomoRequest.getActionUrl(),
                         e.getMessage(), e);
             }
 
-            // The bitstream URL is in the format `<DSPACE_UI_URL>/bitstream/handle/<ITEM_HANDLE>/<BITSTREAM_UUID>`
+            // The bitstream URL is in the format `<DSPACE_UI_URL>/bitstream/handle/<ITEM_HANDLE>/<BITSTREAM_NAME>`
             // if there is an error with the fetching the UUID, the original download URL is used
             matomoRequest.setDownloadUrl(bitstreamUrl);
             matomoRequest.setActionUrl(itemIdentifier);
