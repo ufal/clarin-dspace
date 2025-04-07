@@ -112,7 +112,7 @@ public class ClarinLicense implements ReloadableEntity<Integer> {
     }
 
     public Confirmation getConfirmation() {
-        return confirmation;
+        return confirmation == null ? Confirmation.NOT_REQUIRED : confirmation;
     }
 
     public void setConfirmation(Confirmation confirmation) {

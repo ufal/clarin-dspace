@@ -340,7 +340,7 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
         ClarinLicense clarinLicenseUpdated = ClarinLicenseBuilder.createClarinLicense(context).build();
         clarinLicenseUpdated.setName("updated name");
         clarinLicenseUpdated.setDefinition("updated definition");
-        clarinLicenseUpdated.setConfirmation(ClarinLicense.Confirmation.ALLOW_ANONYMOUS);
+        clarinLicenseUpdated.setConfirmation(ClarinLicense.Confirmation.NOT_REQUIRED);
         clarinLicenseUpdated.setRequiredInfo("updated info");
 
         Set<ClarinLicenseLabel> clarinLicenseLabelUpdated = new HashSet<>();
