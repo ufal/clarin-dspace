@@ -25,6 +25,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.dspace.app.rest.Parameter;
 import org.dspace.app.rest.SearchRestMethod;
 import org.dspace.app.rest.exception.DSpaceBadRequestException;
+import org.dspace.app.rest.exception.PaginationException;
 import org.dspace.app.rest.exception.UnprocessableEntityException;
 import org.dspace.app.rest.model.ClarinLicenseLabelRest;
 import org.dspace.app.rest.model.ClarinLicenseRest;
@@ -43,6 +44,7 @@ import org.dspace.content.service.clarin.ClarinUserRegistrationService;
 import org.dspace.core.Context;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.rest.webmvc.ResourceNotFoundException;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -103,33 +105,44 @@ public class ClarinLicenseRestRepository extends DSpaceRestRepository<ClarinLice
             throw new RuntimeException(e.getMessage(), e);
         }
         clarinLicenseList.add(clarinLicense);
-        return converter.toRestPage(clarinLicenseList, pageable, utils.obtainProjection());
+        try {
+            return converter.toRestPage(clarinLicenseList, pageable, utils.obtainProjection());
+        } catch (PaginationException pe) {
+            return getEmptyPageForIncorrectPageable(pageable, clarinLicenseList.size());
+        }
     }
 
     @SearchRestMethod(name = "byNameLike")
     public Page<ClarinLicenseRest> findByNameLike(@Parameter(value = "name", required = true) String name,
-                                              Pageable pageable) {
-        List<ClarinLicense> clarinLicenseList;
+                                                  Pageable pageable) {
+        List<ClarinLicense> clarinLicenseList = new ArrayList<>();
         try {
             Context context = obtainContext();
-            clarinLicenseList = clarinLicenseService.findByNameLike(context, name);
-            if (CollectionUtils.isEmpty(clarinLicenseList)) {
+            clarinLicenseList.addAll(clarinLicenseService.findByNameLike(context, name));
+            if (clarinLicenseList.isEmpty()) {
                 return null;
             }
         } catch (SQLException e) {
             throw new RuntimeException(e.getMessage(), e);
         }
-        return converter.toRestPage(clarinLicenseList, pageable, utils.obtainProjection());
+        try {
+            return converter.toRestPage(clarinLicenseList, pageable, utils.obtainProjection());
+        } catch (PaginationException pe) {
+            return getEmptyPageForIncorrectPageable(pageable, clarinLicenseList.size());
+        }
     }
 
     @Override
     @PreAuthorize("permitAll()")
     public Page<ClarinLicenseRest> findAll(Context context, Pageable pageable) {
+        List<ClarinLicense> clarinLicenseList = new ArrayList<>();
         try {
-            List<ClarinLicense> clarinLicenseList = clarinLicenseService.findAll(context);
+            clarinLicenseList.addAll(clarinLicenseService.findAll(context));
             return converter.toRestPage(clarinLicenseList, pageable, utils.obtainProjection());
         } catch (SQLException | AuthorizeException e) {
             throw new RuntimeException(e.getMessage(), e);
+        } catch (PaginationException pe) {
+            return getEmptyPageForIncorrectPageable(pageable, clarinLicenseList.size());
         }
     }
 
@@ -271,6 +284,10 @@ public class ClarinLicenseRestRepository extends DSpaceRestRepository<ClarinLice
         clarinLicenseLabel.setIcon(clarinLicenseLabelRest.getIcon());
         clarinLicenseLabel.setId(clarinLicenseLabelRest.getId());
         return clarinLicenseLabel;
+    }
+
+    private <R> Page<R> getEmptyPageForIncorrectPageable(Pageable pageable, int totalElements) {
+        return new PageImpl<>(List.of(), pageable, totalElements);
     }
 
 }
