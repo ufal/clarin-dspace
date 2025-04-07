@@ -126,7 +126,7 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
     }
 
     @Test
-    public void notAuthorizedUser_withAllowingAnonymousLicense_shouldReturnToken() throws Exception {
+    public void notAuthorizedUser_withLicenseConfirmation_ALLOW_ANONYMOUS_USER() throws Exception {
         this.prepareEnvironment("NAME", Confirmation.ALLOW_ANONYMOUS);
         ObjectMapper mapper = new ObjectMapper();
         ClarinUserMetadataRest clarinUserMetadata1 = new ClarinUserMetadataRest();
@@ -158,21 +158,18 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
     }
 
     @Test
-    public void notAuthorizedUser_withNotAllowingAnonymousLicense_shouldRequireAuthorization() throws Exception {
-        this.prepareEnvironment("NAME", Confirmation.ASK_ALWAYS);
-        ObjectMapper mapper = new ObjectMapper();
-        ClarinUserMetadataRest clarinUserMetadata1 = new ClarinUserMetadataRest();
-        clarinUserMetadata1.setMetadataKey("NAME");
-        clarinUserMetadata1.setMetadataValue("Test");
+    public void notAuthorizedUser_withLicenseConfirmation_NOT_REQUIRED() throws Exception {
+        requestTokenForUnauthorizedUser(Confirmation.NOT_REQUIRED);
+    }
 
-        List<ClarinUserMetadataRest> clarinUserMetadataRestList = new ArrayList<>();
-        clarinUserMetadataRestList.add(clarinUserMetadata1);
+    @Test
+    public void notAuthorizedUser_withLicenseConfirmation_ASK_ONLY_ONCE() throws Exception {
+        requestTokenForUnauthorizedUser(Confirmation.ASK_ONLY_ONCE);
+    }
 
-        // Load bitstream from the item.
-        getClient().perform(post("/api/core/clarinusermetadata/manage?bitstreamUUID=" + bitstream.getID())
-                        .content(mapper.writeValueAsBytes(clarinUserMetadataRestList.toArray()))
-                        .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isUnauthorized());
+    @Test
+    public void notAuthorizedUser_withLicenseConfirmation_ASK_ALWAYS() throws Exception {
+        requestTokenForUnauthorizedUser(Confirmation.ASK_ALWAYS);
     }
 
     @Test
@@ -650,4 +647,22 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
         clarinLicenseService.update(context, clarinLicense);
         return clarinLicense;
     }
+
+    private void requestTokenForUnauthorizedUser(Confirmation licenseConfirmation) throws Exception {
+        this.prepareEnvironment("NAME", licenseConfirmation);
+
+        ObjectMapper mapper = new ObjectMapper();
+        ClarinUserMetadataRest clarinUserMetadata = new ClarinUserMetadataRest();
+        clarinUserMetadata.setMetadataKey("NAME");
+        clarinUserMetadata.setMetadataValue("Test");
+
+        List<ClarinUserMetadataRest> clarinUserMetadataRestList = new ArrayList<>();
+        clarinUserMetadataRestList.add(clarinUserMetadata);
+
+        getClient().perform(post("/api/core/clarinusermetadata/manage?bitstreamUUID=" + bitstream.getID())
+                        .content(mapper.writeValueAsBytes(clarinUserMetadataRestList.toArray()))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized());
+    }
+
 }
