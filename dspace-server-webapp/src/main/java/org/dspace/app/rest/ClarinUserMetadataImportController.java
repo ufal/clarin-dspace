@@ -29,6 +29,7 @@ import org.dspace.app.rest.converter.ConverterService;
 import org.dspace.app.rest.model.ClarinUserMetadataRest;
 import org.dspace.app.rest.repository.ClarinUserMetadataRestController;
 import org.dspace.app.rest.utils.Utils;
+import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.clarin.ClarinLicenseResourceMapping;
 import org.dspace.content.clarin.ClarinLicenseResourceUserAllowance;
 import org.dspace.content.clarin.ClarinUserMetadata;
@@ -84,7 +85,7 @@ public class ClarinUserMetadataImportController {
     @PreAuthorize("hasAuthority('ADMIN')")
     @RequestMapping(method =  RequestMethod.POST, value = "/usermetadata")
     public ClarinUserMetadataRest importUserMetadata(HttpServletRequest request) throws SQLException, IOException,
-            java.text.ParseException {
+            java.text.ParseException, AuthorizeException {
         //controlling of the input parameters
         Context context = obtainContext(request);
         if (Objects.isNull(context)) {

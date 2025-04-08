@@ -51,6 +51,7 @@ import org.dspace.content.clarin.ClarinUserRegistration;
 import org.dspace.content.service.clarin.ClarinLicenseLabelService;
 import org.dspace.content.service.clarin.ClarinLicenseService;
 import org.dspace.content.service.clarin.ClarinUserMetadataService;
+import org.dspace.eperson.EPerson;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
@@ -151,8 +152,11 @@ public class ClarinUserMetadataImportControllerIT extends AbstractEntityIntegrat
                         .param("token", "111"))
                 .andExpect(status().isOk());
 
+        EPerson currentUser = context.getCurrentUser();
+        context.setCurrentUser(admin);
         //find created data and control it
         ClarinUserMetadata clarinUserMetadata = clarinUserMetadataService.findAll(context).get(0);
+        context.setCurrentUser(currentUser);
         assertEquals(clarinUserMetadata.getMetadataKey(), "NAME");
         assertEquals(clarinUserMetadata.getMetadataValue(), "Test");
         assertEquals(clarinUserMetadata.getEperson().getPersonID(), admin.getID());
@@ -199,7 +203,10 @@ public class ClarinUserMetadataImportControllerIT extends AbstractEntityIntegrat
                 .andExpect(status().isOk());
 
         //find created data and control it
+        EPerson currentUser = context.getCurrentUser();
+        context.setCurrentUser(admin);
         ClarinUserMetadata clarinUserMetadata = clarinUserMetadataService.findAll(context).get(0);
+        context.setCurrentUser(currentUser);
         assertEquals(clarinUserMetadata.getMetadataKey(), "NAME");
         assertEquals(clarinUserMetadata.getMetadataValue(), "Test");
         assertEquals(clarinUserMetadata.getEperson().getPersonID(), null);
@@ -254,7 +261,10 @@ public class ClarinUserMetadataImportControllerIT extends AbstractEntityIntegrat
                         .param("token", "111"))
                 .andExpect(status().isOk());
 
+        EPerson currentUser = context.getCurrentUser();
+        context.setCurrentUser(admin);
         List<ClarinUserMetadata> allUserMetadata = clarinUserMetadataService.findAll(context);
+        context.setCurrentUser(currentUser);
         // UserMetadata should be created and not updated
         assertEquals(2, allUserMetadata.size());
 
