@@ -197,7 +197,7 @@ public class ClarinLicense implements ReloadableEntity<Integer> {
 
     public enum Confirmation {
 
-        // if new Confirmation value is needed, add it to the end of this list, to not break the backwards compatibility
+        // if new Confirmation value is needed, add it to the end of this list, to not break the backward compatibility
         NOT_REQUIRED(0), ASK_ONLY_ONCE(1), ASK_ALWAYS(2), ALLOW_ANONYMOUS(3);
 
         private final int value;
