@@ -11,6 +11,7 @@ import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
 import org.dspace.builder.ClarinUserRegistrationBuilder;
 import org.dspace.content.clarin.ClarinUserRegistration;
 import org.dspace.content.service.clarin.ClarinUserRegistrationService;
+import org.dspace.eperson.EPerson;
 import org.junit.Assert;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,10 +25,15 @@ public class ClarinUserRegistrationServiceImplIT extends AbstractControllerInteg
     public void testFind() throws Exception {
         context.turnOffAuthorisationSystem();
         ClarinUserRegistration clarinUserRegistration = ClarinUserRegistrationBuilder
-                .createClarinUserRegistration(context).build();
+                .createClarinUserRegistration(context)
+                .withEPersonID(admin.getID())
+                .build();
         context.restoreAuthSystemState();
         // Find created handle
+        EPerson currentUser = context.getCurrentUser();
+        context.setCurrentUser(admin);
         Assert.assertEquals(clarinUserRegistration, clarinUserRegistrationService
                 .find(context, clarinUserRegistration.getID()));
+        context.setCurrentUser(currentUser);
     }
 }

@@ -19,12 +19,12 @@ public interface ClarinUserMetadataService {
 
     ClarinUserMetadata create(Context context) throws SQLException;
 
-    ClarinUserMetadata find(Context context, int valueId) throws SQLException;
-    List<ClarinUserMetadata> findAll(Context context) throws SQLException;
-    void update(Context context, ClarinUserMetadata clarinUserMetadata) throws SQLException;
+    ClarinUserMetadata find(Context context, int valueId) throws SQLException, AuthorizeException;
+    List<ClarinUserMetadata> findAll(Context context) throws SQLException, AuthorizeException;
+    void update(Context context, ClarinUserMetadata clarinUserMetadata) throws SQLException, AuthorizeException;
     void delete(Context context, ClarinUserMetadata clarinUserMetadata) throws SQLException, AuthorizeException;
 
     List<ClarinUserMetadata> findByUserRegistrationAndBitstream(Context context, Integer userRegUUID,
                                                                 UUID bitstreamUUID, boolean lastTransaction)
-            throws SQLException;
+            throws SQLException, AuthorizeException;
 }
