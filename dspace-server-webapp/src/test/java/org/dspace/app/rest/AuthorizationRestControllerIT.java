@@ -8,6 +8,7 @@
 package org.dspace.app.rest;
 
 import static org.dspace.app.rest.repository.ClarinLicenseRestRepository.OPERATION_PATH_LICENSE_RESOURCE;
+import static org.dspace.content.clarin.ClarinLicense.Confirmation;
 import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -127,7 +128,7 @@ public class AuthorizationRestControllerIT extends AbstractControllerIntegration
 
         // Create clarin license with clarin license label
         clarinLicense = createClarinLicense(CLARIN_LICENSE_NAME, "Test Def", "Test R Info",
-                ClarinLicense.Confirmation.ALLOW_ANONYMOUS);
+                Confirmation.ALLOW_ANONYMOUS);
         context.restoreAuthSystemState();
     }
 
@@ -323,8 +324,7 @@ public class AuthorizationRestControllerIT extends AbstractControllerIntegration
      * Create ClarinLicense object with ClarinLicenseLabel object for testing purposes.
      */
     private ClarinLicense createClarinLicense(String name, String definition, String requiredInfo,
-                                              ClarinLicense.Confirmation confirmation)
-            throws SQLException, AuthorizeException {
+                                              Confirmation confirmation) throws SQLException, AuthorizeException {
         ClarinLicense clarinLicense = ClarinLicenseBuilder.createClarinLicense(context).build();
         clarinLicense.setConfirmation(confirmation);
         clarinLicense.setDefinition(definition);

@@ -220,7 +220,7 @@ public class ClarinUserMetadataRestController {
                     " and the bitstream");
         }
 
-        ClarinLicense clarinLicense  = clarinLicenseResourceMapping.getLicense();
+        ClarinLicense clarinLicense  = this.getClarinLicense(clarinLicenseResourceMapping);
         if (Objects.isNull(currentUser) && (clarinLicense.getConfirmation() != Confirmation.ALLOW_ANONYMOUS)) {
             throw new AuthorizeException("Anonymous user is not allowed to get access token");
         }
@@ -540,10 +540,6 @@ public class ClarinUserMetadataRestController {
     }
 
     private ClarinLicense getClarinLicense(ClarinLicenseResourceMapping clarinLicenseResourceMapping) {
-        if (Objects.isNull(clarinLicenseResourceMapping)) {
-            throw new NullPointerException("The clarinLicenseResourceMapping object is null.");
-        }
-
         // Get ClarinLicense from the ClarinLicenseResourceMapping
         ClarinLicense clarinLicense = clarinLicenseResourceMapping.getLicense();
         if (Objects.isNull(clarinLicense)) {
@@ -555,9 +551,6 @@ public class ClarinUserMetadataRestController {
 
     private boolean shouldEmailToken(ClarinLicenseResourceMapping clarinLicenseResourceMapping) {
         ClarinLicense clarinLicense = this.getClarinLicense(clarinLicenseResourceMapping);
-        if (Objects.isNull(clarinLicense)) {
-            throw new NullPointerException("The ClarinLicense is null.");
-        }
 
         // If the required info contains the key work `SEND_TOKEN` it should generate the token.
         if (StringUtils.isBlank(clarinLicense.getRequiredInfo())) {

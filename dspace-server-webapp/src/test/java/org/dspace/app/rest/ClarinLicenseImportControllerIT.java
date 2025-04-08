@@ -8,6 +8,7 @@
 package org.dspace.app.rest;
 
 import static com.jayway.jsonpath.JsonPath.read;
+import static org.dspace.content.clarin.ClarinLicense.Confirmation;
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -82,7 +83,7 @@ public class ClarinLicenseImportControllerIT extends AbstractControllerIntegrati
         // create ClarinLicenses
         firstCLicense = ClarinLicenseBuilder.createClarinLicense(context).build();
         firstCLicense.setName("CL Name1");
-        firstCLicense.setConfirmation(ClarinLicense.Confirmation.NOT_REQUIRED);
+        firstCLicense.setConfirmation(Confirmation.NOT_REQUIRED);
         firstCLicense.setDefinition("CL Definition1");
         firstCLicense.setRequiredInfo("CL Req1");
         // add ClarinLicenseLabels to the ClarinLicense
@@ -111,7 +112,7 @@ public class ClarinLicenseImportControllerIT extends AbstractControllerIntegrati
         ClarinLicenseRest clarinLicenseRest = new ClarinLicenseRest();
         clarinLicenseRest.setName("name");
         clarinLicenseRest.setBitstreams(0);
-        clarinLicenseRest.setConfirmation(0);
+        clarinLicenseRest.setConfirmation(Confirmation.NOT_REQUIRED.getValue());
         clarinLicenseRest.setRequiredInfo("Not required");
         clarinLicenseRest.setDefinition("definition");
         clarinLicenseConverter.setExtendedClarinLicenseLabels(clarinLicenseRest, firstCLicense.getLicenseLabels(),

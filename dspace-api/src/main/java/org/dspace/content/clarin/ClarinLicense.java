@@ -16,6 +16,8 @@ import java.util.Set;
 import javax.persistence.CascadeType;
 import javax.persistence.Column;
 import javax.persistence.Entity;
+import javax.persistence.EnumType;
+import javax.persistence.Enumerated;
 import javax.persistence.FetchType;
 import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
@@ -83,6 +85,7 @@ public class ClarinLicense implements ReloadableEntity<Integer> {
     private String definition = null;
 
     @Column(name = "confirmation")
+    @Enumerated(EnumType.ORDINAL)
     private Confirmation confirmation = Confirmation.NOT_REQUIRED;
 
     @Column(name = "required_info")
@@ -194,6 +197,7 @@ public class ClarinLicense implements ReloadableEntity<Integer> {
 
     public enum Confirmation {
 
+        // if new Confirmation value is needed, add it to the end of this list, to not break the backwards compatibility
         NOT_REQUIRED(0), ASK_ONLY_ONCE(1), ASK_ALWAYS(2), ALLOW_ANONYMOUS(3);
 
         private final int value;
@@ -207,7 +211,11 @@ public class ClarinLicense implements ReloadableEntity<Integer> {
         }
 
         public static Confirmation getConfirmation(int value) {
-            return Arrays.stream(values()).filter(v -> v.getValue() == value).findFirst().orElse(null);
+            return Arrays.stream(values())
+                    .filter(v -> (v.getValue() == value))
+                    .findFirst()
+                    .orElseThrow(() ->
+                            new IllegalArgumentException("No license confirmation found for value: " + value));
         }
 
     }
