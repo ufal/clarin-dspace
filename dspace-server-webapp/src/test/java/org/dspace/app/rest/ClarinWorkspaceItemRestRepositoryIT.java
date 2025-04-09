@@ -8,6 +8,7 @@
 package org.dspace.app.rest;
 
 import static org.dspace.app.rest.repository.ClarinLicenseRestRepository.OPERATION_PATH_LICENSE_RESOURCE;
+import static org.dspace.content.clarin.ClarinLicense.Confirmation;
 import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -625,7 +626,8 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
         String clarinLicenseName = "Test Clarin License";
 
         // 2. Create clarin license with clarin license label
-        ClarinLicense clarinLicense = createClarinLicense(clarinLicenseName, "Test Def", "Test R Info", 0);
+        ClarinLicense clarinLicense = createClarinLicense(clarinLicenseName, "Test Def", "Test R Info",
+                Confirmation.NOT_REQUIRED);
 
         // creating replace operation
         Map<String, String> licenseReplaceOpValue = new HashMap<String, String>();
@@ -676,7 +678,8 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
         List<Operation> replaceOperations = new ArrayList<Operation>();
         // 2. Create Clarin License
         String clarinLicenseName = "Test Clarin License";
-        ClarinLicense clarinLicense = createClarinLicense(clarinLicenseName, "Test Def", "Test R Info", 0);
+        ClarinLicense clarinLicense = createClarinLicense(clarinLicenseName, "Test Def", "Test R Info",
+                Confirmation.NOT_REQUIRED);
         context.restoreAuthSystemState();
 
         // Creating replace operation
@@ -754,9 +757,10 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
         String updateClarinLicenseName = "Updated Clarin License";
 
         // 2. Create Clarin Licenses
-        ClarinLicense clarinLicense = createClarinLicense(clarinLicenseName, "Test Def", "Test R Info", 0);
+        ClarinLicense clarinLicense = createClarinLicense(clarinLicenseName, "Test Def", "Test R Info",
+                Confirmation.NOT_REQUIRED);
         ClarinLicense updatedClarinLicense =
-                createClarinLicense(updateClarinLicenseName, "Test Def2", "Test R Info2", 0);
+                createClarinLicense(updateClarinLicenseName, "Test Def2", "Test R Info2", Confirmation.NOT_REQUIRED);
         context.restoreAuthSystemState();
 
         // Creating replace operation
@@ -1008,8 +1012,8 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
     /**
      * Create ClarinLicense object with ClarinLicenseLabel object for testing purposes.
      */
-    private ClarinLicense createClarinLicense(String name, String definition, String requiredInfo, int confirmation)
-            throws SQLException, AuthorizeException {
+    private ClarinLicense createClarinLicense(String name, String definition, String requiredInfo,
+                                              Confirmation confirmation) throws SQLException, AuthorizeException {
         ClarinLicense clarinLicense = ClarinLicenseBuilder.createClarinLicense(context).build();
         clarinLicense.setConfirmation(confirmation);
         clarinLicense.setDefinition(definition);

@@ -41,7 +41,7 @@ public class ClarinLicenseConverter implements DSpaceConverter<ClarinLicense, Cl
         license.setProjection(projection);
         license.setId(modelObject.getID());
         license.setName(modelObject.getName());
-        license.setConfirmation(modelObject.getConfirmation());
+        license.setConfirmation(modelObject.getConfirmation().getValue());
         license.setDefinition(modelObject.getDefinition());
         license.setRequiredInfo(modelObject.getRequiredInfo());
         setExtendedClarinLicenseLabels(license, modelObject.getLicenseLabels(), projection);

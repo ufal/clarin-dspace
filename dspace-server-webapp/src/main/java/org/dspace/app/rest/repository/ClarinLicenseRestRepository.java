@@ -8,6 +8,7 @@
 package org.dspace.app.rest.repository;
 
 import static org.apache.commons.lang3.StringUtils.isBlank;
+import static org.dspace.content.clarin.ClarinLicense.Confirmation;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -185,7 +186,7 @@ public class ClarinLicenseRestRepository extends DSpaceRestRepository<ClarinLice
         clarinLicense.setLicenseLabels(this.getClarinLicenseLabels(clarinLicenseRest.getClarinLicenseLabel(),
                 clarinLicenseRest.getExtendedClarinLicenseLabels()));
         clarinLicense.setDefinition(clarinLicenseRest.getDefinition());
-        clarinLicense.setConfirmation(clarinLicenseRest.getConfirmation());
+        clarinLicense.setConfirmation(Confirmation.getConfirmation(clarinLicenseRest.getConfirmation()));
         clarinLicense.setRequiredInfo(clarinLicenseRest.getRequiredInfo());
         clarinLicense.setEperson(userRegistration);
 
@@ -233,7 +234,7 @@ public class ClarinLicenseRestRepository extends DSpaceRestRepository<ClarinLice
         clarinLicense.setName(clarinLicenseRest.getName());
         clarinLicense.setRequiredInfo(clarinLicenseRest.getRequiredInfo());
         clarinLicense.setDefinition(clarinLicenseRest.getDefinition());
-        clarinLicense.setConfirmation(clarinLicenseRest.getConfirmation());
+        clarinLicense.setConfirmation(Confirmation.getConfirmation(clarinLicenseRest.getConfirmation()));
         clarinLicense.setLicenseLabels(this.getClarinLicenseLabels(clarinLicenseRest.getClarinLicenseLabel(),
                 clarinLicenseRest.getExtendedClarinLicenseLabels()));
 

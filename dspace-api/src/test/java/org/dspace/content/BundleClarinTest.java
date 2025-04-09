@@ -7,6 +7,7 @@
  */
 package org.dspace.content;
 
+import static org.dspace.content.clarin.ClarinLicense.Confirmation;
 import static org.dspace.core.Constants.CONTENT_BUNDLE_NAME;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.instanceOf;
@@ -119,7 +120,7 @@ public class BundleClarinTest extends AbstractDSpaceObjectTest {
             this.clarinLicense.setLicenseLabels(cllSet);
             this.clarinLicense.setName(LICENSE_NAME);
             this.clarinLicense.setDefinition(LICENSE_URI);
-            this.clarinLicense.setConfirmation(0);
+            this.clarinLicense.setConfirmation(Confirmation.NOT_REQUIRED);
             this.clarinLicenseService.update(context, this.clarinLicense);
 
             // initialize second clarin license and clarin license label
@@ -139,7 +140,7 @@ public class BundleClarinTest extends AbstractDSpaceObjectTest {
             this.secondClarinLicense.setLicenseLabels(secondCllSet);
             this.secondClarinLicense.setName("wrong name");
             this.secondClarinLicense.setDefinition("wrong uri");
-            this.secondClarinLicense.setConfirmation(0);
+            this.secondClarinLicense.setConfirmation(Confirmation.NOT_REQUIRED);
             this.clarinLicenseService.update(context, this.secondClarinLicense);
 
             //we need to commit the changes, so we don't block the table for testing
