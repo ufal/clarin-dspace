@@ -96,8 +96,8 @@ public class DSpaceApi {
             return;
         }
 
-        String url = configurationService.getProperty("dspace.url");
-        url = url + (url.endsWith("/") ? "" : "/") + "handle/" + pid;
+        String url = configurationService.getProperty("dspace.ui.url");
+        url = generateItemURLWithUUID(url, dso);
 
         /*
          * request modification of the PID to point to the correct URL, which
@@ -112,5 +112,20 @@ public class DSpaceApi {
             throw new IOException("Failed to map PID " + pid + " to " + url
                     + " (" + e.toString() + ")");
         }
+    }
+
+    /**
+     * Generate a URL for the given DSpaceObject. The URL consist of the base URL and the ID of the DSpace object.
+     * E.g. `http://localhost:4000/items/<UUID>`
+     * @param url base URL of the DSpace instance
+     * @param dSpaceObject the DSpace object for which the URL is generated
+     * @return the generated URL
+     */
+    public static String generateItemURLWithUUID(String url, DSpaceObject dSpaceObject) {
+        if (dSpaceObject == null) {
+            log.error("DSpaceObject is null, cannot generate URL");
+            return url;
+        }
+        return url + (url.endsWith("/") ? "" : "/") + "items/" + dSpaceObject.getID();
     }
 }

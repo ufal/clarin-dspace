@@ -14,7 +14,9 @@ import java.util.UUID;
 
 import org.dspace.app.rest.Parameter;
 import org.dspace.app.rest.SearchRestMethod;
+import org.dspace.app.rest.exception.RESTAuthorizationException;
 import org.dspace.app.rest.model.ClarinUserMetadataRest;
+import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.clarin.ClarinUserMetadata;
 import org.dspace.content.service.clarin.ClarinUserMetadataService;
 import org.dspace.core.Context;
@@ -30,13 +32,15 @@ public class ClarinUserMetadataRestRepository extends DSpaceRestRepository<Clari
     ClarinUserMetadataService clarinUserMetadataService;
 
     @Override
-    @PreAuthorize("permitAll()")
+    @PreAuthorize("hasAuthority('AUTHENTICATED')")
     public ClarinUserMetadataRest findOne(Context context, Integer integer) {
         ClarinUserMetadata clarinUserMetadata;
         try {
             clarinUserMetadata = clarinUserMetadataService.find(context, integer);
         } catch (SQLException e) {
             throw new RuntimeException(e.getMessage(), e);
+        } catch (AuthorizeException e) {
+            throw new RESTAuthorizationException(e);
         }
 
         if (Objects.isNull(clarinUserMetadata)) {
@@ -46,6 +50,7 @@ public class ClarinUserMetadataRestRepository extends DSpaceRestRepository<Clari
     }
 
     @Override
+    @PreAuthorize("hasAuthority('ADMIN')")
     public Page<ClarinUserMetadataRest> findAll(Context context, Pageable pageable) {
         try {
             List<ClarinUserMetadata> clarinUserMetadataList =
@@ -53,6 +58,8 @@ public class ClarinUserMetadataRestRepository extends DSpaceRestRepository<Clari
             return converter.toRestPage(clarinUserMetadataList, pageable, utils.obtainProjection());
         } catch (SQLException e) {
             throw new RuntimeException(e.getMessage(), e);
+        } catch (AuthorizeException e) {
+            throw new RESTAuthorizationException(e);
         }
     }
 
@@ -60,7 +67,7 @@ public class ClarinUserMetadataRestRepository extends DSpaceRestRepository<Clari
     public Page<ClarinUserMetadataRest> findByUserRegistrationAndBitstream(
             @Parameter(value = "userRegUUID", required = true) Integer userRegId,
             @Parameter(value = "bitstreamUUID", required = true) UUID bitstreamUUID,
-            Pageable pageable) throws SQLException {
+            Pageable pageable) throws SQLException, AuthorizeException {
         Context context = obtainContext();
 
         List<ClarinUserMetadata> clarinUserMetadataList =

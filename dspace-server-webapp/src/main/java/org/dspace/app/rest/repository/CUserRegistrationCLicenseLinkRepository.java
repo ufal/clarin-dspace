@@ -16,6 +16,7 @@ import javax.servlet.http.HttpServletRequest;
 import org.dspace.app.rest.model.ClarinLicenseRest;
 import org.dspace.app.rest.model.ClarinUserRegistrationRest;
 import org.dspace.app.rest.projection.Projection;
+import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.clarin.ClarinLicense;
 import org.dspace.content.clarin.ClarinUserRegistration;
 import org.dspace.content.service.clarin.ClarinUserRegistrationService;
@@ -37,7 +38,7 @@ public class CUserRegistrationCLicenseLinkRepository extends AbstractDSpaceRestR
     public Page<ClarinLicenseRest> getClarinLicenses(@Nullable HttpServletRequest request,
                                                      Integer userRegistrationID,
                                                      @Nullable Pageable optionalPageable,
-                                                     Projection projection) throws SQLException {
+                                                     Projection projection) throws SQLException, AuthorizeException {
         Context context = obtainContext();
         ClarinUserRegistration clarinUserRegistration = clarinUserRegistrationService.find(context, userRegistrationID);
         if (Objects.isNull(clarinUserRegistration)) {

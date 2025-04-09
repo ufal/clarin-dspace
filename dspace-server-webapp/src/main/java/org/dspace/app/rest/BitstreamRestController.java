@@ -165,7 +165,7 @@ public class BitstreamRestController {
                     context.getSpecialGroupUuids(), citationEnabledForBitstream);
 
             // Track the download statistics - only if the downloading has started (the condition is inside the method)
-            matomoBitstreamTracker.trackBitstreamDownload(context, request, bit);
+            matomoBitstreamTracker.trackBitstreamDownload(context, request, bit, false);
 
             //We have all the data we need, close the connection to the database so that it doesn't stay open during
             //download/streaming

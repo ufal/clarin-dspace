@@ -21,6 +21,7 @@ import org.dspace.content.service.clarin.ClarinLicenseResourceMappingService;
 import org.dspace.content.service.clarin.ClarinLicenseResourceUserAllowanceService;
 import org.dspace.core.Context;
 import org.dspace.core.LogHelper;
+import org.dspace.eperson.EPerson;
 import org.hibernate.ObjectNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,9 +51,16 @@ public class ClarinLicenseResourceUserAllowanceServiceImpl implements ClarinLice
     }
 
     @Override
-    public ClarinLicenseResourceUserAllowance find(Context context, int valueId) throws SQLException {
-        return clarinLicenseResourceUserAllowanceDAO.findByID(context,
+    public ClarinLicenseResourceUserAllowance find(Context context, int valueId) throws SQLException,
+            AuthorizeException {
+        ClarinLicenseResourceUserAllowance clrua = clarinLicenseResourceUserAllowanceDAO.findByID(context,
                 ClarinLicenseResourceUserAllowance.class, valueId);
+
+        if (Objects.isNull(clrua)) {
+            return null;
+        }
+        this.authorizeClruaAction(context, List.of(clrua));
+        return clrua;
     }
 
     @Override
@@ -67,7 +75,7 @@ public class ClarinLicenseResourceUserAllowanceServiceImpl implements ClarinLice
 
     @Override
     public void update(Context context, ClarinLicenseResourceUserAllowance clarinLicenseResourceUserAllowance)
-            throws SQLException {
+            throws SQLException, AuthorizeException {
         if (Objects.isNull(clarinLicenseResourceUserAllowance)) {
             throw new NullArgumentException("Cannot update clarinLicenseResourceUserAllowance because the " +
                     "new clarinLicenseResourceUserAllowance is null");
@@ -111,13 +119,56 @@ public class ClarinLicenseResourceUserAllowanceServiceImpl implements ClarinLice
     }
 
     @Override
-    public List<ClarinLicenseResourceUserAllowance> findByEPersonId(Context context, UUID userID) throws SQLException {
-        return clarinLicenseResourceUserAllowanceDAO.findByEPersonId(context, userID);
+    public List<ClarinLicenseResourceUserAllowance> findByEPersonId(Context context, UUID userID) throws SQLException,
+            AuthorizeException {
+        List<ClarinLicenseResourceUserAllowance> clruaList =
+                clarinLicenseResourceUserAllowanceDAO.findByEPersonId(context, userID);
+
+        this.authorizeClruaAction(context, clruaList);
+        return clruaList;
     }
 
     @Override
     public List<ClarinLicenseResourceUserAllowance> findByEPersonIdAndBitstreamId(Context context, UUID userID,
-                                                                            UUID bitstreamID) throws SQLException {
-        return clarinLicenseResourceUserAllowanceDAO.findByEPersonIdAndBitstreamId(context, userID, bitstreamID);
+                                                                            UUID bitstreamID)
+            throws SQLException, AuthorizeException {
+
+        List<ClarinLicenseResourceUserAllowance> clruaList = clarinLicenseResourceUserAllowanceDAO
+                .findByEPersonIdAndBitstreamId(context, userID, bitstreamID);
+
+        this.authorizeClruaAction(context, clruaList);
+
+        return clruaList;
+    }
+
+    /**
+     * Check if the user is authorized to access the Clarin License Resource User Allowance
+     */
+    private void authorizeClruaAction(Context context, List<ClarinLicenseResourceUserAllowance> clruaList)
+            throws SQLException, AuthorizeException {
+        if (authorizeService.isAdmin(context)) {
+            return;
+        }
+
+        if (CollectionUtils.isEmpty(clruaList)) {
+            return;
+        }
+        // Check if the user is the same as from the userRegistration
+        // Do not allow to get the userRegistration of another user
+        EPerson currentUser = context.getCurrentUser();
+        ClarinLicenseResourceUserAllowance clrua = clruaList.get(0);
+
+        // Check if the userRegistration is not null
+        if (Objects.isNull(clrua.getUserRegistration())) {
+            return;
+        }
+
+        UUID userRegistrationEpersonUUID = clrua.getUserRegistration().getPersonID();
+        if (currentUser.getID().equals(userRegistrationEpersonUUID)) {
+            return;
+        }
+
+        throw new AuthorizeException("You are not authorized to access the Clarin License Resource User Allowance " +
+                "because it is not associated with your account.");
     }
 }

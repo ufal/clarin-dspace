@@ -28,6 +28,7 @@ import org.dspace.app.rest.exception.DSpaceBadRequestException;
 import org.dspace.app.rest.exception.UnprocessableEntityException;
 import org.dspace.app.rest.model.ItemRest;
 import org.dspace.app.rest.utils.ContextUtil;
+import org.dspace.app.statistics.clarin.ClarinMatomoBitstreamTracker;
 import org.dspace.authorize.AuthorizationBitstreamUtils;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.authorize.service.AuthorizeService;
@@ -71,6 +72,8 @@ public class MetadataBitstreamController {
     AuthorizationBitstreamUtils authorizationBitstreamUtils;
     @Autowired
     private RequestService requestService;
+    @Autowired
+    ClarinMatomoBitstreamTracker matomoBitstreamTracker;
 
     /**
      * Download all Item's bitstreams as single ZIP file.
@@ -109,6 +112,8 @@ public class MetadataBitstreamController {
         }
 
         Item item = (Item) dso;
+        // This bitstream is used to get it's item in the statistics tracker
+        Bitstream bitstreamForStatistics = null;
         name = item.getName() + ".zip";
         response.setHeader(HttpHeaders.CONTENT_DISPOSITION, String.format("attachment;filename=\"%s\"", name));
         response.setContentType("application/zip");
@@ -129,9 +134,13 @@ public class MetadataBitstreamController {
                 IOUtils.copy(is, zip);
                 zip.closeArchiveEntry();
                 is.close();
+                if (bitstreamForStatistics == null) {
+                    bitstreamForStatistics = bitstream;
+                }
             }
         }
         zip.close();
+        matomoBitstreamTracker.trackBitstreamDownload(context, request, bitstreamForStatistics, true);
         response.getOutputStream().flush();
     }
 }

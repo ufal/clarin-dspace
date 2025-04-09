@@ -15,6 +15,7 @@ import java.util.UUID;
 import org.apache.commons.collections4.CollectionUtils;
 import org.dspace.app.rest.Parameter;
 import org.dspace.app.rest.SearchRestMethod;
+import org.dspace.app.rest.exception.RESTAuthorizationException;
 import org.dspace.app.rest.model.ClarinUserRegistrationRest;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.clarin.ClarinUserRegistration;
@@ -38,13 +39,15 @@ public class ClarinUserRegistrationRestRepository extends DSpaceRestRepository<C
     ClarinUserRegistrationService clarinUserRegistrationService;
 
     @Override
-    @PreAuthorize("permitAll()")
+    @PreAuthorize("hasAuthority('AUTHENTICATED')")
     public ClarinUserRegistrationRest findOne(Context context, Integer idValue) {
         ClarinUserRegistration clarinUserRegistration;
         try {
             clarinUserRegistration = clarinUserRegistrationService.find(context, idValue);
         } catch (SQLException e) {
             throw new RuntimeException(e.getMessage(), e);
+        } catch (AuthorizeException e) {
+            throw new RESTAuthorizationException(e);
         }
 
         if (Objects.isNull(clarinUserRegistration)) {
@@ -54,6 +57,7 @@ public class ClarinUserRegistrationRestRepository extends DSpaceRestRepository<C
     }
 
     @Override
+    @PreAuthorize("hasAuthority('ADMIN')")
     public Page<ClarinUserRegistrationRest> findAll(Context context, Pageable pageable) {
         try {
             List<ClarinUserRegistration> clarinUserRegistrationList = clarinUserRegistrationService.findAll(context);
@@ -63,10 +67,23 @@ public class ClarinUserRegistrationRestRepository extends DSpaceRestRepository<C
         }
     }
 
+    @Override
+    @PreAuthorize("hasAuthority('ADMIN')")
+    public void delete(Context context, Integer idValue) throws AuthorizeException {
+        super.delete(context, idValue);
+    }
+
+    @Override
+    @PreAuthorize("hasAuthority('ADMIN')")
+    protected ClarinUserRegistrationRest createAndReturn(Context context) throws SQLException, AuthorizeException {
+        return super.createAndReturn(context);
+    }
+
     @SearchRestMethod(name = "byEPerson")
     public Page<ClarinUserRegistrationRest> findByEPerson(@Parameter(value = "userUUID", required = true) UUID
                                                                       userUUID,
-                                                              Pageable pageable) throws SQLException {
+                                                              Pageable pageable)
+            throws SQLException, AuthorizeException {
         Context context = obtainContext();
 
         List<ClarinUserRegistration> clarinUserRegistrationList =

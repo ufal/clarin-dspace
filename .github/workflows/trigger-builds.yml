@@ -1,0 +1,29 @@
+name: Trigger Build for All Customer Branches
+
+on:
+  schedule:
+    - cron: "0 */4 * * *" # Runs every 4 hours
+  workflow_dispatch: # Allows manual triggering
+
+permissions:
+  actions: write # Grants permission to trigger workflows
+  contents: read # Access to repository contents
+
+jobs:
+  trigger-builds:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4  # Ensures the repository is available
+
+      - name: Get and Trigger Customer Branch Builds
+        run: |
+          # Authenticate with GitHub CLI using the token
+          echo ${{ secrets.GITHUB_TOKEN }} | gh auth login --with-token
+
+          git fetch --prune origin  # Ensure remote refs are fetched
+          BRANCHES=$(git ls-remote --heads origin | awk -F'/' '{print $3"/"$4}' | grep '^customer/')
+          for branch in $(echo "$BRANCHES" | sed -e 's/[\[\]"]//g' -e 's/,/\n/g'); do
+            echo "Triggering build for branch: $branch"
+            gh workflow run build.yml --ref $branch
+          done
