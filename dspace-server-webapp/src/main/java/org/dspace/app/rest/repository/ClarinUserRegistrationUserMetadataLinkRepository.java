@@ -15,6 +15,7 @@ import javax.servlet.http.HttpServletRequest;
 import org.dspace.app.rest.model.ClarinUserMetadataRest;
 import org.dspace.app.rest.model.ClarinUserRegistrationRest;
 import org.dspace.app.rest.projection.Projection;
+import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.clarin.ClarinUserRegistration;
 import org.dspace.content.service.clarin.ClarinUserRegistrationService;
 import org.dspace.core.Context;
@@ -35,7 +36,7 @@ public class ClarinUserRegistrationUserMetadataLinkRepository extends AbstractDS
     public Page<ClarinUserMetadataRest> getUserMetadata(@Nullable HttpServletRequest request,
                                                         Integer userRegistrationID,
                                                         @Nullable Pageable optionalPageable,
-                                                        Projection projection) throws SQLException {
+                                                        Projection projection) throws SQLException, AuthorizeException {
         Context context = obtainContext();
 
         ClarinUserRegistration clarinUserRegistration = clarinUserRegistrationService.find(context, userRegistrationID);

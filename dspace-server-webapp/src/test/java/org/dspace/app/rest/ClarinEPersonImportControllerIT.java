@@ -166,7 +166,10 @@ public class ClarinEPersonImportControllerIT  extends AbstractControllerIntegrat
                     .andDo(result -> idRef
                             .set(read(result.getResponse().getContentAsString(), "$.id")));
             //control
+            EPerson currentUser = context.getCurrentUser();
+            context.setCurrentUser(admin);
             ClarinUserRegistration clarinUserRegistration = clarinUserRegistrationService.find(context, idRef.get());
+            context.setCurrentUser(currentUser);
             assertTrue(clarinUserRegistration.isConfirmation());
             assertEquals(clarinUserRegistration.getEmail(), "test@test.edu");
             assertEquals(clarinUserRegistration.getPersonID(), ePerson.getID());

@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.UUID;
 import javax.persistence.Query;
 
+import org.dspace.content.Bitstream;
 import org.dspace.content.PreviewContent;
 import org.dspace.content.dao.PreviewContentDAO;
 import org.dspace.core.AbstractHibernateDAO;
@@ -39,7 +40,7 @@ public class PreviewContentDAOImpl extends AbstractHibernateDAO<PreviewContent> 
     }
 
     @Override
-    public List<PreviewContent> findRootByBitstream(Context context, UUID bitstreamId) throws SQLException {
+    public List<PreviewContent> hasPreview(Context context, Bitstream bitstream) throws SQLException {
         // select only data from the previewcontent table whose ID is not a child in the preview2preview table
         Query query = createQuery(context,
                 "SELECT pc FROM " + PreviewContent.class.getSimpleName() + " pc " +
@@ -48,7 +49,7 @@ public class PreviewContentDAOImpl extends AbstractHibernateDAO<PreviewContent> 
                         "AND pc.id NOT IN (SELECT child.id FROM " + PreviewContent.class.getSimpleName() + " parent " +
                         "JOIN parent.sub child)"
         );
-        query.setParameter("bitstream_id", bitstreamId);
+        query.setParameter("bitstream_id", bitstream.getID());
         query.setHint("org.hibernate.cacheable", Boolean.TRUE);
         return findMany(context, query);
     }

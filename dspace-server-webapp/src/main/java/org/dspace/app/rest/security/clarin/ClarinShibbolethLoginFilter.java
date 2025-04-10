@@ -8,6 +8,8 @@
 package org.dspace.app.rest.security.clarin;
 
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Objects;
@@ -269,8 +271,9 @@ public class ClarinShibbolethLoginFilter extends StatelessLoginFilter {
         } else if (this.isEmailIsAssociated) {
             redirectUrl += duplicateUser + "?email=" + this.email;
         } else if (StringUtils.isNotEmpty(this.netId)) {
-            // netId is set if the user doesn't have the email
-            redirectUrl += userWithoutEmailUrl + "?netid=" + this.netId;
+            // Ensure netId is URL-encoded to prevent `+` from turning into a space
+            String encodedNetId = URLEncoder.encode(this.netId, StandardCharsets.UTF_8);
+            redirectUrl += userWithoutEmailUrl + "?netid=" + encodedNetId;
         } else {
             // Remove the last slash from the URL `login/`
             String redirectUrlWithoutSlash = redirectUrl.endsWith("/") ?

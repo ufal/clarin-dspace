@@ -53,6 +53,7 @@ import org.dspace.content.clarin.ClarinUserRegistration;
 import org.dspace.content.service.clarin.ClarinLicenseLabelService;
 import org.dspace.content.service.clarin.ClarinLicenseService;
 import org.dspace.content.service.clarin.ClarinUserMetadataService;
+import org.dspace.eperson.EPerson;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
@@ -527,7 +528,10 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
                 .andExpect(jsonPath("$.page.totalElements", is(4)));
 
         // The User Metadata should not have updated transaction ID after a new download - test for fixed issue
+        EPerson currentUser = context.getCurrentUser();
+        context.setCurrentUser(admin);
         List<ClarinUserMetadata> allUserMetadata = clarinUserMetadataService.findAll(context);
+        context.setCurrentUser(currentUser);
         ClarinLicenseResourceUserAllowance clrua1 = allUserMetadata.get(0).getTransaction();
         ClarinLicenseResourceUserAllowance clrua2 = allUserMetadata.get(3).getTransaction();
         assertThat(clrua1.getID(), not(clrua2.getID()));

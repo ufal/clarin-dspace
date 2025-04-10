@@ -418,7 +418,7 @@ public class ClarinUserMetadataRestController {
                                               List<ClarinUserMetadataRest> clarinUserMetadataRestList,
                                               ClarinLicenseResourceMapping clarinLicenseResourceMapping,
                                               String downloadToken)
-            throws SQLException {
+            throws SQLException, AuthorizeException {
         // If exists userMetadata records in the table update them or create them in other case
         // Get UserRegistration which has the UserMetadata list
         List<ClarinUserRegistration> clarinUserRegistrationList =
@@ -467,7 +467,7 @@ public class ClarinUserMetadataRestController {
                                                            List<ClarinUserMetadata> clarinUserMetadataList,
                                                            String downloadToken,
                                                            ClarinUserRegistration clarinUserRegistration)
-            throws SQLException {
+            throws SQLException, AuthorizeException {
         // Create ClarinResourceUserAllowance record to generate token.
         ClarinLicenseResourceUserAllowance clrua =
                 clarinLicenseResourceUserAllowanceService.create(context);
@@ -479,14 +479,20 @@ public class ClarinUserMetadataRestController {
         if (Objects.nonNull(clarinUserRegistration)) {
             clrua.setUserRegistration(clarinUserRegistration);
         }
-        clarinLicenseResourceUserAllowanceService.update(context, clrua);
+        // Turn off the authorization system to update the user metadata because the ANONYMOUS user cannot update
+        try {
+            context.turnOffAuthorisationSystem();
+            clarinLicenseResourceUserAllowanceService.update(context, clrua);
+        } finally {
+            context.restoreAuthSystemState();
+        }
         return clrua;
     }
 
     public List<ClarinUserMetadata> processNonSignedInUser(Context context,
                                                   List<ClarinUserMetadataRest> clarinUserMetadataRestList,
                                                   ClarinLicenseResourceMapping clarinLicenseResourceMapping,
-                                                  String downloadToken) throws SQLException {
+                                                  String downloadToken) throws SQLException, AuthorizeException {
         // Create ClarinUserMetadataRecord from the ClarinUserMetadataRest List.
         // Add created ClarinUserMetadata to the List.
         List<ClarinUserMetadata> clarinUserMetadataList = this.createUserMetadataFromRequest(context,
@@ -511,7 +517,13 @@ public class ClarinUserMetadataRestController {
         for (ClarinUserMetadata clarinUserMetadata : clarinUserMetadataList) {
             clarinUserMetadata.setTransaction(clrua);
             clarinUserMetadata.setEperson(clarinUserRegistration);
-            clarinUserMetadataService.update(context, clarinUserMetadata);
+            // Turn off the authorization system to update the user metadata because the ANONYMOUS user cannot update
+            try {
+                context.turnOffAuthorisationSystem();
+                clarinUserMetadataService.update(context, clarinUserMetadata);
+            } finally {
+                context.restoreAuthSystemState();
+            }
         }
         return clarinUserMetadataList;
     }
@@ -563,14 +575,19 @@ public class ClarinUserMetadataRestController {
     private List<ClarinUserMetadata> createUserMetadataFromRequest(Context context,
                                                                    List<ClarinUserMetadataRest>
                                                                            clarinUserMetadataRestList)
-            throws SQLException {
+            throws SQLException, AuthorizeException {
         List<ClarinUserMetadata> clarinUserMetadataList = new ArrayList<>();
         for (ClarinUserMetadataRest clarinUserMetadataRest : clarinUserMetadataRestList) {
             ClarinUserMetadata clarinUserMetadata = clarinUserMetadataService.create(context);
             clarinUserMetadata.setMetadataValue(clarinUserMetadataRest.getMetadataValue());
             clarinUserMetadata.setMetadataKey(clarinUserMetadataRest.getMetadataKey());
-            clarinUserMetadataService.update(context, clarinUserMetadata);
-
+            // Turn off the authorization system to update the user metadata because the ANONYMOUS user cannot update
+            try {
+                context.turnOffAuthorisationSystem();
+                clarinUserMetadataService.update(context, clarinUserMetadata);
+            } finally {
+                context.restoreAuthSystemState();
+            }
             // Add created ClarinUserMetadata to the list
             clarinUserMetadataList.add(clarinUserMetadata);
         }

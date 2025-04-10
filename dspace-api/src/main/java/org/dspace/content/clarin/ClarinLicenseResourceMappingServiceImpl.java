@@ -18,6 +18,7 @@ import javax.ws.rs.NotFoundException;
 
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang.NullArgumentException;
+import org.dspace.authorize.AuthorizeException;
 import org.dspace.authorize.service.AuthorizeService;
 import org.dspace.content.Bitstream;
 import org.dspace.content.dao.clarin.ClarinLicenseResourceMappingDAO;
@@ -236,7 +237,14 @@ public class ClarinLicenseResourceMappingServiceImpl implements ClarinLicenseRes
 
         // Find all records when the current user fill in some clarin license required info
         List<ClarinLicenseResourceUserAllowance> clarinLicenseResourceUserAllowances =
-                clarinLicenseResourceUserAllowanceService.findByEPersonId(context, userID);
+                null;
+        try {
+            clarinLicenseResourceUserAllowances = clarinLicenseResourceUserAllowanceService.findByEPersonId(context,
+                    userID);
+        } catch (AuthorizeException e) {
+            log.error("Cannot get the user registration for the user with id: {}", userID, e);
+            return false;
+        }
         // The user hasn't been filled in any information.
         if (CollectionUtils.isEmpty(clarinLicenseResourceUserAllowances)) {
             return false;

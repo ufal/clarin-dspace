@@ -20,6 +20,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
@@ -144,7 +146,8 @@ public class ClarinShibbolethLoginFilterIT extends AbstractControllerIntegration
                         .header("Shib-Identity-Provider", IDP_TEST_EPERSON))
                 .andExpect(status().isFound())
                 .andExpect(redirectedUrl("http://localhost:4000/login/auth-failed?netid=" +
-                        Util.formatNetId(netId, IDP_TEST_EPERSON)));
+                        URLEncoder.encode(Objects.requireNonNull(Util.formatNetId(netId, IDP_TEST_EPERSON)),
+                                StandardCharsets.UTF_8)));
     }
 
     /**
@@ -170,7 +173,8 @@ public class ClarinShibbolethLoginFilterIT extends AbstractControllerIntegration
                         .header("SHIB-NETID", netId))
                 .andExpect(status().isFound())
                 .andExpect(redirectedUrl("http://localhost:4000/login/auth-failed?netid=" +
-                        Util.formatNetId(netId, idp)));
+                        URLEncoder.encode(Objects.requireNonNull(Util.formatNetId(netId, idp)),
+                                StandardCharsets.UTF_8)));
 
         // Send the email with the verification token.
         String tokenAdmin = getAuthToken(admin.getEmail(), password);
@@ -618,7 +622,8 @@ public class ClarinShibbolethLoginFilterIT extends AbstractControllerIntegration
                         .header(NET_ID_PERSISTENT_ID, persistentId))
                 .andExpect(status().isFound())
                 .andExpect(redirectedUrl("http://localhost:4000/login/auth-failed?netid=" +
-                        Util.formatNetId(persistentId, IDP_TEST_EPERSON)));
+                        URLEncoder.encode(Objects.requireNonNull(Util.formatNetId(persistentId, IDP_TEST_EPERSON)),
+                                StandardCharsets.UTF_8)));
     }
 
     // The user was registered and signed in with the verification token on the second attempt, after the email
@@ -636,7 +641,8 @@ public class ClarinShibbolethLoginFilterIT extends AbstractControllerIntegration
                         .header("SHIB-NETID", netId))
                 .andExpect(status().isFound())
                 .andExpect(redirectedUrl("http://localhost:4000/login/auth-failed?netid=" +
-                        Util.formatNetId(netId, idp)));
+                        URLEncoder.encode(Objects.requireNonNull(Util.formatNetId(netId, idp)),
+                                StandardCharsets.UTF_8)));
 
         // Send the email with the verification token.
         String tokenAdmin = getAuthToken(admin.getEmail(), password);
@@ -655,7 +661,8 @@ public class ClarinShibbolethLoginFilterIT extends AbstractControllerIntegration
                         .header("SHIB-NETID", netId))
                 .andExpect(status().isFound())
                 .andExpect(redirectedUrl("http://localhost:4000/login/auth-failed?netid=" +
-                        Util.formatNetId(netId, idp)));
+                        URLEncoder.encode(Objects.requireNonNull(Util.formatNetId(netId, idp)),
+                                StandardCharsets.UTF_8)));
     }
 
     @Test

@@ -16,6 +16,7 @@ import java.math.BigInteger;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.MalformedURLException;
+import java.net.URI;
 import java.net.URL;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
@@ -55,6 +56,9 @@ public final class Utils {
      * log4j logger
      */
     private static final Logger log = LogManager.getLogger(Utils.class);
+
+    private static final Pattern UUID_PATTERN =
+            Pattern.compile("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
 
     private static final Pattern DURATION_PATTERN = Pattern
         .compile("(\\d+)([smhdwy])");
@@ -547,5 +551,31 @@ public final class Utils {
             log.error("Cannot get PID because: " + e.getMessage());
         }
         return pid;
+    }
+
+    /**
+     * Fetch UUID from a URL
+     * This method extracts the UUID from the URL using a regex pattern
+     * @param urlString e.g., http://localhost:8080/server/api/core/bitstreams/UUID/content&bots=1
+     * @return UUID (as string) extracted from the URL
+     */
+    public static String fetchUUIDFromUrl(String urlString) {
+        try {
+            // Parse the URL
+            URI uri = new URI(urlString);
+
+            // Combine path and query to search for UUID
+            String fullPath = uri.getPath() + (uri.getQuery() != null ? "?" + uri.getQuery() : "");
+
+            // Find UUID using regex
+            Matcher matcher = UUID_PATTERN.matcher(fullPath);
+            if (matcher.find()) {
+                return matcher.group();
+            }
+
+            throw new IllegalArgumentException("No UUID found in URL");
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Invalid URL or UUID format: " + e.getMessage(), e);
+        }
     }
 }

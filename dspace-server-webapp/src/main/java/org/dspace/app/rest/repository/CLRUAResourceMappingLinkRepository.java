@@ -15,6 +15,7 @@ import javax.servlet.http.HttpServletRequest;
 import org.dspace.app.rest.model.ClarinLicenseResourceMappingRest;
 import org.dspace.app.rest.model.ClarinLicenseResourceUserAllowanceRest;
 import org.dspace.app.rest.projection.Projection;
+import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.clarin.ClarinLicenseResourceMapping;
 import org.dspace.content.clarin.ClarinLicenseResourceUserAllowance;
 import org.dspace.content.service.clarin.ClarinLicenseResourceUserAllowanceService;
@@ -38,7 +39,8 @@ public class CLRUAResourceMappingLinkRepository extends AbstractDSpaceRestReposi
     public ClarinLicenseResourceMappingRest getResourceMapping(@Nullable HttpServletRequest request,
                                                                Integer clruaID,
                                                                @Nullable Pageable optionalPageable,
-                                                               Projection projection) throws SQLException {
+                                                               Projection projection)
+            throws SQLException, AuthorizeException {
         Context context = obtainContext();
 
         ClarinLicenseResourceUserAllowance clarinLicenseResourceUserAllowance =
