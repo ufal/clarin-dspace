@@ -10,6 +10,7 @@ package org.dspace.app.rest;
 import static org.dspace.app.rest.repository.ClarinLicenseRestRepository.OPERATION_PATH_LICENSE_RESOURCE;
 import static org.dspace.content.InstallItemServiceImpl.SET_OWNING_COLLECTION_EVENT_DETAIL;
 import static org.dspace.content.clarin.ClarinLicense.Confirmation;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -996,10 +997,15 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
 
         String adminToken = getAuthToken(admin.getEmail(), password);
         getClient(adminToken).perform(get("/api/submission/workspaceitems/search/shareToken")
-                        .param("shareToken", shareToken)
-                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                        .param("shareToken", shareToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$._embedded.workspaceitems[0].id", is(wItem.getID())));
+
+        // test BadRequest response for invalid token
+        getClient(adminToken).perform(get("/api/submission/workspaceitems/search/shareToken")
+                        .param("shareToken", "invalid_token"))
+                .andExpect(status().isBadRequest())
+                .andExpect(status().reason(containsString("invalid_token does not exist")));
     }
 
     /**
