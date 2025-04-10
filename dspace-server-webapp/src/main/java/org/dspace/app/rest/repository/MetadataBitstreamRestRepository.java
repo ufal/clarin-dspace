@@ -93,7 +93,7 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
             String use = bundle.getName();
             if (StringUtils.equals("THUMBNAIL", use)) {
                 Thumbnail thumbnail = itemService.getThumbnail(context, item, false);
-                if (Objects.nonNull(thumbnail)) {
+                 if (Objects.nonNull(thumbnail)) {
                     bitstreams.clear();
                     bitstreams.add(thumbnail.getThumb());
                 }
