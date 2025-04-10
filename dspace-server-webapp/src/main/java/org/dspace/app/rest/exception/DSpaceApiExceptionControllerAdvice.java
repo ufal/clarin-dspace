@@ -286,7 +286,8 @@ public class DSpaceApiExceptionControllerAdvice extends ResponseEntityExceptionH
             // Log the error as a single-line WARN
             StackTraceElement[] trace = ex.getStackTrace();
             String location = trace.length <= 0 ? "unknown" : trace[0].toString();
-            log.warn("{} (status:{} exception: {} at: {})", message, statusCode, message, location);
+            log.warn("{} (status:{} exception: {} at: {})",
+                    message, statusCode, ex.getClass().getName(), location);
         }
 
         response.sendError(statusCode, message);
