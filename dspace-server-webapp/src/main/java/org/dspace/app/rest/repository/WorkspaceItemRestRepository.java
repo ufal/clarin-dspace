@@ -22,7 +22,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import javax.servlet.http.HttpServletRequest;
-import javax.ws.rs.BadRequestException;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import org.apache.commons.io.FileUtils;
@@ -492,7 +491,7 @@ public class WorkspaceItemRestRepository extends DSpaceRestRepository<WorkspaceI
             if (CollectionUtils.isEmpty(witems)) {
                 String errorMessage = "The workspace item with share token:" + shareToken + " does not exist.";
                 log.error(errorMessage);
-                throw new BadRequestException(errorMessage);
+                throw new DSpaceBadRequestException(errorMessage);
             }
             if (!authorizeService.authorizeActionBoolean(context, witems.get(0).getItem(), Constants.READ)) {
                 String errorMessage = "The current user does not have rights to view the WorkflowItem";

@@ -16,11 +16,11 @@ import java.util.Objects;
 import java.util.UUID;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import javax.ws.rs.BadRequestException;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.dspace.app.rest.converter.ConverterService;
 import org.dspace.app.rest.converter.MetadataConverter;
+import org.dspace.app.rest.exception.DSpaceBadRequestException;
 import org.dspace.app.rest.exception.UnprocessableEntityException;
 import org.dspace.app.rest.model.BundleRest;
 import org.dspace.app.rest.model.ItemRest;
@@ -156,7 +156,7 @@ public class ItemAddBundleController {
             throws SQLException, AuthorizeException {
         Context context = ContextUtil.obtainContext(request);
         if (Objects.isNull(context)) {
-            throw new BadRequestException("No context found for current user");
+            throw new DSpaceBadRequestException("No context found for current user");
         }
         Item item = itemService.find(context, uuid);
 

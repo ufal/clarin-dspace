@@ -26,12 +26,12 @@ import java.util.Objects;
 import java.util.UUID;
 import javax.mail.MessagingException;
 import javax.servlet.http.HttpServletRequest;
-import javax.ws.rs.BadRequestException;
 import javax.ws.rs.NotFoundException;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.dspace.app.rest.exception.DSpaceBadRequestException;
 import org.dspace.app.rest.model.BitstreamRest;
 import org.dspace.app.rest.model.ClarinUserMetadataRest;
 import org.dspace.app.rest.model.ItemRest;
@@ -275,12 +275,13 @@ public class ClarinUserMetadataRestController {
             throws IOException, SQLException, MessagingException {
         if (StringUtils.isBlank(email)) {
             log.error("Cannot send email with download link because the email is empty.");
-            throw new BadRequestException("Cannot send email with download link because the email is empty.");
+            throw new DSpaceBadRequestException("Cannot send email with download link because the email is empty.");
         }
 
         if (Objects.isNull(dso)) {
             log.error("Cannot send email with download link because the DSpaceObject is null.");
-            throw new BadRequestException("Cannot send email with download link because the DSpaceObject is null.");
+            throw new DSpaceBadRequestException(
+                    "Cannot send email with download link because the DSpaceObject is null.");
         }
 
         // Fetch DSpace main cfg info and send it in the email
