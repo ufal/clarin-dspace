@@ -7,8 +7,7 @@
  */
 package org.dspace.app.rest;
 
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -19,7 +18,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.dspace.app.rest.matcher.ExternalHandleMatcher;
 import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
@@ -99,20 +97,19 @@ public class ExternalHandleRestRepositoryIT extends AbstractControllerIntegratio
 
         org.dspace.handle.Handle handleToUpdate = this.handlesWithMagicURLs.get(0);
         String handle = handleToUpdate.getHandle();
+        String newUrl = "https://lindat.mff.cuni.cz/#!/services/pmltq/";
 
-        String updatedMagicURL = Handle.getMagicUrl(null, null, null, null, null, null, "https://lindat.mff.cuni.cz/#!/services/pmltq/");
-        Handle updatedHandle = new Handle(handle, updatedMagicURL);
 
         String authTokenAdmin = getAuthToken(admin.getEmail(), password);
-        getClient(authTokenAdmin).perform(put("/api/services/handles")
-                .content(mapper.writeValueAsBytes(updatedHandle))
-                .contentType(contentType))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.url", is(updatedHandle.url)))
-        ;
+        Map<String, String> updatedHandle = Map.of(
+                "handle", handle,
+                "url", newUrl,
+                "token", "token0"
+        );
+        updateHandle(authTokenAdmin, updatedHandle);
     }
 
-    @Test
+    @Test(expected = Exception.class)
     public void wut() {
         // ExternalHandleRestRepository::createHandle says this throws if handle already exists
         try {
@@ -143,20 +140,29 @@ public class ExternalHandleRestRepositoryIT extends AbstractControllerIntegratio
 
         Map<String, String> handleResponse = mapper.readValue(createResult.getResponse().getContentAsString(), Map.class);
         String handle = handleResponse.get("handle");
+
+        Assert.assertTrue("Handle contains subprefix", handle.contains("subprefix"));
+
         String token = handleResponse.get("token");
         String newUrl = "https://lindat.cz/#!/services/pmltq/";
         Map<String, String> updatedHandleJson = Map.of(
             "handle", handle,
             "url", newUrl,
-            "token", token
+            "token", token,
+            "title", "IGNORE",
+            "reportemail", "IGNORE",
+            "subprefix", "IGNORE",
+            "datasetName", "IGNORE",
+            "datasetVersion", "IGNORE",
+            "query", "IGNORE"
         );
 
         // remember how many handles we have
         int count = handleClarinService.count(context);
 
         // update the handle
-        updateHandle(authToken, updatedHandleJson);
-
+        MvcResult result = updateHandle(authToken, updatedHandleJson);
+        Assert.assertFalse("Only the URL should be updated", result.getResponse().getContentAsString().contains("IGNORE"));
         Assert.assertEquals("Update should not create new handles.", count, handleClarinService.count(context));
     }
 
@@ -215,23 +221,67 @@ public class ExternalHandleRestRepositoryIT extends AbstractControllerIntegratio
                 "token", "token0",
                 "url", "https://lindat.cz"
         );
-        updateHandle(null, updateWithValid);
+        MvcResult result = updateHandle(null, updateWithValid);
+        Map<String, String> map = mapper.readValue(result.getResponse().getContentAsString(), Map.class);
+
+        // did we get a token that actually works?
+        Map<String, String> updateWithValid2 = Map.of(
+                "handle", HandlePlugin.getCanonicalHandlePrefix() + "123/0",
+                "token", map.get("token"),
+                "url", "https://lindat.cz/test1"
+        );
+
+        updateHandle(null, updateWithValid2);
+
+    }
+
+    // the token or magic url does not leak (it has the token)
+    @Test
+    public void noTokenInGetResponse() throws Exception {
+        MvcResult result = getClient().perform(get("/api/services/handles/magic"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.valueOf("application/json;charset=UTF-8")))
+                .andReturn()
+        ;
+        String content = result.getResponse().getContentAsString();
+        Assert.assertFalse("token key should not be in the response", content.contains("\"token\":"));
+        Assert.assertFalse("Token should not be in the response", content.contains("token0"));
+    }
+
+    @Test
+    public void noMagicInCreateResponse() throws Exception {
+        String url = "https://lindat.mff.cuni.cz/#!/services/pmltq/";
+        Map<String, String> handleJson = Map.of(
+                "url", url,
+                "title", "title",
+                "reportemail", "reporteMail",
+                "subprefix", "subprefix",
+                "datasetName", "datasetName",
+                "datasetVersion", "datasetVersion",
+                "query", "query"
+        );
+        MvcResult result = createHandle(null, handleJson);
+
+        String content = result.getResponse().getContentAsString();
+        Assert.assertFalse("magic bean should not be in the response",
+                content.contains(ExternalHandleConstants.MAGIC_BEAN));
     }
 
     // blacklist/whitelist works
 
-    // magic url does not leak (it has the token)
     // validace jako ve starym
     // try create handle more than once
 
-    private void updateHandle(String authToken, Map<String, String> updatedHandleJson) throws Exception {
-        getClient(authToken).perform(put("/api/services/handles")
+    private MvcResult updateHandle(String authToken, Map<String, String> updatedHandleJson) throws Exception {
+        return getClient(authToken).perform(put("/api/services/handles")
                         .content(mapper.writeValueAsBytes(updatedHandleJson))
                         .contentType(contentType))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.handle", is(updatedHandleJson.get("handle"))))
-                .andExpect(jsonPath("$.token", is(updatedHandleJson.get("token"))))
+                .andExpect(jsonPath("$.handle", anyOf(is(updatedHandleJson.get("handle")),
+                        is(HandlePlugin.getCanonicalHandlePrefix() + updatedHandleJson.get("handle")))))
+                .andExpect(jsonPath("$.token", notNullValue()))
                 .andExpect(jsonPath("$.url", is(updatedHandleJson.get("url"))))
+                .andReturn()
         ;
     }
 

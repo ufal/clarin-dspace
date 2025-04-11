@@ -35,6 +35,8 @@ import org.dspace.handle.service.HandleClarinService;
 import org.dspace.handle.service.HandleService;
 import org.dspace.services.ConfigurationService;
 import org.postgresql.util.PSQLException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -49,6 +51,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/services")
 public class ExternalHandleRestRepository {
+
+    private static final Logger log = LoggerFactory.getLogger(ExternalHandleRestRepository.class);
 
     private final String EXTERNAL_HANDLE_ENDPOINT_FIND_ALL = "handles/magic";
     private final String EXTERNAL_HANDLE_ENDPOINT_SHORTEN = "handles";
@@ -108,7 +112,7 @@ public class ExternalHandleRestRepository {
                 }
                 handle.submitdate = new DCDate(new Date()).toString();
                 String subprefix = (isNotBlank(handle.subprefix)) ? handle.subprefix + "-" : "";
-                String magicURL = handle.getMagicUrl();
+                String magicURL = handle.generateMagicUrl();
                 String hdl = createHandle(subprefix, magicURL, context);
                 if (Objects.isNull(hdl)) {
                     return new ResponseEntity<>("Cannot create the shortened handle, try it again.",
@@ -148,33 +152,40 @@ public class ExternalHandleRestRepository {
                         updatedHandle.getHandle().replace(canonicalPrefix, "");
 
                 // load Handle object from the DB
-                org.dspace.handle.Handle oldHandle =
+                org.dspace.handle.Handle handleEntity =
                         this.handleClarinService.findByHandleAndMagicToken(context, oldHandleStr, updatedHandle.token);
 
-                if (Objects.isNull(oldHandle)) {
+                if (Objects.isNull(handleEntity)) {
                     return new ResponseEntity<>("Cannot find the handle in the database.",
                             HttpStatus.NOT_FOUND);
                 }
 
-                // create externalHandle based on the handle and the URL with the `@magicLindat` string
-                Handle oldExternalHandle = new Handle(oldHandle.getHandle(), oldHandle.getUrl());
+                String oldHandleMagicUrl = handleEntity.getUrl();
+                String hdl = handleEntity.getHandle();
 
+                // create externalHandle based on the handle and the URL with the `@magicLindat` string
+                Handle oldExternalHandle = new Handle(hdl, oldHandleMagicUrl);
+
+                log.info("Handle [{}] changed url from \"{}\" to \"{}\".", hdl, oldExternalHandle.url, updatedHandle.url);
                 oldExternalHandle.url  = updatedHandle.url;
 
-                // generate new magicURL for the oldHandle
-                oldHandle.setUrl(oldExternalHandle.getMagicUrl());
+                // this has the new url and a new token
+                String newMagicUrl = oldExternalHandle.generateMagicUrl();
+
+                // set the new magic url as url on the entity object
+                handleEntity.setUrl(newMagicUrl);
 
                 // update handle in the DB
                 context.turnOffAuthorisationSystem();
                 try {
-                    this.handleClarinService.save(context, oldHandle);
+                    this.handleClarinService.save(context, handleEntity);
                 } finally {
                     context.restoreAuthSystemState();
                 }
                 context.commit();
 
                 // return updated external handle
-                return new ResponseEntity<>(oldExternalHandle, HttpStatus.OK);
+                return new ResponseEntity<>(new Handle(hdl, newMagicUrl), HttpStatus.OK);
             } catch (SQLException | AuthorizeException e) {
                 return new ResponseEntity<>("Cannot update the external handle because: " + e.getMessage(),
                         HttpStatus.INTERNAL_SERVER_ERROR);

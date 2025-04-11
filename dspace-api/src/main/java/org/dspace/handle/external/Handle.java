@@ -87,20 +87,20 @@ public class Handle {
     }
 
     /**
-     * From the attributes generate the url with `@magicLindat` string
+     * Generate new token and combine the properties into the url with `@magicLindat` string
      * @return url with the `@magicLindat` string
      */
-    public String getMagicUrl() {
-        return getMagicUrl(this.title, this.submitdate, this.reportemail, this.datasetName, this.datasetVersion,
+    public String generateMagicUrl() {
+        return generateMagicUrl(this.title, this.submitdate, this.reportemail, this.datasetName, this.datasetVersion,
                 this.query, this.url);
     }
 
     /**
-     * From the attributes generate the url with `@magicLindat` string
+     * Generate new token and combine the params into the url with `@magicLindat` string
      * @return url with the `@magicLindat` string
      */
-    public static String getMagicUrl(String title, String submitdate, String reportemail, String datasetName,
-                              String datasetVersion, String query, String url) {
+    private static String generateMagicUrl(String title, String submitdate, String reportemail, String datasetName,
+                                          String datasetVersion, String query, String url) {
         String magicURL = "";
         String token = UUID.randomUUID().toString();
         String[] magicURLProps = new String[] {title, HandlePlugin.getRepositoryName(), submitdate, reportemail,
