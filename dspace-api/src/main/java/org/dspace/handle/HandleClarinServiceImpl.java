@@ -462,6 +462,20 @@ public class HandleClarinServiceImpl implements HandleClarinService {
         return handle;
     }
 
+    @Override
+    public Handle findByHandleAndMagicToken(Context context, String handle, String token) throws SQLException {
+        Handle h = findByHandle(context, handle);
+        if (Objects.isNull(h) || Objects.isNull(h.getUrl()) || !h.getUrl().contains(MAGIC_BEAN)) {
+            return null;
+        }
+        org.dspace.handle.external.Handle magicHandle = new org.dspace.handle.external.Handle(h.getHandle(), h.getUrl());
+        if (magicHandle.token.equals(token)) {
+            return h;
+        } else {
+            return null;
+        }
+    }
+
     /**
      * Strips the part identifier from the handle
      *

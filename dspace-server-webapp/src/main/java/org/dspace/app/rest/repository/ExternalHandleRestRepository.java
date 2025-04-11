@@ -149,11 +149,11 @@ public class ExternalHandleRestRepository {
 
                 // load Handle object from the DB
                 org.dspace.handle.Handle oldHandle =
-                        this.handleClarinService.findByHandle(context, oldHandleStr);
+                        this.handleClarinService.findByHandleAndMagicToken(context, oldHandleStr, updatedHandle.token);
 
                 if (Objects.isNull(oldHandle)) {
                     return new ResponseEntity<>("Cannot find the handle in the database.",
-                            HttpStatus.BAD_REQUEST);
+                            HttpStatus.NOT_FOUND);
                 }
 
                 // create externalHandle based on the handle and the URL with the `@magicLindat` string

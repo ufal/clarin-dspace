@@ -228,4 +228,6 @@ public interface HandleClarinService {
      * @throws AuthorizeException if authorization error
      */
     public Handle createHandle(Context context, String handle) throws SQLException, AuthorizeException;
+
+    Handle findByHandleAndMagicToken(Context context, String handle, String token) throws SQLException;
 }

@@ -25,6 +25,7 @@ import org.dspace.app.rest.matcher.ExternalHandleMatcher;
 import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.builder.ClarinHandleBuilder;
+import org.dspace.handle.HandlePlugin;
 import org.dspace.handle.external.ExternalHandleConstants;
 import org.dspace.handle.external.Handle;
 import org.dspace.handle.service.HandleClarinService;
@@ -196,9 +197,29 @@ public class ExternalHandleRestRepositoryIT extends AbstractControllerIntegratio
         Assert.assertEquals("Update should not create new handles.", count, handleClarinService.count(context));
     }
 
+    // update works only with token
+    @Test
+    public void updateWithValidTokenOnly() throws Exception {
+        Map<String, String> updateWithInvalid = Map.of(
+                "handle", "123/0",
+                "token", "INVALID",
+                "url", "https://lindat.cz"
+        );
+        getClient().perform(put("/api/services/handles")
+                .content(mapper.writeValueAsBytes(updateWithInvalid))
+                .contentType(contentType))
+                .andExpect(status().isNotFound());
+
+        Map<String, String> updateWithValid = Map.of(
+                "handle", HandlePlugin.getCanonicalHandlePrefix() + "123/0",
+                "token", "token0",
+                "url", "https://lindat.cz"
+        );
+        updateHandle(null, updateWithValid);
+    }
+
     // blacklist/whitelist works
 
-    // update only with token
     // magic url does not leak (it has the token)
     // validace jako ve starym
     // try create handle more than once
