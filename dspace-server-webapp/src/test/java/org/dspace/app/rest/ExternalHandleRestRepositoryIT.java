@@ -8,8 +8,8 @@
 package org.dspace.app.rest;
 
 import static org.hamcrest.Matchers.is;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.hamcrest.Matchers.notNullValue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -17,7 +17,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.dspace.app.rest.matcher.ExternalHandleMatcher;
 import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
@@ -32,6 +34,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.util.ObjectUtils;
 
 /**
@@ -46,6 +49,8 @@ public class ExternalHandleRestRepositoryIT extends AbstractControllerIntegratio
     ConfigurationService configurationService;
 
     List<org.dspace.handle.Handle> handlesWithMagicURLs = new ArrayList<>();
+
+    private ObjectMapper mapper = new ObjectMapper();
 
     @Before
     public void setup() throws SQLException, AuthorizeException {
@@ -90,16 +95,11 @@ public class ExternalHandleRestRepositoryIT extends AbstractControllerIntegratio
 
     @Test
     public void updateHandle() throws Exception {
-        ObjectMapper mapper = new ObjectMapper();
 
         org.dspace.handle.Handle handleToUpdate = this.handlesWithMagicURLs.get(0);
         String handle = handleToUpdate.getHandle();
 
-        String repositoryName = configurationService.getProperty("dspace.name");
-        String token = "token0";
-        String updatedMagicURL = "@magicLindat@@magicLindat@" + repositoryName +
-                "@magicLindat@@magicLindat@@magicLindat@@magicLindat@@magicLindat@@magicLindat@" + token +
-                "@magicLindat@https://lindat.mff.cuni.cz/#!/services/pmltq/";
+        String updatedMagicURL = Handle.getMagicUrl(null, null, null, null, null, null, "https://lindat.mff.cuni.cz/#!/services/pmltq/");
         Handle updatedHandle = new Handle(handle, updatedMagicURL);
 
         String authTokenAdmin = getAuthToken(admin.getEmail(), password);
@@ -109,6 +109,120 @@ public class ExternalHandleRestRepositoryIT extends AbstractControllerIntegratio
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.url", is(updatedHandle.url)))
         ;
+    }
+
+    @Test
+    public void wut() {
+        // ExternalHandleRestRepository::createHandle says this throws if handle already exists
+        try {
+            org.dspace.handle.Handle handle = handleClarinService.findByHandle(context, "123/0");
+            Assert.assertNotNull(handle);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Test
+    public void createAndUpdateHandleByAdmin() throws Exception {
+
+        String authToken = getAuthToken(admin.getEmail(), password);
+
+        String url = "https://lindat.mff.cuni.cz/#!/services/pmltq/";
+        Map<String, String> handleJson = Map.of(
+            "url", url,
+            "title", "title",
+            "reportemail", "reporteMail",
+            "subprefix", "subprefix",
+            "datasetName", "datasetName",
+            "datasetVersion", "datasetVersion",
+            "query", "query"
+        );
+        // create new handle
+        MvcResult createResult = createHandle(authToken, handleJson);
+
+        Map<String, String> handleResponse = mapper.readValue(createResult.getResponse().getContentAsString(), Map.class);
+        String handle = handleResponse.get("handle");
+        String token = handleResponse.get("token");
+        String newUrl = "https://lindat.cz/#!/services/pmltq/";
+        Map<String, String> updatedHandleJson = Map.of(
+            "handle", handle,
+            "url", newUrl,
+            "token", token
+        );
+
+        // remember how many handles we have
+        int count = handleClarinService.count(context);
+
+        // update the handle
+        updateHandle(authToken, updatedHandleJson);
+
+        Assert.assertEquals("Update should not create new handles.", count, handleClarinService.count(context));
+    }
+
+    // create/update no login
+    @Test
+    public void createHandleAsAnonymous() throws Exception {
+        String authToken = null;
+
+        String url = "https://lindat.mff.cuni.cz/#!/services/pmltq/";
+        Map<String, String> handleJson = Map.of(
+                "url", url,
+                "title", "title",
+                "reportemail", "reporteMail",
+                "subprefix", "subprefix",
+                "datasetName", "datasetName",
+                "datasetVersion", "datasetVersion",
+                "query", "query"
+        );
+        // create new handle
+        MvcResult createResult = createHandle(authToken, handleJson);
+
+        Map<String, String> handleResponse = mapper.readValue(createResult.getResponse().getContentAsString(), Map.class);
+        String handle = handleResponse.get("handle");
+        String token = handleResponse.get("token");
+        String newUrl = "https://lindat.cz/#!/services/pmltq/";
+        Map<String, String> updatedHandleJson = Map.of(
+                "handle", handle,
+                "url", newUrl,
+                "token", token
+        );
+
+        // remember how many handles we have
+        int count = handleClarinService.count(context);
+
+        // update the handle
+        updateHandle(authToken, updatedHandleJson);
+
+        Assert.assertEquals("Update should not create new handles.", count, handleClarinService.count(context));
+    }
+
+    // blacklist/whitelist works
+
+    // update only with token
+    // magic url does not leak (it has the token)
+    // validace jako ve starym
+    // try create handle more than once
+
+    private void updateHandle(String authToken, Map<String, String> updatedHandleJson) throws Exception {
+        getClient(authToken).perform(put("/api/services/handles")
+                        .content(mapper.writeValueAsBytes(updatedHandleJson))
+                        .contentType(contentType))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.handle", is(updatedHandleJson.get("handle"))))
+                .andExpect(jsonPath("$.token", is(updatedHandleJson.get("token"))))
+                .andExpect(jsonPath("$.url", is(updatedHandleJson.get("url"))))
+        ;
+    }
+
+    private MvcResult createHandle(String authToken, Map<String, String> handleJson) throws Exception {
+        return getClient(authToken).perform(post("/api/services/handles")
+                        .content(mapper.writeValueAsBytes(handleJson))
+                        .contentType(contentType))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.handle", notNullValue()))
+                .andExpect(jsonPath("$.token", notNullValue()))
+                .andExpect(jsonPath("$.url", is(handleJson.get("url"))))
+                .andReturn();
     }
 
     private List<String> createMagicURLs() {

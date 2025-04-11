@@ -91,7 +91,7 @@ public class Handle {
      * @return url with the `@magicLindat` string
      */
     public String getMagicUrl() {
-        return this.getMagicUrl(this.title, this.submitdate, this.reportemail, this.datasetName, this.datasetVersion,
+        return getMagicUrl(this.title, this.submitdate, this.reportemail, this.datasetName, this.datasetVersion,
                 this.query, this.url);
     }
 
@@ -99,7 +99,7 @@ public class Handle {
      * From the attributes generate the url with `@magicLindat` string
      * @return url with the `@magicLindat` string
      */
-    public String getMagicUrl(String title, String submitdate, String reportemail, String datasetName,
+    public static String getMagicUrl(String title, String submitdate, String reportemail, String datasetName,
                               String datasetVersion, String query, String url) {
         String magicURL = "";
         String token = UUID.randomUUID().toString();

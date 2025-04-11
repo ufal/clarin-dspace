@@ -337,6 +337,11 @@ public class HandleClarinServiceImpl implements HandleClarinService {
                 + Constants.typeText[handleTypeId]);
     }
 
+    @Override
+    public int count(Context context) throws SQLException {
+        return handleDAO.countRows(context);
+    }
+
     /**
      * Create id for handle object.
      *

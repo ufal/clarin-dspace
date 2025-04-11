@@ -156,6 +156,8 @@ public interface HandleClarinService {
      */
     public DSpaceObject resolveToObject(Context context, String handle) throws IllegalStateException, SQLException;
 
+    int count(Context context) throws SQLException;
+
     /**
      * Create the external handles from the list of handles with magic URL
      *

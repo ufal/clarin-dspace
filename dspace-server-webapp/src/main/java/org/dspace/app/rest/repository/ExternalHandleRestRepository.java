@@ -165,7 +165,12 @@ public class ExternalHandleRestRepository {
                 oldHandle.setUrl(oldExternalHandle.getMagicUrl());
 
                 // update handle in the DB
-                this.handleClarinService.save(context, oldHandle);
+                context.turnOffAuthorisationSystem();
+                try {
+                    this.handleClarinService.save(context, oldHandle);
+                } finally {
+                    context.restoreAuthSystemState();
+                }
                 context.commit();
 
                 // return updated external handle
@@ -203,7 +208,12 @@ public class ExternalHandleRestRepository {
             return null;
         }
 
-        handleClarinService.createExternalHandle(context, handle, url);
+        context.turnOffAuthorisationSystem();
+        try {
+            handleClarinService.createExternalHandle(context, handle, url);
+        } finally {
+            context.restoreAuthSystemState();
+        }
         return handle;
     }
 
