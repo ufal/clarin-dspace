@@ -23,7 +23,6 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.ws.rs.core.MediaType;
 
-import org.apache.commons.lang.RandomStringUtils;
 import org.dspace.app.rest.utils.ContextUtil;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.DCDate;
@@ -68,6 +67,9 @@ public class ExternalHandleRestRepository {
 
     @Autowired
     private ConfigurationService configurationService;
+
+    @Autowired
+    private RandomStringGenerator randomStringGenerator;
 
     /**
      * Get all Handles with url which contains the `@magicLindat` string then convert them to the `external/Handle`
@@ -115,8 +117,8 @@ public class ExternalHandleRestRepository {
                 String magicURL = handle.generateMagicUrl();
                 String hdl = createHandle(subprefix, magicURL, context);
                 if (Objects.isNull(hdl)) {
-                    return new ResponseEntity<>("Cannot create the shortened handle, try it again.",
-                            HttpStatus.BAD_REQUEST);
+                    return new ResponseEntity<>("Failed to create the shortened handle.",
+                            HttpStatus.INTERNAL_SERVER_ERROR);
                 }
                 context.complete();
 
@@ -166,7 +168,8 @@ public class ExternalHandleRestRepository {
                 // create externalHandle based on the handle and the URL with the `@magicLindat` string
                 Handle oldExternalHandle = new Handle(hdl, oldHandleMagicUrl);
 
-                log.info("Handle [{}] changed url from \"{}\" to \"{}\".", hdl, oldExternalHandle.url, updatedHandle.url);
+                log.info("Handle [{}] changed url from \"{}\" to \"{}\".", hdl, oldExternalHandle.url,
+                        updatedHandle.url);
                 oldExternalHandle.url  = updatedHandle.url;
 
                 // this has the new url and a new token
@@ -205,27 +208,27 @@ public class ExternalHandleRestRepository {
      * @return shortened Handle string e.g. `5478`
      */
     private String createHandle(String subprefix, String url, Context context) throws SQLException, AuthorizeException {
+        int attempts = 100;
         String handle;
         this.loadPrefix();
 
-        // generate short handle
-        String rnd = RandomStringUtils.random(4,true,true).toUpperCase();
-        handle = prefix + "/" + subprefix + rnd;
-
-        try {
-            // check if exists such handle - it throws error if exists such handle
-            this.handleClarinService.findByHandle(context, handle);
-        } catch (PSQLException | PersistenceException e) {
-            return null;
+        for (int attempt = 0; attempt < attempts; attempt++) {
+            // generate short handle
+            String rnd = randomStringGenerator.generate(4).toUpperCase();
+            handle = prefix + "/" + subprefix + rnd;
+            // check if exists, create and return if not
+            if (handleClarinService.findByHandle(context, handle) == null) {
+                context.turnOffAuthorisationSystem();
+                try {
+                    handleClarinService.createExternalHandle(context, handle, url);
+                } finally {
+                    context.restoreAuthSystemState();
+                }
+                return handle;
+            }
         }
-
-        context.turnOffAuthorisationSystem();
-        try {
-            handleClarinService.createExternalHandle(context, handle, url);
-        } finally {
-            context.restoreAuthSystemState();
-        }
-        return handle;
+        log.error("Cannot create handle, all attempts failed.");
+        return null;
     }
 
     private boolean validateHandle(Handle handle) {
@@ -236,8 +239,7 @@ public class ExternalHandleRestRepository {
         // handle parameters cannot be blank
         if (isBlank(handle.url) ||
                 isBlank(handle.title) ||
-                isBlank(handle.reportemail) ||
-                isBlank(handle.subprefix)) {
+                isBlank(handle.reportemail)) {
             return false;
         }
 

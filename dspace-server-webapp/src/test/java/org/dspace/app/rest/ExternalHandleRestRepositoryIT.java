@@ -10,6 +10,7 @@ package org.dspace.app.rest;
 import static org.hamcrest.Matchers.anyOf;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -24,6 +25,7 @@ import java.util.Map;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.dspace.app.rest.matcher.ExternalHandleMatcher;
+import org.dspace.app.rest.repository.RandomStringGenerator;
 import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.builder.ClarinHandleBuilder;
@@ -36,6 +38,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.util.ObjectUtils;
@@ -51,12 +54,18 @@ public class ExternalHandleRestRepositoryIT extends AbstractControllerIntegratio
     @Autowired
     ConfigurationService configurationService;
 
+    private String prefix;
+
+    @SpyBean
+    private RandomStringGenerator rnd;
+
     List<org.dspace.handle.Handle> handlesWithMagicURLs = new ArrayList<>();
 
     private final ObjectMapper mapper = new ObjectMapper();
 
     @Before
     public void setup() throws SQLException, AuthorizeException {
+        prefix  = configurationService.getProperty("shortener.handle.prefix") + "/" ;
         context.turnOffAuthorisationSystem();
 
         List<String> magicURLs = this.createMagicURLs();
@@ -67,7 +76,7 @@ public class ExternalHandleRestRepositoryIT extends AbstractControllerIntegratio
             // create Handle
 
             org.dspace.handle.Handle handle = ClarinHandleBuilder
-                    .createHandle(context, "123/" + index, magicURL)
+                    .createHandle(context, prefix + index, magicURL)
                     .build();
             this.handlesWithMagicURLs.add(handle);
             index++;
@@ -113,15 +122,20 @@ public class ExternalHandleRestRepositoryIT extends AbstractControllerIntegratio
         updateHandle(authTokenAdmin, updatedHandle);
     }
 
-    @Test(expected = Exception.class)
-    public void wut() {
-        // ExternalHandleRestRepository::createHandle says this throws if handle already exists
-        try {
-            org.dspace.handle.Handle handle = handleClarinService.findByHandle(context, "123/0");
-            Assert.assertNotNull(handle);
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
+    // try create handle more than once
+    @Test
+    public void simulateHittingAnExistingHandleButThenSucceed() throws Exception {
+        when(rnd.generate(4)).thenReturn("0")
+                .thenReturn("1").thenReturn("2").thenReturn("3");
+        MvcResult result = createHandle(null, Map.of(
+                "url", "https://lindat.mff.cuni.cz/#!/services/pmltq/",
+                "title", "title",
+                "reportemail", "reporteMail"
+        ));
+        Map<String, String> handleResponse = mapper.readValue(result.getResponse().getContentAsString(),
+                Map.class);
+        Assert.assertEquals("Handle should be created", handleResponse.get("handle"),
+                HandlePlugin.getCanonicalHandlePrefix() + prefix + "3");
     }
 
     @Test
@@ -213,8 +227,9 @@ public class ExternalHandleRestRepositoryIT extends AbstractControllerIntegratio
     // update works only with token
     @Test
     public void updateWithValidTokenOnly() throws Exception {
+        String hdl = prefix + "0";
         Map<String, String> updateWithInvalid = Map.of(
-                "handle", "123/0",
+                "handle", hdl,
                 "token", "INVALID",
                 "url", "https://lindat.cz"
         );
@@ -224,7 +239,7 @@ public class ExternalHandleRestRepositoryIT extends AbstractControllerIntegratio
                 .andExpect(status().isNotFound());
 
         Map<String, String> updateWithValid = Map.of(
-                "handle", HandlePlugin.getCanonicalHandlePrefix() + "123/0",
+                "handle", HandlePlugin.getCanonicalHandlePrefix() + hdl,
                 "token", "token0",
                 "url", "https://lindat.cz"
         );
@@ -233,7 +248,7 @@ public class ExternalHandleRestRepositoryIT extends AbstractControllerIntegratio
 
         // did we get a token that actually works?
         Map<String, String> updateWithValid2 = Map.of(
-                "handle", HandlePlugin.getCanonicalHandlePrefix() + "123/0",
+                "handle", HandlePlugin.getCanonicalHandlePrefix() + hdl,
                 "token", map.get("token"),
                 "url", "https://lindat.cz/test1"
         );
@@ -274,10 +289,8 @@ public class ExternalHandleRestRepositoryIT extends AbstractControllerIntegratio
                 content.contains(ExternalHandleConstants.MAGIC_BEAN));
     }
 
-    // blacklist/whitelist works
-
+    // TODO blacklist/whitelist works
     // validace jako ve starym
-    // try create handle more than once
 
     private MvcResult updateHandle(String authToken, Map<String, String> updatedHandleJson) throws Exception {
         return getClient(authToken).perform(put("/api/services/handles")
