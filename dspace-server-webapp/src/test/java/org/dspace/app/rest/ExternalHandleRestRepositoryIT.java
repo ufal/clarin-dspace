@@ -7,8 +7,12 @@
  */
 package org.dspace.app.rest;
 
-import static org.hamcrest.Matchers.*;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.hamcrest.Matchers.anyOf;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.notNullValue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -49,7 +53,7 @@ public class ExternalHandleRestRepositoryIT extends AbstractControllerIntegratio
 
     List<org.dspace.handle.Handle> handlesWithMagicURLs = new ArrayList<>();
 
-    private ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = new ObjectMapper();
 
     @Before
     public void setup() throws SQLException, AuthorizeException {
@@ -138,7 +142,8 @@ public class ExternalHandleRestRepositoryIT extends AbstractControllerIntegratio
         // create new handle
         MvcResult createResult = createHandle(authToken, handleJson);
 
-        Map<String, String> handleResponse = mapper.readValue(createResult.getResponse().getContentAsString(), Map.class);
+        Map<String, String> handleResponse = mapper.readValue(createResult.getResponse().getContentAsString(),
+                Map.class);
         String handle = handleResponse.get("handle");
 
         Assert.assertTrue("Handle contains subprefix", handle.contains("subprefix"));
@@ -162,7 +167,8 @@ public class ExternalHandleRestRepositoryIT extends AbstractControllerIntegratio
 
         // update the handle
         MvcResult result = updateHandle(authToken, updatedHandleJson);
-        Assert.assertFalse("Only the URL should be updated", result.getResponse().getContentAsString().contains("IGNORE"));
+        Assert.assertFalse("Only the URL should be updated", result.getResponse().getContentAsString().contains(
+                "IGNORE"));
         Assert.assertEquals("Update should not create new handles.", count, handleClarinService.count(context));
     }
 
@@ -184,7 +190,8 @@ public class ExternalHandleRestRepositoryIT extends AbstractControllerIntegratio
         // create new handle
         MvcResult createResult = createHandle(authToken, handleJson);
 
-        Map<String, String> handleResponse = mapper.readValue(createResult.getResponse().getContentAsString(), Map.class);
+        Map<String, String> handleResponse = mapper.readValue(createResult.getResponse().getContentAsString(),
+                Map.class);
         String handle = handleResponse.get("handle");
         String token = handleResponse.get("token");
         String newUrl = "https://lindat.cz/#!/services/pmltq/";
