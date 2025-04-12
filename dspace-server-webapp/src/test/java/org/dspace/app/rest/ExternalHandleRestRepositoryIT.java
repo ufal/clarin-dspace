@@ -34,6 +34,7 @@ import org.dspace.handle.external.ExternalHandleConstants;
 import org.dspace.handle.external.Handle;
 import org.dspace.handle.service.HandleClarinService;
 import org.dspace.services.ConfigurationService;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -63,10 +64,21 @@ public class ExternalHandleRestRepositoryIT extends AbstractControllerIntegratio
 
     private final ObjectMapper mapper = new ObjectMapper();
 
+    private List<org.dspace.handle.Handle> handlesBeforeTest;
+
+    private final String urlBlacklistConfig = "shortener.post.url.blacklist.regexps";
+    private final String hostBlacklistConfig = "shortener.post.host.blacklist.regexps";
+    private String[] urlBlacklist;
+    private String[] hostBlacklist;
+
     @Before
     public void setup() throws SQLException, AuthorizeException {
         prefix  = configurationService.getProperty("shortener.handle.prefix") + "/" ;
+        urlBlacklist = configurationService.getArrayProperty(urlBlacklistConfig);
+        hostBlacklist = configurationService.getArrayProperty(hostBlacklistConfig);
         context.turnOffAuthorisationSystem();
+
+        handlesBeforeTest = handleClarinService.findAll(context);
 
         List<String> magicURLs = this.createMagicURLs();
 
@@ -84,6 +96,21 @@ public class ExternalHandleRestRepositoryIT extends AbstractControllerIntegratio
 
         context.commit();
         context.restoreAuthSystemState();
+    }
+
+    @After
+    public void cleanUp() throws SQLException, AuthorizeException {
+        context.turnOffAuthorisationSystem();
+        for (org.dspace.handle.Handle handle : handleClarinService.findAll(context)) {
+            if (!handlesBeforeTest.contains(handle)) {
+                handleClarinService.delete(context, handle);
+            }
+        }
+        context.commit();
+        context.restoreAuthSystemState();
+
+        configurationService.setProperty(urlBlacklistConfig, urlBlacklist);
+        configurationService.setProperty(hostBlacklistConfig, hostBlacklist);
     }
 
     @Test
@@ -289,8 +316,32 @@ public class ExternalHandleRestRepositoryIT extends AbstractControllerIntegratio
                 content.contains(ExternalHandleConstants.MAGIC_BEAN));
     }
 
-    // TODO blacklist/whitelist works
-    // validace jako ve starym
+    @Test
+    public void hostBlacklist() throws Exception {
+        configurationService.setProperty(urlBlacklistConfig, null);
+        configurationService.setProperty(hostBlacklistConfig, List.of(".*\\.com;.*\\.cz",".*\\.app"));
+        for (String tld : new String[] {".com", ".cz", ".app"}) {
+            getClient().perform(post("/api/services/handles")
+                            .content(mapper.writeValueAsBytes(Map.of(
+                                    "url", "https://example" + tld,
+                                    "title", "title",
+                                    "reportemail", "reporteMail"
+                            )))
+                            .contentType(contentType))
+                    .andExpect(status().isBadRequest());
+        }
+    }
+    @Test
+    public void urlBlacklist() throws Exception {
+        getClient().perform(post("/api/services/handles")
+                        .content(mapper.writeValueAsBytes(Map.of(
+                                "url", "https://junk",
+                                "title", "title",
+                                "reportemail", "reporteMail"
+                        )))
+                        .contentType(contentType))
+                .andExpect(status().isBadRequest());
+    }
 
     private MvcResult updateHandle(String authToken, Map<String, String> updatedHandleJson) throws Exception {
         return getClient(authToken).perform(put("/api/services/handles")

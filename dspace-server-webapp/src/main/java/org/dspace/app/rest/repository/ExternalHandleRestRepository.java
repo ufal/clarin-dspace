@@ -18,7 +18,6 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Objects;
-import javax.persistence.PersistenceException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.ws.rs.core.MediaType;
@@ -33,7 +32,6 @@ import org.dspace.handle.external.HandleRest;
 import org.dspace.handle.service.HandleClarinService;
 import org.dspace.handle.service.HandleService;
 import org.dspace.services.ConfigurationService;
-import org.postgresql.util.PSQLException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -128,7 +126,7 @@ public class ExternalHandleRestRepository {
             }
         }
 
-        return new ResponseEntity<>("Cannot create handle because some parameter is null or the URL is not valid",
+        return new ResponseEntity<>(configurationService.getProperty("shortener.post.error"),
                 HttpStatus.BAD_REQUEST);
     }
 
@@ -280,7 +278,7 @@ public class ExternalHandleRestRepository {
             return false;
         }
 
-        final String pattern = String.join(",", patterns);
+        final String pattern = String.join(";", patterns);
 
         String[] list = pattern.split(";");
         for (String regexp : list) {
