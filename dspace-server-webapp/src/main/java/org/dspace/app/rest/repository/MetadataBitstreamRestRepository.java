@@ -111,7 +111,8 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
                             fileInfos.addAll(previewContentService.getFilePreviewContent(context, bitstream));
                             // Do not store HTML content in the database because it could be longer than the limit
                             // of the database column
-                            if (!StringUtils.equals("text/html", bitstream.getFormat(context).getMIMEType())) {
+                            if (!fileInfos.isEmpty() &&
+                                    !StringUtils.equals("text/html", bitstream.getFormat(context).getMIMEType())) {
                                 for (FileInfo fi : fileInfos) {
                                     previewContentService.createPreviewContent(context, bitstream, fi);
                                 }

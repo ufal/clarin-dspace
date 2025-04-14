@@ -49,7 +49,6 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
             METADATABITSTREAM_ENDPOINT + "search/byHandle";
     private static final String FILE_GRP_TYPE = "ORIGINAL,TEXT,THUMBNAIL";
     private static final String AUTHOR = "Test author name";
-    private Collection col;
 
     private Item publicItem;
     private Bitstream bts;
@@ -73,7 +72,7 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
                 .withName("Parent Community")
                 .build();
 
-        col = CollectionBuilder.createCollection(context, parentCommunity).withName("Collection").build();
+        Collection col = CollectionBuilder.createCollection(context, parentCommunity).withName("Collection").build();
 
         publicItem = ItemBuilder.createItem(context, col)
                 .withAuthor(AUTHOR)
