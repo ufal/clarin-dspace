@@ -18,12 +18,10 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Objects;
-import javax.persistence.PersistenceException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.ws.rs.core.MediaType;
 
-import org.apache.commons.lang.RandomStringUtils;
 import org.dspace.app.rest.utils.ContextUtil;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.DCDate;
@@ -34,7 +32,8 @@ import org.dspace.handle.external.HandleRest;
 import org.dspace.handle.service.HandleClarinService;
 import org.dspace.handle.service.HandleService;
 import org.dspace.services.ConfigurationService;
-import org.postgresql.util.PSQLException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -50,6 +49,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/services")
 public class ExternalHandleRestRepository {
 
+    private static final Logger log = LoggerFactory.getLogger(ExternalHandleRestRepository.class);
+
     private final String EXTERNAL_HANDLE_ENDPOINT_FIND_ALL = "handles/magic";
     private final String EXTERNAL_HANDLE_ENDPOINT_SHORTEN = "handles";
     private final String EXTERNAL_HANDLE_ENDPOINT_UPDATE = "handles";
@@ -64,6 +65,9 @@ public class ExternalHandleRestRepository {
 
     @Autowired
     private ConfigurationService configurationService;
+
+    @Autowired
+    private RandomStringGenerator randomStringGenerator;
 
     /**
      * Get all Handles with url which contains the `@magicLindat` string then convert them to the `external/Handle`
@@ -108,11 +112,11 @@ public class ExternalHandleRestRepository {
                 }
                 handle.submitdate = new DCDate(new Date()).toString();
                 String subprefix = (isNotBlank(handle.subprefix)) ? handle.subprefix + "-" : "";
-                String magicURL = handle.getMagicUrl();
+                String magicURL = handle.generateMagicUrl();
                 String hdl = createHandle(subprefix, magicURL, context);
                 if (Objects.isNull(hdl)) {
-                    return new ResponseEntity<>("Cannot create the shortened handle, try it again.",
-                            HttpStatus.BAD_REQUEST);
+                    return new ResponseEntity<>("Failed to create the shortened handle.",
+                            HttpStatus.INTERNAL_SERVER_ERROR);
                 }
                 context.complete();
 
@@ -122,7 +126,8 @@ public class ExternalHandleRestRepository {
             }
         }
 
-        return new ResponseEntity<>("Cannot create handle because some parameter is null or the URL is not valid",
+        return new ResponseEntity<>(configurationService.getProperty("shortener.post.error",
+                "Cannot create handle because some parameter is null or the URL is not valid"),
                 HttpStatus.BAD_REQUEST);
     }
 
@@ -148,28 +153,41 @@ public class ExternalHandleRestRepository {
                         updatedHandle.getHandle().replace(canonicalPrefix, "");
 
                 // load Handle object from the DB
-                org.dspace.handle.Handle oldHandle =
-                        this.handleClarinService.findByHandle(context, oldHandleStr);
+                org.dspace.handle.Handle handleEntity =
+                        this.handleClarinService.findByHandleAndMagicToken(context, oldHandleStr, updatedHandle.token);
 
-                if (Objects.isNull(oldHandle)) {
+                if (Objects.isNull(handleEntity)) {
                     return new ResponseEntity<>("Cannot find the handle in the database.",
-                            HttpStatus.BAD_REQUEST);
+                            HttpStatus.NOT_FOUND);
                 }
 
-                // create externalHandle based on the handle and the URL with the `@magicLindat` string
-                Handle oldExternalHandle = new Handle(oldHandle.getHandle(), oldHandle.getUrl());
+                String oldHandleMagicUrl = handleEntity.getUrl();
+                String hdl = handleEntity.getHandle();
 
+                // create externalHandle based on the handle and the URL with the `@magicLindat` string
+                Handle oldExternalHandle = new Handle(hdl, oldHandleMagicUrl);
+
+                log.info("Handle [{}] changed url from \"{}\" to \"{}\".", hdl, oldExternalHandle.url,
+                        updatedHandle.url);
                 oldExternalHandle.url  = updatedHandle.url;
 
-                // generate new magicURL for the oldHandle
-                oldHandle.setUrl(oldExternalHandle.getMagicUrl());
+                // this has the new url and a new token
+                String newMagicUrl = oldExternalHandle.generateMagicUrl();
+
+                // set the new magic url as url on the entity object
+                handleEntity.setUrl(newMagicUrl);
 
                 // update handle in the DB
-                this.handleClarinService.save(context, oldHandle);
+                context.turnOffAuthorisationSystem();
+                try {
+                    this.handleClarinService.save(context, handleEntity);
+                } finally {
+                    context.restoreAuthSystemState();
+                }
                 context.commit();
 
                 // return updated external handle
-                return new ResponseEntity<>(oldExternalHandle, HttpStatus.OK);
+                return new ResponseEntity<>(new Handle(hdl, newMagicUrl), HttpStatus.OK);
             } catch (SQLException | AuthorizeException e) {
                 return new ResponseEntity<>("Cannot update the external handle because: " + e.getMessage(),
                         HttpStatus.INTERNAL_SERVER_ERROR);
@@ -189,22 +207,27 @@ public class ExternalHandleRestRepository {
      * @return shortened Handle string e.g. `5478`
      */
     private String createHandle(String subprefix, String url, Context context) throws SQLException, AuthorizeException {
+        int attempts = 100;
         String handle;
         this.loadPrefix();
 
-        // generate short handle
-        String rnd = RandomStringUtils.random(4,true,true).toUpperCase();
-        handle = prefix + "/" + subprefix + rnd;
-
-        try {
-            // check if exists such handle - it throws error if exists such handle
-            this.handleClarinService.findByHandle(context, handle);
-        } catch (PSQLException | PersistenceException e) {
-            return null;
+        for (int attempt = 0; attempt < attempts; attempt++) {
+            // generate short handle
+            String rnd = randomStringGenerator.generate(4).toUpperCase();
+            handle = prefix + "/" + subprefix + rnd;
+            // check if exists, create and return if not
+            if (handleClarinService.findByHandle(context, handle) == null) {
+                context.turnOffAuthorisationSystem();
+                try {
+                    handleClarinService.createExternalHandle(context, handle, url);
+                } finally {
+                    context.restoreAuthSystemState();
+                }
+                return handle;
+            }
         }
-
-        handleClarinService.createExternalHandle(context, handle, url);
-        return handle;
+        log.error("Cannot create handle, all attempts failed.");
+        return null;
     }
 
     private boolean validateHandle(Handle handle) {
@@ -215,8 +238,7 @@ public class ExternalHandleRestRepository {
         // handle parameters cannot be blank
         if (isBlank(handle.url) ||
                 isBlank(handle.title) ||
-                isBlank(handle.reportemail) ||
-                isBlank(handle.subprefix)) {
+                isBlank(handle.reportemail)) {
             return false;
         }
 
@@ -257,7 +279,7 @@ public class ExternalHandleRestRepository {
             return false;
         }
 
-        final String pattern = String.join(",", patterns);
+        final String pattern = String.join(";", patterns);
 
         String[] list = pattern.split(";");
         for (String regexp : list) {
