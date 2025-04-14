@@ -126,7 +126,8 @@ public class ExternalHandleRestRepository {
             }
         }
 
-        return new ResponseEntity<>(configurationService.getProperty("shortener.post.error"),
+        return new ResponseEntity<>(configurationService.getProperty("shortener.post.error",
+                "Cannot create handle because some parameter is null or the URL is not valid"),
                 HttpStatus.BAD_REQUEST);
     }
 

@@ -156,6 +156,12 @@ public interface HandleClarinService {
      */
     public DSpaceObject resolveToObject(Context context, String handle) throws IllegalStateException, SQLException;
 
+    /**
+     * Return the number of entries in the handle table.
+     * @param context
+     * @return number of rows in the handle table
+     * @throws SQLException
+     */
     int count(Context context) throws SQLException;
 
     /**
@@ -229,5 +235,14 @@ public interface HandleClarinService {
      */
     public Handle createHandle(Context context, String handle) throws SQLException, AuthorizeException;
 
+    /**
+     * Returns a handle entity matching the provided `prefix/suffix` but only when the "magic url"
+     * contains the provided token.
+     * @param context
+     * @param handle prefix/suffix
+     * @param token the automatically generated part of the magic URL
+     * @return Handle entity or null (if the handle is not found or the "magic url" does not contain the provided token)
+     * @throws SQLException
+     */
     Handle findByHandleAndMagicToken(Context context, String handle, String token) throws SQLException;
 }
