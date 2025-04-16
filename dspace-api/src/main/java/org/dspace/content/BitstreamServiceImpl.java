@@ -266,7 +266,7 @@ public class BitstreamServiceImpl extends DSpaceObjectServiceImpl<Bitstream> imp
     @Override
     public void delete(Context context, Bitstream bitstream) throws SQLException, AuthorizeException {
 
-        // changed to a check on delete
+        // Changed to a check on delete
         // Check authorisation
         authorizeService.authorizeAction(context, bitstream, Constants.DELETE);
         log.info(LogHelper.getHeader(context, "delete_bitstream",
@@ -278,26 +278,26 @@ public class BitstreamServiceImpl extends DSpaceObjectServiceImpl<Bitstream> imp
         // Remove bitstream itself
         bitstream.setDeleted(true);
         update(context, bitstream);
-        // Update Item's metadata about bitstreams
-        clarinItemService.updateItemFilesMetadata(context, bitstream);
 
-        //Remove our bitstream from all our bundles
+        // Remove our bitstream from all our bundles
         final List<Bundle> bundles = bitstream.getBundles();
         for (Bundle bundle : bundles) {
             authorizeService.authorizeAction(context, bundle, Constants.REMOVE);
-            //We also need to remove the bitstream id when it's set as bundle's primary bitstream
+            // We also need to remove the bitstream id when it's set as bundle's primary bitstream
             if (bitstream.equals(bundle.getPrimaryBitstream())) {
                 bundle.unsetPrimaryBitstreamID();
             }
             bundle.removeBitstream(bitstream);
         }
-        //Remove all bundles from the bitstream object, clearing the connection in 2 ways
+        // Update Item's metadata about bitstreams
+        clarinItemService.updateItemFilesMetadata(context, bitstream);
+        // Remove all bundles from the bitstream object, clearing the connection in 2 ways
         bundles.clear();
 
         // Remove policies only after the bitstream has been updated (otherwise the current user has not WRITE rights)
         authorizeService.removeAllPolicies(context, bitstream);
 
-        // detach the license from the bitstream
+        // Detach the license from the bitstream
         clarinLicenseResourceMappingService.detachLicenses(context, bitstream);
     }
 
