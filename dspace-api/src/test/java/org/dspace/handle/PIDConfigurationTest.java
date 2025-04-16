@@ -130,22 +130,22 @@ public class PIDConfigurationTest extends AbstractUnitTest {
     @Test
     public void testGeneratingItemURL() {
         String repositoryUrl = "http://localhost:4000/";
-        String expectedUrl = repositoryUrl + "items/" + publicItem.getID();
+        String expectedUrl = repositoryUrl + "handle/" + publicItem.getHandle();
 
-        String url = DSpaceApi.generateItemURLWithUUID(repositoryUrl, publicItem);
+        String url = DSpaceApi.generateItemURLWithHandle(repositoryUrl, publicItem);
         assertEquals(expectedUrl, url);
 
         // Test with no trailing slash
         repositoryUrl = "http://localhost:4000";
 
-        url = DSpaceApi.generateItemURLWithUUID(repositoryUrl, publicItem);
+        url = DSpaceApi.generateItemURLWithHandle(repositoryUrl, publicItem);
         assertEquals(expectedUrl, url);
 
         // Test with namespace
         repositoryUrl = "http://localhost:4000/namespace";
-        expectedUrl = repositoryUrl + "/items/" + publicItem.getID();
+        expectedUrl = repositoryUrl + "/handle/" + publicItem.getHandle();
 
-        url = DSpaceApi.generateItemURLWithUUID(repositoryUrl, publicItem);
+        url = DSpaceApi.generateItemURLWithHandle(repositoryUrl, publicItem);
         assertEquals(expectedUrl, url);
     }
 }
