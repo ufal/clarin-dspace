@@ -32,6 +32,7 @@ import org.dspace.content.service.ItemService;
 import org.dspace.content.service.PreviewContentService;
 import org.dspace.core.Context;
 import org.dspace.handle.service.HandleService;
+import org.dspace.services.ConfigurationService;
 import org.dspace.util.FileInfo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -57,6 +58,9 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
 
     @Autowired
     PreviewContentService previewContentService;
+
+    @Autowired
+    ConfigurationService configurationService;
 
     @SearchRestMethod(name = "byHandle")
     public Page<MetadataBitstreamWrapperRest> findByHandle(@Parameter(value = "handle", required = true) String handle,
@@ -108,13 +112,17 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
                         List<PreviewContent> prContents = previewContentService.hasPreview(context, bitstream);
                         // Generate new content if we didn't find any
                         if (prContents.isEmpty()) {
-                            fileInfos.addAll(previewContentService.getFilePreviewContent(context, bitstream));
-                            // Do not store HTML content in the database because it could be longer than the limit
-                            // of the database column
-                            if (!fileInfos.isEmpty() &&
+                            boolean allowComposePreviewContent = configurationService.getBooleanProperty
+                                    ("create.file-preview.on-item-page-load", false);
+                            if (allowComposePreviewContent) {
+                                fileInfos.addAll(previewContentService.getFilePreviewContent(context, bitstream));
+                                // Do not store HTML content in the database because it could be longer than the limit
+                                // of the database column
+                                if (!fileInfos.isEmpty() &&
                                     !StringUtils.equals("text/html", bitstream.getFormat(context).getMIMEType())) {
-                                for (FileInfo fi : fileInfos) {
-                                    previewContentService.createPreviewContent(context, bitstream, fi);
+                                    for (FileInfo fi : fileInfos) {
+                                        previewContentService.createPreviewContent(context, bitstream, fi);
+                                    }
                                 }
                             }
                         } else {
