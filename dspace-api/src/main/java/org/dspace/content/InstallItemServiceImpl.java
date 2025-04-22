@@ -34,6 +34,7 @@ import org.dspace.core.Context;
 import org.dspace.discovery.IsoLangCodes;
 import org.dspace.embargo.service.EmbargoService;
 import org.dspace.eperson.EPerson;
+import org.dspace.eperson.service.GroupService;
 import org.dspace.event.Event;
 import org.dspace.identifier.Identifier;
 import org.dspace.identifier.IdentifierException;
@@ -63,6 +64,8 @@ public class InstallItemServiceImpl implements InstallItemService {
     protected IdentifierService identifierService;
     @Autowired(required = true)
     protected ItemService itemService;
+    @Autowired(required = true)
+    protected GroupService groupService;
     @Autowired(required = true)
     protected SupervisionOrderService supervisionOrderService;
     @Autowired(required = false)
@@ -114,7 +117,7 @@ public class InstallItemServiceImpl implements InstallItemService {
 
         //Allow submitter to edit item
         if (isCollectionAllowedForSubmitterEditing(item.getOwningCollection()) &&
-                isInSubmitGroup(item.getSubmitter(), item.getOwningCollection().getID())) {
+                isInSubmitGroup(c, item.getSubmitter(), item.getOwningCollection().getID())) {
             createResourcePolicy(c, item, Constants.WRITE);
         }
 
@@ -379,17 +382,17 @@ public class InstallItemServiceImpl implements InstallItemService {
     }
 
     /**
-     * Checks if the given EPerson is in a submitter of the collection.
+     * Checks if the given ePerson is in the submit group of the collection.
      * A submit group is identified by the name containing "SUBMIT" and the collection UUID.
      *
-     * @param eperson      the EPerson whose is checked
-     * @param collectionUUID the UUID of the collection to check group names
-     * @return true if the EPerson is in a submitter, false otherwise
+     * @param context           The current DSpace context.
+     * @param ePerson           the EPerson that is checked to be member of collection submit group
+     * @param collectionUUID    the UUID of the collection
+     * @return true if the EPerson is a member (direct or indirect) of a submit group, false otherwise
      */
-    private boolean isInSubmitGroup(EPerson eperson, UUID collectionUUID) {
-        return eperson.getGroups().stream()
-                .anyMatch(group -> group.getName().contains("SUBMIT") &&
-                        group.getName().contains(collectionUUID.toString()));
+    private boolean isInSubmitGroup(Context context, EPerson ePerson, UUID collectionUUID) throws SQLException {
+        return groupService.isMember(context, ePerson,
+                "COLLECTION_" + collectionUUID.toString() + "_SUBMIT");
     }
 
     /**
