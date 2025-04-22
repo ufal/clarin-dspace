@@ -20,10 +20,12 @@ import org.dspace.authorize.AuthorizeException;
 import org.dspace.builder.CollectionBuilder;
 import org.dspace.builder.CommunityBuilder;
 import org.dspace.builder.ItemBuilder;
+import org.dspace.builder.WorkspaceItemBuilder;
 import org.dspace.content.Bitstream;
 import org.dspace.content.Collection;
 import org.dspace.content.Community;
 import org.dspace.content.Item;
+import org.dspace.content.WorkspaceItem;
 import org.dspace.content.factory.ContentServiceFactory;
 import org.dspace.content.service.BitstreamService;
 import org.junit.Before;
@@ -37,6 +39,7 @@ public class FileDownloaderIT extends AbstractIntegrationTestWithDatabase {
     public MockServerRule mockServerRule = new MockServerRule(this);
 
     private Item item;
+    private WorkspaceItem workspaceItem;
 
     //Prepare a community and a collection before the test
     @Before
@@ -45,8 +48,15 @@ public class FileDownloaderIT extends AbstractIntegrationTestWithDatabase {
         super.setUp();
         context.setCurrentUser(admin);
         Community community = CommunityBuilder.createCommunity(context).build();
-        Collection collection = CollectionBuilder.createCollection(context, community).build();
+        Collection collection = CollectionBuilder.createCollection(context, community)
+                .withSubmitterGroup(eperson)
+                .build();
         item = ItemBuilder.createItem(context, collection).withTitle("FileDownloaderIT Item").build();
+        context.setCurrentUser(eperson);
+        workspaceItem = WorkspaceItemBuilder.createWorkspaceItem(context, collection)
+                .withTitle("FileDownloaderIT WorkspaceItem")
+                .withSubmitter(eperson)
+                .build();
 
         mockServerRule.getClient().when(request()
                 .withMethod("GET")
@@ -115,6 +125,25 @@ public class FileDownloaderIT extends AbstractIntegrationTestWithDatabase {
         String[] args = new String[] {"file-downloader", "-i", item.getID().toString(),
                 "-u", String.format("http://localhost:%s/test", port), "-e", eperson.getEmail()};
         assertThrows(AuthorizeException.class, () -> runDSpaceScript(args));
+    }
+
+    @Test
+    public void testDownloadFileAsSubmitterWithWorkspaceItem() throws Exception {
+        context.setCurrentUser(eperson);
+        Item i = workspaceItem.getItem();
+        assertEquals("FileDownloaderIT WorkspaceItem", i.getName());
+        assertEquals(0, i.getBundles("ORIGINAL").size());
+        assertEquals(i.getSubmitter().getID(), eperson.getID());
+
+        int port = mockServerRule.getPort();
+        String[] args = new String[] {"file-downloader", "-w", workspaceItem.getID().toString(),
+                "-u", String.format("http://localhost:%s/test", port), "-e", eperson.getEmail()};
+
+        runDSpaceScript(args);
+
+        assertEquals(1, i.getBundles("ORIGINAL").size());
+        List<Bitstream> bs = i.getBundles("ORIGINAL").get(0).getBitstreams();
+        assertEquals(1, bs.size());
     }
 
 }
