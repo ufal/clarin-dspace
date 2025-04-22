@@ -109,7 +109,7 @@ public class FileDownloaderIT extends AbstractIntegrationTestWithDatabase {
     }
 
     @Test
-    public void testDownloadFileForNotAuthorizedUser() {
+    public void testDownloadFileForAuthorizedUserWithNoPermissionToAddFile() {
         context.setCurrentUser(eperson);
         int port = mockServerRule.getPort();
         String[] args = new String[] {"file-downloader", "-i", item.getID().toString(),
