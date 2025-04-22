@@ -9,6 +9,7 @@ package org.dspace.app.rest.repository;
 
 import static javax.ws.rs.core.MediaType.APPLICATION_JSON;
 import static org.dspace.app.rest.utils.ContextUtil.obtainContext;
+import static org.dspace.content.clarin.ClarinLicense.Confirmation;
 import static org.dspace.content.clarin.ClarinLicense.EXTRA_EMAIL;
 import static org.dspace.content.clarin.ClarinLicense.SEND_TOKEN;
 import static org.dspace.content.clarin.ClarinUserRegistration.ANONYMOUS_USER_REGISTRATION;
@@ -25,12 +26,12 @@ import java.util.Objects;
 import java.util.UUID;
 import javax.mail.MessagingException;
 import javax.servlet.http.HttpServletRequest;
-import javax.ws.rs.BadRequestException;
 import javax.ws.rs.NotFoundException;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.dspace.app.rest.exception.DSpaceBadRequestException;
 import org.dspace.app.rest.model.BitstreamRest;
 import org.dspace.app.rest.model.ClarinUserMetadataRest;
 import org.dspace.app.rest.model.ItemRest;
@@ -219,6 +220,11 @@ public class ClarinUserMetadataRestController {
                     " and the bitstream");
         }
 
+        ClarinLicense clarinLicense  = this.getClarinLicense(clarinLicenseResourceMapping);
+        if (Objects.isNull(currentUser) && (clarinLicense.getConfirmation() != Confirmation.ALLOW_ANONYMOUS)) {
+            throw new AuthorizeException("Anonymous user is not allowed to get access token");
+        }
+
         // Get ClarinUserMetadataRest Array from the request body
         ClarinUserMetadataRest[] clarinUserMetadataRestArray =
                 new ObjectMapper().readValue(request.getInputStream(), ClarinUserMetadataRest[].class);
@@ -246,7 +252,6 @@ public class ClarinUserMetadataRestController {
             // If yes - send token to e-mail
             try {
                 String email = getEmailFromUserMetadata(clarinUserMetadataRestList);
-                ClarinLicense clarinLicense = this.getClarinLicense(clarinLicenseResourceMapping);
                 this.sendEmailWithDownloadLink(context, bitstream, clarinLicense,
                         email, downloadToken, MailType.BITSTREAM, clarinUserMetadataRestList);
             } catch (MessagingException e) {
@@ -270,12 +275,13 @@ public class ClarinUserMetadataRestController {
             throws IOException, SQLException, MessagingException {
         if (StringUtils.isBlank(email)) {
             log.error("Cannot send email with download link because the email is empty.");
-            throw new BadRequestException("Cannot send email with download link because the email is empty.");
+            throw new DSpaceBadRequestException("Cannot send email with download link because the email is empty.");
         }
 
         if (Objects.isNull(dso)) {
             log.error("Cannot send email with download link because the DSpaceObject is null.");
-            throw new BadRequestException("Cannot send email with download link because the DSpaceObject is null.");
+            throw new DSpaceBadRequestException(
+                    "Cannot send email with download link because the DSpaceObject is null.");
         }
 
         // Fetch DSpace main cfg info and send it in the email
@@ -547,10 +553,6 @@ public class ClarinUserMetadataRestController {
     }
 
     private ClarinLicense getClarinLicense(ClarinLicenseResourceMapping clarinLicenseResourceMapping) {
-        if (Objects.isNull(clarinLicenseResourceMapping)) {
-            throw new NullPointerException("The clarinLicenseResourceMapping object is null.");
-        }
-
         // Get ClarinLicense from the ClarinLicenseResourceMapping
         ClarinLicense clarinLicense = clarinLicenseResourceMapping.getLicense();
         if (Objects.isNull(clarinLicense)) {
@@ -562,9 +564,6 @@ public class ClarinUserMetadataRestController {
 
     private boolean shouldEmailToken(ClarinLicenseResourceMapping clarinLicenseResourceMapping) {
         ClarinLicense clarinLicense = this.getClarinLicense(clarinLicenseResourceMapping);
-        if (Objects.isNull(clarinLicense)) {
-            throw new NullPointerException("The ClarinLicense is null.");
-        }
 
         // If the required info contains the key work `SEND_TOKEN` it should generate the token.
         if (StringUtils.isBlank(clarinLicense.getRequiredInfo())) {

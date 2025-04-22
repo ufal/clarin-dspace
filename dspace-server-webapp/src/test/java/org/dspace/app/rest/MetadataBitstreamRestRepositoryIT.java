@@ -7,6 +7,7 @@
  */
 package org.dspace.app.rest;
 
+import static org.dspace.app.rest.utils.Utils.DEFAULT_PAGE_SIZE;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
@@ -32,6 +33,7 @@ import org.dspace.builder.ItemBuilder;
 import org.dspace.content.Bitstream;
 import org.dspace.content.Collection;
 import org.dspace.content.Item;
+import org.dspace.content.service.BundleService;
 import org.dspace.content.service.clarin.ClarinLicenseResourceMappingService;
 import org.dspace.core.Constants;
 import org.dspace.services.ConfigurationService;
@@ -45,9 +47,8 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
     private static final String METADATABITSTREAM_ENDPOINT = "/api/core/metadatabitstream/";
     private static final String METADATABITSTREAM_SEARCH_BY_HANDLE_ENDPOINT =
             METADATABITSTREAM_ENDPOINT + "search/byHandle";
-    private static final String FILE_GRP_TYPE = "ORIGINAL";
+    private static final String FILE_GRP_TYPE = "ORIGINAL,TEXT,THUMBNAIL";
     private static final String AUTHOR = "Test author name";
-    private Collection col;
 
     private Item publicItem;
     private Bitstream bts;
@@ -59,6 +60,9 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
     AuthorizeService authorizeService;
 
     @Autowired
+    BundleService bundleService;
+
+    @Autowired
     ConfigurationService configurationService;
 
     @Before
@@ -68,11 +72,14 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
                 .withName("Parent Community")
                 .build();
 
-        col = CollectionBuilder.createCollection(context, parentCommunity).withName("Collection").build();
+        Collection col = CollectionBuilder.createCollection(context, parentCommunity).withName("Collection").build();
 
         publicItem = ItemBuilder.createItem(context, col)
                 .withAuthor(AUTHOR)
                 .build();
+
+        // create empty THUMBNAIL bundle
+        bundleService.create(context, publicItem, "THUMBNAIL");
 
         String bitstreamContent = "ThisIsSomeDummyText";
         InputStream is = IOUtils.toInputStream(bitstreamContent, CharEncoding.UTF_8);
@@ -82,6 +89,9 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
                 .withDescription("Description")
                 .withMimeType("application/x-gzip")
                 .build();
+
+        // Allow composing of file preview in the config
+        configurationService.setProperty("create.file-preview.on-item-page-load", true);
 
         context.restoreAuthSystemState();
 
@@ -170,7 +180,7 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.page.totalElements", is(0)))
                 .andExpect(jsonPath("$.page.totalPages", is(0)))
-                .andExpect(jsonPath("$.page.size", is(20)))
+                .andExpect(jsonPath("$.page.size", is(DEFAULT_PAGE_SIZE)))
                 .andExpect(jsonPath("$.page.number", is(0)))
                 .andExpect(jsonPath("$._links.self.href",
                         Matchers.containsString(METADATABITSTREAM_SEARCH_BY_HANDLE_ENDPOINT +

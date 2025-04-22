@@ -13,12 +13,10 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.FileSystem;
-import java.nio.file.FileSystems;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -31,6 +29,8 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
@@ -288,18 +288,6 @@ public class PreviewContentServiceImpl implements PreviewContentService {
     }
 
     /**
-     * Creates a temporary file with the appropriate extension based on the specified file type.
-     * @param fileType the type of file for which to create a temporary file
-     * @return a Path object representing the temporary file
-     * @throws IOException if an I/O error occurs while creating the file
-     */
-    private Path createTempFile(String fileType) throws IOException {
-        String extension = ARCHIVE_TYPE_TAR.equals(fileType) ?
-                String.format(".%s", ARCHIVE_TYPE_TAR) : String.format(".%s", ARCHIVE_TYPE_ZIP);
-        return Files.createTempFile("temp", extension);
-    }
-
-    /**
      * Adds a file path and its size to the list of file paths.
      * If the path represents a directory, appends a "/" to the path.
      * @param filePaths the list of file paths to add to
@@ -307,22 +295,31 @@ public class PreviewContentServiceImpl implements PreviewContentService {
      * @param size the size of the file or directory
      */
     private void addFilePath(List<String> filePaths, String path, long size) {
-        String fileInfo = (Files.isDirectory(Paths.get(path))) ? path + "/|" + size : path + "|" + size;
+        String fileInfo = "";
+        try {
+            Path filePath = Paths.get(path);
+            boolean isDir = Files.isDirectory(filePath);
+            fileInfo = (isDir ? path + "/|" : path + "|") + size;
+        } catch (NullPointerException | InvalidPathException | SecurityException e) {
+            log.error(String.format("Failed to add file path. Path: '%s', Size: %d", path, size), e);
+        }
         filePaths.add(fileInfo);
     }
 
     /**
      * Processes a TAR file, extracting its entries and adding their paths to the provided list.
      * @param filePaths the list to populate with the extracted file paths
-     * @param tempFile  the temporary TAR file to process
+     * @param inputStream the TAR file data
      * @throws IOException if an I/O error occurs while reading the TAR file
      */
-    private void processTarFile(List<String> filePaths, Path tempFile) throws IOException {
-        try (InputStream fi = Files.newInputStream(tempFile);
-             TarArchiveInputStream tis = new TarArchiveInputStream(fi)) {
+    private void processTarFile(List<String> filePaths, InputStream inputStream) throws IOException {
+        try (TarArchiveInputStream tis = new TarArchiveInputStream(inputStream)) {
             TarArchiveEntry entry;
             while ((entry = tis.getNextTarEntry()) != null) {
-                addFilePath(filePaths, entry.getName(), entry.getSize());
+                if (!entry.isDirectory()) {
+                    // Add the file path and its size (from the TAR entry)
+                    addFilePath(filePaths, entry.getName(), entry.getSize());
+                }
             }
         }
     }
@@ -330,45 +327,18 @@ public class PreviewContentServiceImpl implements PreviewContentService {
     /**
      * Processes a ZIP file, extracting its entries and adding their paths to the provided list.
      * @param filePaths      the list to populate with the extracted file paths
-     * @param zipFileSystem  the FileSystem object representing the ZIP file
-     * @throws IOException if an I/O error occurs while reading the ZIP file
+     * @param inputStream the ZIP file data
+     * @throws IOException   if an I/O error occurs while reading the ZIP file
      */
-    private void processZipFile(List<String> filePaths, FileSystem zipFileSystem) throws IOException {
-        Path root = zipFileSystem.getPath("/");
-        Files.walk(root).forEach(path -> {
-            try {
-                long fileSize = Files.size(path);
-                addFilePath(filePaths, path.toString().substring(1), fileSize);
-            } catch (IOException e) {
-                log.error("An error occurred while getting the size of the zip file.", e);
-            }
-        });
-    }
-
-    /**
-     * Closes the specified FileSystem resource if it is not null.
-     * @param zipFileSystem the FileSystem to close
-     */
-    private void closeFileSystem(FileSystem zipFileSystem) {
-        if (Objects.nonNull(zipFileSystem)) {
-            try {
-                zipFileSystem.close();
-            } catch (IOException e) {
-                log.error("An error occurred while closing the zip file.", e);
-            }
-        }
-    }
-
-    /**
-     * Deletes the specified temporary file if it is not null.
-     * @param tempFile the Path object representing the temporary file to delete
-     */
-    private void deleteTempFile(Path tempFile) {
-        if (Objects.nonNull(tempFile)) {
-            try {
-                Files.delete(tempFile);
-            } catch (IOException e) {
-                log.error("An error occurred while deleting temp file.", e);
+    private void processZipFile(List<String> filePaths, InputStream inputStream) throws IOException {
+        try (ZipInputStream zipInputStream = new ZipInputStream(inputStream)) {
+            ZipEntry entry;
+            while ((entry = zipInputStream.getNextEntry()) != null) {
+                if (!entry.isDirectory()) {
+                    // Add the file path and its size (from the ZIP entry)
+                    long fileSize = entry.getSize();
+                    addFilePath(filePaths, entry.getName(), fileSize);
+                }
             }
         }
     }
@@ -406,7 +376,7 @@ public class PreviewContentServiceImpl implements PreviewContentService {
     }
 
     /**
-     * Extracts files from an InputStream, processes them based on the specified file type (tar or zip),
+     * Processes  file data based on the specified file type (tar or zip),
      * and returns an XML representation of the file paths.
      * @param inputStream the InputStream containing the file data
      * @param fileType    the type of file to extract ("tar" or "zip")
@@ -414,28 +384,12 @@ public class PreviewContentServiceImpl implements PreviewContentService {
      */
     private String extractFile(InputStream inputStream, String fileType) throws Exception {
         List<String> filePaths = new ArrayList<>();
-        Path tempFile = null;
-        FileSystem zipFileSystem = null;
-
-        try {
-            // Create a temporary file based on the file type
-            tempFile = createTempFile(fileType);
-
-            // Copy the input stream to the temporary file
-            Files.copy(inputStream, tempFile, StandardCopyOption.REPLACE_EXISTING);
-
-            // Process the file based on its type
-            if (ARCHIVE_TYPE_TAR.equals(fileType)) {
-                processTarFile(filePaths, tempFile);
-            } else {
-                zipFileSystem = FileSystems.newFileSystem(tempFile, (ClassLoader) null);
-                processZipFile(filePaths, zipFileSystem);
-            }
-        } finally {
-            closeFileSystem(zipFileSystem);
-            deleteTempFile(tempFile);
+        // Process the file based on its type
+        if (ARCHIVE_TYPE_TAR.equals(fileType)) {
+            processTarFile(filePaths, inputStream);
+        } else {
+            processZipFile(filePaths, inputStream);
         }
-
         return buildXmlResponse(filePaths);
     }
 

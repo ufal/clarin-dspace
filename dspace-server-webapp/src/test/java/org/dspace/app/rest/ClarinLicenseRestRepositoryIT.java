@@ -10,6 +10,8 @@ package org.dspace.app.rest;
 import static com.jayway.jsonpath.JsonPath.read;
 import static org.apache.commons.codec.CharEncoding.UTF_8;
 import static org.apache.commons.io.IOUtils.toInputStream;
+import static org.dspace.app.rest.utils.Utils.DEFAULT_PAGE_SIZE;
+import static org.dspace.content.clarin.ClarinLicense.Confirmation;
 import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -54,6 +56,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
  * Integration tests for the Clarin License Rest Repository
@@ -61,6 +64,8 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author Milan Majchrak (milan.majchrak at dataquest.sk)
  */
 public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegrationTest {
+
+    private static final String BASE_URI = "/api/core/clarinlicenses";
 
     @Autowired
     ClarinLicenseService clarinLicenseService;
@@ -110,7 +115,7 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
         // create ClarinLicenses
         firstCLicense = ClarinLicenseBuilder.createClarinLicense(context).build();
         firstCLicense.setName("CL Name1");
-        firstCLicense.setConfirmation(0);
+        firstCLicense.setConfirmation(Confirmation.NOT_REQUIRED);
         firstCLicense.setDefinition("CL Definition1");
         firstCLicense.setRequiredInfo("CL Req1");
         // add ClarinLicenseLabels to the ClarinLicense
@@ -123,7 +128,7 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
 
         secondCLicense = ClarinLicenseBuilder.createClarinLicense(context).build();
         secondCLicense.setName("CL Name2");
-        secondCLicense.setConfirmation(1);
+        secondCLicense.setConfirmation(Confirmation.ASK_ONLY_ONCE);
         secondCLicense.setDefinition("CL Definition2");
         secondCLicense.setRequiredInfo("CL Req2");
         // add ClarinLicenseLabels to the ClarinLicense
@@ -188,7 +193,7 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
     @Test
     public void findAll() throws Exception {
         String authTokenAdmin = getAuthToken(admin.getEmail(), password);
-        getClient(authTokenAdmin).perform(get("/api/core/clarinlicenses"))
+        getClient(authTokenAdmin).perform(get(BASE_URI))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(contentType))
                 .andExpect(jsonPath("$._embedded.clarinlicenses", Matchers.hasItem(
@@ -207,8 +212,7 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
                                         Objects.requireNonNull(getExtendedLicenseLabels(
                                                 firstCLicense.getLicenseLabels())))
                                 )))
-                .andExpect(jsonPath("$._links.self.href",
-                        Matchers.containsString("/api/core/clarinlicenses")));
+                .andExpect(jsonPath("$._links.self.href", Matchers.containsString(BASE_URI)));
     }
 
     /**
@@ -217,7 +221,7 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
     @Test
     public void searchBy() throws Exception {
         String authTokenAdmin = getAuthToken(admin.getEmail(), password);
-        getClient(authTokenAdmin).perform(get("/api/core/clarinlicenses/search/byName")
+        getClient(authTokenAdmin).perform(get(BASE_URI + "/search/byName")
                         .param("name", "CL Name1"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(contentType))
@@ -232,7 +236,7 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
     @Test
     public void searchByLike() throws Exception {
         String authTokenAdmin = getAuthToken(admin.getEmail(), password);
-        getClient(authTokenAdmin).perform(get("/api/core/clarinlicenses/search/byNameLike")
+        getClient(authTokenAdmin).perform(get(BASE_URI + "/search/byNameLike")
                         .param("name", "Name"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(contentType))
@@ -252,8 +256,17 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
                                         Objects.requireNonNull(getExtendedLicenseLabels(
                                                 firstCLicense.getLicenseLabels())))
                         )))
-                .andExpect(jsonPath("$._links.self.href",
-                        Matchers.containsString("/api/core/clarinlicenses")));
+                .andExpect(jsonPath("$._links.self.href", Matchers.containsString(BASE_URI)));
+    }
+
+    /**
+     * This method tests requests for incorrect page parameter (e.g. page=5).
+     */
+    @Test
+    public void searchWithIncorrectPageParameter() throws Exception {
+        testRequestWithIncorrectPageable("", null, 2, 10);
+        testRequestWithIncorrectPageable("/search/byName", "CL Name1", 1, 20);
+        testRequestWithIncorrectPageable("/search/byNameLike", "Name", 2, 30);
     }
 
     @Test
@@ -261,7 +274,7 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
         ClarinLicenseRest clarinLicenseRest = new ClarinLicenseRest();
         clarinLicenseRest.setName("name");
         clarinLicenseRest.setBitstreams(0);
-        clarinLicenseRest.setConfirmation(4);
+        clarinLicenseRest.setConfirmation(Confirmation.NOT_REQUIRED.getValue());
         clarinLicenseRest.setRequiredInfo("Not required");
         clarinLicenseRest.setDefinition("definition");
         clarinLicenseConverter.setExtendedClarinLicenseLabels(clarinLicenseRest, firstCLicense.getLicenseLabels(),
@@ -276,7 +289,7 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
         AtomicReference<Integer> idRef = new AtomicReference<>();
         String authTokenAdmin = getAuthToken(admin.getEmail(), password);
         try {
-            getClient(authTokenAdmin).perform(post("/api/core/clarinlicenses")
+            getClient(authTokenAdmin).perform(post(BASE_URI)
                             .content(new ObjectMapper().writeValueAsBytes(clarinLicenseRest))
                             .contentType(org.springframework.http.MediaType.APPLICATION_JSON))
                     .andExpect(status().isCreated())
@@ -328,7 +341,7 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
         ClarinLicense clarinLicense = ClarinLicenseBuilder.createClarinLicense(context).build();
         clarinLicense.setName("default name");
         clarinLicense.setDefinition("default definition");
-        clarinLicense.setConfirmation(0);
+        clarinLicense.setConfirmation(Confirmation.NOT_REQUIRED);
         clarinLicense.setRequiredInfo("default info");
 
         Set<ClarinLicenseLabel> clarinLicenseLabels = new HashSet<>();
@@ -340,7 +353,7 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
         ClarinLicense clarinLicenseUpdated = ClarinLicenseBuilder.createClarinLicense(context).build();
         clarinLicenseUpdated.setName("updated name");
         clarinLicenseUpdated.setDefinition("updated definition");
-        clarinLicenseUpdated.setConfirmation(4);
+        clarinLicenseUpdated.setConfirmation(Confirmation.ASK_ALWAYS);
         clarinLicenseUpdated.setRequiredInfo("updated info");
 
         Set<ClarinLicenseLabel> clarinLicenseLabelUpdated = new HashSet<>();
@@ -352,15 +365,15 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
         ClarinLicenseRest clarinLicenseRest = clarinLicenseConverter.convert(clarinLicenseUpdated, Projection.DEFAULT);
 
         String authTokenAdmin = getAuthToken(admin.getEmail(), password);
-        getClient(authTokenAdmin).perform(get("/api/core/clarinlicenses/" + clarinLicense.getID()))
+        getClient(authTokenAdmin).perform(get(BASE_URI + "/" + clarinLicense.getID()))
                 .andExpect(status().isOk());
 
-        getClient(authTokenAdmin).perform(put("/api/core/clarinlicenses/" + clarinLicense.getID())
+        getClient(authTokenAdmin).perform(put(BASE_URI + "/" + clarinLicense.getID())
                         .content(new ObjectMapper().writeValueAsBytes(clarinLicenseRest))
                         .contentType(org.springframework.http.MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk());
 
-        getClient(authTokenAdmin).perform(get("/api/core/clarinlicenses/" + clarinLicense.getID()))
+        getClient(authTokenAdmin).perform(get(BASE_URI + "/" + clarinLicense.getID()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", Matchers.is(
                         ClarinLicenseMatcher.matchClarinLicenseWithoutId(clarinLicenseUpdated))
@@ -376,7 +389,7 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
 
         clarinLicense.setName("default name");
         clarinLicense.setDefinition("default definition");
-        clarinLicense.setConfirmation(0);
+        clarinLicense.setConfirmation(Confirmation.NOT_REQUIRED);
         clarinLicense.setRequiredInfo("default info");
 
         Set<ClarinLicenseLabel> clarinLicenseLabels = new HashSet<>();
@@ -387,7 +400,7 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
 
         ClarinLicenseRest clarinLicenseRest = clarinLicenseConverter.convert(clarinLicense, Projection.DEFAULT);
         String authTokenUser = getAuthToken(eperson.getEmail(), password);
-        getClient(authTokenUser).perform(delete("/api/core/clarinlicenses/" + clarinLicense.getID())
+        getClient(authTokenUser).perform(delete(BASE_URI + "/" + clarinLicense.getID())
                 .content(new ObjectMapper().writeValueAsBytes(clarinLicenseRest))
                 .contentType(org.springframework.http.MediaType.APPLICATION_JSON))
                 .andExpect(status().isForbidden())
@@ -403,7 +416,7 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
 
         clarinLicense.setName("default name");
         clarinLicense.setDefinition("default definition");
-        clarinLicense.setConfirmation(0);
+        clarinLicense.setConfirmation(Confirmation.NOT_REQUIRED);
         clarinLicense.setRequiredInfo("default info");
 
         Set<ClarinLicenseLabel> clarinLicenseLabels = new HashSet<>();
@@ -415,7 +428,7 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
         ClarinLicenseRest clarinLicenseRest = clarinLicenseConverter.convert(clarinLicense, Projection.DEFAULT);
 
         String authTokenAdmin = getAuthToken(admin.getEmail(), password);
-        getClient(authTokenAdmin).perform(put("/api/core/clarinlicenses/" + clarinLicense.getID() + "124679")
+        getClient(authTokenAdmin).perform(put(BASE_URI + "/" + clarinLicense.getID() + "124679")
                 .content(new ObjectMapper().writeValueAsBytes(clarinLicenseRest))
                 .contentType(org.springframework.http.MediaType.APPLICATION_JSON))
                 .andExpect(status().isNotFound())
@@ -430,13 +443,13 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
         context.restoreAuthSystemState();
 
         String authTokenAdmin = getAuthToken(admin.getEmail(), password);
-        getClient(authTokenAdmin).perform(get("/api/core/clarinlicenses/" + clarinLicense.getID()))
+        getClient(authTokenAdmin).perform(get(BASE_URI + "/" + clarinLicense.getID()))
                 .andExpect(status().isOk());
 
-        getClient(authTokenAdmin).perform(delete("/api/core/clarinlicenses/" + clarinLicense.getID()))
+        getClient(authTokenAdmin).perform(delete(BASE_URI + "/" + clarinLicense.getID()))
                 .andExpect(status().isNoContent());
 
-        getClient(authTokenAdmin).perform(get("/api/core/clarinlicenses/" + clarinLicense.getID()))
+        getClient(authTokenAdmin).perform(get(BASE_URI + "/" + clarinLicense.getID()))
                 .andExpect(status().isNotFound());
     }
 
@@ -447,7 +460,7 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
         ClarinLicense clarinLicense = ClarinLicenseBuilder.createClarinLicense(context).build();
         context.restoreAuthSystemState();
 
-        getClient().perform(delete("/api/core/clarinlicenses/" + clarinLicense.getID()))
+        getClient().perform(delete(BASE_URI + "/" + clarinLicense.getID()))
                 .andExpect(status().isUnauthorized())
         ;
     }
@@ -460,7 +473,7 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
         context.restoreAuthSystemState();
 
         String authTokenUser = getAuthToken(eperson.getEmail(), password);
-        getClient(authTokenUser).perform(delete("/api/core/clarinlicenses/" + clarinLicense.getID()))
+        getClient(authTokenUser).perform(delete(BASE_URI + "/" + clarinLicense.getID()))
                 .andExpect(status().isForbidden())
         ;
     }
@@ -469,7 +482,7 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
     @Test
     public void notFoundDeleteClarinLicense() throws Exception {
         String authTokenAdmin = getAuthToken(admin.getEmail(), password);
-        getClient(authTokenAdmin).perform(delete("/api/core/clarinlicenses/" + 1239990))
+        getClient(authTokenAdmin).perform(delete(BASE_URI + "/" + 1239990))
                 .andExpect(status().isNotFound())
         ;
     }
@@ -489,7 +502,7 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
 
         String tokenAdmin = getAuthToken(admin.getEmail(), password);
         // Check if the Clarin License was attached to the Bitstreams
-        getClient(tokenAdmin).perform(get("/api/core/clarinlicenses/" + firstCLicense.getID()))
+        getClient(tokenAdmin).perform(get(BASE_URI + "/" + firstCLicense.getID()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.bitstreams", is(2)));
     }
@@ -514,5 +527,26 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
         return null;
     }
 
+    private void testRequestWithIncorrectPageable(String uri,
+                                                  String nameValue,
+                                                  int expectedTotal,
+                                                  int pageNumber) throws Exception {
+        String authTokenAdmin = getAuthToken(admin.getEmail(), password);
+        MockHttpServletRequestBuilder mockBuilder = get(BASE_URI + uri)
+                .param("page", String.valueOf(pageNumber));
+        if (nameValue != null) {
+            mockBuilder = mockBuilder.param("name", nameValue);
+        }
+
+        getClient(authTokenAdmin).perform(mockBuilder)
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(contentType))
+                .andExpect(jsonPath("$._embedded").doesNotExist())
+                .andExpect(jsonPath("$._links.self.href", Matchers.containsString(BASE_URI)))
+                .andExpect(jsonPath("$.page.size", Matchers.equalTo(DEFAULT_PAGE_SIZE)))
+                .andExpect(jsonPath("$.page.totalElements", Matchers.equalTo(expectedTotal)))
+                .andExpect(jsonPath("$.page.totalPages", Matchers.equalTo(1)))
+                .andExpect(jsonPath("$.page.number", Matchers.equalTo(pageNumber)));
+    }
 
 }
