@@ -9,12 +9,14 @@ package org.dspace.administer;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertThrows;
 import static org.mockserver.model.HttpRequest.request;
 import static org.mockserver.model.HttpResponse.response;
 
 import java.util.List;
 
 import org.dspace.AbstractIntegrationTestWithDatabase;
+import org.dspace.authorize.AuthorizeException;
 import org.dspace.builder.CollectionBuilder;
 import org.dspace.builder.CommunityBuilder;
 import org.dspace.builder.ItemBuilder;
@@ -28,7 +30,6 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.mockserver.junit.MockServerRule;
-
 
 public class FileDownloaderIT extends AbstractIntegrationTestWithDatabase {
 
@@ -77,7 +78,7 @@ public class FileDownloaderIT extends AbstractIntegrationTestWithDatabase {
 
         int port = mockServerRule.getPort();
         String[] args = new String[]{"file-downloader", "-i", item.getID().toString(),
-                "-u", String.format("http://localhost:%s/test400", port), "-e", "admin@email.com"};
+                "-u", String.format("http://localhost:%s/test400", port), "-e", admin.getEmail()};
         try {
             runDSpaceScript(args);
         } catch (IllegalArgumentException e) {
@@ -96,7 +97,7 @@ public class FileDownloaderIT extends AbstractIntegrationTestWithDatabase {
 
           int port = mockServerRule.getPort();
           String[] args = new String[] {"file-downloader", "-i", item.getID().toString(),
-                  "-u", String.format("http://localhost:%s/test", port), "-e", "admin@email.com"};
+                  "-u", String.format("http://localhost:%s/test", port), "-e", admin.getEmail()};
         runDSpaceScript(args);
 
 
@@ -105,6 +106,15 @@ public class FileDownloaderIT extends AbstractIntegrationTestWithDatabase {
         assertEquals(1, bs.size());
         assertNotNull("Expecting name to be defined", bs.get(0).getName());
 
+    }
+
+    @Test
+    public void testDownloadFileForNotAuthorizedUser() {
+        context.setCurrentUser(eperson);
+        int port = mockServerRule.getPort();
+        String[] args = new String[] {"file-downloader", "-i", item.getID().toString(),
+                "-u", String.format("http://localhost:%s/test", port), "-e", eperson.getEmail()};
+        assertThrows(AuthorizeException.class, () -> runDSpaceScript(args));
     }
 
 }
