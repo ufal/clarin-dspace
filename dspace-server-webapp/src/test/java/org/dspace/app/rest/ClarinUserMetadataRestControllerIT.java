@@ -9,6 +9,7 @@ package org.dspace.app.rest;
 
 import static org.dspace.app.rest.repository.ClarinLicenseRestRepository.OPERATION_PATH_LICENSE_RESOURCE;
 import static org.dspace.app.rest.repository.ClarinUserMetadataRestController.CHECK_EMAIL_RESPONSE_CONTENT;
+import static org.dspace.content.clarin.ClarinLicense.Confirmation;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
@@ -73,7 +74,7 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
     Bitstream bitstream2;
 
     // Attach ClarinLicense to the Bitstream
-    private void prepareEnvironment(String requiredInfo, Integer confirmation) throws Exception {
+    private void prepareEnvironment(String requiredInfo, Confirmation confirmation) throws Exception {
         // 1. Create Workspace Item with uploaded file
         // 2. Create Clarin License
         // 3. Send request to add Clarin License to the Workspace Item
@@ -126,8 +127,8 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
     }
 
     @Test
-    public void notAuthorizedUser_shouldReturnToken() throws Exception {
-        this.prepareEnvironment("NAME", 0);
+    public void notAuthorizedUser_withLicenseConfirmation_ALLOW_ANONYMOUS_USER() throws Exception {
+        this.prepareEnvironment("NAME", Confirmation.ALLOW_ANONYMOUS);
         ObjectMapper mapper = new ObjectMapper();
         ClarinUserMetadataRest clarinUserMetadata1 = new ClarinUserMetadataRest();
         clarinUserMetadata1.setMetadataKey("NAME");
@@ -158,8 +159,23 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
     }
 
     @Test
-    public void notAuthorizedUser_shouldSendEmail() throws Exception {
-        this.prepareEnvironment("SEND_TOKEN", 0);
+    public void notAuthorizedUser_withLicenseConfirmation_NOT_REQUIRED() throws Exception {
+        requestTokenForUnauthorizedUser(Confirmation.NOT_REQUIRED);
+    }
+
+    @Test
+    public void notAuthorizedUser_withLicenseConfirmation_ASK_ONLY_ONCE() throws Exception {
+        requestTokenForUnauthorizedUser(Confirmation.ASK_ONLY_ONCE);
+    }
+
+    @Test
+    public void notAuthorizedUser_withLicenseConfirmation_ASK_ALWAYS() throws Exception {
+        requestTokenForUnauthorizedUser(Confirmation.ASK_ALWAYS);
+    }
+
+    @Test
+    public void notAuthorizedUser_withAllowingAnonymousLicense_shouldSendEmail() throws Exception {
+        this.prepareEnvironment("SEND_TOKEN", Confirmation.ALLOW_ANONYMOUS);
         ObjectMapper mapper = new ObjectMapper();
         ClarinUserMetadataRest clarinUserMetadata1 = new ClarinUserMetadataRest();
         clarinUserMetadata1.setMetadataKey("NAME");
@@ -200,7 +216,7 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
 
     @Test
     public void authorizedUserWithoutMetadata_shouldReturnToken() throws Exception {
-        this.prepareEnvironment("NAME", 0);
+        this.prepareEnvironment("NAME", Confirmation.NOT_REQUIRED);
         context.turnOffAuthorisationSystem();
         ClarinUserRegistration clarinUserRegistration = ClarinUserRegistrationBuilder
                 .createClarinUserRegistration(context).withEPersonID(admin.getID()).build();
@@ -245,7 +261,7 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
 
     @Test
     public void authorizedUserWithoutMetadata_shouldSendEmail() throws Exception {
-        this.prepareEnvironment("SEND_TOKEN", 0);
+        this.prepareEnvironment("SEND_TOKEN", Confirmation.NOT_REQUIRED);
         context.turnOffAuthorisationSystem();
         ClarinUserRegistration clarinUserRegistration = ClarinUserRegistrationBuilder
                 .createClarinUserRegistration(context).withEPersonID(admin.getID()).build();
@@ -299,7 +315,7 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
 
     @Test
     public void authorizedUserWithMetadata_shouldSendToken() throws Exception {
-        this.prepareEnvironment("NAME,ADDRESS", 0);
+        this.prepareEnvironment("NAME,ADDRESS", Confirmation.NOT_REQUIRED);
         context.turnOffAuthorisationSystem();
         ClarinUserRegistration clarinUserRegistration = ClarinUserRegistrationBuilder
                 .createClarinUserRegistration(context).withEPersonID(admin.getID()).build();
@@ -348,7 +364,7 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
 
     @Test
     public void authorizedUserWithMetadata_shouldSendEmail() throws Exception {
-        this.prepareEnvironment("SEND_TOKEN,NAME,ADDRESS", 0);
+        this.prepareEnvironment("SEND_TOKEN,NAME,ADDRESS", Confirmation.NOT_REQUIRED);
         context.turnOffAuthorisationSystem();
         ClarinUserRegistration clarinUserRegistration = ClarinUserRegistrationBuilder
                 .createClarinUserRegistration(context).withEPersonID(admin.getID()).build();
@@ -407,7 +423,7 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
     // Confirmation = 1
     @Test
     public void authorizedUserWithoutMetadata_shouldDownloadToken() throws Exception {
-        this.prepareEnvironment(null, 1);
+        this.prepareEnvironment(null, Confirmation.ASK_ONLY_ONCE);
         context.turnOffAuthorisationSystem();
         ClarinUserRegistration clarinUserRegistration = ClarinUserRegistrationBuilder
                 .createClarinUserRegistration(context).withEPersonID(admin.getID()).build();
@@ -441,7 +457,7 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
     public void shouldNotCreateDuplicateUserMetadataBasedOnHistory() throws Exception {
         // Prepare environment with Clarin License, resource mapping, allowance, user registration and user metadata
         // then try to download the same bitstream again and the user metadata should not be created based on history
-        this.prepareEnvironment("NAME,ADDRESS", 0);
+        this.prepareEnvironment("NAME,ADDRESS", Confirmation.NOT_REQUIRED);
         context.turnOffAuthorisationSystem();
         ClarinUserRegistration clarinUserRegistration = ClarinUserRegistrationBuilder
                 .createClarinUserRegistration(context).withEPersonID(admin.getID()).build();
@@ -617,7 +633,8 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
     /**
      * Create ClarinLicense object with ClarinLicenseLabel object for testing purposes.
      */
-    private ClarinLicense createClarinLicense(String name, String definition, String requiredInfo, int confirmation)
+    private ClarinLicense createClarinLicense(String name, String definition, String requiredInfo,
+                                              Confirmation confirmation)
             throws SQLException, AuthorizeException {
         ClarinLicense clarinLicense = ClarinLicenseBuilder.createClarinLicense(context).build();
         clarinLicense.setConfirmation(confirmation);
@@ -634,4 +651,22 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
         clarinLicenseService.update(context, clarinLicense);
         return clarinLicense;
     }
+
+    private void requestTokenForUnauthorizedUser(Confirmation licenseConfirmation) throws Exception {
+        this.prepareEnvironment("NAME", licenseConfirmation);
+
+        ObjectMapper mapper = new ObjectMapper();
+        ClarinUserMetadataRest clarinUserMetadata = new ClarinUserMetadataRest();
+        clarinUserMetadata.setMetadataKey("NAME");
+        clarinUserMetadata.setMetadataValue("Test");
+
+        List<ClarinUserMetadataRest> clarinUserMetadataRestList = new ArrayList<>();
+        clarinUserMetadataRestList.add(clarinUserMetadata);
+
+        getClient().perform(post("/api/core/clarinusermetadata/manage?bitstreamUUID=" + bitstream.getID())
+                        .content(mapper.writeValueAsBytes(clarinUserMetadataRestList.toArray()))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized());
+    }
+
 }

@@ -70,7 +70,6 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
         if (StringUtils.isBlank(handle)) {
             throw new DSpaceBadRequestException("handle cannot be null!");
         }
-        List<MetadataBitstreamWrapper> metadataValueWrappers = new ArrayList<>();
         Context context = obtainContext();
         if (Objects.isNull(context)) {
             throw new RuntimeException("Cannot obtain the context from the request.");
@@ -78,7 +77,7 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
         HttpServletRequest request = getRequestService().getCurrentRequest().getHttpServletRequest();
         String contextPath = request.getContextPath();
         List<MetadataBitstreamWrapperRest> rs = new ArrayList<>();
-        DSpaceObject dso = null;
+        DSpaceObject dso;
 
         try {
             dso = handleService.resolveToObject(context, handle);
@@ -91,15 +90,15 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
         }
 
         Item item = (Item) dso;
-        List<String> fileGrpTypes = Arrays.asList(fileGrpType.split(","));
+        List<String> fileGrpTypes = (fileGrpType == null ? List.of() : Arrays.asList(fileGrpType.split(",")));
         List<Bundle> bundles = findEnabledBundles(fileGrpTypes, item);
         for (Bundle bundle : bundles) {
-            List<Bitstream> bitstreams = bundle.getBitstreams();
+            List<Bitstream> bitstreams = new ArrayList<>(bundle.getBitstreams());
             String use = bundle.getName();
             if (StringUtils.equals("THUMBNAIL", use)) {
                 Thumbnail thumbnail = itemService.getThumbnail(context, item, false);
                 if (Objects.nonNull(thumbnail)) {
-                    bitstreams = new ArrayList<>();
+                    bitstreams.clear();
                     bitstreams.add(thumbnail.getThumb());
                 }
             }
@@ -116,33 +115,31 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
                             boolean allowComposePreviewContent = configurationService.getBooleanProperty
                                     ("create.file-preview.on-item-page-load", false);
                             if (allowComposePreviewContent) {
-                                fileInfos = previewContentService.getFilePreviewContent(context, bitstream);
+                                fileInfos.addAll(previewContentService.getFilePreviewContent(context, bitstream));
                                 // Do not store HTML content in the database because it could be longer than the limit
                                 // of the database column
-                                if (!StringUtils.equals("text/html", bitstream.getFormat(context).getMIMEType())) {
+                                if (!fileInfos.isEmpty() &&
+                                    !StringUtils.equals("text/html", bitstream.getFormat(context).getMIMEType())) {
                                     for (FileInfo fi : fileInfos) {
                                         previewContentService.createPreviewContent(context, bitstream, fi);
                                     }
                                 }
                             }
                         } else {
-                            fileInfos = new ArrayList<>();
                             for (PreviewContent pc : prContents) {
                                 fileInfos.add(previewContentService.createFileInfo(pc));
                             }
                         }
                     } catch (Exception e) {
                         log.error("Cannot create preview content for bitstream: {} because: {}",
-                                bitstream.getID(), e.getMessage(), e);
+                                bitstream.getID(), e.getMessage());
                     }
                 }
                 MetadataBitstreamWrapper bts = new MetadataBitstreamWrapper(bitstream, fileInfos,
                         bitstream.getFormat(context).getMIMEType(),
                         bitstream.getFormatDescription(context), url, canPreview);
-                metadataValueWrappers.add(bts);
                 rs.add(metadataBitstreamWrapperConverter.convert(bts, utils.obtainProjection()));
             }
-            context.commit();
         }
 
         return new PageImpl<>(rs, pageable, rs.size());
