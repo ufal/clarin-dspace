@@ -2808,8 +2808,8 @@ public class ItemRestRepositoryIT extends AbstractControllerIntegrationTest {
 
             Collection col1 = CollectionBuilder.createCollection(context, parentCommunity).withName(colName).build();
 
-            // here the submitter(EPerson) is not directly member of the collection SUBMIT group
-            // but member of the "collection-submitters" subgroup that is a child of SUBMIT group
+            // here the submitter(EPerson) is not a direct member of the collection SUBMIT group
+            // but member of the "collection-submitters" group that is a subgroup of the SUBMIT group
             Group submitGroup = GroupBuilder.createCollectionSubmitterGroup(context, col1).build();
 
             GroupBuilder.createGroup(context)
