@@ -129,9 +129,18 @@ public class ScriptRestRepositoryIT extends AbstractControllerIntegrationTest {
     public void findAllScriptsGenericLoggedInUserTest() throws Exception {
         String token = getAuthToken(eperson.getEmail(), password);
 
+        ScriptConfiguration<?> fileDownloaderScriptConfiguration =
+                scriptConfigurations.stream()
+                        .filter(scriptConfiguration
+                                -> scriptConfiguration.getName().equals("file-downloader"))
+                        .findAny().orElseThrow();
+
         getClient(token).perform(get("/api/system/scripts"))
                         .andExpect(status().isOk())
-                        .andExpect(jsonPath("$.page.totalElements", is(0)));
+                        .andExpect(jsonPath("$.page.totalElements", is(1)))
+                        .andExpect(jsonPath("$._embedded.scripts", Matchers.hasItem(
+                                ScriptMatcher.matchScript(fileDownloaderScriptConfiguration.getName(),
+                                        fileDownloaderScriptConfiguration.getDescription()))));
     }
 
     @Test
