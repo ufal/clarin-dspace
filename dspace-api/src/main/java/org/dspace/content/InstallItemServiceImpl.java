@@ -15,7 +15,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.UUID;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -391,8 +390,7 @@ public class InstallItemServiceImpl implements InstallItemService {
      * @return true if the EPerson is a member (direct or indirect) of a submit group, false otherwise
      */
     private boolean isInSubmitGroup(Context context, EPerson ePerson, Collection collection) throws SQLException {
-        return groupService.isMember(context, ePerson,
-                "COLLECTION_" + collection.getID() + "_SUBMIT");
+        return groupService.isMember(context, ePerson, "COLLECTION_" + collection.getID() + "_SUBMIT");
     }
 
     /**
