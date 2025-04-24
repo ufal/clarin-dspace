@@ -178,7 +178,10 @@ public class AuthorizeServiceImpl implements AuthorizeService {
         // CLARIN
         // This function throws exception if the authorization fails - if it is not reported, the license
         // restrictions are OK
-        if (o.getType() == Constants.BITSTREAM && !isAdmin(c)) {
+        //
+        // the license confirmation is excluded when bitstream is edited,
+        // or when user has admin permission on bitstream object
+        if (o.getType() == Constants.BITSTREAM && action != Constants.WRITE && !isAdmin(c, o)) {
             authorizationBitstreamUtils.authorizeBitstream(c, (Bitstream) o);
         }
         // CLARIN

@@ -15,6 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,16 +24,24 @@ import org.dspace.app.rest.matcher.MetadataMatcher;
 import org.dspace.app.rest.model.BitstreamRest;
 import org.dspace.app.rest.model.MetadataRest;
 import org.dspace.app.rest.model.MetadataValueRest;
+import org.dspace.app.rest.repository.ClarinUserMetadataRestController;
 import org.dspace.app.rest.test.AbstractEntityIntegrationTest;
 import org.dspace.authorize.service.AuthorizeService;
 import org.dspace.builder.BundleBuilder;
+import org.dspace.builder.ClarinLicenseBuilder;
+import org.dspace.builder.ClarinLicenseLabelBuilder;
 import org.dspace.builder.CollectionBuilder;
 import org.dspace.builder.CommunityBuilder;
 import org.dspace.builder.ItemBuilder;
 import org.dspace.content.Bundle;
 import org.dspace.content.Collection;
 import org.dspace.content.Community;
+import org.dspace.content.DSpaceObject;
 import org.dspace.content.Item;
+import org.dspace.content.clarin.ClarinLicense;
+import org.dspace.content.clarin.ClarinLicenseLabel;
+import org.dspace.content.service.clarin.ClarinLicenseLabelService;
+import org.dspace.content.service.clarin.ClarinLicenseService;
 import org.dspace.core.Constants;
 import org.hamcrest.Matchers;
 import org.junit.Ignore;
@@ -41,12 +50,22 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 
 public class BundleUploadBitstreamControllerIT extends AbstractEntityIntegrationTest {
 
     @Autowired
     private AuthorizeService authorizeService;
+
+    @Autowired
+    private ClarinLicenseLabelService clarinLicenseLabelService;
+
+    @Autowired
+    private ClarinLicenseService clarinLicenseService;
+
+    @Autowired
+    ClarinUserMetadataRestController clarinUserMetadataRestController;
 
     @Test
     public void uploadBitstreamAllPossibleFieldsProperties() throws Exception {
@@ -385,6 +404,112 @@ public class BundleUploadBitstreamControllerIT extends AbstractEntityIntegration
                         .andExpect(status().isOk())
                         .andExpect(jsonPath("_embedded.bitstreams", Matchers.hasItem(
                                 BitstreamMatcher.matchBitstreamEntry(UUID.fromString(bitstreamId), file.getSize()))));
+    }
+
+    @Test
+    public void uploadBitstreamToItemWithClarinLicense() throws Exception {
+        context.turnOffAuthorisationSystem();
+
+        // create ClarinLicenseLabel
+        ClarinLicenseLabel firstCLicenseLabel = ClarinLicenseLabelBuilder.createClarinLicenseLabel(context).build();
+        firstCLicenseLabel.setLabel("PUB");
+        firstCLicenseLabel.setTitle("Publicly Available");
+        firstCLicenseLabel.setExtended(false);
+        clarinLicenseLabelService.update(context, firstCLicenseLabel);
+
+        // create ClarinLicense
+        ClarinLicense firstCLicense = ClarinLicenseBuilder.createClarinLicense(context).build();
+        firstCLicense.setName("Apache License 2.0");
+        firstCLicense.setConfirmation(ClarinLicense.Confirmation.ASK_ALWAYS);
+        firstCLicense.setDefinition("http://opensource.org/licenses/Apache-2.0");
+
+        // add ClarinLicenseLabel to the ClarinLicense
+        firstCLicense.setLicenseLabels(Set.of(firstCLicenseLabel));
+        clarinLicenseService.update(context, firstCLicense);
+
+        context.setCurrentUser(admin);
+
+        parentCommunity = CommunityBuilder.createCommunity(context)
+                .withName("Parent Community")
+                .build();
+        Community child1 = CommunityBuilder.createSubCommunity(context, parentCommunity)
+                .withName("Sub Community")
+                .build();
+        Collection col1 = CollectionBuilder.createCollection(context, child1).withName("Collection 1").build();
+
+        Item item = ItemBuilder.createItem(context, col1)
+                .withTitle("Author1")
+                .withIssueDate("2017-10-17")
+                .withAuthor("Smith, Donald")
+                .withLicense( "Apache License 2.0", "http://opensource.org/licenses/Apache-2.0")
+                .build();
+
+        Bundle bundle = BundleBuilder.createBundle(context, item)
+                .withName("ORIGINAL")
+                .build();
+
+        context.setCurrentUser(eperson);
+        String token = getAuthToken(eperson.getEmail(), password);
+
+        String input = "Hello, World!";
+
+        MockMultipartFile file = new MockMultipartFile("file", "hello.txt", MediaType.TEXT_PLAIN_VALUE,
+                input.getBytes());
+
+        ObjectMapper mapper = new ObjectMapper();
+        BitstreamRest bitstreamRest = new BitstreamRest();
+        String properties = mapper.writeValueAsString(bitstreamRest);
+
+        context.restoreAuthSystemState();
+
+        // user has READ/WRITE/ADD permissions on item and bundle
+        authorizeService.addPolicy(context, bundle, Constants.ADD, eperson);
+        authorizeService.addPolicy(context, bundle, Constants.WRITE, eperson);
+        authorizeService.addPolicy(context, item, Constants.ADD, eperson);
+        authorizeService.addPolicy(context, item, Constants.WRITE, eperson);
+
+        uploadFileToBundle(token, bundle, file, properties)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.bundleName", is("ORIGINAL")))
+                .andExpect(jsonPath("$.uuid", notNullValue())).andReturn();
+
+        // user has READ/WRITE/ADD permissions only on item
+        authorizeService.removeAllPolicies(context, bundle);
+
+        uploadFileToBundle(token, bundle, file, properties)
+                .andExpect(status().isForbidden());
+
+        // user has missing ADD permission on bundle
+        authorizeService.addPolicy(context, bundle, Constants.READ, eperson);
+        authorizeService.addPolicy(context, bundle, Constants.WRITE, eperson);
+
+        uploadFileToBundle(token, bundle, file, properties)
+                .andExpect(status().isForbidden());
+
+        // user has ADMIN permission on item
+        authorizeService.removeAllPolicies(context, bundle);
+        authorizeService.removeAllPolicies(context, item);
+        authorizeService.addPolicy(context, item, Constants.ADMIN, eperson);
+
+        uploadFileToBundle(token, bundle, file, properties)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.bundleName", is("ORIGINAL")))
+                .andExpect(jsonPath("$.uuid", notNullValue())).andReturn();
+
+        getClient(token).perform(get("/api/core/bundles/" + bundle.getID() + "/bitstreams")
+                        .param("projection", "full"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements", is(2)));
+    }
+
+    private ResultActions uploadFileToBundle(String token,
+                                             DSpaceObject bundle,
+                                             MockMultipartFile file,
+                                             String properties) throws Exception {
+        return getClient(token).perform(
+                MockMvcRequestBuilders.multipart("/api/core/bundles/" + bundle.getID() + "/bitstreams")
+                        .file(file)
+                        .param("properties", properties));
     }
 
     // TODO This test doesn't work either as it seems that only the first file is ever transfered into the request

@@ -373,6 +373,11 @@ public class ItemBuilder extends AbstractDSpaceObjectBuilder<Item> {
         return this;
     }
 
+    public ItemBuilder withLicense(String licenseName, String licenseUri) throws SQLException, AuthorizeException {
+        this.addMetadataValue(item, "dc", "rights", null, licenseName);
+        return this.addMetadataValue(item, "dc", "rights", "uri", licenseUri);
+    }
+
     @Override
     public Item build() {
         try {
