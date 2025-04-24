@@ -2806,8 +2806,17 @@ public class ItemRestRepositoryIT extends AbstractControllerIntegrationTest {
                     .withPassword("dspace")
                     .build();
 
-            Collection col1 = CollectionBuilder.createCollection(context, parentCommunity).withName(colName)
-                    .withSubmitterGroup(submitter).build();
+            Collection col1 = CollectionBuilder.createCollection(context, parentCommunity).withName(colName).build();
+
+            // here the submitter(EPerson) is not a direct member of the collection SUBMIT group
+            // but member of the "collection-submitters" group that is a subgroup of the SUBMIT group
+            Group submitGroup = GroupBuilder.createCollectionSubmitterGroup(context, col1).build();
+
+            GroupBuilder.createGroup(context)
+                    .withParent(submitGroup)
+                    .withName("collection-submitters")
+                    .addMember(submitter)
+                    .build();
 
             context.setCurrentUser(submitter);
 
