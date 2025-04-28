@@ -368,12 +368,7 @@ public class ItemBuilder extends AbstractDSpaceObjectBuilder<Item> {
         return addMetadataValue(item, "person", "email", null, email);
     }
 
-    public ItemBuilder withCCLicense(String uri) throws SQLException, AuthorizeException {
-        creativeCommonsService.updateLicense(context, uri, item);
-        return this;
-    }
-
-    public ItemBuilder withLicense(String licenseName, String licenseUri) throws SQLException, AuthorizeException {
+    public ItemBuilder withClarinLicense(String licenseName, String licenseUri) {
         this.addMetadataValue(item, "dc", "rights", null, licenseName);
         return this.addMetadataValue(item, "dc", "rights", "uri", licenseUri);
     }

@@ -441,7 +441,7 @@ public class BundleUploadBitstreamControllerIT extends AbstractEntityIntegration
                 .withTitle("Author1")
                 .withIssueDate("2017-10-17")
                 .withAuthor("Smith, Donald")
-                .withLicense( "Apache License 2.0", "http://opensource.org/licenses/Apache-2.0")
+                .withClarinLicense("Apache License 2.0", "http://opensource.org/licenses/Apache-2.0")
                 .build();
 
         Bundle bundle = BundleBuilder.createBundle(context, item)
