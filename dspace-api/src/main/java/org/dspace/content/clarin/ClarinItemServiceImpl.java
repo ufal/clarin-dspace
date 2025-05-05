@@ -155,6 +155,11 @@ public class ClarinItemServiceImpl implements ClarinItemService {
             return;
         }
 
+        if (Objects.isNull(item)) {
+            log.error("Cannot update the item files metadata because the item is null.");
+            return;
+        }
+
         int totalNumberOfFiles = 0;
         long totalSizeofFiles = 0;
 

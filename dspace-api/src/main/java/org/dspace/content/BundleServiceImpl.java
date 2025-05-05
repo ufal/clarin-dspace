@@ -242,7 +242,6 @@ public class BundleServiceImpl extends DSpaceObjectServiceImpl<Bundle> implement
         if (owningItem != null) {
             itemService.updateLastModified(context, owningItem);
             itemService.update(context, owningItem);
-            clarinItemService.updateItemFilesMetadata(context, owningItem, bundle);
         }
 
         // In the event that the bitstream to remove is actually
@@ -265,6 +264,7 @@ public class BundleServiceImpl extends DSpaceObjectServiceImpl<Bundle> implement
             bundle.removeBitstream(bitstream);
             bitstream.getBundles().remove(bundle);
         }
+        clarinItemService.updateItemFilesMetadata(context, owningItem, bundle);
     }
 
     @Override

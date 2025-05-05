@@ -7,6 +7,7 @@
  */
 package org.dspace.app.rest;
 
+import static com.jayway.jsonpath.matchers.JsonPathMatchers.hasJsonPath;
 import static javax.servlet.http.HttpServletResponse.SC_NOT_FOUND;
 import static javax.servlet.http.HttpServletResponse.SC_OK;
 import static org.dspace.app.rest.matcher.MetadataMatcher.matchMetadata;
@@ -2498,6 +2499,15 @@ public class BitstreamRestRepositoryIT extends AbstractControllerIntegrationTest
         // Verify that only the three bitstreams were deleted and the fourth one still exists
         Assert.assertTrue(bitstreamNotFound(token, bitstream1, bitstream2, bitstream3));
         Assert.assertTrue(bitstreamExists(token, bitstream4));
+
+        // Verify that the item without bitstreams has updated `local.has.files` metadata
+        getClient(token).perform(get("/api/core/items/" + publicItem1.getID()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", Matchers.allOf(
+                        hasJsonPath("$.id", is(publicItem1.getID().toString())),
+                        hasJsonPath("$.uuid", is(publicItem1.getID().toString())),
+                        hasJsonPath("$.type", is("item")),
+                        hasJsonPath("$.metadata", MetadataMatcher.matchMetadata("local.has.files", "no", 0)))));
     }
 
     @Test

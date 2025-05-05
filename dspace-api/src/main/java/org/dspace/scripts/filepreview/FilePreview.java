@@ -14,6 +14,9 @@ import java.util.UUID;
 
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.lang3.StringUtils;
+import org.dspace.authenticate.AuthenticationMethod;
+import org.dspace.authenticate.factory.AuthenticateServiceFactory;
+import org.dspace.authenticate.service.AuthenticationService;
 import org.dspace.content.Bitstream;
 import org.dspace.content.Bundle;
 import org.dspace.content.Item;
@@ -22,6 +25,9 @@ import org.dspace.content.factory.ContentServiceFactory;
 import org.dspace.content.service.ItemService;
 import org.dspace.content.service.PreviewContentService;
 import org.dspace.core.Context;
+import org.dspace.eperson.EPerson;
+import org.dspace.eperson.factory.EPersonServiceFactory;
+import org.dspace.eperson.service.EPersonService;
 import org.dspace.scripts.DSpaceRunnable;
 import org.dspace.util.FileInfo;
 import org.dspace.utils.DSpace;
@@ -37,6 +43,10 @@ public class FilePreview extends DSpaceRunnable<FilePreviewConfiguration> {
     private ItemService itemService = ContentServiceFactory.getInstance().getItemService();
     private PreviewContentService previewContentService =
             ContentServiceFactory.getInstance().getPreviewContentService();
+    private EPersonService ePersonService = EPersonServiceFactory.getInstance()
+            .getEPersonService();
+    private AuthenticationService authenticateService = AuthenticateServiceFactory.getInstance()
+            .getAuthenticationService();
 
     /**
      * `-i`: Info, show help information.
@@ -47,6 +57,9 @@ public class FilePreview extends DSpaceRunnable<FilePreviewConfiguration> {
      * `-u`: UUID of the Item for which to create a preview of its bitstreams.
      */
     private String specificItemUUID = null;
+
+    private String email = null;
+    private String password = null;
 
     @Override
     public FilePreviewConfiguration getScriptConfiguration() {
@@ -69,6 +82,14 @@ public class FilePreview extends DSpaceRunnable<FilePreviewConfiguration> {
             handler.logInfo("\nGenerate the file previews for the specified item with the given UUID: " +
                     specificItemUUID);
         }
+
+        if (commandLine.hasOption('e')) {
+            email = commandLine.getOptionValue('e');
+        }
+
+        if (commandLine.hasOption('p')) {
+            password = commandLine.getOptionValue('p');
+        }
     }
 
     @Override
@@ -79,33 +100,61 @@ public class FilePreview extends DSpaceRunnable<FilePreviewConfiguration> {
         }
 
         Context context = new Context();
-        context.turnOffAuthorisationSystem();
-        if (StringUtils.isNotBlank(specificItemUUID)) {
-            // Generate the preview only for a specific item
-            generateItemFilePreviews(context, UUID.fromString(specificItemUUID));
-        } else {
-            // Generate the preview for all items
-            Iterator<Item> items = itemService.findAll(context);
+        try {
+            if (StringUtils.isBlank(email)) {
+                handler.logError("Email is required for authentication.");
+                return;
+            }
+            if (StringUtils.isBlank(password)) {
+                handler.logError("Password is required for authentication.");
+                return;
+            }
 
-            int count = 0;
-            while (items.hasNext()) {
-                count++;
-                Item item = items.next();
-                try {
-                    generateItemFilePreviews(context, item.getID());
-                } catch (Exception e) {
-                    handler.logError("Error while generating preview for item with UUID: " + item.getID());
-                    handler.logError(e.getMessage());
-                }
+            EPerson eperson = ePersonService.findByEmail(context, email);
+            if (eperson == null) {
+                handler.logError("No EPerson found for this email: " + email);
+                return;
+            }
 
-                if (count % 100 == 0) {
-                    handler.logInfo("Processed " + count + " items.");
+            int authenticated = authenticateService.authenticate(context, email, password, null, null);
+            if (AuthenticationMethod.SUCCESS != authenticated) {
+                handler.logError("Authentication failed for email: " + email);
+                return;
+            } else {
+                handler.logInfo("Authentication successful for email: " + email);
+            }
+
+            context.setCurrentUser(eperson);
+            if (StringUtils.isNotBlank(specificItemUUID)) {
+                // Generate the preview only for a specific item
+                generateItemFilePreviews(context, UUID.fromString(specificItemUUID));
+            } else {
+                // Generate the preview for all items
+                Iterator<Item> items = itemService.findAll(context);
+
+                int count = 0;
+                while (items.hasNext()) {
+                    count++;
+                    Item item = items.next();
+                    try {
+                        generateItemFilePreviews(context, item.getID());
+                    } catch (Exception e) {
+                        handler.logError("Error while generating preview for item with UUID: " + item.getID());
+                        handler.logError(e.getMessage());
+                    }
+
+                    if (count % 100 == 0) {
+                        handler.logInfo("Processed " + count + " items.");
+                    }
                 }
             }
+            context.commit();
+            context.complete();
+        } finally {
+            if (context.isValid()) {
+                context.abort();
+            }
         }
-        context.restoreAuthSystemState();
-        context.commit();
-        context.complete();
     }
 
     private void generateItemFilePreviews(Context context, UUID itemUUID) throws Exception {
@@ -149,6 +198,9 @@ public class FilePreview extends DSpaceRunnable<FilePreviewConfiguration> {
                 "have a preview.\n" +
                 "You can choose from these available options:\n" +
                 "  -i, --info            Show help information\n" +
-                "  -u, --uuid            The UUID of the ITEM for which to create a preview of its bitstreams\n");
+                "  -u, --uuid            The UUID of the ITEM for which to create a preview of its bitstreams\n" +
+                "  -e, --email           Email for authentication\n" +
+                "  -p, --password        Password for authentication\n");
+
     }
 }

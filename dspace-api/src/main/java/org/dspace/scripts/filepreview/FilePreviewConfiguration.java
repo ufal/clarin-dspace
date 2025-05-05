@@ -38,6 +38,17 @@ public class FilePreviewConfiguration<T extends FilePreview> extends ScriptConfi
                     "The UUID of the ITEM for which to create a preview of its bitstreams.");
             options.getOption("u").setType(String.class);
             options.getOption("u").setRequired(false);
+
+            options.addOption("e", "email", true,
+                    "Email for authentication.");
+            options.getOption("e").setType(String.class);
+            options.getOption("e").setRequired(true);
+
+            options.addOption("p", "password", true,
+                    "Password for authentication.");
+            options.getOption("p").setType(String.class);
+            options.getOption("p").setRequired(true);
+
             super.options = options;
         }
         return options;
