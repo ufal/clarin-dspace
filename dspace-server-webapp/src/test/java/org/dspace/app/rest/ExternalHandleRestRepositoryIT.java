@@ -319,7 +319,8 @@ public class ExternalHandleRestRepositoryIT extends AbstractControllerIntegratio
     @Test
     public void hostBlacklist() throws Exception {
         configurationService.setProperty(urlBlacklistConfig, null);
-        configurationService.setProperty(hostBlacklistConfig, List.of(".*\\.com;.*\\.cz",".*\\.app"));
+        configurationService.setProperty(hostBlacklistConfig, ".*\\.com;.*\\.cz;.*\\.app");
+        Assert.assertEquals(1, configurationService.getArrayProperty(hostBlacklistConfig).length);
         for (String tld : new String[] {".com", ".cz", ".app"}) {
             getClient().perform(post("/api/services/handles")
                             .content(mapper.writeValueAsBytes(Map.of(
@@ -341,6 +342,30 @@ public class ExternalHandleRestRepositoryIT extends AbstractControllerIntegratio
                         )))
                         .contentType(contentType))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    public void urlBlacklistRegexpWithRange() throws Exception {
+        configurationService.setProperty(hostBlacklistConfig, null);
+        configurationService.setProperty(urlBlacklistConfig, "http://.*;.*\\..{3\\,4}$,.*/wp-login$");
+        Assert.assertEquals(2, configurationService.getArrayProperty(urlBlacklistConfig).length);
+        List<String> shouldBeBlocked = List.of("http://junk", "https://example.com", "https://localhost:4000/wp-login");
+        for (String url : shouldBeBlocked) {
+            getClient().perform(post("/api/services/handles")
+                            .content(mapper.writeValueAsBytes(Map.of(
+                                    "url", url,
+                                    "title", "title",
+                                    "reportemail", "reporteMail"
+                            )))
+                            .contentType(contentType))
+                    .andExpect(status().isBadRequest());
+        }
+        //should not be blocked
+        createHandle(null, Map.of(
+                "url", "https://example.cz",
+                "title", "title",
+                "reportemail", "email"
+        ));
     }
 
     private MvcResult updateHandle(String authToken, Map<String, String> updatedHandleJson) throws Exception {

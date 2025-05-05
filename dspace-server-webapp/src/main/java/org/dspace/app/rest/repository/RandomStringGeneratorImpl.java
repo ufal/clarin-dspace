@@ -7,7 +7,7 @@
  */
 package org.dspace.app.rest.repository;
 
-import org.apache.commons.lang.RandomStringUtils;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.springframework.stereotype.Component;
 
 /**

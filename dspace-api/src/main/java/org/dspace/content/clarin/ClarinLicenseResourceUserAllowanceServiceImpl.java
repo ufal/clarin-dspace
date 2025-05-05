@@ -164,7 +164,7 @@ public class ClarinLicenseResourceUserAllowanceServiceImpl implements ClarinLice
         }
 
         UUID userRegistrationEpersonUUID = clrua.getUserRegistration().getPersonID();
-        if (currentUser.getID().equals(userRegistrationEpersonUUID)) {
+        if (Objects.nonNull(currentUser) && currentUser.getID().equals(userRegistrationEpersonUUID)) {
             return;
         }
 
