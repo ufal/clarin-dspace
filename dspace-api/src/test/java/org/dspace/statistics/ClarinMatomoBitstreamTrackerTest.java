@@ -205,5 +205,6 @@ public class ClarinMatomoBitstreamTrackerTest extends AbstractDSpaceTest {
         assertNotNull(sentRequest);
         assertEquals(pageName, sentRequest.getActionName());
         assertEquals("Action URL should match the request URL", expectedUrl, sentRequest.getActionUrl());
+        assertEquals("Item handle should be set as a dimension", HANDLE, sentRequest.getDimensions().get(1L));
     }
 }
