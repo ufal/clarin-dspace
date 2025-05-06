@@ -358,8 +358,8 @@ public class ClarinDiscoveryRestControllerIT extends AbstractControllerIntegrati
                 // up in different items
                 //These authors are order according to count. Only two show up because of the prefix.
                 .andExpect(jsonPath("$._embedded.values", containsInAnyOrder(
-                        FacetValueMatcher.entryAuthor("Smith, Maria".toLowerCase()),
-                        FacetValueMatcher.entryAuthor("Smith, Donald".toLowerCase())
+                        FacetValueMatcher.entryAuthor("Smith, Maria"),
+                        FacetValueMatcher.entryAuthor("Smith, Donald")
                 )))
         ;
     }
