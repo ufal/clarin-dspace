@@ -24,7 +24,6 @@ import org.dspace.app.rest.matcher.MetadataMatcher;
 import org.dspace.app.rest.model.BitstreamRest;
 import org.dspace.app.rest.model.MetadataRest;
 import org.dspace.app.rest.model.MetadataValueRest;
-import org.dspace.app.rest.repository.ClarinUserMetadataRestController;
 import org.dspace.app.rest.test.AbstractEntityIntegrationTest;
 import org.dspace.authorize.service.AuthorizeService;
 import org.dspace.builder.BundleBuilder;
@@ -63,9 +62,6 @@ public class BundleUploadBitstreamControllerIT extends AbstractEntityIntegration
 
     @Autowired
     private ClarinLicenseService clarinLicenseService;
-
-    @Autowired
-    ClarinUserMetadataRestController clarinUserMetadataRestController;
 
     @Test
     public void uploadBitstreamAllPossibleFieldsProperties() throws Exception {
