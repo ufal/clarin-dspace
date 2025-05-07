@@ -52,6 +52,7 @@ public class ClarinMatomoBitstreamTrackerTest extends AbstractDSpaceTest {
     private static final String HANDLE = "123456789/1";
     private static final String BASE_URL = "http://example.com";
     private static final String LOCALHOST_URL = "http://localhost:4000";
+    private static final UUID ITEM_UUID = UUID.randomUUID();
 
     @Mock
     private ConfigurationService configurationService;
@@ -187,6 +188,7 @@ public class ClarinMatomoBitstreamTrackerTest extends AbstractDSpaceTest {
         Item item = mock(Item.class);
         when(item.getHandle()).thenReturn(HANDLE);
         when(clarinItemService.findByBitstreamUUID(context, bitstreamId)).thenReturn(Collections.singletonList(item));
+        when(item.getID()).thenReturn(ITEM_UUID);
 
         MetadataValue metadataValue = mock(MetadataValue.class);
         when(metadataValue.getValue()).thenReturn("http://hdl.handle.net/" + HANDLE);
@@ -202,6 +204,7 @@ public class ClarinMatomoBitstreamTrackerTest extends AbstractDSpaceTest {
         MatomoRequest sentRequest = captor.getValue();
         assertNotNull(sentRequest);
         assertEquals(pageName, sentRequest.getActionName());
-        assertEquals("Action URL should match the request URL", expectedUrl, sentRequest.getDownloadUrl());
+        assertEquals("Action URL should match the request URL", expectedUrl, sentRequest.getActionUrl());
+        assertEquals("Item handle should be set as a dimension", HANDLE, sentRequest.getDimensions().get(1L));
     }
 }
