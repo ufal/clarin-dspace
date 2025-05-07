@@ -13,6 +13,7 @@ import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.abdera.i18n.iri.IRI;
+import org.apache.commons.lang3.StringUtils;
 import org.dspace.content.Bitstream;
 import org.dspace.content.Bundle;
 import org.dspace.content.Collection;
@@ -109,7 +110,7 @@ public class SwordUrlManager {
                     "Unable to construct service document urls, due to missing/invalid " +
                         "config in sword2.url and/or dspace.server.url");
             }
-            sUrl = buildSWORDUrl("swordv2");
+            sUrl = buildSWORDUrl("");
         }
         return sUrl;
     }
@@ -496,6 +497,6 @@ public class SwordUrlManager {
      * @return a sword URL
      */
     private String buildSWORDUrl(String path) {
-        return dspaceUrl + "/" + swordPath + "/" + path;
+        return dspaceUrl + "/" + swordPath + (StringUtils.isNotBlank(path) ? "/" + path : "");
     }
 }
