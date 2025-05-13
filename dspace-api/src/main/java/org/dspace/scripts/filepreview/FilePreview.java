@@ -7,10 +7,12 @@
  */
 package org.dspace.scripts.filepreview;
 
+import java.sql.SQLException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import javax.naming.AuthenticationException;
 
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.lang3.StringUtils;
@@ -58,8 +60,8 @@ public class FilePreview extends DSpaceRunnable<FilePreviewConfiguration> {
      */
     private String specificItemUUID = null;
 
-    private String email = null;
-    private String password = null;
+    private String epersonMail = null;
+    private String epersonPassword = null;
 
     @Override
     public FilePreviewConfiguration getScriptConfiguration() {
@@ -83,12 +85,11 @@ public class FilePreview extends DSpaceRunnable<FilePreviewConfiguration> {
                     specificItemUUID);
         }
 
-        if (commandLine.hasOption('e')) {
-            email = commandLine.getOptionValue('e');
-        }
+        epersonMail = commandLine.getOptionValue('e');
+        epersonPassword = commandLine.getOptionValue('p');
 
-        if (commandLine.hasOption('p')) {
-            password = commandLine.getOptionValue('p');
+        if (getEpersonIdentifier() == null && (epersonMail == null || epersonPassword == null)) {
+            throw new ParseException("Provide both -e/--email and -p/--password when no eperson is supplied.");
         }
     }
 
@@ -101,30 +102,8 @@ public class FilePreview extends DSpaceRunnable<FilePreviewConfiguration> {
 
         Context context = new Context();
         try {
-            if (StringUtils.isBlank(email)) {
-                handler.logError("Email is required for authentication.");
-                return;
-            }
-            if (StringUtils.isBlank(password)) {
-                handler.logError("Password is required for authentication.");
-                return;
-            }
-
-            EPerson eperson = ePersonService.findByEmail(context, email);
-            if (eperson == null) {
-                handler.logError("No EPerson found for this email: " + email);
-                return;
-            }
-
-            int authenticated = authenticateService.authenticate(context, email, password, null, null);
-            if (AuthenticationMethod.SUCCESS != authenticated) {
-                handler.logError("Authentication failed for email: " + email);
-                return;
-            } else {
-                handler.logInfo("Authentication successful for email: " + email);
-            }
-
-            context.setCurrentUser(eperson);
+            context.setCurrentUser(getAuthenticatedEperson((context)));
+            handler.logInfo("Authentication by user: " + context.getCurrentUser().getEmail());
             if (StringUtils.isNotBlank(specificItemUUID)) {
                 // Generate the preview only for a specific item
                 generateItemFilePreviews(context, UUID.fromString(specificItemUUID));
@@ -202,5 +181,38 @@ public class FilePreview extends DSpaceRunnable<FilePreviewConfiguration> {
                 "  -e, --email           Email for authentication\n" +
                 "  -p, --password        Password for authentication\n");
 
+    }
+
+    /**
+     * Retrieves an EPerson object either by its identifier or by performing an email-based lookup.
+     * It then authenticates the EPerson using the provided email and password.
+     * If the authentication is successful, it returns the EPerson object; otherwise,
+     * it throws an AuthenticationException.
+     *
+     * @param context The Context object used for interacting with the DSpace database and service layer.
+     * @return The authenticated EPerson object corresponding to the provided email,
+     *         if authentication is successful.
+     * @throws SQLException If a database error occurs while retrieving or interacting with the EPerson data.
+     * @throws AuthenticationException If no EPerson is found for the provided email
+     *         or if the authentication fails.
+     */
+    private EPerson getAuthenticatedEperson(Context context) throws SQLException, AuthenticationException {
+        if (getEpersonIdentifier() != null) {
+            return ePersonService.find(context, getEpersonIdentifier());
+        }
+        String msg;
+        EPerson ePerson = ePersonService.findByEmail(context, epersonMail);
+        if (ePerson == null) {
+            msg = "No EPerson found for this email: " + epersonMail;
+            handler.logError(msg);
+            throw new AuthenticationException(msg);
+        }
+        int authenticated = authenticateService.authenticate(context, epersonMail, epersonPassword, null, null);
+        if (AuthenticationMethod.SUCCESS != authenticated) {
+            msg = "Authentication failed for email: " + epersonMail;
+            handler.logError(msg);
+            throw new AuthenticationException(msg);
+        }
+        return ePerson;
     }
 }
