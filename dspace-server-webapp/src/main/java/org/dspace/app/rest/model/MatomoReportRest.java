@@ -1,0 +1,57 @@
+/**
+ * The contents of this file are subject to the license and copyright
+ * detailed in the LICENSE and NOTICE files at the root of the source
+ * tree and available online at
+ *
+ * http://www.dspace.org/license/
+ */
+package org.dspace.app.rest.model;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+import org.dspace.app.rest.RestResourceController;
+
+/**
+ * The MatomoReport REST Resource
+ *
+ * @author Milan Kuchtiak
+ */
+public class MatomoReportRest extends BaseObjectRest<Integer> {
+
+    public static final String NAME = "matomoreport";
+    public static final String CATEGORY = RestAddressableModel.CORE;
+
+    private String epersonId;
+    private String itemId;
+
+    public String getEpersonId() {
+        return epersonId;
+    }
+
+    public void setEpersonId(String epersonId) {
+        this.epersonId = epersonId;
+    }
+
+    public String getItemId() {
+        return itemId;
+    }
+
+    public void setItemId(String itemId) {
+        this.itemId = itemId;
+    }
+
+    @Override
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    public String getType() {
+        return NAME;
+    }
+
+    @Override
+    public Class getController() {
+        return RestResourceController.class;
+    }
+
+    @Override
+    public String getCategory() {
+        return CATEGORY;
+    }
+}
