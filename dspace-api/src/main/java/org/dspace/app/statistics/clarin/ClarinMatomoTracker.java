@@ -53,8 +53,7 @@ public class ClarinMatomoTracker {
      */
     public void trackPage(Context context, HttpServletRequest request, Item item, String pageName) {
         log.debug("Matomo tracks " + pageName);
-        // `&bots=1` because we want to track downloading by bots
-        String pageURL = getFullURL(request) + "&bots=1";
+        String pageURL = getFullURL(request);
 
         MatomoRequest matomoRequest = createMatomoRequest(request, pageName, pageURL);
         if (Objects.isNull(matomoRequest)) {
@@ -116,18 +115,6 @@ public class ClarinMatomoTracker {
         matomoRequest.setCurrentHour(now.get(Calendar.HOUR_OF_DAY));
         matomoRequest.setCurrentMinute(now.get(Calendar.MINUTE));
         matomoRequest.setCurrentSecond(now.get(Calendar.SECOND));
-        matomoRequest.setReferrerUrl(configurationService.getProperty("dspace.ui.url"));
-        matomoRequest.setPluginPDF(true);
-        matomoRequest.setPluginQuicktime(false);
-        matomoRequest.setPluginRealPlayer(false);
-        matomoRequest.setPluginWindowsMedia(false);
-        matomoRequest.setPluginDirector(false);
-        matomoRequest.setPluginFlash(false);
-        matomoRequest.setPluginJava(false);
-        matomoRequest.setPluginGears(false);
-        matomoRequest.setPluginSilverlight(false);
-        matomoRequest.setParameter("cookie", 1);
-        matomoRequest.setDeviceResolution("1920x1080");
     }
 
     /**

@@ -98,7 +98,6 @@ public class ClarinWorkflowItemRestRepositoryIT extends AbstractControllerIntegr
                 .withIssueDate("2017-10-17")
                 .withAuthor("Doe, John")
                 .withSubject("ExtraEntry")
-                .withCCLicense("http://creativecommons.org/licenses/by-nc-sa/4.0/")
                 .build();
         context.restoreAuthSystemState();
 
