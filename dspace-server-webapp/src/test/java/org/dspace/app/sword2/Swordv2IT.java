@@ -672,4 +672,3 @@ public class Swordv2IT extends AbstractWebClientIntegrationTest {
         assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
     }
 }
-

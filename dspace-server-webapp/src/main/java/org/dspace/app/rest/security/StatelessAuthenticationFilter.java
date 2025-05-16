@@ -105,6 +105,7 @@ public class StatelessAuthenticationFilter extends BasicAuthenticationFilter {
         } finally {
             // Complete the context to avoid transactions getting stuck in the connection pool in the
             // `idle in transaction` state.
+            // TODO add the issue url
             Context context = (Context) req.getAttribute(ContextUtil.DSPACE_CONTEXT);
             // Ensure the context is cleared after the request is done
             if (context != null && context.isValid()) {
