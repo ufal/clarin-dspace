@@ -197,14 +197,8 @@
             <!--Treats the entire field as a single token, regardless of its content-->
             <tokenizer class="solr.KeywordTokenizerFactory"/>
 
-            <filter class="solr.LowerCaseFilterFactory" />
+            <!--<filter class="solr.LowerCaseFilterFactory" />-->
             <filter class="solr.TrimFilterFactory" />
-        </analyzer>
-    </fieldType>
-
-    <fieldType name="noLowKeywordFilter" class="solr.TextField" sortMissingLast="true" omitNorms="true">
-        <analyzer>
-            <tokenizer class="solr.KeywordTokenizerFactory"/>
         </analyzer>
     </fieldType>
 
@@ -313,7 +307,7 @@
 	<dynamicField name="*_acid" type="keywordFilter" indexed="true" stored="true" omitNorms="true" multiValued="true"/>
 
     <!--Dynamic field used for sidebar filters & SOLR browse by value -->
-    <dynamicField name="*_filter" type="noLowKeywordFilter" indexed="true" stored="true" multiValued="true" omitNorms="true" />
+    <dynamicField name="*_filter" type="keywordFilter" indexed="true" stored="true" multiValued="true" omitNorms="true" />
     <!--Dynamic field used to index the facet/filter value, split on each word to end,
         so that the facet search can search all words in a facet-->
     <dynamicField name="*_prefix" type="keywordFilter" indexed="true" stored="true" multiValued="true" omitNorms="true" />
