@@ -13,16 +13,23 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 
+import java.io.InputStream;
 import java.nio.file.Path;
+import java.sql.SQLException;
 import java.util.List;
 
 import org.dspace.app.rest.test.AbstractWebClientIntegrationTest;
+import org.dspace.authorize.AuthorizeException;
 import org.dspace.builder.CollectionBuilder;
 import org.dspace.builder.CommunityBuilder;
 import org.dspace.builder.ItemBuilder;
+import org.dspace.builder.WorkflowItemBuilder;
+import org.dspace.builder.WorkspaceItemBuilder;
 import org.dspace.content.Collection;
 import org.dspace.content.Item;
+import org.dspace.content.WorkspaceItem;
 import org.dspace.services.ConfigurationService;
+import org.dspace.workflow.WorkflowItem;
 import org.junit.Assume;
 import org.junit.Before;
 import org.junit.ClassRule;
@@ -228,6 +235,84 @@ public class Swordv2IT extends AbstractWebClientIntegrationTest {
         assertEquals(ATOM_ENTRY_CONTENT_TYPE, response.getHeaders().getContentType().toString());
     }
 
+    // Test when the `swordv2-server.url` is null. The swordv2 server URL should be constructed using the default value
+    @Test
+    public void editMediaPathTest() throws SQLException, AuthorizeException {
+        context.turnOffAuthorisationSystem();
+        // The `swordv2` server URL is constructed, and the default value is used if `swordv2-server.url` is null.
+        configurationService.setProperty("swordv2-server.url", null);
+        // The `dspace.server.url` must be updated following the same logic as the `swordv2-server.url`.
+        // The `getURL` method used a specific port.
+        String dspaceServerUrl = configurationService.getProperty("dspace.server.url");
+        configurationService.setProperty("dspace.server.url", getURL(""));
+        try {
+            // Create a top level community and one Collection
+            parentCommunity = CommunityBuilder.createCommunity(context)
+                    .withName("Parent Community")
+                    .build();
+            // Make sure our Collection allows the "eperson" user to submit into it
+            Collection collection = CollectionBuilder.createCollection(context, parentCommunity)
+                    .withName("Test SWORDv2 Collection")
+                    .withSubmitterGroup(eperson)
+                    .build();
+            // Above changes MUST be committed to the database for SWORDv2 to see them.
+            context.commit();
+            context.restoreAuthSystemState();
+
+            // Add file
+            LinkedMultiValueMap<Object, Object> multipart = new LinkedMultiValueMap<>();
+            multipart.add("file", new FileSystemResource(Path.of("src", "test", "resources",
+                    "org", "dspace", "app", "sword2", "example.zip")));
+            // Add required headers
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+            headers.setContentDisposition(ContentDisposition.attachment().filename("example.zip").build());
+            headers.set("Packaging", "http://purl.org/net/sword/package/METSDSpaceSIP");
+            headers.setAccept(List.of(MediaType.APPLICATION_ATOM_XML));
+
+            //----
+            // STEP 1: Verify upload/submit via SWORDv2 works
+            //----
+            // Send POST to upload Zip file via SWORD
+            ResponseEntity<String> response = postResponseAsString(COLLECTION_PATH + "/" + collection.getHandle(),
+                    eperson.getEmail(), password,
+                    new HttpEntity<>(multipart, headers));
+
+            // Expect a 201 CREATED response with ATOM "entry" content returned
+            assertEquals(HttpStatus.CREATED, response.getStatusCode());
+            assertEquals(ATOM_ENTRY_CONTENT_TYPE, response.getHeaders().getContentType().toString());
+            // MUST return a "Location" header which is the "/swordv2/edit/[uuid]" URI of the created item
+            assertNotNull(response.getHeaders().getLocation());
+
+            String editLink = response.getHeaders().getLocation().toString();
+
+            // Body should include that link as the rel="edit" URL
+            assertThat(response.getBody(), containsString("<link href=\"" + editLink + "\" rel=\"edit\"/>"));
+
+            //----
+            // STEP 2: Verify uploaded content can be read via SWORDv2
+            //----
+            // Edit URI should work when requested by the EPerson who did the deposit
+            HttpHeaders authHeaders = new HttpHeaders();
+            authHeaders.setBasicAuth(eperson.getEmail(), password);
+            RequestEntity request = RequestEntity.get(editLink)
+                    .accept(MediaType.valueOf("application/atom+xml"))
+                    .headers(authHeaders)
+                    .build();
+            response = responseAsString(request);
+            // Expect a 200 response with ATOM feed content returned
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertEquals(ATOM_FEED_CONTENT_TYPE, response.getHeaders().getContentType().toString());
+            // Body should include links to bitstreams from the zip.
+            // This just verifies at least one /swordv2/edit-media/bitstream/* link exists.
+            assertThat(response.getBody(), containsString(getURL(MEDIA_RESOURCE_PATH + "/bitstream")));
+            // Verify Item title also is returned in the body
+            assertThat(response.getBody(), containsString("Attempts to detect retrotransposition"));
+        } finally {
+            configurationService.setProperty("dspace.server.url", dspaceServerUrl);
+        }
+    }
+
     /**
      * This tests four different SWORDv2 actions, as these all require starting with a new deposit.
      * 1. Depositing a new item via SWORD (via POST /collections/[collection-uuid])
@@ -258,7 +343,8 @@ public class Swordv2IT extends AbstractWebClientIntegrationTest {
         // Add required headers
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.MULTIPART_FORM_DATA);
-        headers.setContentDisposition(ContentDisposition.attachment().filename("example.zip").build());
+        // Test the file with spaces or special characters in the name
+        headers.setContentDisposition(ContentDisposition.attachment().filename("example .zip").build());
         headers.set("Packaging", "http://purl.org/net/sword/package/METSDSpaceSIP");
         headers.setAccept(List.of(MediaType.APPLICATION_ATOM_XML));
 
@@ -364,6 +450,105 @@ public class Swordv2IT extends AbstractWebClientIntegrationTest {
         assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
     }
 
+    // test workspace delete - use org.dspace.sword2.WorkflowManagerDefault
+    @Test
+    public void testDeleteWorkspaceManagerDefault() throws SQLException, AuthorizeException {
+        context.turnOffAuthorisationSystem();
+        // Create a top level community and one Collection
+        parentCommunity = CommunityBuilder.createCommunity(context)
+                .withName("Parent Community")
+                .build();
+        // Make sure our Collection allows the "eperson" user to submit into it
+        Collection collection = CollectionBuilder.createCollection(context, parentCommunity)
+                .withName("Test SWORDv2 Collection")
+                .withSubmitterGroup(eperson)
+                .build();
+        // Above changes MUST be committed to the database for SWORDv2 to see them.
+        WorkspaceItem wsi = WorkspaceItemBuilder.createWorkspaceItem(context, collection)
+                .withTitle("Test SWORDv2 Item")
+                .withAuthor("Test, Sam")
+                .withSubmitter(eperson)
+                .build();
+        context.commit();
+        context.restoreAuthSystemState();
+
+        // Edit URI should also allow user to DELETE the uploaded content
+        // The Item is in Workspace and not in workflow, so we can use the WorkflowManagerDefault to delete it.
+        configurationService.setProperty("plugin.single.org.dspace.sword2.WorkflowManager",
+                "org.dspace.sword2.WorkflowManagerDefault");
+        String editLink = getURL(EDIT_PATH + "/" + wsi.getItem().getID().toString());
+        HttpHeaders authHeaders = new HttpHeaders();
+        authHeaders.setBasicAuth(admin.getEmail(), password);
+        RequestEntity request = RequestEntity.delete(editLink)
+                .headers(authHeaders)
+                .build();
+        ResponseEntity<String> response = responseAsString(request);
+        configurationService.setProperty("plugin.single.org.dspace.sword2.WorkflowManager",
+                "org.dspace.sword2.WorkflowManagerUnrestricted");
+
+        // Expect a 204 No Content response
+        assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
+
+        // Verify that Edit URI now returns a 404 (using eperson login info)
+        authHeaders = new HttpHeaders();
+        authHeaders.setBasicAuth(eperson.getEmail(), password);
+        request = RequestEntity.get(editLink)
+                .accept(MediaType.valueOf("application/atom+xml"))
+                .headers(authHeaders)
+                .build();
+        response = responseAsString(request);
+        // Expect a 404 response as content was deleted
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+    }
+
+    // test workflow delete - use org.dspace.sword2.WorkflowManagerUnrestricted
+    @Test
+    public void testDeleteWorkflowManagerDefault() throws SQLException, AuthorizeException {
+        context.turnOffAuthorisationSystem();
+        // Create a top level community and one Collection
+        parentCommunity = CommunityBuilder.createCommunity(context)
+                .withName("Parent Community")
+                .build();
+        // Make sure our Collection allows the "eperson" user to submit into it
+        Collection collection = CollectionBuilder.createCollection(context, parentCommunity)
+                .withName("Test SWORDv2 Collection")
+                .withSubmitterGroup(eperson)
+                .build();
+        // Above changes MUST be committed to the database for SWORDv2 to see them.
+        WorkflowItem wfi = WorkflowItemBuilder.createWorkflowItem(context, collection)
+                .withTitle("Test SWORDv2 Item")
+                .withAuthor("Test, Sam")
+                .withSubmitter(eperson)
+                .build();
+        context.commit();
+        context.restoreAuthSystemState();
+
+        // Edit URI should allow user to DELETE the uploaded content
+        // The item is in workflow, so we need to use the WorkflowManagerUnrestricted to delete it. It is set in the
+        // @Before method
+        String editLink = getURL(EDIT_PATH + "/" + wfi.getItem().getID().toString());
+        HttpHeaders authHeaders = new HttpHeaders();
+        authHeaders.setBasicAuth(admin.getEmail(), password);
+        RequestEntity request = RequestEntity.delete(editLink)
+                .headers(authHeaders)
+                .build();
+        ResponseEntity<String> response = responseAsString(request);
+
+        // Expect a 204 No Content response
+        assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
+
+        // Verify that Edit URI now returns a 404 (using eperson login info)
+        authHeaders = new HttpHeaders();
+        authHeaders.setBasicAuth(eperson.getEmail(), password);
+        request = RequestEntity.get(editLink)
+                .accept(MediaType.valueOf("application/atom+xml"))
+                .headers(authHeaders)
+                .build();
+        response = responseAsString(request);
+        // Expect a 404 response as content was deleted
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+    }
+
     @Test
     public void editUnauthorizedTest() throws Exception {
         // Attempt to POST to /edit endpoint without sending authentication information
@@ -435,6 +620,56 @@ public class Swordv2IT extends AbstractWebClientIntegrationTest {
         // Also verify Item is in "archived" state
         assertThat(response.getBody(),
                    containsString("<category term=\"http://dspace.org/state/archived\""));
+    }
+
+    @Test
+    public void updateFileTest() throws Exception {
+        context.turnOffAuthorisationSystem();
+        // Create all content as the SAME EPERSON we will use to authenticate on this endpoint.
+        // THIS IS REQUIRED as the /statements endpoint will only show YOUR ITEM SUBMISSIONS.
+        context.setCurrentUser(eperson);
+        // Create a top level community and one Collection
+        parentCommunity = CommunityBuilder.createCommunity(context)
+                .withName("Parent Community")
+                .build();
+        Collection collection = CollectionBuilder.createCollection(context, parentCommunity)
+                .withName("Test SWORDv2 Collection")
+                .build();
+
+        // Add one Item into that Collection.
+        InputStream pdf = getClass().getResourceAsStream("simple-article.pdf");
+        WorkspaceItem witem = WorkspaceItemBuilder.createWorkspaceItem(context, collection)
+                .withTitle("Test WorkspaceItem")
+                .withIssueDate("2017-10-17")
+                .withFulltext("simple-article.pdf", "/local/path/simple-article.pdf", pdf)
+                .build();
+        Item item = witem.getItem();
+
+        // Above changes MUST be committed to the database for SWORDv2 to see them.
+        context.commit();
+        context.restoreAuthSystemState();
+
+        String editLink = getURL(MEDIA_RESOURCE_PATH + "/" + item.getID().toString());
+        // Load the ZIP file from the filesystem
+        FileSystemResource zipFile = new FileSystemResource(
+                Path.of("src", "test", "resources",
+                        "org", "dspace", "app", "sword2", "example.zip").toFile()
+        );
+
+        // Set up headers
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBasicAuth(admin.getEmail(), password);
+        headers.setContentType(MediaType.valueOf("application/zip"));
+        headers.setContentDisposition(ContentDisposition.attachment().filename("example.zip").build());
+
+        RequestEntity<FileSystemResource> request = RequestEntity
+                .put(editLink)
+                .headers(headers)
+                .body(zipFile);
+        ResponseEntity<String> response = responseAsString(request);
+
+        // Expect a 200 response with ATOM feed content returned
+        assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
     }
 }
 

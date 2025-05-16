@@ -40,6 +40,8 @@
         <property name="pathStyleAccessEnabled" value="${assetstore.s3.pathStyleAccessEnabled}"/>
     </bean>
 
+
+    <bean name="s3DirectDownload" class="org.dspace.storage.bitstore.S3DirectDownloadServiceImpl"/>
     <!-- <bean name="localStore2 ... -->
     <!-- <bean name="s3Store2 ... -->
 </beans>

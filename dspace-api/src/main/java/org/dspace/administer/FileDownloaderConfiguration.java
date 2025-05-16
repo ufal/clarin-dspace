@@ -7,8 +7,12 @@
  */
 package org.dspace.administer;
 
+import java.util.List;
+
 import org.apache.commons.cli.OptionGroup;
 import org.apache.commons.cli.Options;
+import org.dspace.core.Context;
+import org.dspace.scripts.DSpaceCommandLineParameter;
 import org.dspace.scripts.configuration.ScriptConfiguration;
 
 public class FileDownloaderConfiguration extends ScriptConfiguration<FileDownloader> {
@@ -33,6 +37,20 @@ public class FileDownloaderConfiguration extends ScriptConfiguration<FileDownloa
     @Override
     public void setDspaceRunnableClass(Class<FileDownloader> dspaceRunnableClass) {
         this.dspaceRunnableClass = dspaceRunnableClass;
+    }
+
+    /**
+     * This script is allowed to execute to any authorized user. Further access control mechanism then checks,
+     * if the current user is authorized to download a file to the item specified in command line parameters.
+     *
+     * @param context   The relevant DSpace context
+     * @param commandLineParameters the parameters that will be used to start the process if known,
+     *        <code>null</code> otherwise
+     * @return          A boolean indicating whether the script is allowed to execute or not
+     */
+    @Override
+    public boolean isAllowedToExecute(Context context, List<DSpaceCommandLineParameter> commandLineParameters) {
+        return context.getCurrentUser() != null;
     }
 
     /**

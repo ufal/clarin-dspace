@@ -163,7 +163,7 @@ public class HandleRestRepository extends  DSpaceRestRepository<HandleRest, Inte
                 throw new UnprocessableEntityException("Can not create handle. Required fields are empty.");
             }
             handle = handleClarinService.createExternalHandle(context, handleRest.getHandle(),
-                   handleRest.getUrl());
+                   handleRest.getUrl(), handleRest.getDead(), handleRest.getDeadSince());
             // Save created handle
             handleClarinService.save(context, handle);
         } catch (SQLException e) {

@@ -210,6 +210,69 @@ public class CommunityRestRepositoryIT extends AbstractControllerIntegrationTest
     }
 
     @Test
+    public void createWithHandleTest() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        CommunityRest comm = new CommunityRest();
+        // We send a name but the created community should set this to the title
+        comm.setName("Test Community");
+        MetadataRest metadataRest = new MetadataRest();
+        MetadataValueRest title = new MetadataValueRest();
+        title.setValue("Title Text");
+        metadataRest.put("dc.title", title);
+        comm.setMetadata(metadataRest);
+
+        context.turnOffAuthorisationSystem();
+        configurationService.setProperty("handle.prefix", "test");
+        context.restoreAuthSystemState();
+        String handleStr = "test/community";
+        comm.setHandle(handleStr);
+
+        String authToken = getAuthToken(admin.getEmail(), password);
+
+        // Capture the UUID of the created Community (see andDo() below)
+        AtomicReference<UUID> idRef = new AtomicReference<>();
+        AtomicReference<String> handle = new AtomicReference<>();
+
+        try {
+            getClient(authToken).perform(post("/api/core/communities")
+                            .content(mapper.writeValueAsBytes(comm))
+                            .contentType(contentType)
+                            .param("embed", CommunityMatcher.getNonAdminEmbeds()))
+                    .andExpect(status().isCreated())
+                    .andExpect(content().contentType(contentType))
+                    .andExpect(jsonPath("$", CommunityMatcher.matchNonAdminEmbeds()))
+                    .andExpect(jsonPath("$", Matchers.allOf(
+                            hasJsonPath("$.id", not(empty())),
+                            hasJsonPath("$.uuid", not(empty())),
+                            hasJsonPath("$.name", is("Title Text")),
+                            hasJsonPath("$.handle", is(handleStr)),
+                            hasJsonPath("$._links.self.href", not(empty())),
+                            hasJsonPath("$.metadata", Matchers.allOf(
+                                            matchMetadata("dc.title", "Title Text")
+                                    )
+                            )
+                    )))
+                    // capture "handle" returned in JSON response and check against the metadata
+                    .andDo(result -> handle.set(
+                            read(result.getResponse().getContentAsString(), "$.handle")))
+                    // capture "id" returned in JSON response
+                    .andDo(result -> idRef
+                            .set(UUID.fromString(read(result.getResponse().getContentAsString(), "$.id"))))
+                    .andExpect(jsonPath("$",
+                            hasJsonPath("$.metadata", Matchers.allOf(
+                                            matchMetadataNotEmpty("dc.identifier.uri"),
+                                            matchMetadataStringEndsWith("dc.identifier.uri", handle.get())
+                                    )
+                            )));
+        } finally {
+            // Delete the created community (cleanup after ourselves!)
+            if (idRef.get() != null) {
+                CommunityBuilder.deleteCommunity(idRef.get());
+            }
+        }
+    }
+
+    @Test
     public void createSubCommunityUnAuthorizedTest() throws Exception {
         //We turn off the authorization system in order to create the structure as defined below
         context.turnOffAuthorisationSystem();
