@@ -7,6 +7,7 @@
  */
 package org.dspace.app.rest.model;
 
+import java.util.Date;
 import java.util.UUID;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -33,6 +34,10 @@ public class HandleRest extends BaseObjectRest<Integer> {
 
     private UUID resourceId;
 
+    private Boolean dead;
+
+    private Date deadSince;
+
     public String getHandle() {
         return handle;
     }
@@ -49,6 +54,14 @@ public class HandleRest extends BaseObjectRest<Integer> {
         return resourceId;
     }
 
+    public Boolean getDead() {
+        return dead;
+    }
+
+    public Date getDeadSince() {
+        return deadSince;
+    }
+
     public void setHandle(String handle) {
         this.handle = handle;
     }
@@ -63,7 +76,14 @@ public class HandleRest extends BaseObjectRest<Integer> {
 
     public void setResourceId(UUID resourceId) {
         this.resourceId = resourceId;
+    }
 
+    public void setDead(Boolean dead) {
+        this.dead = dead;
+    }
+
+    public void setDeadSince(Date deadSince) {
+        this.deadSince = deadSince;
     }
 
     @Override
