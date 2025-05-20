@@ -9,6 +9,7 @@ package org.dspace.app.rest.converter;
 
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Objects;
 
 import org.apache.commons.cli.Option;
 import org.apache.commons.collections4.CollectionUtils;
@@ -36,6 +37,13 @@ public class ScriptConverter implements DSpaceConverter<ScriptConfiguration, Scr
 
         List<ParameterRest> parameterRestList = new LinkedList<>();
         for (Option option : CollectionUtils.emptyIfNull(scriptConfiguration.getOptions().getOptions())) {
+            if ("file-preview".equalsIgnoreCase(scriptConfiguration.getName())
+                                        && (Objects.equals(option.getOpt(), "e")
+                                            || Objects.equals(option.getOpt(), "p")
+                                            || Objects.equals(option.getLongOpt(), "email")
+                                            || Objects.equals(option.getLongOpt(), "password"))) {
+                continue;
+            }
             ParameterRest parameterRest = new ParameterRest();
             parameterRest.setDescription(option.getDescription());
             parameterRest.setName((option.getOpt() != null ? "-" + option.getOpt() : "--" + option.getLongOpt()));

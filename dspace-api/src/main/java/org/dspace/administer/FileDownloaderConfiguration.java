@@ -50,7 +50,7 @@ public class FileDownloaderConfiguration extends ScriptConfiguration<FileDownloa
      */
     @Override
     public boolean isAllowedToExecute(Context context, List<DSpaceCommandLineParameter> commandLineParameters) {
-        return true;
+        return context.getCurrentUser() != null;
     }
 
     /**

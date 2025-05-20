@@ -79,6 +79,8 @@ public class ClarinMatomoBitstreamTracker extends ClarinMatomoTracker {
     @Override
     protected void preTrack(Context context, MatomoRequest matomoRequest, Item item, HttpServletRequest request) {
         super.preTrack(context, matomoRequest, item, request);
+        // `&bots=1` because we want to track downloading by bots
+        matomoRequest.setTrackBotRequests(true);
         matomoRequest.setSiteId(siteId);
         log.debug("Logging to site " + matomoRequest.getSiteId());
         String itemIdentifier = getItemIdentifier(item);
@@ -86,26 +88,30 @@ public class ClarinMatomoBitstreamTracker extends ClarinMatomoTracker {
             log.error("Cannot track the item without Identifier URI.");
         } else {
             // Set PageURL to handle identifier
-            String bitstreamUrl = getFullURL(request);
+            String actionUrl = getFullURL(request);
             try {
                 // Get the Bitstream UUID from the URL
-                String bitstreamId = Utils.fetchUUIDFromUrl(matomoRequest.getActionUrl());
-                if (StringUtils.isBlank(bitstreamId)) {
-                    throw new BadRequestException("The Bitstream UUID is blank.");
+                String uuidFromUrl = Utils.fetchUUIDFromUrl(matomoRequest.getActionUrl());
+                if (StringUtils.isBlank(uuidFromUrl)) {
+                    throw new BadRequestException("The UUID is blank.");
                 }
-                // Get the bitstream using its UUID
-                Bitstream bitstream = bitstreamService.find(context, UUID.fromString(bitstreamId));
-                if (Objects.isNull(bitstream)) {
-                    throw new BadRequestException("The Bitstream: UUID = " + bitstreamId + " was not found.");
-                }
+                // with allzip the uuid might be item id
+                if (!item.getID().toString().equals(uuidFromUrl)) {
+                    // Get the bitstream using its UUID
+                    Bitstream bitstream = bitstreamService.find(context, UUID.fromString(uuidFromUrl));
+                    if (Objects.isNull(bitstream)) {
+                        throw new BadRequestException("The Bitstream: UUID = " + uuidFromUrl + " was not found.");
+                    }
 
-                if (StringUtils.isBlank(bitstream.getName())) {
-                    throw new NameNotFoundException("The Bitstream: UUID = " + bitstreamId +
-                            " bitstream.getName() is null.");
-                }
+                    if (StringUtils.isBlank(bitstream.getName())) {
+                        throw new NameNotFoundException("The Bitstream: UUID = " + uuidFromUrl +
+                                " bitstream.getName() is null.");
+                    }
 
-                bitstreamUrl = configurationService.getProperty("dspace.ui.url") + "/bitstream/handle/" +
-                        item.getHandle() + "/" + URLEncoder.encode(bitstream.getName(), StandardCharsets.UTF_8);
+                    // set actionUrl to bitstreamUrl
+                    actionUrl = configurationService.getProperty("dspace.ui.url") + "/bitstream/handle/" +
+                            item.getHandle() + "/" + URLEncoder.encode(bitstream.getName(), StandardCharsets.UTF_8);
+                }
             } catch (IllegalArgumentException | BadRequestException | SQLException | NameNotFoundException e) {
                 log.error("Cannot get the Bitstream UUID from the URL {}: {}", matomoRequest.getActionUrl(),
                         e.getMessage(), e);
@@ -113,8 +119,7 @@ public class ClarinMatomoBitstreamTracker extends ClarinMatomoTracker {
 
             // The bitstream URL is in the format `<DSPACE_UI_URL>/bitstream/handle/<ITEM_HANDLE>/<BITSTREAM_NAME>`
             // if there is an error with the fetching the UUID, the original download URL is used
-            matomoRequest.setDownloadUrl(bitstreamUrl);
-            matomoRequest.setActionUrl(itemIdentifier);
+            matomoRequest.setActionUrl(actionUrl);
         }
         try {
             // Add the Item handle into the request as a custom dimension

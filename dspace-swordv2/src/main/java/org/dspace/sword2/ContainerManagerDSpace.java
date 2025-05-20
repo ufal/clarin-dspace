@@ -13,6 +13,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.UUID;
 
 import org.apache.logging.log4j.Logger;
 import org.dspace.authorize.AuthorizeException;
@@ -25,6 +26,7 @@ import org.dspace.content.service.WorkspaceItemService;
 import org.dspace.core.Constants;
 import org.dspace.core.Context;
 import org.dspace.core.LogHelper;
+import org.dspace.event.Event;
 import org.dspace.workflow.WorkflowItem;
 import org.dspace.workflow.WorkflowItemService;
 import org.dspace.workflow.factory.WorkflowServiceFactory;
@@ -756,13 +758,19 @@ public class ContainerManagerDSpace extends DSpaceSwordAPI
             if (wft.isItemInWorkspace(swordContext.getContext(), item)) {
                 WorkspaceItem wsi = wft.getWorkspaceItem(context, item);
                 workspaceItemService.deleteAll(context, wsi);
+                // the item is deleted in the above call
             } else if (wft.isItemInWorkflow(context, item)) {
                 WorkflowItem wfi = wft.getWorkflowItem(context, item);
                 workflowItemService.deleteWrapper(context, wfi);
             }
 
-            // then delete the item
-            itemService.delete(context, item);
+            // then delete the item, but only if it hasn't already been deleted by the methods above.
+            // the delete method is called in `workspaceItemService.deleteAll(context, wsi);`,
+            // so it should not be called again here, as that would throw an exception.
+            if (!isItemAlreadyDeleted(context, item.getID())) {
+                itemService.delete(context, item);
+            }
+
         } catch (SQLException | IOException e) {
             throw new DSpaceSwordException(e);
         } catch (AuthorizeException e) {
@@ -787,5 +795,21 @@ public class ContainerManagerDSpace extends DSpaceSwordAPI
             "Location resolves to item with handle: " + item.getHandle());
 
         return item;
+    }
+
+    /**
+     * Check if the item is already deleted in the context.
+     */
+    private boolean isItemAlreadyDeleted(Context context, UUID itemUUID) {
+        if (context.getEvents() == null) {
+            return false;
+        }
+
+        for (Event event : context.getEvents()) {
+            if (event.getEventType() == Event.DELETE && event.getSubjectID().equals(itemUUID)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

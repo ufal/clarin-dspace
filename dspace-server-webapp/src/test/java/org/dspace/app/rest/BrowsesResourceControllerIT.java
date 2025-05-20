@@ -1422,7 +1422,7 @@ public class BrowsesResourceControllerIT extends AbstractControllerIntegrationTe
 
                    //Verify that the index filters to the "Universe" entries and Counts 2 Items.
                    .andExpect(jsonPath("$._embedded.entries",
-                                       contains(BrowseEntryResourceMatcher.matchBrowseEntry("Universe".toLowerCase(), 2)
+                                       contains(BrowseEntryResourceMatcher.matchBrowseEntry("Universe", 2)
                                        )))
                    //Verify startsWith parameter is included in the links
                     .andExpect(jsonPath("$._links.self.href", containsString("?startsWith=U")));
@@ -1447,7 +1447,7 @@ public class BrowsesResourceControllerIT extends AbstractControllerIntegrationTe
                    //Verify that the index filters to the "Turing, Alan'" items.
                    .andExpect(jsonPath("$._embedded.entries",
                                        contains(BrowseEntryResourceMatcher.matchBrowseEntry(
-                                               "Turing, Alan Mathison".toLowerCase(), 1)
+                                               "Turing, Alan Mathison", 1)
                                        )))
                    //Verify that the startsWith paramater is included in the links
                     .andExpect(jsonPath("$._links.self.href", containsString("?startsWith=T")));
@@ -1471,7 +1471,7 @@ public class BrowsesResourceControllerIT extends AbstractControllerIntegrationTe
                    //Verify that the index filters to the "Computing'" items.
                    .andExpect(jsonPath("$._embedded.entries",
                                        contains(BrowseEntryResourceMatcher.matchBrowseEntry(
-                                               "Computing".toLowerCase(), 3)
+                                               "Computing", 3)
                                        )))
                    //Verify that the startsWith paramater is included in the links
                     .andExpect(jsonPath("$._links.self.href", containsString("?startsWith=C")));
@@ -1547,11 +1547,11 @@ public class BrowsesResourceControllerIT extends AbstractControllerIntegrationTe
                    // and diacritics are ignored in sorting
                    .andExpect(jsonPath("$._embedded.entries",
                                        contains(BrowseEntryResourceMatcher.matchBrowseEntry(
-                                                        "Alonso, Nombre".toLowerCase(), 1),
+                                                        "Alonso, Nombre", 1),
                                                 BrowseEntryResourceMatcher.matchBrowseEntry(
-                                                        "Álvarez, Nombre".toLowerCase(), 1),
+                                                        "Álvarez, Nombre", 1),
                                                 BrowseEntryResourceMatcher.matchBrowseEntry(
-                                                        "Azuaga, Nombre".toLowerCase(), 1)
+                                                        "Azuaga, Nombre", 1)
                                                )))
 
                    //Verify startsWith parameter is included in the links
@@ -1576,9 +1576,9 @@ public class BrowsesResourceControllerIT extends AbstractControllerIntegrationTe
                    //Verify that the index filters to the "Ögren, Name"" and "Ortiz, Nombre"
                    .andExpect(jsonPath("$._embedded.entries",
                                        contains(BrowseEntryResourceMatcher.matchBrowseEntry(
-                                                        "Ögren, Name".toLowerCase(), 1),
+                                                        "Ögren, Name", 1),
                                                 BrowseEntryResourceMatcher.matchBrowseEntry(
-                                                        "Ortiz, Nombre".toLowerCase(), 1)
+                                                        "Ortiz, Nombre", 1)
                                                )))
                    //Verify that the startsWith paramater is included in the links
                    .andExpect(jsonPath("$._links.self.href", containsString("?startsWith=Ó")));
@@ -1604,11 +1604,11 @@ public class BrowsesResourceControllerIT extends AbstractControllerIntegrationTe
                    // it is sorted ignoring diacritics
                    .andExpect(jsonPath("$._embedded.entries",
                                        contains(BrowseEntryResourceMatcher.matchBrowseEntry(
-                                                        "Telecomunicaciones".toLowerCase(), 1),
+                                                        "Telecomunicaciones", 1),
                                                 BrowseEntryResourceMatcher.matchBrowseEntry(
-                                                        "Teléfono".toLowerCase(), 1),
+                                                        "Teléfono", 1),
                                                 BrowseEntryResourceMatcher.matchBrowseEntry(
-                                                        "Televisor".toLowerCase(), 1)
+                                                        "Televisor", 1)
                                                )))
                    //Verify that the startsWith paramater is included in the links
                    .andExpect(jsonPath("$._links.self.href", containsString("?startsWith=Tele")));
@@ -1631,7 +1631,7 @@ public class BrowsesResourceControllerIT extends AbstractControllerIntegrationTe
 
                    //Verify that the index filters to the "Guion"
                    .andExpect(jsonPath("$._embedded.entries",
-                                       contains(BrowseEntryResourceMatcher.matchBrowseEntry("Guion".toLowerCase(), 1)
+                                       contains(BrowseEntryResourceMatcher.matchBrowseEntry("Guion", 1)
                                                )))
                    //Verify that the startsWith paramater is included in the links
                    .andExpect(jsonPath("$._links.self.href", containsString("?startsWith=Guión")));

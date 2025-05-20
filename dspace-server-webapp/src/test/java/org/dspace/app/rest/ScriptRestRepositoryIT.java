@@ -588,8 +588,56 @@ public class ScriptRestRepositoryIT extends AbstractControllerIntegrationTest {
         }
     }
 
+    @Test
+    public void postFilePreviewProcess() throws Exception {
+        LinkedList<DSpaceCommandLineParameter> parameters = new LinkedList<>();
 
+        List<ParameterValueRest> list = parameters.stream()
+                .map(dSpaceCommandLineParameter -> dSpaceRunnableParameterConverter
+                        .convert(dSpaceCommandLineParameter, Projection.DEFAULT))
+                .collect(Collectors.toList());
 
+        String token = getAuthToken(admin.getEmail(), password);
+        List<ProcessStatus> acceptableProcessStatuses = new LinkedList<>();
+        acceptableProcessStatuses.addAll(Arrays.asList(ProcessStatus.SCHEDULED,
+                ProcessStatus.RUNNING,
+                ProcessStatus.COMPLETED));
+
+        AtomicReference<Integer> idRef = new AtomicReference<>();
+
+        try {
+            getClient(token)
+                    .perform(multipart("/api/system/scripts/file-preview/processes")
+                            .param("properties", new ObjectMapper().writeValueAsString(list)))
+                    .andExpect(status().isAccepted())
+                    .andExpect(jsonPath("$", is(
+                            ProcessMatcher.matchProcess("file-preview",
+                                    String.valueOf(admin.getID()),
+                                    parameters,
+                                    acceptableProcessStatuses))))
+                    .andDo(result -> idRef
+                            .set(read(result.getResponse().getContentAsString(), "$.processId")));
+
+            Process process = processService.find(context, idRef.get());
+            Bitstream bitstream = processService.getBitstream(context, process, Process.OUTPUT_TYPE);
+            MvcResult mvcResult = getClient(token)
+                    .perform(get("/api/core/bitstreams/" + bitstream.getID() + "/content")).andReturn();
+            String content = mvcResult.getResponse().getContentAsString();
+
+            getClient(token).perform(get("/api/system/processes/" + idRef.get() + "/output"))
+                    .andExpect(status().isOk());
+            assertThat(content, CoreMatchers
+                    .containsString("INFO file-preview - " + process.getID() + " @ The script has started"));
+            assertThat(content,
+                    CoreMatchers.containsString(
+                            "INFO file-preview - " + process.getID() +
+                                    " @ Authentication by user: " + admin.getEmail()));
+            assertThat(content, CoreMatchers
+                    .containsString("INFO file-preview - " + process.getID() + " @ The script has completed"));
+        } finally {
+            ProcessBuilder.deleteProcess(idRef.get());
+        }
+    }
 
     @Test
     public void postProcessAdminWithWrongContentTypeBadRequestException() throws Exception {
