@@ -7,7 +7,11 @@
  */
 package org.dspace.content.dao.clarin;
 
+import java.sql.SQLException;
+import java.util.UUID;
+
 import org.dspace.content.clarin.MatomoReport;
+import org.dspace.core.Context;
 import org.dspace.core.GenericDAO;
 
 /**
@@ -19,4 +23,9 @@ import org.dspace.core.GenericDAO;
  * @author Milan Kuchtiak
  */
 public interface MatomoReportDAO extends GenericDAO<MatomoReport> {
+
+    MatomoReport findByItemId(Context context, UUID itemId)  throws SQLException;
+
+    MatomoReport findByEPersonIdAndItemId(Context context, UUID ePersonId, UUID itemId)  throws SQLException;
+
 }

@@ -12,6 +12,8 @@ import java.util.List;
 
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.authorize.service.AuthorizeService;
+import org.dspace.content.Item;
+import org.dspace.content.dao.ItemDAO;
 import org.dspace.content.dao.clarin.MatomoReportDAO;
 import org.dspace.content.service.clarin.MatomoReportService;
 import org.dspace.core.Context;
@@ -31,36 +33,72 @@ public class MatomoReportServiceImpl implements MatomoReportService {
     MatomoReportDAO matomoReportDAO;
 
     @Autowired
+    ItemDAO itemDAO;
+
+    @Autowired
     AuthorizeService authorizeService;
 
     @Override
-    public MatomoReport create(Context context, MatomoReport matomoReport) throws SQLException,
-            AuthorizeException {
-        if (!authorizeService.isAdmin(context)) {
-            throw new AuthorizeException(
-                    "You must be an admin to create a MatomoReport object");
+    public MatomoReport find(Context context, int id) throws SQLException, AuthorizeException {
+        if (context.getCurrentUser() == null) {
+            throw new AuthorizeException("You must be authenticated user");
         }
+        MatomoReport matomoReport =  matomoReportDAO.findByID(context, MatomoReport.class, id);
 
-        return matomoReportDAO.create(context, matomoReport);
-    }
-
-    @Override
-    public MatomoReport find(Context context, int id) throws SQLException {
-        return matomoReportDAO.findByID(context, MatomoReport.class, id);
+        if (matomoReport != null && !context.getCurrentUser().getID().equals(matomoReport.getEPerson().getID())) {
+            throw new AuthorizeException("You must be admin to get the MatomoReport object for this ID");
+        }
+        return matomoReport;
     }
 
     @Override
     public List<MatomoReport> findAll(Context context) throws SQLException, AuthorizeException {
+        if (!authorizeService.isAdmin(context)) {
+            throw new AuthorizeException(
+                    "You must be admin to get the list of MatomoReport objects");
+        }
         return matomoReportDAO.findAll(context, MatomoReport.class);
     }
 
     @Override
-    public void delete(Context context, MatomoReport matomoReport) throws SQLException, AuthorizeException {
-        if (!authorizeService.isAdmin(context)) {
-            throw new AuthorizeException(
-                    "You must be an admin to delete a MatomoReport object");
+    public MatomoReport findByItem(Context context, Item item) throws SQLException, AuthorizeException {
+        if (context.getCurrentUser() == null) {
+            throw new AuthorizeException("You must be authenticated user");
         }
+        return matomoReportDAO.findByItemId(context, item.getID());
+    }
 
-        matomoReportDAO.delete(context, matomoReport);
+    @Override
+    public MatomoReport subscribe(Context context, Item item) throws SQLException, AuthorizeException {
+        MatomoReport matomoReport = findByItem(context, item);
+
+        if (matomoReport != null) {
+            // already subscribed
+            return matomoReport;
+        } else {
+            MatomoReport  mr = new MatomoReport();
+            mr.setEPerson(context.getCurrentUser());
+            mr.setItem(item);
+            return matomoReportDAO.create(context, mr);
+        }
+    }
+
+    @Override
+    public void unsubscribe(Context context, Item item) throws SQLException, AuthorizeException {
+        if (context.getCurrentUser() == null) {
+            throw new AuthorizeException("You must be authenticated user");
+        }
+        MatomoReport matomoReport = findByItem(context, item);
+        if (matomoReport != null) {
+            matomoReportDAO.delete(context, matomoReport);
+        }
+    }
+
+    @Override
+    public boolean isSubscribed(Context context, Item item) throws SQLException, AuthorizeException {
+        if (context.getCurrentUser() == null) {
+            throw new AuthorizeException("You must be authenticated user");
+        }
+        return (matomoReportDAO.findByItemId(context, item.getID()) != null);
     }
 }

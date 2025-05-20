@@ -8,6 +8,7 @@
 package org.dspace.content.service.clarin;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -80,32 +81,37 @@ public class MatomoReportServiceTest extends AbstractIntegrationTestWithDatabase
     public void testMatomoReportService() throws Exception {
         MatomoReport mr = new MatomoReport();
         mr.setItem(item);
-        mr.setEPerson(eperson);
         MatomoReport expectedReport = new MatomoReport();
         expectedReport.setItem(item);
-        expectedReport.setEPerson(eperson);
+        expectedReport.setEPerson(admin);
 
         context.setCurrentUser(admin);
-        MatomoReport createdReport = matomoReportService.create(context, mr);
+        MatomoReport createdReport = matomoReportService.subscribe(context, item);
         expectedReport.setId(createdReport.getID());
         assertEquals(expectedReport, createdReport);
 
-        MatomoReport retrievedReport = matomoReportService.find(context, createdReport.getID());
-        assertEquals(expectedReport, retrievedReport);
+        assertTrue(matomoReportService.isSubscribed(context, item));
 
         List<MatomoReport> retrievedReports = matomoReportService.findAll(context);
-        context.turnOffAuthorisationSystem();
+
         assertEquals(1, retrievedReports.size());
         assertEquals(expectedReport, retrievedReports.get(0));
 
-        matomoReportService.delete(context, createdReport);
+        matomoReportService.unsubscribe(context, createdReport.getItem());
         assertEquals(0, matomoReportService.findAll(context).size());
 
+        context.setCurrentUser(eperson);
         MatomoReport mr1 = new MatomoReport();
         mr1.setItem(item);
-        mr1.setEPerson(eperson);
-        MatomoReport anotherReport = matomoReportService.create(context, mr1);
+        MatomoReport anotherReport = matomoReportService.subscribe(context, item);
         assertTrue(anotherReport.getID() > 1);
-        assertEquals(1, matomoReportService.findAll(context).size());
+
+        MatomoReport retrievedReport = matomoReportService.find(context, anotherReport.getID());
+        assertEquals(anotherReport, retrievedReport);
+
+        assertTrue(matomoReportService.isSubscribed(context, item));
+
+        // only admin can get all Matomo Reports
+        assertThrows(AuthorizeException.class, () -> matomoReportService.findAll(context).size());
     }
 }
