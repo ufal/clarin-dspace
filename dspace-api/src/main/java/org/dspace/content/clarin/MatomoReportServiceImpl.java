@@ -53,11 +53,14 @@ public class MatomoReportServiceImpl implements MatomoReportService {
 
     @Override
     public List<MatomoReport> findAll(Context context) throws SQLException, AuthorizeException {
-        if (!authorizeService.isAdmin(context)) {
-            throw new AuthorizeException(
-                    "You must be admin to get the list of MatomoReport objects");
+        if (context.getCurrentUser() == null) {
+            throw new AuthorizeException("You must be authenticated user");
         }
-        return matomoReportDAO.findAll(context, MatomoReport.class);
+        if (authorizeService.isAdmin(context)) {
+            return matomoReportDAO.findAll(context, MatomoReport.class);
+        } else {
+            return matomoReportDAO.findByEPersonId(context, context.getCurrentUser().getID());
+        }
     }
 
     @Override

@@ -8,6 +8,7 @@
 package org.dspace.content.dao.impl.clarin;
 
 import java.sql.SQLException;
+import java.util.List;
 import java.util.UUID;
 import javax.persistence.Query;
 
@@ -49,5 +50,15 @@ public class MatomoReportDAOImpl extends AbstractHibernateDAO<MatomoReport>
         return singleResult(query);
     }
 
+    @Override
+    public List<MatomoReport> findByEPersonId(Context context, UUID ePersonId) throws SQLException {
+        Query query = createQuery(
+                context,
+                "SELECT mr FROM MatomoReport mr WHERE mr.ePerson.id = :ePersonId"
+        );
+        query.setParameter("ePersonId", ePersonId);
+        query.setHint("org.hibernate.cacheable", Boolean.TRUE);
 
+        return list(query);
+    }
 }

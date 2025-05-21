@@ -56,13 +56,15 @@ public class MatomoReportRestRepository extends DSpaceRestRepository<MatomoRepor
     }
 
     @Override
-    @PreAuthorize("hasAuthority('ADMIN')")
+    @PreAuthorize("hasAuthority('AUTHENTICATED')")
     public Page<MatomoReportRest> findAll(Context context, Pageable pageable) {
         try {
             List<MatomoReport> matomoReportList = matomoReportService.findAll(context);
             return converter.toRestPage(matomoReportList, pageable, utils.obtainProjection());
-        } catch (SQLException | AuthorizeException e) {
-            throw new RuntimeException(e.getMessage(), e);
+        } catch (SQLException se) {
+            throw new RuntimeException(se.getMessage(), se);
+        } catch (AuthorizeException e) {
+            throw new RESTAuthorizationException(e);
         }
     }
 

@@ -8,7 +8,6 @@
 package org.dspace.content.service.clarin;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -97,6 +96,9 @@ public class MatomoReportServiceTest extends AbstractIntegrationTestWithDatabase
         assertEquals(1, retrievedReports.size());
         assertEquals(expectedReport, retrievedReports.get(0));
 
+        MatomoReport retrievedReport = matomoReportService.findByItem(context, retrievedReports.get(0).getItem());
+        assertEquals(expectedReport, retrievedReport);
+
         matomoReportService.unsubscribe(context, createdReport.getItem());
         assertEquals(0, matomoReportService.findAll(context).size());
 
@@ -106,12 +108,12 @@ public class MatomoReportServiceTest extends AbstractIntegrationTestWithDatabase
         MatomoReport anotherReport = matomoReportService.subscribe(context, item);
         assertTrue(anotherReport.getID() > 1);
 
-        MatomoReport retrievedReport = matomoReportService.find(context, anotherReport.getID());
-        assertEquals(anotherReport, retrievedReport);
+        MatomoReport retrievedReport1 = matomoReportService.find(context, anotherReport.getID());
+        assertEquals(anotherReport, retrievedReport1);
 
         assertTrue(matomoReportService.isSubscribed(context, item));
 
-        // only admin can get all Matomo Reports
-        assertThrows(AuthorizeException.class, () -> matomoReportService.findAll(context).size());
+        List<MatomoReport> retrievedReports1 = matomoReportService.findAll(context);
+        assertEquals(1, retrievedReports1.size());
     }
 }
