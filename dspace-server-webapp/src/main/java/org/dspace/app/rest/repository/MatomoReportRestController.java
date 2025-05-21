@@ -13,9 +13,10 @@ import java.sql.SQLException;
 import java.util.Objects;
 import java.util.UUID;
 import javax.servlet.http.HttpServletRequest;
+import javax.ws.rs.BadRequestException;
 
 import org.dspace.app.rest.converter.ConverterService;
-import org.dspace.app.rest.exception.UnprocessableEntityException;
+import org.dspace.app.rest.exception.DSpaceBadRequestException;
 import org.dspace.app.rest.model.MatomoReportRest;
 import org.dspace.app.rest.utils.Utils;
 import org.dspace.authorize.AuthorizeException;
@@ -57,24 +58,11 @@ public class MatomoReportRestController {
     @RequestMapping(method = RequestMethod.POST, path = "subscribe")
     public MatomoReportRest itemSubscribe(@PathVariable UUID uuid, HttpServletRequest request)
             throws AuthorizeException, SQLException {
-        Context context = obtainContext(request);
-        if (Objects.isNull(context)) {
-            throw new RuntimeException("Context is null!");
-        }
+        Context context = getContext(request);
 
-        Item item;
-        try {
-            item = itemService.find(context, uuid);
-            if (item == null) {
-                throw new UnprocessableEntityException("MatomoReport item for itemId does not exist");
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException(e.getMessage(), e);
-        }
-
+        Item item = getItem(context, uuid);
         MatomoReport matomoReport = matomoReportService.subscribe(context, item);
         context.commit();
-
         return converter.toRest(matomoReport, utils.obtainProjection());
     }
 
@@ -82,22 +70,15 @@ public class MatomoReportRestController {
     @RequestMapping(method = RequestMethod.POST, path = "unsubscribe")
     public ResponseEntity<RepresentationModel<?>> itemUnsubscribe(@PathVariable UUID uuid, HttpServletRequest request)
             throws AuthorizeException, SQLException {
-        Context context = obtainContext(request);
-        if (Objects.isNull(context)) {
-            throw new RuntimeException("Context is null!");
-        }
-        Item item;
-        try {
-            item = itemService.find(context, uuid);
-            if (item == null) {
-                throw new UnprocessableEntityException("Item for itemId does not exist");
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException(e.getMessage(), e);
-        }
+        Context context = getContext(request);
 
-        matomoReportService.unsubscribe(context, item);
-        context.commit();
+        Item item = getItem(context, uuid);
+        try {
+            matomoReportService.unsubscribe(context, item);
+            context.commit();
+        } catch (BadRequestException ex) {
+            throw new DSpaceBadRequestException(ex.getMessage(), ex);
+        }
         return ControllerUtils.toEmptyResponse(HttpStatus.NO_CONTENT);
     }
 
@@ -105,22 +86,31 @@ public class MatomoReportRestController {
     @RequestMapping(method = RequestMethod.GET)
     public MatomoReportRest getReportForItem(@PathVariable UUID uuid, HttpServletRequest request)
             throws AuthorizeException, SQLException {
+        Context context = getContext(request);
+
+        Item item = getItem(context, uuid);
+        MatomoReport matomoReport = matomoReportService.findByItem(context, item);
+        return converter.toRest(matomoReport, utils.obtainProjection());
+    }
+
+    private Item getItem(Context context, UUID itemId) {
+        try {
+            Item item = itemService.find(context, itemId);
+            if (item == null) {
+                throw new DSpaceBadRequestException("Item for this item ID does not exist");
+            }
+            return item;
+        } catch (SQLException e) {
+            throw new RuntimeException(e.getMessage(), e);
+        }
+    }
+
+    private static Context getContext(HttpServletRequest request) {
         Context context = obtainContext(request);
         if (Objects.isNull(context)) {
             throw new RuntimeException("Context is null!");
         }
-        Item item;
-        try {
-            item = itemService.find(context, uuid);
-            if (item == null) {
-                throw new UnprocessableEntityException("Item for itemId does not exist");
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException(e.getMessage(), e);
-        }
-
-        MatomoReport matomoReport = matomoReportService.findByItem(context, item);
-        return converter.toRest(matomoReport, utils.obtainProjection());
+        return context;
     }
 
 }

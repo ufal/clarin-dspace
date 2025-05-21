@@ -9,6 +9,7 @@ package org.dspace.content.clarin;
 
 import java.sql.SQLException;
 import java.util.List;
+import javax.ws.rs.BadRequestException;
 
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.authorize.service.AuthorizeService;
@@ -46,7 +47,7 @@ public class MatomoReportServiceImpl implements MatomoReportService {
         MatomoReport matomoReport =  matomoReportDAO.findByID(context, MatomoReport.class, id);
 
         if (matomoReport != null && !context.getCurrentUser().getID().equals(matomoReport.getEPerson().getID())) {
-            throw new AuthorizeException("You must be admin to get the MatomoReport object for this ID");
+            throw new AuthorizeException("You must be admin user to get matomo report subscription for this ID");
         }
         return matomoReport;
     }
@@ -94,6 +95,8 @@ public class MatomoReportServiceImpl implements MatomoReportService {
         MatomoReport matomoReport = findByItem(context, item);
         if (matomoReport != null) {
             matomoReportDAO.delete(context, matomoReport);
+        } else {
+            throw new BadRequestException("Matomo report subscription for this item doesn't exist for this user");
         }
     }
 
