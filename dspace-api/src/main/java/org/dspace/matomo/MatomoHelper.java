@@ -34,7 +34,6 @@ import javax.xml.xpath.XPathFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.tools.ant.filters.StringInputStream;
-import org.dspace.content.Item;
 import org.dspace.services.ConfigurationService;
 import org.dspace.services.factory.DSpaceServicesFactory;
 import org.json.simple.JSONArray;
@@ -49,15 +48,29 @@ public class MatomoHelper {
 
     private static final ConfigurationService configurationService = DSpaceServicesFactory.getInstance()
             .getConfigurationService();
-    private static final String dspaceURL = configurationService.getProperty("dspace.url");
+    private static final String DSPACE_URL = configurationService.getProperty("dspace.url");
     /** Matomo configurations */
-    private static final String PIWIK_API_MODE = configurationService.getProperty("lr.statistics.api.mode");
-    private static final String PIWIK_API_URL = configurationService.getProperty("lr.statistics.api.url");
-    private static final String PIWIK_API_URL_CACHED = configurationService.getProperty("lr.statistics.api.cached.url");
-    private static final String PIWIK_AUTH_TOKEN = configurationService.getProperty("lr.statistics.api.auth.token");
-    private static final String PIWIK_SITE_ID = configurationService.getProperty("lr.statistics.api.site_id");
-    private static final String PIWIK_DOWNLOAD_SITE_ID =
+    static final String MATOMO_API_MODE =
+            configurationService.getProperty("lr.statistics.api.mode", "cached");
+    private static final String MATOMO_API_URL = configurationService.getProperty("lr.statistics.api.url");
+    private static final String MATOMO_API_URL_CACHED =
+            configurationService.getProperty("lr.statistics.api.cached.url");
+    private static final String AUTH_TOKEN = configurationService.getProperty("lr.statistics.api.auth.token");
+    private static final String MATOMO_SITE_ID = configurationService.getProperty("lr.statistics.api.site_id");
+    private static final String MATOMO_DOWNLOAD_SITE_ID =
             configurationService.getProperty("lr.tracker.bitstream.site_id");
+
+    private final String period;
+    private final String date;
+    private final String handle;
+    private final String rest;
+
+    MatomoHelper(String period, String date, String handle, String rest) {
+        this.period = period;
+        this.date = date;
+        this.handle = handle;
+        this.rest = rest;
+    }
 
     /**
      *
@@ -378,21 +391,9 @@ public class MatomoHelper {
         return output.toString();
     }
 
-    String period;
-    String date;
-    Item item;
-    String rest;
-
-    MatomoHelper(String period, String date, Item item, String rest) {
-        this.period = period;
-        this.date = date;
-        this.item = item;
-        this.rest = rest;
-    }
-
     String getDataAsJsonString() throws Exception {
         String mergedResult;
-        if (PIWIK_API_MODE.equals("cached")) {
+        if (MATOMO_API_MODE.equals("cached")) {
             log.debug("========CACHED MODE");
             mergedResult = getDataFromLindatMatomoCacheServer();
         } else {
@@ -405,7 +406,7 @@ public class MatomoHelper {
 
     List<String[]> getCountryData() throws Exception {
         try {
-            if (PIWIK_API_MODE.equals("cached")) {
+            if (MATOMO_API_MODE.equals("cached")) {
                 log.debug("========CACHED MODE");
                 return getCountryDataFromLindatMatomoCacheServer();
             } else {
@@ -420,7 +421,7 @@ public class MatomoHelper {
     }
 
     private List<String[]> getCountryDataFromLindatMatomoCacheServer() throws Exception {
-        String url = PIWIK_API_URL_CACHED + "handle?h=" + item.getHandle() + "&period=month&country=true";
+        String url = MATOMO_API_URL_CACHED + "handle?h=" + handle + "&period=month&country=true";
 
         if (date != null) {
             url += "&date=" + date;
@@ -451,17 +452,17 @@ public class MatomoHelper {
 
     private List<String[]> getCountryDataFromMatomo() throws Exception {
 
-        String countryReportURL = PIWIK_API_URL + "index.php"
+        String countryReportURL = MATOMO_API_URL + "index.php"
                 + "?module=API"
                 + "&method=UserCountry.getCountry"
-                + "&idSite=" + PIWIK_SITE_ID
+                + "&idSite=" + MATOMO_SITE_ID
                 + "&period=month"
                 + "&date=" + date
                 + "&expanded=1"
-                + "&token_auth=" + PIWIK_AUTH_TOKEN
+                + "&token_auth=" + AUTH_TOKEN
                 + "&filter_limit=10"
                 + "&format=xml"
-                + "&segment=pageUrl=@" + URLEncoder.encode(dspaceURL + "/handle/" + item.getHandle(), "UTF-8");
+                + "&segment=pageUrl=@" + URLEncoder.encode(DSPACE_URL + "/handle/" + handle, "UTF-8");
 
 
         String xml = readFromURL(countryReportURL);
@@ -509,7 +510,7 @@ public class MatomoHelper {
 
 
     private String getDataFromLindatMatomoCacheServer() throws IOException {
-        String url = PIWIK_API_URL_CACHED + "handle?h=" + item.getHandle() + "&period=" + period;
+        String url = MATOMO_API_URL_CACHED + "handle?h=" + handle + "&period=" + period;
 
         if (date != null) {
             url += "&date=" + date;
@@ -531,9 +532,9 @@ public class MatomoHelper {
 
     private String buildBulkApiGetRequestURL(SortedMap<String, String> urls) {
         String matomoBulkApiGetQuery = "module=API&method=API.getBulkRequest&format=JSON"
-                + "&token_auth=" + PIWIK_AUTH_TOKEN;
+                + "&token_auth=" + AUTH_TOKEN;
         StringBuilder sb = new StringBuilder();
-        sb.append(PIWIK_API_URL)
+        sb.append(MATOMO_API_URL)
                 .append(rest)
                 .append("?")
                 .append(matomoBulkApiGetQuery);
@@ -550,11 +551,11 @@ public class MatomoHelper {
     private SortedMap<String, String> buildViewsURL() throws UnsupportedEncodingException, ParseException {
         // use Actions.getPageUrl; call it twice; once with ?show=full
         String paramsFmt = "method=Actions.getPageUrl&pageUrl=%s";
-        String summaryItemView = buildURL(PIWIK_SITE_ID,
-                String.format(paramsFmt, URLEncoder.encode(dspaceURL + "/handle/" + item.getHandle(), "UTF-8")));
-        String fullItemView = buildURL(PIWIK_SITE_ID,
+        String summaryItemView = buildURL(MATOMO_SITE_ID,
+                String.format(paramsFmt, URLEncoder.encode(DSPACE_URL + "/handle/" + handle, "UTF-8")));
+        String fullItemView = buildURL(MATOMO_SITE_ID,
                 String.format(paramsFmt, URLEncoder.encode(
-                        dspaceURL + "/handle" + "/" + item.getHandle() + "?show=full", "UTF-8")));
+                        DSPACE_URL + "/handle" + "/" + handle + "?show=full", "UTF-8")));
         SortedMap<String, String> ret = new TreeMap<>();
         ret.put("summaryItemView", summaryItemView);
         ret.put("fullItemView", fullItemView);
@@ -562,13 +563,13 @@ public class MatomoHelper {
     }
 
     private String buildDownloadsURL() throws UnsupportedEncodingException, ParseException {
-        String filterPattern =  URLEncoder.encode(dspaceURL + "/bitstream/handle/" + item.getHandle(), "UTF-8");
+        String filterPattern =  URLEncoder.encode(DSPACE_URL + "/bitstream/handle/" + handle, "UTF-8");
         String params =
                 "method=Actions.getPageUrls" +
                         "&expanded=1&flat=1" +
                         "&filter_column=url" +
                         "&filter_pattern=" + filterPattern;
-        return buildURL(PIWIK_DOWNLOAD_SITE_ID, params);
+        return buildURL(MATOMO_DOWNLOAD_SITE_ID, params);
     }
 
     private String buildURL(String siteID, String specificParams) throws UnsupportedEncodingException,
@@ -601,7 +602,7 @@ public class MatomoHelper {
                 specificParams
                         + "&date=" + dateRange
                         + "&period=" + period
-                        + "&token_auth=" + PIWIK_AUTH_TOKEN
+                        + "&token_auth=" + AUTH_TOKEN
                         + "&showColumns=label,url,nb_visits,nb_hits"
                         // don't want to handle "paging" (summary views)
                         + "&filter_limit=-1"

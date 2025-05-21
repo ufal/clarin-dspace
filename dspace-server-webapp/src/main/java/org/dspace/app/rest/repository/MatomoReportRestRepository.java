@@ -11,6 +11,7 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Objects;
 
+import org.dspace.app.rest.exception.RESTAuthorizationException;
 import org.dspace.app.rest.model.MatomoReportRest;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.authorize.service.AuthorizeService;
@@ -43,8 +44,10 @@ public class MatomoReportRestRepository extends DSpaceRestRepository<MatomoRepor
         MatomoReport matomoReport;
         try {
             matomoReport = matomoReportService.find(context, id);
-        } catch (SQLException | AuthorizeException e) {
-            throw new RuntimeException(e.getMessage(), e);
+        } catch (SQLException se) {
+            throw new RuntimeException(se.getMessage(), se);
+        } catch (AuthorizeException ae) {
+            throw new RESTAuthorizationException(ae);
         }
         if (Objects.isNull(matomoReport)) {
             return null;

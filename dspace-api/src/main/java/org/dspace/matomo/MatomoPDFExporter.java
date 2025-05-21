@@ -32,6 +32,7 @@ import javax.mail.MessagingException;
 import com.itextpdf.awt.PdfGraphics2D;
 import com.itextpdf.text.BaseColor;
 import com.itextpdf.text.Chunk;
+import com.itextpdf.text.Document;
 import com.itextpdf.text.Font;
 import com.itextpdf.text.Font.FontFamily;
 import com.itextpdf.text.Image;
@@ -44,6 +45,12 @@ import com.itextpdf.text.pdf.PdfPTable;
 import com.itextpdf.text.pdf.PdfTemplate;
 import com.itextpdf.text.pdf.PdfWriter;
 import com.itextpdf.text.pdf.draw.LineSeparator;
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.DefaultParser;
+import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -57,6 +64,7 @@ import org.dspace.core.Context;
 import org.dspace.core.Email;
 import org.dspace.core.I18nUtil;
 import org.dspace.eperson.EPerson;
+import org.dspace.eperson.factory.EPersonServiceFactory;
 import org.dspace.services.ConfigurationService;
 import org.dspace.services.factory.DSpaceServicesFactory;
 import org.jfree.chart.ChartFactory;
@@ -80,14 +88,13 @@ import org.json.simple.parser.JSONParser;
 public class MatomoPDFExporter {
 
     /** Matomo configurations */
-    private static String PIWIK_REPORTS_OUTPUT_PATH;
+    private static final String HANDLE_URL_PREFIX = "http://hdl.handle.net/";
+    private static String MATOMO_REPORTS_OUTPUT_PATH;
 
     /** Matomo configurations */
-    private static boolean PIWIK_KEEP_REPORTS;
+    private static boolean MATOMO_KEEP_REPORTS;
 
-    private static String LINDAT_LOGO;
-
-    private static String PIWIK_API_MODE;
+    private static URL LINDAT_LOGO;
 
     private static SimpleDateFormat inputDateFormat = new SimpleDateFormat("yyyy-MM-dd");
     private static SimpleDateFormat outputDateFormat = new SimpleDateFormat("MMM-dd");
@@ -96,12 +103,33 @@ public class MatomoPDFExporter {
 
     public static void main(String args[]) throws Exception {
         log.info("Generating MATOMO pdf reports ....");
-        initialize();
-        if (!PIWIK_API_MODE.equals("cached")) {
-            log.warn("Not using the cached mode: the reports will be missing uniq stats for pageviews, " +
-                    "downloads and visitors as this is not implemented in transformJSON.");
+
+        Options options = new Options();
+        options.addRequiredOption("e", "email", true, "admin email");
+        options.addOption("h", "help", false, "help");
+        options.addOption("v", "verbose", false, "Verbose output");
+
+        CommandLineParser parser = new DefaultParser();
+        try {
+            CommandLine line = parser.parse(options, args);
+            if (line.hasOption('h') || !line.hasOption('e')) {
+                printHelpAndExit(options);
+            }
+            String adminEmail = line.getOptionValue('e');
+            boolean verboseOutput = line.hasOption('v');
+
+            initialize();
+            if (!MatomoHelper.MATOMO_API_MODE.equals("cached")) {
+                log.warn("Not using the cached mode: the reports will be missing uniq stats for pageviews, " +
+                        "downloads and visitors as this is not implemented in transformJSON.");
+            }
+            generateReports(adminEmail, verboseOutput);
+
+        } catch (ParseException e) {
+            System.err.println("Cannot read command options");
+            printHelpAndExit(options);
         }
-        generateReports();
+
         log.info("MATOMO pdf reports generation finished.");
     }
 
@@ -110,29 +138,39 @@ public class MatomoPDFExporter {
 
     public static void initialize() {
         ConfigurationService configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
-        PIWIK_REPORTS_OUTPUT_PATH = configurationService.getProperty("lr.statistics.report.path");
-        PIWIK_KEEP_REPORTS = configurationService.getBooleanProperty("lr.statistics.keep.reports", true);
-        LINDAT_LOGO = configurationService.getProperty("lr.lindat.logo.mono");
-        PIWIK_API_MODE = configurationService.getProperty("lr.statistics.api.mode");
+        MATOMO_REPORTS_OUTPUT_PATH = configurationService.getProperty("lr.statistics.report.path");
+        MATOMO_KEEP_REPORTS = configurationService.getBooleanProperty("lr.statistics.keep.reports", true);
+        LINDAT_LOGO = MatomoPDFExporter.class.getResource("/org/dspace/lindat/lindat-logo.png");
     }
 
-    private static void generateReports() throws SQLException, AuthorizeException, IOException {
+    private static void generateReports(String adminEmail, boolean verboseOutput)
+            throws SQLException, AuthorizeException, IOException {
 
         Context context = new Context(Context.Mode.READ_ONLY);
 
-//        ItemService itemService = ContentServiceFactory.getInstance().getItemService();
-//        IFunctionalities functionalityManager = DSpaceApi.getFunctionalityManager();
-//        functionalityManager.openSession();
-//        List<PiwikReport> piwikReports = functionalityManager.getAllPiwikReports();
-//        functionalityManager.closeSession();
+        EPerson eperson = EPersonServiceFactory.getInstance().getEPersonService().findByEmail(context,adminEmail);
+
+        context.turnOffAuthorisationSystem();
+        context.setCurrentUser(eperson);
+        context.restoreAuthSystemState();
 
         List<MatomoReport> matomoReports = ClarinServiceFactory.getInstance()
                 .getMatomoReportService().findAll(context);
 
-        File outputDir = new File(PIWIK_REPORTS_OUTPUT_PATH);
+        if (matomoReports.isEmpty()) {
+            log.info("No Matomo Report Subscriptions found");
+            if (verboseOutput) {
+                System.out.println("No Matomo Report Subscriptions found");
+            }
+            System.exit(0);
+        } else if (verboseOutput) {
+            System.out.println("Found " + matomoReports.size() + " Matomo Report Subscriptions");
+        }
+
+        File outputDir = new File(MATOMO_REPORTS_OUTPUT_PATH);
         if (!outputDir.exists()) {
             if (!outputDir.mkdirs()) {
-                throw new IOException("Cannot create " + PIWIK_REPORTS_OUTPUT_PATH + " directory");
+                throw new IOException("Cannot create " + MATOMO_REPORTS_OUTPUT_PATH + " directory");
             }
         }
 
@@ -142,20 +180,26 @@ public class MatomoPDFExporter {
             Item item = mr.getItem();
             if (item != null) {
                 if (!done.contains(item)) {
-                    if (item.getHandle() != null && !item.getHandle().isEmpty()) {
+                    if (!getHandle(item).isEmpty()) {
                         try {
-                            log.info("Processing Item : " + item.getHandle());
+                            log.info("Processing Item: {}", getHandle(item));
+                            if (verboseOutput) {
+                                System.out.println("Processing Item: " + item.getID() + "(" + getHandle(item) + ")");
+                            }
                             generateItemReport(item);
                             done.add(item);
                         } catch (FileNotFoundException e) {
-                            log.info(String.format("404 '%s' probably nothing logged for that date", e.getMessage()));
+                            log.info("404 '{}' probably nothing logged for that date", e.getMessage());
+                            if (verboseOutput) {
+                                System.out.println("Nothing logged for: " + e.getMessage());
+                            }
                             continue;
                         } catch (Exception e) {
                             log.error("Unable to generate report.", e);
                             continue;
                         }
                     } else {
-                        log.info("Item handle not found : item_id=" + item.getID());
+                        log.info("Item handle not found : item_id={}", item.getID());
                     }
                 }
                 EPerson to = mr.getEPerson();
@@ -167,7 +211,7 @@ public class MatomoPDFExporter {
             }
         }
         //cleanup
-        if (!PIWIK_KEEP_REPORTS) {
+        if (!MATOMO_KEEP_REPORTS) {
             try {
                 FileUtils.deleteDirectory(outputDir);
             } catch (IOException e) {
@@ -186,7 +230,7 @@ public class MatomoPDFExporter {
         email.addArgument(itemTitle);
         email.addArgument(to.getName());
         email.addRecipient(to.getEmail());
-        email.addAttachment(new File(PIWIK_REPORTS_OUTPUT_PATH + "/" + item.getID() + ".pdf"), "MonthlyStats.pdf");
+        email.addAttachment(new File(MATOMO_REPORTS_OUTPUT_PATH + "/" + item.getID() + ".pdf"), "MonthlyStats.pdf");
         email.send();
     }
 
@@ -198,7 +242,11 @@ public class MatomoPDFExporter {
         Date firstDay = cal.getTime();
 
         // use just the yyyy-MM part for the date param
-        MatomoHelper matomoHelper = new MatomoHelper("day", inputDateFormat.format(firstDay).substring(0,7), item, "");
+        String handle = getHandle(item);
+        MatomoHelper matomoHelper =
+                new MatomoHelper("day", inputDateFormat.format(firstDay).substring(0,7), handle, "");
+
+        log.info("Generating Item Report for item handle: {}", handle);
 
         String json = matomoHelper.getDataAsJsonString();
         JSONParser parser = new JSONParser();
@@ -361,9 +409,9 @@ public class MatomoPDFExporter {
                                     JFreeChart viewsChart,
                                     Map<String, Integer> summary,
                                     List<String[]> countryData) throws Exception {
-        com.itextpdf.text.Document pdf = new com.itextpdf.text.Document(PageSize.A4, 36, 36, 54, 54);
+        Document pdf = new Document(PageSize.A4, 36, 36, 54, 54);
         PdfWriter writer = PdfWriter.getInstance(pdf,
-                new FileOutputStream(PIWIK_REPORTS_OUTPUT_PATH + "/" + item.getID() + ".pdf"));
+                new FileOutputStream(MATOMO_REPORTS_OUTPUT_PATH + "/" + item.getID() + ".pdf"));
 
         pdf.open();
 
@@ -378,7 +426,6 @@ public class MatomoPDFExporter {
         FONT[5] = new Font(FontFamily.HELVETICA, 8, Font.BOLD);
         FONT[6] = new Font(FontFamily.HELVETICA, 8);
         FONT[7] = new Font(FontFamily.HELVETICA, 10, Font.BOLD);
-
 
         Image logo = Image.getInstance(LINDAT_LOGO);
         logo.scaleAbsolute(82, 48);
@@ -428,10 +475,8 @@ public class MatomoPDFExporter {
 
         pdf.add(cl);
 
-        ItemService itemService = item.getItemService();
-        String itemTitle = itemService.getMetadataFirstValue(item, ItemService.MD_NAME, Item.ANY);
-        String hdlURL = itemService.getMetadataFirstValue(item, MetadataSchemaEnum.DC.getName(),
-                "identifier", "uri", Item.ANY);
+        String itemTitle = item.getItemService().getMetadataFirstValue(item, ItemService.MD_NAME, Item.ANY);
+        String hdlURL = getHandleUrl(item);
 
         Paragraph itemName = new Paragraph();
         itemName.setFont(FONT[3]);
@@ -570,4 +615,26 @@ public class MatomoPDFExporter {
         pdf.close();
         writer.close();
     }
+
+    private static void printHelpAndExit(Options options) {
+        // print the help message
+        HelpFormatter myHelp = new HelpFormatter();
+        myHelp.printHelp("matomo-report-generator\n", options);
+        System.exit(0);
+    }
+
+    private static String getHandle(Item item) {
+//        return item.getHandle();
+        String handleUrl = getHandleUrl(item);
+        return handleUrl != null ? handleUrl.substring(HANDLE_URL_PREFIX.length()) : "";
+    }
+
+    private static String getHandleUrl(Item item) {
+//        return item.getItemService().getMetadataFirstValue(item, MetadataSchemaEnum.DC.getName(),
+//                "identifier", "uri", Item.ANY);
+        return item.getItemService().getMetadataFirstValue(item, MetadataSchemaEnum.DC.getName(),
+                "identifier", null, Item.ANY);
+    }
+
+
 }
