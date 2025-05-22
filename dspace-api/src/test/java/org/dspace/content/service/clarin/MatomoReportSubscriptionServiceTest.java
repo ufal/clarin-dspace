@@ -24,7 +24,7 @@ import org.dspace.content.Collection;
 import org.dspace.content.Community;
 import org.dspace.content.Item;
 import org.dspace.content.WorkspaceItem;
-import org.dspace.content.clarin.MatomoReport;
+import org.dspace.content.clarin.MatomoReportSubscription;
 import org.dspace.content.factory.ClarinServiceFactory;
 import org.dspace.content.factory.ContentServiceFactory;
 import org.dspace.content.service.InstallItemService;
@@ -32,12 +32,13 @@ import org.dspace.content.service.WorkspaceItemService;
 import org.junit.Before;
 import org.junit.Test;
 
-public class MatomoReportServiceTest extends AbstractIntegrationTestWithDatabase {
-    private static final Logger log = LogManager.getLogger(MatomoReportServiceTest.class);
+public class MatomoReportSubscriptionServiceTest extends AbstractIntegrationTestWithDatabase {
+    private static final Logger log = LogManager.getLogger(MatomoReportSubscriptionServiceTest.class);
 
     protected InstallItemService installItemService = ContentServiceFactory.getInstance().getInstallItemService();
     protected WorkspaceItemService workspaceItemService = ContentServiceFactory.getInstance().getWorkspaceItemService();
-    private final MatomoReportService matomoReportService = ClarinServiceFactory.getInstance().getMatomoReportService();
+    private final MatomoReportSubscriptionService matomoReportSubscriptionService =
+            ClarinServiceFactory.getInstance().getMatomoReportService();
 
     Community community;
     Collection collection1;
@@ -77,43 +78,45 @@ public class MatomoReportServiceTest extends AbstractIntegrationTestWithDatabase
     }
 
     @Test
-    public void testMatomoReportService() throws Exception {
-        MatomoReport mr = new MatomoReport();
-        mr.setItem(item);
-        MatomoReport expectedReport = new MatomoReport();
-        expectedReport.setItem(item);
-        expectedReport.setEPerson(admin);
+    public void testMatomoReportSubscriptionService() throws Exception {
+        MatomoReportSubscription mrs = new MatomoReportSubscription();
+        mrs.setItem(item);
+        MatomoReportSubscription expected = new MatomoReportSubscription();
+        expected.setItem(item);
+        expected.setEPerson(admin);
 
         context.setCurrentUser(admin);
-        MatomoReport createdReport = matomoReportService.subscribe(context, item);
-        expectedReport.setId(createdReport.getID());
-        assertEquals(expectedReport, createdReport);
+        MatomoReportSubscription created = matomoReportSubscriptionService.subscribe(context, item);
+        expected.setId(created.getID());
+        assertEquals(expected, created);
 
-        assertTrue(matomoReportService.isSubscribed(context, item));
+        assertTrue(matomoReportSubscriptionService.isSubscribed(context, item));
 
-        List<MatomoReport> retrievedReports = matomoReportService.findAll(context);
+        List<MatomoReportSubscription> retrievedSubscriptions = matomoReportSubscriptionService.findAll(context);
 
-        assertEquals(1, retrievedReports.size());
-        assertEquals(expectedReport, retrievedReports.get(0));
+        assertEquals(1, retrievedSubscriptions.size());
+        assertEquals(expected, retrievedSubscriptions.get(0));
 
-        MatomoReport retrievedReport = matomoReportService.findByItem(context, retrievedReports.get(0).getItem());
-        assertEquals(expectedReport, retrievedReport);
+        MatomoReportSubscription retrievedSubscription =
+                matomoReportSubscriptionService.findByItem(context, retrievedSubscriptions.get(0).getItem());
+        assertEquals(expected, retrievedSubscription);
 
-        matomoReportService.unsubscribe(context, createdReport.getItem());
-        assertEquals(0, matomoReportService.findAll(context).size());
+        matomoReportSubscriptionService.unsubscribe(context, created.getItem());
+        assertEquals(0, matomoReportSubscriptionService.findAll(context).size());
 
         context.setCurrentUser(eperson);
-        MatomoReport mr1 = new MatomoReport();
-        mr1.setItem(item);
-        MatomoReport anotherReport = matomoReportService.subscribe(context, item);
-        assertTrue(anotherReport.getID() > 1);
+        MatomoReportSubscription mrs1 = new MatomoReportSubscription();
+        mrs1.setItem(item);
+        MatomoReportSubscription anotherCreated = matomoReportSubscriptionService.subscribe(context, item);
+        assertTrue(anotherCreated.getID() > 1);
 
-        MatomoReport retrievedReport1 = matomoReportService.find(context, anotherReport.getID());
-        assertEquals(anotherReport, retrievedReport1);
+        MatomoReportSubscription retrievedSubscription1 =
+                matomoReportSubscriptionService.find(context, anotherCreated.getID());
+        assertEquals(anotherCreated, retrievedSubscription1);
 
-        assertTrue(matomoReportService.isSubscribed(context, item));
+        assertTrue(matomoReportSubscriptionService.isSubscribed(context, item));
 
-        List<MatomoReport> retrievedReports1 = matomoReportService.findAll(context);
-        assertEquals(1, retrievedReports1.size());
+        List<MatomoReportSubscription> retrievedSubscriptions1 = matomoReportSubscriptionService.findAll(context);
+        assertEquals(1, retrievedSubscriptions1.size());
     }
 }

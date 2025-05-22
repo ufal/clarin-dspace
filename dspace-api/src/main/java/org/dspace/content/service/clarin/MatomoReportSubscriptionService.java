@@ -12,17 +12,17 @@ import java.util.List;
 
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.Item;
-import org.dspace.content.clarin.MatomoReport;
+import org.dspace.content.clarin.MatomoReportSubscription;
 import org.dspace.core.Context;
 
 /**
- * Service interface class for the MatomoReport object.
- * The implementation of this class is responsible for all business logic calls for the MatomoReport object
+ * Service interface class for the MatomoReportSubscription object.
+ * The implementation of this class is responsible for all business logic calls for the MatomoReportSubscription object
  * and is autowired by spring
  *
  * @author Milan Kuchtiak
  */
-public interface MatomoReportService {
+public interface MatomoReportSubscriptionService {
 
     /**
      * Subscribe current user to get Matomo report for the item.
@@ -32,10 +32,10 @@ public interface MatomoReportService {
      * @throws SQLException if database error
      * @throws AuthorizeException the user in not admin
      */
-    MatomoReport subscribe(Context context, Item item) throws SQLException, AuthorizeException;
+    MatomoReportSubscription subscribe(Context context, Item item) throws SQLException, AuthorizeException;
 
     /**
-     * Unsubscribe current user from getting Matomo report for the item.
+     * Unsubscribe current user from getting the Matomo report for the item.
      * @param context DSpace context object
      * @param item Item to be excluded from Matomo report
      * @throws SQLException if database error
@@ -44,7 +44,7 @@ public interface MatomoReportService {
     void unsubscribe(Context context, Item item) throws SQLException, AuthorizeException;
 
     /**
-     * Check if current user is subscribed to get Matomo report for the item.
+     * Check if current user is subscribed to get the Matomo report for the item.
      * @param context DSpace context object
      * @param item Item to be checked if included in Matomo report
      * @throws SQLException if database error
@@ -53,31 +53,31 @@ public interface MatomoReportService {
     boolean isSubscribed(Context context, Item item) throws SQLException, AuthorizeException;
 
     /**
-     * Find the MatomoReport object by id
+     * Find the MatomoReportSubscription object by id
      * @param context DSpace context object
-     * @param id id of the searching MatomoReport object
-     * @return found MatomoReport object or null
+     * @param id id of the searching MatomoReportSubscription object
+     * @return found MatomoReportSubscription object or null
      * @throws SQLException if database error
      */
-    MatomoReport find(Context context, int id) throws SQLException, AuthorizeException;
+    MatomoReportSubscription find(Context context, int id) throws SQLException, AuthorizeException;
 
     /**
-     * Find the MatomoReport object for the item, for current user .
+     * Find the MatomoReportSubscription object for the item, for current user.
      * @param context DSpace context object
-     * @param item id of the searching MatomoReport object
-     * @return found MatomoReport object or null
+     * @param item Item object for which the MatomoReportSubscription is searched for
+     * @return found MatomoReportSubscription object or null
      * @throws SQLException if database error
      * @throws AuthorizeException the user in not
      */
-    MatomoReport findByItem(Context context, Item item) throws SQLException, AuthorizeException;
+    MatomoReportSubscription findByItem(Context context, Item item) throws SQLException, AuthorizeException;
 
     /**
-     * Find all MatomoReport objects, only available for admin user.
+     * Find all MatomoReportSubscription objects, only available for admin user.
      * @param context DSpace context object
-     * @return list of all MatomoReport objects
+     * @return list of all MatomoReportSubscription objects
      * @throws SQLException if database error
      * @throws AuthorizeException the user in not admin
      */
-    List<MatomoReport> findAll(Context context) throws SQLException, AuthorizeException;
+    List<MatomoReportSubscription> findAll(Context context) throws SQLException, AuthorizeException;
 
 }

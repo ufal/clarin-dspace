@@ -55,7 +55,7 @@
     <bean class="org.dspace.content.dao.impl.clarin.ClarinLicenseResourceUserAllowanceDAOImpl"/>
     <bean class="org.dspace.content.dao.impl.clarin.ClarinItemDAOImpl"/>
     <bean class="org.dspace.content.dao.impl.clarin.ClarinVerificationTokenDAOImpl"/>
-    <bean class="org.dspace.content.dao.impl.clarin.MatomoReportDAOImpl"/>
+    <bean class="org.dspace.content.dao.impl.clarin.MatomoReportSubscriptionDAOImpl"/>
 
     <bean class="org.dspace.harvest.dao.impl.HarvestedItemDAOImpl"/>
     <bean class="org.dspace.harvest.dao.impl.HarvestedCollectionDAOImpl"/>
@@ -75,7 +75,7 @@
     <bean class="org.dspace.xmlworkflow.storedcomponents.dao.impl.WorkflowItemRoleDAOImpl"/>
     <bean class="org.dspace.xmlworkflow.storedcomponents.dao.impl.XmlWorkflowItemDAOImpl"/>
     <bean class="org.dspace.statistics.export.dao.impl.OpenURLTrackerDAOImpl"/>
- 	
+
     <bean class="org.dspace.orcid.dao.impl.OrcidQueueDAOImpl" />
     <bean class="org.dspace.orcid.dao.impl.OrcidHistoryDAOImpl" />
 

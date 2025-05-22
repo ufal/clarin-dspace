@@ -57,7 +57,7 @@ import org.apache.logging.log4j.Logger;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.Item;
 import org.dspace.content.MetadataSchemaEnum;
-import org.dspace.content.clarin.MatomoReport;
+import org.dspace.content.clarin.MatomoReportSubscription;
 import org.dspace.content.factory.ClarinServiceFactory;
 import org.dspace.content.service.ItemService;
 import org.dspace.core.Context;
@@ -154,7 +154,7 @@ public class MatomoPDFExporter {
         context.setCurrentUser(eperson);
         context.restoreAuthSystemState();
 
-        List<MatomoReport> matomoReports = ClarinServiceFactory.getInstance()
+        List<MatomoReportSubscription> matomoReports = ClarinServiceFactory.getInstance()
                 .getMatomoReportService().findAll(context);
 
         if (matomoReports.isEmpty()) {
@@ -176,7 +176,7 @@ public class MatomoPDFExporter {
 
         HashSet<Item> done = new HashSet<Item>();
 
-        for (MatomoReport mr : matomoReports) {
+        for (MatomoReportSubscription mr : matomoReports) {
             Item item = mr.getItem();
             if (item != null) {
                 if (!done.contains(item)) {

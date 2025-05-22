@@ -15,7 +15,7 @@ import org.dspace.content.service.clarin.ClarinLicenseService;
 import org.dspace.content.service.clarin.ClarinUserMetadataService;
 import org.dspace.content.service.clarin.ClarinUserRegistrationService;
 import org.dspace.content.service.clarin.ClarinVerificationTokenService;
-import org.dspace.content.service.clarin.MatomoReportService;
+import org.dspace.content.service.clarin.MatomoReportSubscriptionService;
 import org.dspace.handle.service.HandleClarinService;
 import org.dspace.services.factory.DSpaceServicesFactory;
 import org.matomo.java.tracking.MatomoTracker;
@@ -48,7 +48,7 @@ public abstract class ClarinServiceFactory {
 
     public abstract ClarinItemService getClarinItemService();
 
-    public abstract MatomoReportService getMatomoReportService();
+    public abstract MatomoReportSubscriptionService getMatomoReportService();
 
     public static ClarinServiceFactory getInstance() {
         return DSpaceServicesFactory.getInstance().getServiceManager()

@@ -12,11 +12,11 @@ import java.util.List;
 import java.util.Objects;
 
 import org.dspace.app.rest.exception.RESTAuthorizationException;
-import org.dspace.app.rest.model.MatomoReportRest;
+import org.dspace.app.rest.model.MatomoReportSubscriptionRest;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.authorize.service.AuthorizeService;
-import org.dspace.content.clarin.MatomoReport;
-import org.dspace.content.service.clarin.MatomoReportService;
+import org.dspace.content.clarin.MatomoReportSubscription;
+import org.dspace.content.service.clarin.MatomoReportSubscriptionService;
 import org.dspace.core.Context;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -25,42 +25,43 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Component;
 
 /**
- * This is the repository responsible to manage Matomo Report Rest object
+ * This is the repository responsible to manage Matomo Report Subscription Rest object
  *
  * @author Milan Kuchtiak
  */
-@Component(MatomoReportRest.CATEGORY + "." + MatomoReportRest.NAME)
-public class MatomoReportRestRepository extends DSpaceRestRepository<MatomoReportRest, Integer> {
+@Component(MatomoReportSubscriptionRest.CATEGORY + "." + MatomoReportSubscriptionRest.NAME)
+public class MatomoReportSubscriptionRestRepository extends
+        DSpaceRestRepository<MatomoReportSubscriptionRest, Integer> {
 
     @Autowired
     AuthorizeService authorizeService;
 
     @Autowired
-    MatomoReportService matomoReportService;
+    MatomoReportSubscriptionService matomoReportSubscriptionService;
 
     @Override
     @PreAuthorize("hasAuthority('AUTHENTICATED')")
-    public MatomoReportRest findOne(Context context, Integer id) {
-        MatomoReport matomoReport;
+    public MatomoReportSubscriptionRest findOne(Context context, Integer id) {
+        MatomoReportSubscription matomoReportSubscription;
         try {
-            matomoReport = matomoReportService.find(context, id);
+            matomoReportSubscription = matomoReportSubscriptionService.find(context, id);
         } catch (SQLException se) {
             throw new RuntimeException(se.getMessage(), se);
         } catch (AuthorizeException ae) {
             throw new RESTAuthorizationException(ae);
         }
-        if (Objects.isNull(matomoReport)) {
+        if (Objects.isNull(matomoReportSubscription)) {
             return null;
         }
-        return converter.toRest(matomoReport, utils.obtainProjection());
+        return converter.toRest(matomoReportSubscription, utils.obtainProjection());
     }
 
     @Override
     @PreAuthorize("hasAuthority('AUTHENTICATED')")
-    public Page<MatomoReportRest> findAll(Context context, Pageable pageable) {
+    public Page<MatomoReportSubscriptionRest> findAll(Context context, Pageable pageable) {
         try {
-            List<MatomoReport> matomoReportList = matomoReportService.findAll(context);
-            return converter.toRestPage(matomoReportList, pageable, utils.obtainProjection());
+            List<MatomoReportSubscription> matomoReportSubscriptions = matomoReportSubscriptionService.findAll(context);
+            return converter.toRestPage(matomoReportSubscriptions, pageable, utils.obtainProjection());
         } catch (SQLException se) {
             throw new RuntimeException(se.getMessage(), se);
         } catch (AuthorizeException e) {
@@ -69,7 +70,7 @@ public class MatomoReportRestRepository extends DSpaceRestRepository<MatomoRepor
     }
 
     @Override
-    public Class<MatomoReportRest> getDomainClass() {
-        return MatomoReportRest.class;
+    public Class<MatomoReportSubscriptionRest> getDomainClass() {
+        return MatomoReportSubscriptionRest.class;
     }
 }

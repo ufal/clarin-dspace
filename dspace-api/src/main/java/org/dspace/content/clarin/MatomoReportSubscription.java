@@ -24,18 +24,19 @@ import org.dspace.core.ReloadableEntity;
 import org.dspace.eperson.EPerson;
 
 /**
- * Entity representing matomo_report.
+ * Entity representing Matomo report subscriptions.
  *
  * @author Milan Kuchtiak
  */
 @Entity
-@Table(name = "matomo_report")
-public class MatomoReport implements ReloadableEntity<Integer> {
+@Table(name = "matomo_report_registry")
+public class MatomoReportSubscription implements ReloadableEntity<Integer> {
 
     @Id
     @Column(name = "id")
-    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "matomo_report_id_seq")
-    @SequenceGenerator(name = "matomo_report_id_seq", sequenceName = "matomo_report_id_seq", allocationSize = 1)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "matomo_report_registry_id_seq")
+    @SequenceGenerator(name = "matomo_report_registry_id_seq", sequenceName = "matomo_report_registry_id_seq",
+            allocationSize = 1)
     private Integer id;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -46,7 +47,7 @@ public class MatomoReport implements ReloadableEntity<Integer> {
     @JoinColumn(name = "item_id")
     private Item item;
 
-    public MatomoReport() {
+    public MatomoReportSubscription() {
     }
 
     @Override
@@ -79,7 +80,7 @@ public class MatomoReport implements ReloadableEntity<Integer> {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        MatomoReport that = (MatomoReport) o;
+        MatomoReportSubscription that = (MatomoReportSubscription) o;
         return Objects.equals(id, that.id)
                 && Objects.equals(ePerson.getID(), that.ePerson.getID())
                 && Objects.equals(item.getID(), that.item.getID());
@@ -92,7 +93,7 @@ public class MatomoReport implements ReloadableEntity<Integer> {
 
     @Override
     public String toString() {
-        return "MatomoReport{" +
+        return "MatomoReportSubscription{" +
                 "id=" + id +
                 ", ePerson=" + ePerson +
                 ", item=" + item +

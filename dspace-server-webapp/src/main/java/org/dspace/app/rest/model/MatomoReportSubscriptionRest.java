@@ -11,13 +11,13 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.dspace.app.rest.RestResourceController;
 
 /**
- * The MatomoReport REST Resource
+ * The MatomoReportSubscription REST Resource
  *
  * @author Milan Kuchtiak
  */
-public class MatomoReportRest extends BaseObjectRest<Integer> {
+public class MatomoReportSubscriptionRest extends BaseObjectRest<Integer> {
 
-    public static final String NAME = "matomoreport";
+    public static final String NAME = "matomoreportsubscription";
     public static final String CATEGORY = RestAddressableModel.CORE;
 
     private String epersonId;
