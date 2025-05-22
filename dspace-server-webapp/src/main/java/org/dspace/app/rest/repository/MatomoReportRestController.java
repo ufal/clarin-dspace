@@ -27,6 +27,7 @@ import org.dspace.content.service.clarin.MatomoReportService;
 import org.dspace.core.Context;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.rest.webmvc.ControllerUtils;
+import org.springframework.data.rest.webmvc.ResourceNotFoundException;
 import org.springframework.hateoas.RepresentationModel;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -90,6 +91,9 @@ public class MatomoReportRestController {
 
         Item item = getItem(context, uuid);
         MatomoReport matomoReport = matomoReportService.findByItem(context, item);
+        if (matomoReport == null) {
+            throw new ResourceNotFoundException("Current user is not subscribed for this item");
+        }
         return converter.toRest(matomoReport, utils.obtainProjection());
     }
 
