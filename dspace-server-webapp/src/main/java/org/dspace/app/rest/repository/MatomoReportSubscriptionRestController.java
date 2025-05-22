@@ -42,8 +42,7 @@ import org.springframework.web.bind.annotation.RestController;
  * @author Milan Kuchtiak
  */
 @RestController
-@RequestMapping("/api/" + MatomoReportSubscriptionRest.CATEGORY + "/" +
-        MatomoReportSubscriptionRest.NAME + "/forItem")
+@RequestMapping("/api/" + MatomoReportSubscriptionRest.CATEGORY + "/" + MatomoReportSubscriptionRest.NAME)
 public class MatomoReportSubscriptionRestController {
 
     private static final String ITEM_QUERY_PARAMETER = "item";
@@ -86,7 +85,7 @@ public class MatomoReportSubscriptionRestController {
     }
 
     @PreAuthorize("hasAuthority('AUTHENTICATED')")
-    @RequestMapping(method = RequestMethod.GET)
+    @RequestMapping(method = RequestMethod.GET, path = "forItem")
     public MatomoReportSubscriptionRest getReportForItem(HttpServletRequest request)
             throws AuthorizeException, SQLException {
         Context context = getContext(request);
