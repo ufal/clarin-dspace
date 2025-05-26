@@ -47,7 +47,7 @@ public class MatomoReportSubscriptionServiceImpl implements MatomoReportSubscrip
         MatomoReportSubscription matomoReportSubscription =
                 matomoReportSubscriptionDAO.findByID(context, MatomoReportSubscription.class, id);
 
-        if (matomoReportSubscription != null &&
+        if (matomoReportSubscription != null && !authorizeService.isAdmin(context) &&
                 !context.getCurrentUser().getID().equals(matomoReportSubscription.getEPerson().getID())) {
             throw new AuthorizeException("You must be admin user to get matomo report subscription for this ID");
         }
