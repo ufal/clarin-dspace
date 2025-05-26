@@ -204,7 +204,7 @@ public class MatomoPDFExporter {
                 }
                 EPerson to = mr.getEPerson();
                 try {
-                    sendEmail(to, item);
+                    sendEmail(to, item, verboseOutput);
                 } catch (Exception e) {
                     log.error(e);
                 }
@@ -220,7 +220,7 @@ public class MatomoPDFExporter {
         }
     }
 
-    private static void sendEmail(EPerson to, Item item) throws IOException, MessagingException {
+    private static void sendEmail(EPerson to, Item item, boolean verboseOutput) throws IOException, MessagingException {
 
         // Get a resource bundle according to the eperson language preferences
         Locale supportedLocale = I18nUtil.getEPersonLocale(to);
@@ -232,6 +232,10 @@ public class MatomoPDFExporter {
         email.addRecipient(to.getEmail());
         email.addAttachment(new File(MATOMO_REPORTS_OUTPUT_PATH + "/" + item.getID() + ".pdf"), "MonthlyStats.pdf");
         email.send();
+        if (verboseOutput) {
+            System.out.println("Email sent to " + to.getEmail());
+        }
+
     }
 
     private static void generateItemReport(Item item) throws Exception {
@@ -624,16 +628,18 @@ public class MatomoPDFExporter {
     }
 
     private static String getHandle(Item item) {
-//        return item.getHandle();
-        String handleUrl = getHandleUrl(item);
-        return handleUrl != null ? handleUrl.substring(HANDLE_URL_PREFIX.length()) : "";
+        return item.getHandle();
+        /* This is only for testing purpose */
+        // String handleUrl = getHandleUrl(item);
+        // return handleUrl != null ? handleUrl.substring(HANDLE_URL_PREFIX.length()) : "";
     }
 
     private static String getHandleUrl(Item item) {
-//        return item.getItemService().getMetadataFirstValue(item, MetadataSchemaEnum.DC.getName(),
-//                "identifier", "uri", Item.ANY);
         return item.getItemService().getMetadataFirstValue(item, MetadataSchemaEnum.DC.getName(),
-                "identifier", null, Item.ANY);
+                "identifier", "uri", Item.ANY);
+        /* This is only for testing purpose */
+        // return item.getItemService().getMetadataFirstValue(item, MetadataSchemaEnum.DC.getName(),
+        //        "identifier", null, Item.ANY);
     }
 
 

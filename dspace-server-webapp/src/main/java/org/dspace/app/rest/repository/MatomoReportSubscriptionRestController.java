@@ -32,6 +32,7 @@ import org.springframework.hateoas.RepresentationModel;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
@@ -42,10 +43,9 @@ import org.springframework.web.bind.annotation.RestController;
  * @author Milan Kuchtiak
  */
 @RestController
-@RequestMapping("/api/" + MatomoReportSubscriptionRest.CATEGORY + "/" + MatomoReportSubscriptionRest.NAME)
+@RequestMapping("/api/" + MatomoReportSubscriptionRest.CATEGORY + "/" +
+        MatomoReportSubscriptionRest.NAME + "/item/{itemId}")
 public class MatomoReportSubscriptionRestController {
-
-    private static final String ITEM_QUERY_PARAMETER = "item";
 
     @Autowired
     private ConverterService converter;
@@ -58,11 +58,11 @@ public class MatomoReportSubscriptionRestController {
 
     @PreAuthorize("hasAuthority('AUTHENTICATED')")
     @RequestMapping(method = RequestMethod.POST, path = "subscribe")
-    public MatomoReportSubscriptionRest itemSubscribe(HttpServletRequest request)
+    public MatomoReportSubscriptionRest itemSubscribe(@PathVariable UUID itemId, HttpServletRequest request)
             throws AuthorizeException, SQLException {
         Context context = getContext(request);
 
-        Item item = getItem(context, request);
+        Item item = getItem(context, itemId);
         MatomoReportSubscription matomoReport = matomoReportSubscriptionService.subscribe(context, item);
         context.commit();
         return converter.toRest(matomoReport, utils.obtainProjection());
@@ -70,11 +70,11 @@ public class MatomoReportSubscriptionRestController {
 
     @PreAuthorize("hasAuthority('AUTHENTICATED')")
     @RequestMapping(method = RequestMethod.POST, path = "unsubscribe")
-    public ResponseEntity<RepresentationModel<?>> itemUnsubscribe(HttpServletRequest request)
+    public ResponseEntity<RepresentationModel<?>> itemUnsubscribe(@PathVariable UUID itemId, HttpServletRequest request)
             throws AuthorizeException, SQLException {
         Context context = getContext(request);
 
-        Item item = getItem(context, request);
+        Item item = getItem(context, itemId);
         try {
             matomoReportSubscriptionService.unsubscribe(context, item);
             context.commit();
@@ -85,12 +85,12 @@ public class MatomoReportSubscriptionRestController {
     }
 
     @PreAuthorize("hasAuthority('AUTHENTICATED')")
-    @RequestMapping(method = RequestMethod.GET, path = "forItem")
-    public MatomoReportSubscriptionRest getReportForItem(HttpServletRequest request)
+    @RequestMapping(method = RequestMethod.GET)
+    public MatomoReportSubscriptionRest getReportForItem(@PathVariable UUID itemId, HttpServletRequest request)
             throws AuthorizeException, SQLException {
         Context context = getContext(request);
 
-        Item item = getItem(context, request);
+        Item item = getItem(context, itemId);
         MatomoReportSubscription matomoReport = matomoReportSubscriptionService.findByItem(context, item);
         if (matomoReport == null) {
             throw new ResourceNotFoundException("Current user is not subscribed for this item");
@@ -98,19 +98,9 @@ public class MatomoReportSubscriptionRestController {
         return converter.toRest(matomoReport, utils.obtainProjection());
     }
 
-    private Item getItem(Context context, HttpServletRequest request) {
-        String itemId = request.getParameter(ITEM_QUERY_PARAMETER);
-        if (itemId == null || itemId.isEmpty()) {
-            throw new DSpaceBadRequestException("missing " + ITEM_QUERY_PARAMETER + " query parameter");
-        }
-        UUID itemUuid;
+    private Item getItem(Context context, UUID itemId) {
         try {
-            itemUuid =  UUID.fromString(itemId);
-        } catch (IllegalArgumentException ex) {
-            throw new DSpaceBadRequestException(ex.getMessage(), ex);
-        }
-        try {
-            Item item = itemService.find(context, itemUuid);
+            Item item = itemService.find(context, itemId);
             if (item == null) {
                 throw new DSpaceBadRequestException("Item for this item ID does not exist");
             }
