@@ -46,19 +46,14 @@ import org.w3c.dom.NodeList;
 public class MatomoHelper {
     private static Logger log = LogManager.getLogger(MatomoHelper.class);
 
-    private static final ConfigurationService configurationService = DSpaceServicesFactory.getInstance()
-            .getConfigurationService();
-    private static final String DSPACE_URL = configurationService.getProperty("dspace.url");
+    private static String DSPACE_URL;
     /** Matomo configurations */
-    static final String MATOMO_API_MODE =
-            configurationService.getProperty("lr.statistics.api.mode", "cached");
-    private static final String MATOMO_API_URL = configurationService.getProperty("lr.statistics.api.url");
-    private static final String MATOMO_API_URL_CACHED =
-            configurationService.getProperty("lr.statistics.api.cached.url");
-    private static final String AUTH_TOKEN = configurationService.getProperty("lr.statistics.api.auth.token");
-    private static final String MATOMO_SITE_ID = configurationService.getProperty("lr.statistics.api.site_id");
-    private static final String MATOMO_DOWNLOAD_SITE_ID =
-            configurationService.getProperty("lr.tracker.bitstream.site_id");
+    private static String MATOMO_API_MODE;
+    private static String MATOMO_API_URL;
+    private static String MATOMO_API_URL_CACHED;
+    private static String AUTH_TOKEN;
+    private static String MATOMO_SITE_ID;
+    private static String MATOMO_DOWNLOAD_SITE_ID;
 
     private final String period;
     private final String date;
@@ -66,10 +61,23 @@ public class MatomoHelper {
     private final String rest;
 
     MatomoHelper(String period, String date, String handle, String rest) {
+        initProperties();
         this.period = period;
         this.date = date;
         this.handle = handle;
         this.rest = rest;
+    }
+
+    private static void initProperties() {
+        ConfigurationService configurationService = DSpaceServicesFactory.getInstance()
+                .getConfigurationService();
+        DSPACE_URL = configurationService.getProperty("dspace.url");
+        MATOMO_API_MODE = configurationService.getProperty("lr.statistics.api.mode", "cached");
+        MATOMO_API_URL = configurationService.getProperty("lr.statistics.api.url");
+        MATOMO_API_URL_CACHED = configurationService.getProperty("lr.statistics.api.cached.url");
+        AUTH_TOKEN = configurationService.getProperty("lr.statistics.api.auth.token");
+        MATOMO_SITE_ID = configurationService.getProperty("lr.statistics.api.site_id");
+        MATOMO_DOWNLOAD_SITE_ID = configurationService.getProperty("lr.tracker.bitstream.site_id");
     }
 
     /**
@@ -79,7 +87,7 @@ public class MatomoHelper {
      * @return
      * @throws Exception
      */
-    private static String transformJSONResults(Set<String> keys, String report) throws Exception {
+    static String transformJSONResults(Set<String> keys, String report) throws Exception {
         JSONParser parser = new JSONParser();
         JSONArray json = (JSONArray)parser.parse(report);
         JSONObject views = null;

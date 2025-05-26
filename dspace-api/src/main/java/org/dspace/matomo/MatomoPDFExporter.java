@@ -92,6 +92,7 @@ public class MatomoPDFExporter {
     private static String MATOMO_REPORTS_OUTPUT_PATH;
 
     /** Matomo configurations */
+    private static String MATOMO_API_MODE;
     private static boolean MATOMO_KEEP_REPORTS;
 
     private static URL LINDAT_LOGO;
@@ -119,7 +120,7 @@ public class MatomoPDFExporter {
             boolean verboseOutput = line.hasOption('v');
 
             initialize();
-            if (!MatomoHelper.MATOMO_API_MODE.equals("cached")) {
+            if (!MATOMO_API_MODE.equals("cached")) {
                 log.warn("Not using the cached mode: the reports will be missing uniq stats for pageviews, " +
                         "downloads and visitors as this is not implemented in transformJSON.");
             }
@@ -138,6 +139,7 @@ public class MatomoPDFExporter {
 
     public static void initialize() {
         ConfigurationService configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
+        MATOMO_API_MODE = configurationService.getProperty("lr.statistics.api.mode", "cached");
         MATOMO_REPORTS_OUTPUT_PATH = configurationService.getProperty("lr.statistics.report.path");
         MATOMO_KEEP_REPORTS = configurationService.getBooleanProperty("lr.statistics.keep.reports", true);
         LINDAT_LOGO = MatomoPDFExporter.class.getResource("/org/dspace/lindat/lindat-logo.png");
