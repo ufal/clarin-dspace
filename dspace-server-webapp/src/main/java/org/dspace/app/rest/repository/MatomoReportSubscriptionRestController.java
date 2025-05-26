@@ -43,8 +43,7 @@ import org.springframework.web.bind.annotation.RestController;
  * @author Milan Kuchtiak
  */
 @RestController
-@RequestMapping("/api/" + MatomoReportSubscriptionRest.CATEGORY + "/" +
-        MatomoReportSubscriptionRest.NAME + "/item/{itemId}")
+@RequestMapping({MatomoReportSubscriptionRest.URI_SINGLE, MatomoReportSubscriptionRest.URI_PLURAL})
 public class MatomoReportSubscriptionRestController {
 
     @Autowired
