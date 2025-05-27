@@ -9,7 +9,7 @@
 ##
 ## See org.dspace.core.Email for information on the format of this file.
 ##
-#set($subject = 'Account Registration')
+#set($subject = "${config.get('dspace.shortname')}: Account Registration")
 To complete registration for a ${params[3]} repository account at ${params[5]}, please click the link below:
 
   ${params[0]}
