@@ -18,6 +18,7 @@ import javax.ws.rs.BadRequestException;
 import org.dspace.app.rest.converter.ConverterService;
 import org.dspace.app.rest.exception.DSpaceBadRequestException;
 import org.dspace.app.rest.model.MatomoReportSubscriptionRest;
+import org.dspace.app.rest.model.hateoas.MatomoReportSubscriptionResource;
 import org.dspace.app.rest.utils.Utils;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.Item;
@@ -57,14 +58,14 @@ public class MatomoReportSubscriptionRestController {
 
     @PreAuthorize("hasAuthority('AUTHENTICATED')")
     @RequestMapping(method = RequestMethod.POST, path = "subscribe")
-    public MatomoReportSubscriptionRest itemSubscribe(@PathVariable UUID itemId, HttpServletRequest request)
+    public MatomoReportSubscriptionResource itemSubscribe(@PathVariable UUID itemId, HttpServletRequest request)
             throws AuthorizeException, SQLException {
         Context context = getContext(request);
 
         Item item = getItem(context, itemId);
         MatomoReportSubscription matomoReport = matomoReportSubscriptionService.subscribe(context, item);
         context.commit();
-        return converter.toRest(matomoReport, utils.obtainProjection());
+        return converter.toResource(converter.toRest(matomoReport, utils.obtainProjection()));
     }
 
     @PreAuthorize("hasAuthority('AUTHENTICATED')")
@@ -85,7 +86,8 @@ public class MatomoReportSubscriptionRestController {
 
     @PreAuthorize("hasAuthority('AUTHENTICATED')")
     @RequestMapping(method = RequestMethod.GET)
-    public MatomoReportSubscriptionRest getReportForItem(@PathVariable UUID itemId, HttpServletRequest request)
+    public MatomoReportSubscriptionResource getSubscriptionForItem(@PathVariable UUID itemId,
+                                                                   HttpServletRequest request)
             throws AuthorizeException, SQLException {
         Context context = getContext(request);
 
@@ -94,7 +96,7 @@ public class MatomoReportSubscriptionRestController {
         if (matomoReport == null) {
             throw new ResourceNotFoundException("Current user is not subscribed for this item");
         }
-        return converter.toRest(matomoReport, utils.obtainProjection());
+        return converter.toResource(converter.toRest(matomoReport, utils.obtainProjection()));
     }
 
     private Item getItem(Context context, UUID itemId) {

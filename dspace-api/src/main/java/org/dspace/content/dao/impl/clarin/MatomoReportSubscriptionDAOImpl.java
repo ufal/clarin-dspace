@@ -32,7 +32,7 @@ public class MatomoReportSubscriptionDAOImpl extends AbstractHibernateDAO<Matomo
     }
 
     @Override
-    public MatomoReportSubscription findByItemId(Context context, UUID itemId)throws SQLException {
+    public MatomoReportSubscription findByItemIdAndCurrentUser(Context context, UUID itemId)throws SQLException {
         EPerson currentUser = context.getCurrentUser();
         return findByEPersonIdAndItemId(context, currentUser.getID(), itemId);
     }

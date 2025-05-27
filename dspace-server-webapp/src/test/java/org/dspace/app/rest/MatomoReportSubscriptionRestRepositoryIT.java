@@ -9,11 +9,14 @@ package org.dspace.app.rest;
 
 import static com.jayway.jsonpath.matchers.JsonPathMatchers.hasJsonPath;
 import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import java.util.List;
 
 import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
 import org.dspace.builder.CollectionBuilder;
@@ -23,17 +26,38 @@ import org.dspace.content.Collection;
 import org.dspace.content.Community;
 import org.dspace.content.Item;
 import org.dspace.content.clarin.MatomoReportSubscription;
+import org.dspace.content.service.clarin.MatomoReportSubscriptionService;
+import org.dspace.eperson.EPerson;
 import org.hamcrest.Matcher;
 import org.hamcrest.Matchers;
 import org.junit.Before;
 import org.junit.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 
 public class MatomoReportSubscriptionRestRepositoryIT extends AbstractControllerIntegrationTest {
 
+    private static final String ENTITY_TYPE = "matomoreportsubscription";
     private static final String URL_PREFIX = "/api/core/matomoreportsubscriptions";
 
     private Item publicItem1;
     private Item publicItem2;
+
+    private String adminToken;
+    private String userToken;
+
+    String item1Url;
+    String item2Url;
+    String subscribe1Url;
+    String subscribe2Url;
+    String unSubscribe1Url;
+    String unSubscribe2Url;
+
+    MatomoReportSubscription subscription1;
+    MatomoReportSubscription subscription2;
+    MatomoReportSubscription subscription3;
+
+    @Autowired
+    private MatomoReportSubscriptionService matomoReportSubscriptionService;
 
     @Before
     public void setup() throws Exception {
@@ -64,121 +88,59 @@ public class MatomoReportSubscriptionRestRepositoryIT extends AbstractController
                 .build();
 
         context.restoreAuthSystemState();
+
+        item1Url = URL_PREFIX + "/item/" + publicItem1.getID();
+        item2Url = URL_PREFIX + "/item/" + publicItem2.getID();
+        subscribe1Url = item1Url + "/subscribe";
+        subscribe2Url = item2Url + "/subscribe";
+        unSubscribe1Url = item1Url + "/unsubscribe";
+        unSubscribe2Url = item2Url + "/unsubscribe";
+
+        adminToken = getAuthToken(admin.getEmail(), password);
+        userToken = getAuthToken(eperson.getEmail(), password);
+
+        subscription1 = new MatomoReportSubscription();
+        subscription1.setId(1);
+        subscription1.setEPerson(admin);
+        subscription1.setItem(publicItem1);
+
+        subscription2 = new MatomoReportSubscription();
+        subscription2.setId(2);
+        subscription2.setEPerson(eperson);
+        subscription2.setItem(publicItem2);
+
+        subscription3 = new MatomoReportSubscription();
+        subscription3.setId(3);
+        subscription3.setEPerson(eperson);
+        subscription3.setItem(publicItem1);
     }
 
     @Test
-    public void testRestAPI() throws Exception {
-        String adminToken = getAuthToken(admin.getEmail(), password);
-        String userToken = getAuthToken(eperson.getEmail(), password);
-
-        String item1Url = URL_PREFIX + "/item/" + publicItem1.getID();
-        String item2Url = URL_PREFIX + "/item/" + publicItem2.getID();
-
-        String subscribe1Url = item1Url + "/subscribe";
-        String subscribe2Url = item2Url + "/subscribe";
-
-        String unSubscribe1Url = item1Url + "/unsubscribe";
-        String unSubscribe2Url = item2Url + "/unsubscribe";
-
-        MatomoReportSubscription expectedReport1 = new MatomoReportSubscription();
-        expectedReport1.setId(1);
-        expectedReport1.setEPerson(admin);
-        expectedReport1.setItem(publicItem1);
-
-        MatomoReportSubscription expectedReport2 = new MatomoReportSubscription();
-        expectedReport2.setId(2);
-        expectedReport2.setEPerson(eperson);
-        expectedReport2.setItem(publicItem2);
-
-        /* TEST subscribe items */
-
+    public void testSubscribe() throws Exception {
         // admin
         getClient(adminToken).perform(post(subscribe1Url))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", matchMatomoReportSubscriptionProperties(expectedReport1)));
+                .andExpect(jsonPath("$", matchMatomoReportSubscriptionProperties(subscription1)));
 
         // common user
         getClient(userToken).perform(post(subscribe2Url))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", matchMatomoReportSubscriptionProperties(expectedReport2)));
+                .andExpect(jsonPath("$", matchMatomoReportSubscriptionProperties(subscription2)));
+
+        getClient(userToken).perform(post(subscribe1Url))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", matchMatomoReportSubscriptionProperties(subscription3)));
 
         // un-authorized user
         getClient().perform(post(subscribe1Url))
                 .andExpect(status().isUnauthorized());
 
-        /* test findAll */
+        checkSubscriptions(3);
+    }
 
-        // admin
-        getClient(adminToken).perform(get(URL_PREFIX))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.page.totalElements", is(2)))
-                .andExpect(jsonPath("$._embedded.matomoreportsubscriptions",
-                        Matchers.containsInAnyOrder(
-                                matchMatomoReportSubscriptionProperties(expectedReport1),
-                                matchMatomoReportSubscriptionProperties(expectedReport2)
-                        )));
-
-        // common user
-        getClient(userToken).perform(get(URL_PREFIX))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.page.totalElements", is(1)))
-                .andExpect(jsonPath("$._embedded.matomoreportsubscriptions",
-                        Matchers.contains(
-                                matchMatomoReportSubscriptionProperties(expectedReport2)
-                        )));
-        // un-authorized user
-        getClient().perform(get(URL_PREFIX))
-                .andExpect(status().isUnauthorized());
-
-        /* test findOne */
-
-        // admin
-        getClient(adminToken).perform(get(URL_PREFIX + "/2"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$", matchMatomoReportSubscriptionProperties(expectedReport2)));
-
-        // common user
-        getClient(userToken).perform(get(URL_PREFIX + "/2"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$", matchMatomoReportSubscriptionProperties(expectedReport2)));
-
-        // common user tries to get other subscription
-        getClient(userToken).perform(get(URL_PREFIX + "/1"))
-                .andExpect(status().isForbidden());
-
-        // common user tries to get non-existing subscription
-        getClient(userToken).perform(get(URL_PREFIX + "/99"))
-                .andExpect(status().isNotFound());
-
-        // un-authorized user
-        getClient().perform(get(URL_PREFIX + "/1"))
-                .andExpect(status().isUnauthorized());
-
-        /* test get subscription for item */
-
-        // admin
-        getClient(adminToken).perform(get(item1Url))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$", matchMatomoReportSubscriptionProperties(expectedReport1)));
-
-        // admin tries to get subscription for item admin is not subscribed for
-        getClient(adminToken).perform(get(item2Url))
-                .andExpect(status().isNotFound());
-
-        // common user
-        getClient(userToken).perform(get(item2Url))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$", matchMatomoReportSubscriptionProperties(expectedReport2)));
-
-        // common user tries to get subscription for item user is not subscribed for
-        getClient(userToken).perform(get(item1Url))
-                .andExpect(status().isNotFound());
-
-        // un-authorized user
-        getClient().perform(get(item1Url))
-                .andExpect(status().isUnauthorized());
-
-        /* test unsubscribe items */
+    @Test
+    public void testUnsubscribe() throws Exception {
+        subscribeItems(List.of(publicItem1, publicItem2), List.of(admin, eperson));
 
         // common user tries to unsubscribe item that is not subscribed to this user
         getClient(userToken).perform(post(unSubscribe1Url))
@@ -196,19 +158,119 @@ public class MatomoReportSubscriptionRestRepositoryIT extends AbstractController
         getClient(adminToken).perform(post(unSubscribe1Url))
                 .andExpect(status().isNoContent());
 
-        // check how many subscriptions left
+        checkSubscriptions(0);
+    }
+
+    @Test
+    public void testFindAll() throws Exception {
+        subscribeItems(List.of(publicItem1, publicItem2, publicItem1), List.of(admin, eperson, eperson));
+
+        // admin
         getClient(adminToken).perform(get(URL_PREFIX))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.page.totalElements", is(0)));
+                .andExpect(jsonPath("$.page.totalElements", is(3)))
+                .andExpect(jsonPath("$._embedded.matomoreportsubscriptions",
+                        Matchers.containsInAnyOrder(
+                                matchMatomoReportSubscriptionProperties(subscription1),
+                                matchMatomoReportSubscriptionProperties(subscription2),
+                                matchMatomoReportSubscriptionProperties(subscription3)
+                        )));
+
+        // common user
+        getClient(userToken).perform(get(URL_PREFIX))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements", is(2)))
+                .andExpect(jsonPath("$._embedded.matomoreportsubscriptions",
+                        Matchers.containsInAnyOrder(
+                                matchMatomoReportSubscriptionProperties(subscription2),
+                                matchMatomoReportSubscriptionProperties(subscription3)
+                        )));
+        // un-authorized user
+        getClient().perform(get(URL_PREFIX))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    public void testFindOne() throws Exception {
+        Integer[] ids = subscribeItems(List.of(publicItem1, publicItem2), List.of(admin, eperson));
+
+        // admin
+        getClient(adminToken).perform(get(URL_PREFIX + "/" + ids[1]))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", matchMatomoReportSubscriptionProperties(subscription2)));
+
+        // common user
+        getClient(userToken).perform(get(URL_PREFIX + "/" + ids[1]))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", matchMatomoReportSubscriptionProperties(subscription2)));
+
+        // common user tries to get other subscription
+        getClient(userToken).perform(get(URL_PREFIX + "/" + ids[0]))
+                .andExpect(status().isForbidden());
+
+        // common user tries to get non-existing subscription
+        getClient(userToken).perform(get(URL_PREFIX + "/99"))
+                .andExpect(status().isNotFound());
+
+        // un-authorized user
+        getClient().perform(get(URL_PREFIX + "/" + ids[0]))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    public void testGetSubscriptionForItem() throws Exception {
+        subscribeItems(List.of(publicItem1, publicItem2), List.of(admin, eperson));
+
+        // admin
+        getClient(adminToken).perform(get(item1Url))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", matchMatomoReportSubscriptionProperties(subscription1)));
+
+        // admin tries to get subscription for item admin is not subscribed for
+        getClient(adminToken).perform(get(item2Url))
+                .andExpect(status().isNotFound());
+
+        // common user
+        getClient(userToken).perform(get(item2Url))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", matchMatomoReportSubscriptionProperties(subscription2)));
+
+        // common user tries to get subscription for item user is not subscribed for
+        getClient(userToken).perform(get(item1Url))
+                .andExpect(status().isNotFound());
+
+        // un-authorized user
+        getClient().perform(get(item1Url))
+                .andExpect(status().isUnauthorized());
     }
 
     private static Matcher<? super Object> matchMatomoReportSubscriptionProperties(
             MatomoReportSubscription subscription) {
         return allOf(
-                hasJsonPath("$.id", is(subscription.getID())),
+                hasJsonPath("$.id", Matchers.greaterThan(0)),
                 hasJsonPath("$.epersonId", is(subscription.getEPerson().getID().toString())),
                 hasJsonPath("$.itemId", is(subscription.getItem().getID().toString())),
-                hasJsonPath("$.type", is("matomoreportsubscription"))
+                hasJsonPath("$.type", is(ENTITY_TYPE)),
+                hasJsonPath("$._links.self.href", containsString(URL_PREFIX))
         );
+    }
+
+    private Integer[] subscribeItems(List<Item> items, List<EPerson> users) throws Exception {
+        Integer[] subscriptionIds = new Integer[items.size()];
+        context.turnOffAuthorisationSystem();
+        for (int i = 0; i < items.size(); i++) {
+            context.setCurrentUser(users.get(i));
+            MatomoReportSubscription sub = matomoReportSubscriptionService.subscribe(context, items.get(i));
+            subscriptionIds[i] = sub.getID();
+        }
+        context.restoreAuthSystemState();
+        checkSubscriptions(items.size());
+        return subscriptionIds;
+    }
+
+    private void checkSubscriptions(int expectedCount) throws Exception {
+        getClient(adminToken).perform(get(URL_PREFIX))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements", is(expectedCount)));
     }
 }

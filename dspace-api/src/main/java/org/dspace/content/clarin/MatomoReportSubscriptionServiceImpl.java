@@ -71,7 +71,7 @@ public class MatomoReportSubscriptionServiceImpl implements MatomoReportSubscrip
         if (context.getCurrentUser() == null) {
             throw new AuthorizeException("You must be authenticated user");
         }
-        return matomoReportSubscriptionDAO.findByItemId(context, item.getID());
+        return matomoReportSubscriptionDAO.findByItemIdAndCurrentUser(context, item.getID());
     }
 
     @Override
@@ -107,6 +107,6 @@ public class MatomoReportSubscriptionServiceImpl implements MatomoReportSubscrip
         if (context.getCurrentUser() == null) {
             throw new AuthorizeException("You must be authenticated user");
         }
-        return (matomoReportSubscriptionDAO.findByItemId(context, item.getID()) != null);
+        return (matomoReportSubscriptionDAO.findByItemIdAndCurrentUser(context, item.getID()) != null);
     }
 }

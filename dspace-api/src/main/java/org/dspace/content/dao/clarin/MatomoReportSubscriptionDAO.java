@@ -25,7 +25,7 @@ import org.dspace.core.GenericDAO;
  */
 public interface MatomoReportSubscriptionDAO extends GenericDAO<MatomoReportSubscription> {
 
-    MatomoReportSubscription findByItemId(Context context, UUID itemId) throws SQLException;
+    MatomoReportSubscription findByItemIdAndCurrentUser(Context context, UUID itemId) throws SQLException;
 
     MatomoReportSubscription findByEPersonIdAndItemId(Context context, UUID ePersonId, UUID itemId) throws SQLException;
 
