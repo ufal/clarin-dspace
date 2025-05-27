@@ -150,7 +150,7 @@
                     <dc-schema>local</dc-schema>
                     <dc-element>hidden</dc-element>
                     <dc-qualifier/>
-                    <repeatable>true</repeatable>
+                    <repeatable>false</repeatable>
                     <label>Má být tento příspěvek skryt při procházení/vyhledávání? (Admin only field)</label>
                     <style>col-sm-4</style>
                     <input-type value-pairs-name="hidden_list">list</input-type>
@@ -165,7 +165,7 @@
                 <field>
                     <dc-schema>local</dc-schema>
                     <dc-element>hasCMDI</dc-element>
-                    <repeatable>true</repeatable>
+                    <repeatable>false</repeatable>
                     <label>Chystáte se nahrát cmdi soubor? (Admin only field)</label>
                     <input-type value-pairs-name="hasCMDI_checkbox">list</input-type>
                     <hint>Uveďte, jestli se chystáte v dalším kroku nahrát cmdi soubor. Kombinujte se schováváním záznamů pro weblicht příspěvky.</hint>
@@ -238,7 +238,7 @@
                     <dc-schema>dc</dc-schema>
                     <dc-element>language</dc-element>
                     <dc-qualifier>iso</dc-qualifier>
-                    <repeatable>false</repeatable>
+                    <repeatable>true</repeatable>
                     <label>Jazyk</label>
                     <type-bind>corpus,lexicalConceptualResource,languageDescription</type-bind>
                     <input-type autocomplete-custom="json_static-iso_langs.json">autocomplete</input-type>
