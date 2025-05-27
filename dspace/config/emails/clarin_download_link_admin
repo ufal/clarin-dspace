@@ -29,7 +29,7 @@ Extra information filled by the user:
 ${config.get('dspace.shortname')} Team
 
 _____________________________________
-${config.get('dspace.name')},
+${config.get('dspace.shortname')},
 WWW: ${config.get('dspace.ui.url')}
 Email: ${config.get('lr.help.mail')}
 Tel.: ${config.get('lr.help.phone')}
