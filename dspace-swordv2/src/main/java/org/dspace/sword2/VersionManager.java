@@ -10,6 +10,7 @@ package org.dspace.sword2;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
@@ -43,13 +44,16 @@ public class VersionManager {
         throws SQLException, AuthorizeException, IOException {
         boolean keep = configurationService
             .getBooleanProperty("swordv2-server.versions.keep");
-        Iterator<Bundle> bundles = item.getBundles().iterator();
-        while (bundles.hasNext()) {
-            Bundle b = bundles.next();
+        // Add the bundle to the list of bundles to remove because the method `this.removeBundle`
+        // modifies the item's bundles, which can cause a ConcurrentModificationException.
+        List<Bundle> bundlesToRemove = new ArrayList<>();
+        for (Bundle b : item.getBundles()) {
             if (name.equals(b.getName())) {
-                bundles.remove();
-                this.removeBundle(context, item, b, keep);
+                bundlesToRemove.add(b);
             }
+        }
+        for (Bundle b : bundlesToRemove) {
+            this.removeBundle(context, item, b, keep);
         }
     }
 

@@ -8,6 +8,7 @@
 package org.dspace.handle.service;
 
 import java.sql.SQLException;
+import java.util.Date;
 import java.util.List;
 
 import org.dspace.authorize.AuthorizeException;
@@ -75,6 +76,23 @@ public interface HandleClarinService {
      * @throws AuthorizeException if authorization error
      */
     public Handle createExternalHandle(Context context, String handleStr, String url)
+            throws SQLException, AuthorizeException;
+
+    /**
+     * Creates a new external Handle with the given handle string, URL, and optional dead status and date.
+     * Only administrators are authorized to create external handles.
+     * The created handle is saved and returned.
+     *
+     * @param context    the DSpace context
+     * @param handleStr  the string representation of the handle
+     * @param url        the URL to associate with the handle
+     * @param dead       whether the handle is marked as dead
+     * @param deadSince  the date since the handle has been dead
+     * @return the newly created Handle
+     * @throws SQLException        if a database error occurs
+     * @throws AuthorizeException  if the current user is not an administrator
+     */
+    public Handle createExternalHandle(Context context, String handleStr, String url, Boolean dead, Date deadSince)
             throws SQLException, AuthorizeException;
 
     /**
