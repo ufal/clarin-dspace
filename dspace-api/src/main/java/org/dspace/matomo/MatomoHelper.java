@@ -19,6 +19,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.SortedMap;
@@ -31,14 +32,15 @@ import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpression;
 import javax.xml.xpath.XPathFactory;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.tools.ant.filters.StringInputStream;
 import org.dspace.services.ConfigurationService;
 import org.dspace.services.factory.DSpaceServicesFactory;
-import org.json.simple.JSONArray;
-import org.json.simple.JSONObject;
-import org.json.simple.parser.JSONParser;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
@@ -54,6 +56,8 @@ public class MatomoHelper {
     private static String AUTH_TOKEN;
     private static String MATOMO_SITE_ID;
     private static String MATOMO_DOWNLOAD_SITE_ID;
+
+    static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final String period;
     private final String date;
@@ -88,282 +92,282 @@ public class MatomoHelper {
      * @throws Exception
      */
     static String transformJSONResults(Set<String> keys, String report) throws Exception {
-        JSONParser parser = new JSONParser();
-        JSONArray json = (JSONArray)parser.parse(report);
-        JSONObject views = null;
-        JSONObject downloads = null;
+        JsonNode json = OBJECT_MAPPER.readTree(report);
+        ObjectNode views = null;
+        ObjectNode downloads = null;
         int i = 0;
         for (String key : keys) {
             if (key.toLowerCase().contains("itemview")) {
-                views = mergeJSONReports(views, (JSONObject)json.get(i));
+                views = mergeJSONReports(views, (ObjectNode)json.get(i));
             } else if (key.toLowerCase().contains("downloads")) {
-                downloads = mergeJSONReports(downloads, (JSONObject)json.get(i));
+                downloads = mergeJSONReports(downloads, (ObjectNode)json.get(i));
             }
             i++;
         }
-        JSONObject response = new JSONObject();
-        JSONObject result = new JSONObject();
-        response.put("response", result);
-        result.put("views", transformJSON(views));
-        result.put("downloads", transformJSON(downloads));
+        ObjectNode response = OBJECT_MAPPER.createObjectNode();
+        ObjectNode result = OBJECT_MAPPER.createObjectNode();
+        response.set("response", result);
+        result.set("views", transformJSON(views));
+        result.set("downloads", transformJSON(downloads));
 
-        return response.toJSONString().replace("\\/", "/");
+        return response.toString();
     }
 
-    @SuppressWarnings("unchecked")
-    private static JSONObject mergeJSONReports(JSONObject o1, JSONObject o2) {
+    private static ObjectNode mergeJSONReports(ObjectNode o1, ObjectNode o2) {
         if (o1 == null) {
             return o2;
         } else {
             //just concatenate the dmy arrays, transformJSON should do the rest
-            Set<String> keys = o1.keySet();
-            for (String dmyKey : keys) {
-                if (o2.containsKey(dmyKey)) {
-                    JSONArray a = (JSONArray)o1.get(dmyKey);
-                    a.addAll((JSONArray)o2.get(dmyKey));
+            Iterator<String> keys = o1.fieldNames();
+            while (keys.hasNext()) {
+                String dmyKey = keys.next();
+                if (o2.get(dmyKey) != null) {
+                    o1.withArray(dmyKey).addAll(o2.withArray(dmyKey));
                 }
             }
-            keys = o2.keySet();
-            for (String dmyKey : keys) {
-                if (!o1.containsKey(dmyKey)) {
-                    o1.put(dmyKey, o2.get(dmyKey));
+            keys = o2.fieldNames();
+            while (keys.hasNext()) {
+                String dmyKey = keys.next();
+                if (o1.get(dmyKey) == null) {
+                    o1.set(dmyKey, o2.get(dmyKey));
                 }
             }
             return o1;
         }
     }
 
-    private static JSONObject transformJSON(JSONObject views) {
-        JSONObject result = new JSONObject();
-        JSONObject total = new JSONObject();
-        for (Object key : views.keySet()) {
-            JSONArray view_data = (JSONArray) views.get(key);
-            if (view_data.size() == 0) {
+    private static ObjectNode transformJSON(ObjectNode views) {
+        ObjectNode result = OBJECT_MAPPER.createObjectNode();
+        ObjectNode total = OBJECT_MAPPER.createObjectNode();
+        Iterator<String> keys = views.fieldNames();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            ArrayNode view_data = views.withArray(key);
+            if (view_data.isEmpty()) {
                 continue;
             }
-            String dmy[] = key.toString().split("-");
+            String[] dmy = key.split("-");
             if (dmy.length == 1) {
-                int y = Integer.parseInt(dmy[0]);
-                JSONObject year = null;
-                if (!result.containsKey(y)) {
-                    year = new JSONObject();
-                    result.put(y, year);
+                String y = String.valueOf(Integer.parseInt(dmy[0]));
+                ObjectNode year;
+                if (result.get(y) == null) {
+                    year = OBJECT_MAPPER.createObjectNode();
+                    result.set(y, year);
                 } else {
-                    year = (JSONObject)result.get(y);
+                    year = result.with(y);
                 }
-                for (int i = 0 ; i < view_data.size(); i++) {
-                    JSONObject row = (JSONObject)view_data.get(i);
-                    String url = row.get("label").toString();
+                for (int i = 0; i < view_data.size(); i++) {
+                    JsonNode row = view_data.get(i);
+                    String url = row.get("label").asText();
                     url = url.split("\\?|@")[0];
-                    JSONObject v = null;
+
                     int nb_visits = 0;
                     int nb_hits = 0;
-                    if (year.containsKey(url)) {
-                        v = (JSONObject)year.get(url);
-                        nb_visits = Integer.parseInt(v.get("nb_visits").toString());
-                        nb_hits = Integer.parseInt(v.get("nb_hits").toString());
+                    if (year.get(url) != null) {
+                        JsonNode urlNode = year.get(url);
+                        nb_visits += urlNode.get("nb_visits").asInt();
+                        nb_hits += urlNode.get("nb_hits").asInt();
                     }
-                    v = new JSONObject();
-                    nb_visits = nb_visits + Integer.parseInt(row.get("nb_visits").toString());
-                    nb_hits = nb_hits + Integer.parseInt(row.get("nb_hits").toString());
+                    ObjectNode v = OBJECT_MAPPER.createObjectNode();
+                    nb_visits += row.get("nb_visits").asInt();
+                    nb_hits += row.get("nb_hits").asInt();
                     v.put("nb_hits", nb_hits);
                     v.put("nb_visits", nb_visits);
-                    year.put(url, v);
+                    year.set(url, v);
 
                     int total_nb_visits = 0;
                     int total_nb_hits = 0;
 
-                    if (total.containsKey(y)) {
-                        v = (JSONObject)total.get(y);
-                        total_nb_visits = Integer.parseInt(v.get("nb_visits").toString());
-                        total_nb_hits = Integer.parseInt(v.get("nb_hits").toString());
+                    if (total.get(y) != null) {
+                        JsonNode v1 = total.get(y);
+                        total_nb_visits += v1.get("nb_visits").asInt();
+                        total_nb_hits += v1.get("nb_hits").asInt();
                     }
-                    v = new JSONObject();
-                    total_nb_visits = total_nb_visits + Integer.parseInt(row.get("nb_visits").toString());
-                    total_nb_hits = total_nb_hits + Integer.parseInt(row.get("nb_hits").toString());
+                    v = OBJECT_MAPPER.createObjectNode();
+                    total_nb_visits += Integer.parseInt(row.get("nb_visits").toString());
+                    total_nb_hits += Integer.parseInt(row.get("nb_hits").toString());
                     v.put("nb_hits", total_nb_hits);
                     v.put("nb_visits", total_nb_visits);
-                    total.put(y, v);
+                    total.set(y, v);
 
                     total_nb_visits = 0;
                     total_nb_hits = 0;
 
-                    if (total.containsKey("nb_visits")) {
-                        total_nb_visits = Integer.parseInt(total.get("nb_visits").toString());
+                    if (total.get("nb_visits") != null) {
+                        total_nb_visits += total.get("nb_visits").asInt();
                     }
 
-                    if (total.containsKey("nb_hits")) {
-                        total_nb_hits = Integer.parseInt(total.get("nb_hits").toString());
+                    if (total.get("nb_hits") != null) {
+                        total_nb_hits += total.get("nb_hits").asInt();
                     }
-                    total_nb_visits = total_nb_visits + Integer.parseInt(row.get("nb_visits").toString());
-                    total_nb_hits = total_nb_hits + Integer.parseInt(row.get("nb_hits").toString());
+                    total_nb_visits += row.get("nb_visits").asInt();
+                    total_nb_hits += row.get("nb_hits").asInt();
 
                     total.put("nb_hits", total_nb_hits);
                     total.put("nb_visits", total_nb_visits);
                 }
             } else if (dmy.length == 2) {
-                JSONObject year = null;
-                int y = Integer.parseInt(dmy[0]);
-                if (!result.containsKey(y)) {
-                    year = new JSONObject();
-                    result.put(y, year);
+                ObjectNode year;
+                String y = String.valueOf(Integer.parseInt(dmy[0]));
+                if (result.get(y) == null) {
+                    year = OBJECT_MAPPER.createObjectNode();
+                    result.set(y, year);
                 } else {
-                    year = (JSONObject)result.get(y);
+                    year = result.with(y);
                 }
-                int m = Integer.parseInt(dmy[1]);
-                JSONObject month = null;
-                if (!year.containsKey(m)) {
-                    month = new JSONObject();
-                    year.put(m, month);
+                String m = String.valueOf(Integer.parseInt(dmy[1]));
+                ObjectNode month;
+                if (year.get(m) == null) {
+                    month = OBJECT_MAPPER.createObjectNode();
+                    year.set(m, month);
                 } else {
-                    month = (JSONObject)year.get(m);
+                    month = year.with(m);
                 }
-                for (int i = 0 ; i < view_data.size(); i++) {
-                    JSONObject row = (JSONObject)view_data.get(i);
-                    String url = row.get("label").toString();
+                for (int i = 0; i < view_data.size(); i++) {
+                    JsonNode row = view_data.get(i);
+                    String url = row.get("label").asText();
                     url = url.split("\\?|@")[0];
-                    JSONObject v = null;
+                    ObjectNode v;
                     int nb_visits = 0;
                     int nb_hits = 0;
-                    if (month.containsKey(url)) {
-                        v = (JSONObject)month.get(url);
-                        nb_visits = Integer.parseInt(v.get("nb_visits").toString());
-                        nb_hits = Integer.parseInt(v.get("nb_hits").toString());
+                    if (month.get(url) != null) {
+                        JsonNode urlNode = month.get(url);
+                        nb_visits += urlNode.get("nb_visits").asInt();
+                        nb_hits += urlNode.get("nb_hits").asInt();
                     }
-                    v = new JSONObject();
-                    nb_visits = nb_visits + Integer.parseInt(row.get("nb_visits").toString());
-                    nb_hits = nb_hits + Integer.parseInt(row.get("nb_hits").toString());
+                    v = OBJECT_MAPPER.createObjectNode();
+                    nb_visits += row.get("nb_visits").asInt();
+                    nb_hits += row.get("nb_hits").asInt();
                     v.put("nb_hits", nb_hits);
                     v.put("nb_visits", nb_visits);
-                    month.put(url, v);
+                    month.set(url, v);
 
-                    JSONObject tyear = null;
+                    ObjectNode tyear;
 
-                    if (total.containsKey(y)) {
-                        tyear = (JSONObject)total.get(y);
+                    if (total.get(y) != null) {
+                        tyear = total.with(y);
                     } else {
-                        tyear = new JSONObject();
-                        total.put(y, tyear);
+                        tyear = OBJECT_MAPPER.createObjectNode();
+                        total.set(y, tyear);
                     }
 
-                    JSONObject tmonth = null;
+                    ObjectNode tmonth;
 
-                    if (tyear.containsKey(m)) {
-                        tmonth = (JSONObject)tyear.get(m);
+                    if (tyear.get(m) != null) {
+                        tmonth = tyear.with(m);
                     } else {
-                        tmonth = new JSONObject();
-                        tyear.put(m, tmonth);
+                        tmonth = OBJECT_MAPPER.createObjectNode();
+                        tyear.set(m, tmonth);
                     }
 
                     int total_nb_visits = 0;
                     int total_nb_hits = 0;
 
-                    if (tmonth.containsKey("nb_visits")) {
-                        total_nb_visits = Integer.parseInt(tmonth.get("nb_visits").toString());
+                    if (tmonth.get("nb_visits") != null) {
+                        total_nb_visits += tmonth.get("nb_visits").asInt();
                     }
-                    if (tmonth.containsKey("nb_hits")) {
-                        total_nb_hits = Integer.parseInt(tmonth.get("nb_hits").toString());
+                    if (tmonth.get("nb_hits") != null) {
+                        total_nb_hits += tmonth.get("nb_hits").asInt();
                     }
 
-                    v = new JSONObject();
-                    total_nb_visits = total_nb_visits + Integer.parseInt(row.get("nb_visits").toString());
-                    total_nb_hits = total_nb_hits + Integer.parseInt(row.get("nb_hits").toString());
+                    v = OBJECT_MAPPER.createObjectNode();
+                    total_nb_visits += row.get("nb_visits").asInt();
+                    total_nb_hits += row.get("nb_hits").asInt();
                     v.put("nb_hits", total_nb_hits);
                     v.put("nb_visits", total_nb_visits);
-                    tyear.put(m, v);
-
+                    tyear.set(m, v);
                 }
             } else if (dmy.length == 3) {
-                JSONObject year = null;
-                int y = Integer.parseInt(dmy[0]);
-                if (!result.containsKey(y)) {
-                    year = new JSONObject();
-                    result.put(y, year);
+                ObjectNode year;
+                String y = String.valueOf(Integer.parseInt(dmy[0]));
+                if (result.get(y) == null) {
+                    year = OBJECT_MAPPER.createObjectNode();
+                    result.set(y, year);
                 } else {
-                    year = (JSONObject)result.get(y);
+                    year = result.with(y);
                 }
-                int m = Integer.parseInt(dmy[1]);
-                JSONObject month = null;
-                if (!year.containsKey(m)) {
-                    month = new JSONObject();
-                    year.put(m, month);
+                String m = String.valueOf(Integer.parseInt(dmy[1]));
+                ObjectNode month;
+                if (year.get(m) == null) {
+                    month = OBJECT_MAPPER.createObjectNode();
+                    year.set(m, month);
                 } else {
-                    month = (JSONObject)year.get(m);
+                    month = year.with(m);
                 }
-                int d = Integer.parseInt(dmy[2]);
-                JSONObject day = null;
-                if (!month.containsKey(d)) {
-                    day = new JSONObject();
-                    month.put(d, day);
+                String d = String.valueOf(Integer.parseInt(dmy[2]));
+                ObjectNode day;
+                if (month.get(d) == null) {
+                    day = OBJECT_MAPPER.createObjectNode();
+                    month.set(d, day);
                 } else {
-                    day = (JSONObject)month.get(d);
+                    day = month.with(d);
                 }
 
                 for (int i = 0 ; i < view_data.size(); i++) {
-                    JSONObject row = (JSONObject)view_data.get(i);
-                    String url = row.get("label").toString();
+                    JsonNode row = view_data.get(i);
+                    String url = row.get("label").asText();
                     url = url.split("\\?|@")[0];
-                    JSONObject v = null;
+                    ObjectNode v;
                     int nb_visits = 0;
                     int nb_hits = 0;
-                    if (day.containsKey(url)) {
-                        v = (JSONObject)day.get(url);
-                        nb_visits = Integer.parseInt(v.get("nb_visits").toString());
-                        nb_hits = Integer.parseInt(v.get("nb_hits").toString());
+                    if (day.get(url) != null) {
+                        JsonNode urlNode = day.get(url);
+                        nb_visits += urlNode.get("nb_visits").asInt();
+                        nb_hits += urlNode.get("nb_hits").asInt();
                     }
-                    v = new JSONObject();
-                    nb_visits = nb_visits + Integer.parseInt(row.get("nb_visits").toString());
-                    nb_hits = nb_hits + Integer.parseInt(row.get("nb_hits").toString());
+                    v = OBJECT_MAPPER.createObjectNode();
+                    nb_visits += row.get("nb_visits").asInt();
+                    nb_hits += row.get("nb_hits").asInt();
                     v.put("nb_hits", nb_hits);
                     v.put("nb_visits", nb_visits);
-                    day.put(url, v);
-                    JSONObject tyear = null;
+                    day.set(url, v);
 
-                    if (total.containsKey(y)) {
-                        tyear = (JSONObject)total.get(y);
+                    ObjectNode tyear;
+
+                    if (total.get(y) != null) {
+                        tyear = total.with(y);
                     } else {
-                        tyear = new JSONObject();
-                        total.put(y, tyear);
+                        tyear = OBJECT_MAPPER.createObjectNode();
+                        total.set(y, tyear);
                     }
 
-                    JSONObject tmonth = null;
+                    ObjectNode tmonth;
 
-                    if (tyear.containsKey(m)) {
-                        tmonth = (JSONObject)tyear.get(m);
+                    if (tyear.get(m) != null) {
+                        tmonth = tyear.with(m);
                     } else {
-                        tmonth = new JSONObject();
-                        tyear.put(m, tmonth);
+                        tmonth = OBJECT_MAPPER.createObjectNode();
+                        tyear.set(m, tmonth);
                     }
 
-                    JSONObject tday = null;
+                    ObjectNode tday;
 
-                    if (tmonth.containsKey(d)) {
-                        tday = (JSONObject)tmonth.get(d);
+                    if (tmonth.get(d) != null) {
+                        tday = tmonth.with(d);
                     } else {
-                        tday = new JSONObject();
-                        tmonth.put(d, tday);
+                        tday = OBJECT_MAPPER.createObjectNode();
+                        tmonth.set(d, tday);
                     }
 
                     int total_nb_visits = 0;
                     int total_nb_hits = 0;
 
-                    if (tday.containsKey("nb_visits")) {
-                        total_nb_visits = Integer.parseInt(tday.get("nb_visits").toString());
+                    if (tday.get("nb_visits") != null) {
+                        total_nb_visits += tday.get("nb_visits").asInt();
                     }
-                    if (tday.containsKey("nb_hits")) {
-                        total_nb_hits = Integer.parseInt(tday.get("nb_hits").toString());
+                    if (tday.get("nb_hits") != null) {
+                        total_nb_hits += tday.get("nb_hits").asInt();
                     }
 
-                    v = new JSONObject();
-                    total_nb_visits = total_nb_visits + Integer.parseInt(row.get("nb_visits").toString());
-                    total_nb_hits = total_nb_hits + Integer.parseInt(row.get("nb_hits").toString());
+                    v = OBJECT_MAPPER.createObjectNode();
+                    total_nb_visits += row.get("nb_visits").asInt();
+                    total_nb_hits += row.get("nb_hits").asInt();
                     v.put("nb_hits", total_nb_hits);
                     v.put("nb_visits", total_nb_visits);
-                    tmonth.put(d, v);
+                    tmonth.set(d, v);
                 }
-
             }
-            result.put("total", total);
+            result.set("total", total);
         }
         return result;
     }
@@ -434,26 +438,21 @@ public class MatomoHelper {
         if (date != null) {
             url += "&date=" + date;
         }
-        JSONParser parser = new JSONParser();
-        JSONObject countriesReport = (JSONObject)parser.parse(readFromURL(url));
+        ObjectNode countriesReport = (ObjectNode) OBJECT_MAPPER.readTree(readFromURL(url));
 
         List<String[]> result = new ArrayList<>(10);
 
-        for (Object key : countriesReport.keySet()) {
-            if (key instanceof String) {
-                String date = (String) key;
-                JSONArray countryData = (JSONArray) countriesReport.get(date);
-                for (Object country: countryData) {
-                    if (country instanceof JSONObject) {
-                        JSONObject c = (JSONObject) country;
-                        String label = (String) c.get("label");
-                        String count = ((Long) c.get("nb_visits")).toString();
-                        result.add(new String[]{label, count});
-                    }
+        Iterator<String> fieldNames = countriesReport.fieldNames();
+        while (fieldNames.hasNext()) {
+            String date = fieldNames.next();
+            ArrayNode countryData = countriesReport.withArray(date);
+            countryData.forEach(country -> {
+                if (country.isObject()) {
+                    String label = country.get("label").asText();
+                    String count = country.get("nb_visits").asText();
+                    result.add(new String[]{label, count});
                 }
-                // expecting only one date key
-                break;
-            }
+            });
         }
         return result;
     }

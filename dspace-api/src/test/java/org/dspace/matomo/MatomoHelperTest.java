@@ -11,11 +11,11 @@ package org.dspace.matomo;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import java.util.SortedSet;
+import java.util.Set;
 import java.util.TreeSet;
 
-import org.json.simple.JSONObject;
-import org.json.simple.parser.JSONParser;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.Test;
 
 /**
@@ -25,7 +25,7 @@ public class MatomoHelperTest {
 
     @Test
     public void testTransformJSONResults() throws Exception {
-        SortedSet set = new TreeSet();
+        Set<String> set = new TreeSet<>();
         set.add("1simpleItemView");
         set.add("2fullItemView");
         set.add("3downloads");
@@ -34,21 +34,12 @@ public class MatomoHelperTest {
                 "\"2021-01-05\":[],\"2021-01-06\":[{\"label\":\"/1-1827?show=full\",\"nb_visits\":1,\"nb_hits\":1,\"url\":\"https://lindat.mff.cuni.cz/repository/xmlui/handle/11234/1-1827?show=full\"}],\"2021-01-07\":[{\"label\":\"/1-1827?show=full\",\"nb_visits\":1,\"nb_hits\":1,\"url\":\"https://lindat.mff.cuni.cz/repository/xmlui/handle/11234/1-1827?show=full\"}],\"2021-01-08\":[],\"2021-01-09\":[],\"2021-01-10\":[],\"2021-01-11\":[],\"2021-01-12\":[],\"2021-01-13\":[],\"2021-01-14\":[],\"2021-01-15\":[],\"2021-01-16\":[],\"2021-01-17\":[],\"2021-01-18\":[],\"2021-01-19\":[],\"2021-01-20\":[],\"2021-01-21\":[],\"2021-01-22\":[{\"label\":\"/1-1827?show=full\",\"nb_visits\":1,\"nb_hits\":1,\"url\":\"https://lindat.mff.cuni.cz/repository/xmlui/handle/11234/1-1827?show=full\"}],\"2021-01-23\":[],\"2021-01-24\":[{\"label\":\"/1-1827?show=full\",\"nb_visits\":1,\"nb_hits\":1,\"url\":\"https://lindat.mff.cuni.cz/repository/xmlui/handle/11234/1-1827?show=full\"}],\"2021-01-25\":[],\"2021-01-26\":[],\"2021-01-27\":[],\"2021-01-28\":[{\"label\":\"/1-1827?show=full\",\"nb_visits\":1,\"nb_hits\":1,\"url\":\"https://lindat.mff.cuni.cz/repository/xmlui/handle/11234/1-1827?show=full\"}],\"2021-01-29\":[{\"label\":\"/1-1827?show=full\",\"nb_visits\":1,\"nb_hits\":1,\"url\":\"https://lindat.mff.cuni.cz/repository/xmlui/handle/11234/1-1827?show=full\"}],\"2021-01-30\":[{\"label\":\"/1-1827?show=full\",\"nb_visits\":1,\"nb_hits\":1,\"url\":\"https://lindat.mff.cuni.cz/repository/xmlui/handle/11234/1-1827?show=full\"}],\"2021-01-31\":[]}\n";
         String json = String.format("[%s, %s, {}]", simple, showFull);
         String result = MatomoHelper.transformJSONResults(set, json);
-        System.out.println(result);
-        final JSONParser parser = new JSONParser();
-        final JSONObject jsonResult = (JSONObject)parser.parse(result);
-        JSONObject response = (JSONObject) jsonResult.get("response");
-        JSONObject downloads = (JSONObject) response.get("downloads");
-        assertTrue(downloads.isEmpty());
-        JSONObject views = (JSONObject) response.get("views");
-        final long totalHits =
-                Long.parseLong(
-                        ((JSONObject)
-                            ((JSONObject)
-                                    ((JSONObject)
-                                            ((JSONObject) views.get("total"))
-                                                    .get("2021")).get("1")).get("29")).get("nb_hits").toString());
-        assertEquals(2 + 1, totalHits);
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode node = mapper.readTree(result);
+        System.out.println(node);
+        assertTrue(node.get("response").get("downloads").isEmpty());
+        JsonNode nbHits = node.get("response").get("views").get("total").get("2021").get("1").get("29").get("nb_hits");
+        assertTrue(nbHits.isInt());
+        assertEquals(2 + 1, nbHits.asInt());
     }
-
 }

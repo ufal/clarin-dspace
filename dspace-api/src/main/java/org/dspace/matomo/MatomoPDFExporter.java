@@ -24,11 +24,13 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import javax.mail.MessagingException;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.itextpdf.awt.PdfGraphics2D;
 import com.itextpdf.text.BaseColor;
 import com.itextpdf.text.Chunk;
@@ -82,8 +84,6 @@ import org.jfree.data.time.Day;
 import org.jfree.data.time.TimeSeries;
 import org.jfree.data.time.TimeSeriesCollection;
 import org.jfree.util.ShapeUtilities;
-import org.json.simple.JSONObject;
-import org.json.simple.parser.JSONParser;
 
 public class MatomoPDFExporter {
 
@@ -255,10 +255,7 @@ public class MatomoPDFExporter {
         log.info("Generating Item Report for item handle: {}", handle);
 
         String json = matomoHelper.getDataAsJsonString();
-        JSONParser parser = new JSONParser();
-        JSONObject report = (JSONObject) parser.parse(json);
-
-
+        JsonNode report = MatomoHelper.OBJECT_MAPPER.readTree(json);
 
         Map<String, Integer> summary = new HashMap<>();
 
@@ -269,7 +266,7 @@ public class MatomoPDFExporter {
     }
 
 
-    private static Map<String, Integer> extractStats(JSONObject statsObject, TimeSeries series,
+    private static Map<String, Integer> extractStats(JsonNode statsObject, TimeSeries series,
                                                      String keyForSeries, String[] keysForTotals) {
         HashMap<String, Integer> totals = new HashMap<>();
         for (String key : keysForTotals) {
@@ -279,44 +276,42 @@ public class MatomoPDFExporter {
         int max = 0;
 
         if (statsObject != null) {
-            for (Object yo : statsObject.keySet()) {
-                if (yo instanceof String) {
-                    String year = (String) yo;
-                    int y = Integer.parseInt(year);
-                    JSONObject months = (JSONObject) statsObject.get(year);
-                    for (Object mo : months.keySet()) {
-                        if (mo instanceof String) {
-                            String month = (String) mo;
-                            int m = Integer.parseInt(month);
-                            Calendar c = Calendar.getInstance();
-                            // months are zero based, 0 january
-                            c.set(y, m - 1, 1);
-                            // get the valid days in month and fill the series with zeros
-                            for (int d = 1; d <= c.getActualMaximum(Calendar.DATE); d++) {
-                                // here month is 1-12
-                                series.add(new Day(d, m, y), 0);
+            Iterator<String> fieldNames = statsObject.fieldNames();
+            while (fieldNames.hasNext()) {
+                String year = fieldNames.next();
+                int y = Integer.parseInt(year);
+                JsonNode monthsNode = statsObject.get(year);
+                Iterator<String> months = monthsNode.fieldNames();
+                while (months.hasNext()) {
+                    String month = months.next();
+                    int m = Integer.parseInt(month);
+                    Calendar c = Calendar.getInstance();
+                    // months are zero based, 0 january
+                    c.set(y, m - 1, 1);
+                    // get the valid days in month and fill the series with zeros
+                    for (int d = 1; d <= c.getActualMaximum(Calendar.DATE); d++) {
+                        // here month is 1-12
+                        series.add(new Day(d, m, y), 0);
+                    }
+                    JsonNode daysNode = monthsNode.get(month);
+                    Iterator<String> days = daysNode.fieldNames();
+                    while (days.hasNext()) {
+                        String day = days.next();
+                        int d = Integer.parseInt(day);
+
+                        JsonNode stats = daysNode.get(day);
+                        if (stats.get(keyForSeries) != null) {
+                            int valueForSeries = stats.get(keyForSeries).asInt();
+                            if (max < valueForSeries) {
+                                max = valueForSeries;
                             }
-                            JSONObject days = (JSONObject) months.get(month);
-                            for (Object dayo : days.keySet()) {
-                                if (dayo instanceof String) {
-                                    String day = (String) dayo;
-                                    int d = Integer.parseInt(day);
-                                    JSONObject stats = (JSONObject) days.get(day);
-                                    if (stats.containsKey(keyForSeries)) {
-                                        int valueForSeries = ((Long) stats.get(keyForSeries)).intValue();
-                                        if (max < valueForSeries) {
-                                            max = valueForSeries;
-                                        }
-                                        series.addOrUpdate(new Day(d, m, y), valueForSeries);
-                                    }
-                                    for (String key : keysForTotals) {
-                                        if (stats.containsKey(key)) {
-                                            int valueForTotal = ((Long) stats.get(key)).intValue();
-                                            int number = totals.get(key);
-                                            totals.put(key, number + valueForTotal);
-                                        }
-                                    }
-                                }
+                            series.addOrUpdate(new Day(d, m, y), valueForSeries);
+                        }
+                        for (String key : keysForTotals) {
+                            if (stats.get(key) != null) {
+                                int valueForTotal = stats.get(key).asInt();
+                                int number = totals.get(key);
+                                totals.put(key, number + valueForTotal);
                             }
                         }
                     }
@@ -327,7 +322,7 @@ public class MatomoPDFExporter {
         return totals;
     }
 
-    private static JFreeChart createViewsChart(JSONObject report, Map<String, Integer> summary) throws Exception {
+    private static JFreeChart createViewsChart(JsonNode report, Map<String, Integer> summary) throws Exception {
 
         JFreeChart lineChart = null;
 
@@ -335,9 +330,9 @@ public class MatomoPDFExporter {
         TimeSeries downloadsSeries = new TimeSeries("Downloads");
         TimeSeries visitorsSeries = new TimeSeries("Unique visitors");
 
-        JSONObject response = (JSONObject)report.get("response");
-        JSONObject views = (JSONObject) ((JSONObject) response.get("views")).get("total");
-        JSONObject downloads = (JSONObject) ((JSONObject) response.get("downloads")).get("total");
+        JsonNode response = report.get("response");
+        JsonNode views = response.get("views").get("total");
+        JsonNode downloads = response.get("downloads").get("total");
 
         Map<String, Integer> viewsTotals = extractStats(views, viewsSeries, "nb_hits",
                 new String[] {"nb_hits", "nb_uniq_pageviews", "nb_visits"});
@@ -641,7 +636,7 @@ public class MatomoPDFExporter {
                 "identifier", "uri", Item.ANY);
         /* This is only for testing purpose */
         // return item.getItemService().getMetadataFirstValue(item, MetadataSchemaEnum.DC.getName(),
-        //        "identifier", null, Item.ANY);
+        //         "identifier", null, Item.ANY);
     }
 
 
