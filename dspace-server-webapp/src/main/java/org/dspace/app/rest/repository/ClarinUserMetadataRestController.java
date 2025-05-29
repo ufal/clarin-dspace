@@ -287,7 +287,7 @@ public class ClarinUserMetadataRestController {
         // Fetch DSpace main cfg info and send it in the email
         String uiUrl = configurationService.getProperty("dspace.ui.url", "");
         String helpDeskEmail = configurationService.getProperty("lr.help.mail", "");
-        String helpDeskPhoneNum = configurationService.getProperty("lr.help.phone", "");
+        String helpDeskPhoneNum = configurationService.getProperty("mail.message.helpdesk.telephone", "");
         String dspaceName = configurationService.getProperty("dspace.name", "");
         String dspaceNameShort = configurationService.getProperty("dspace.shortname", "");
 
