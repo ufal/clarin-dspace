@@ -95,8 +95,8 @@ public class MatomoReportSubscription implements ReloadableEntity<Integer> {
     public String toString() {
         return "MatomoReportSubscription{" +
                 "id=" + id +
-                ", ePerson=" + ePerson +
-                ", item=" + item +
+                ", ePerson=" + ePerson.getName() +
+                ", item=" + item.getHandle() +
                 '}';
     }
 }
