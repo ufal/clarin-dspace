@@ -10,6 +10,7 @@
 ## See org.dspace.core.Email for information on the format of this file.
 ##
 #set($subject = "${config.get('dspace.shortname')}: New File Download Request (CC)")
+#set($phone = ${config.get('mail.message.helpdesk.telephone')})
 
 This is an information for administrators and other configured people about a new download request.
 
@@ -32,4 +33,6 @@ _____________________________________
 ${config.get('dspace.shortname')},
 WWW: ${config.get('dspace.ui.url')}
 Email: ${config.get('lr.help.mail')}
-Tel.: ${config.get('lr.help.phone')}
+#if( $phone )
+Tel.: ${phone}
+#end
