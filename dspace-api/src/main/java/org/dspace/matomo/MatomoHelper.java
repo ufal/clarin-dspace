@@ -106,9 +106,9 @@ public class MatomoHelper {
         }
         ObjectNode response = OBJECT_MAPPER.createObjectNode();
         ObjectNode result = OBJECT_MAPPER.createObjectNode();
+        result.set("views", (views == null ? OBJECT_MAPPER.createObjectNode() : transformJSON(views)));
+        result.set("downloads", (downloads == null ? OBJECT_MAPPER.createObjectNode() : transformJSON(downloads)));
         response.set("response", result);
-        result.set("views", transformJSON(views));
-        result.set("downloads", transformJSON(downloads));
 
         return response.toString();
     }
@@ -184,8 +184,8 @@ public class MatomoHelper {
                         total_nb_hits += v1.get("nb_hits").asInt();
                     }
                     v = OBJECT_MAPPER.createObjectNode();
-                    total_nb_visits += Integer.parseInt(row.get("nb_visits").toString());
-                    total_nb_hits += Integer.parseInt(row.get("nb_hits").toString());
+                    total_nb_visits += row.get("nb_visits").asInt();
+                    total_nb_hits += row.get("nb_hits").asInt();
                     v.put("nb_hits", total_nb_hits);
                     v.put("nb_visits", total_nb_visits);
                     total.set(y, v);
