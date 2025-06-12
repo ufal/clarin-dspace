@@ -46,6 +46,7 @@ import org.springframework.stereotype.Component;
 @Component(MetadataBitstreamWrapperRest.CATEGORY + "." + MetadataBitstreamWrapperRest.NAME)
 public class MetadataBitstreamRestRepository extends DSpaceRestRepository<MetadataBitstreamWrapperRest, Integer> {
     private static Logger log = org.apache.logging.log4j.LogManager.getLogger(MetadataBitstreamRestRepository.class);
+    private static String TEXT_HTML_MIME_TYPE = "text/html";
 
     @Autowired
     HandleService handleService;
@@ -107,7 +108,10 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
                 String url = previewContentService.composePreviewURL(context, item, bitstream, contextPath);
                 List<FileInfo> fileInfos = new ArrayList<>();
                 boolean canPreview = previewContentService.canPreview(context, bitstream);
-                if (canPreview) {
+                String mimeType = bitstream.getFormat(context).getMIMEType();
+                // HTML content could be longer than the limit, so we do not store it in the DB.
+                // It has to be generated even if property is false.
+                if (StringUtils.equals(mimeType, TEXT_HTML_MIME_TYPE) || canPreview) {
                     try {
                         List<PreviewContent> prContents = previewContentService.hasPreview(context, bitstream);
                         // Generate new content if we didn't find any
@@ -119,7 +123,8 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
                                 // Do not store HTML content in the database because it could be longer than the limit
                                 // of the database column
                                 if (!fileInfos.isEmpty() &&
-                                    !StringUtils.equals("text/html", bitstream.getFormat(context).getMIMEType())) {
+                                    !StringUtils.equals(TEXT_HTML_MIME_TYPE,
+                                            bitstream.getFormat(context).getMIMEType())) {
                                     for (FileInfo fi : fileInfos) {
                                         previewContentService.createPreviewContent(context, bitstream, fi);
                                     }
