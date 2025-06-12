@@ -13,19 +13,19 @@ import java.util.Objects;
 
 /**
  * Interface to help with <a href="https://docs.pidinst.org/en/latest/epic-cookbook/handles.html" target=_new>
- *     ePIC PID handles REST API</a>.
+ *     ePIC handles REST API</a>.
  *
  * @author Milan Kuchtiak
  */
-public interface EpicPidService {
+public interface EpicHandleService {
 
     /**
-     * Return the  URL for handle, or null if handle cannot be found.
+     * Return the URL for handle, or null if handle cannot be found.
      *
      * @param prefix        The handle prefix
      * @param suffix        The handle suffix
      * @return              The handle URL or null
-     * @throws IOException If request to ePIC PID server fails
+     * @throws IOException If request to ePIC handle server fails
      */
     String resolveURLForHandle(String prefix, String suffix) throws IOException;
 
@@ -37,7 +37,7 @@ public interface EpicPidService {
      * @param subSuffix         The handle subSuffix
      * @param url               url associated with the handle
      * @return                  The full handle String (prefix/suffix)
-     * @throws IOException      If request to ePIC PID server fails
+     * @throws IOException      If request to ePIC handle server fails
      */
     String createHandle(String prefix, String subPrefix, String subSuffix, String url) throws IOException;
 
@@ -47,7 +47,7 @@ public interface EpicPidService {
      * @param prefix            The handle prefix
      * @param suffix            The handle suffix
      * @param url               url associated with the handle
-     * @throws IOException      If request to ePIC PID server fails
+     * @throws IOException      If request to ePIC handle server fails
      */
     void updateHandle(String prefix, String suffix, String url) throws IOException;
 
@@ -56,7 +56,7 @@ public interface EpicPidService {
      *
      * @param prefix            The handle prefix
      * @param suffix            The handle suffix
-     * @throws IOException      If request to ePIC PID server fails
+     * @throws IOException      If request to ePIC handle server fails
      */
     void deleteHandle(String prefix, String suffix) throws IOException;
 
@@ -68,7 +68,7 @@ public interface EpicPidService {
      * @param limit             sets the limit for response (when -1 use default, which is 1000)
      * @param page              the offset to start searching from (when -1 use default, which is 1 - first page)
      * @return                  list iof handles satisfying the URL query
-     * @throws IOException      If request to ePIC PID server fails
+     * @throws IOException      If request to ePIC handle server fails
      */
     List<Handle> search(String prefix, String urlQuery, int limit, int page) throws IOException;
 

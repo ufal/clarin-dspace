@@ -7,7 +7,7 @@
  */
 package org.dspace.handle.factory;
 
-import org.dspace.handle.service.EpicPidService;
+import org.dspace.handle.service.EpicHandleService;
 import org.dspace.handle.service.HandleClarinService;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -23,7 +23,7 @@ public class HandleClarinServiceFactoryImpl extends HandleClarinServiceFactory {
     private HandleClarinService handleClarinService;
 
     @Autowired
-    private EpicPidService epicPidService;
+    private EpicHandleService epicHandleService;
 
     @Override
     public HandleClarinService getHandleClarinService() {
@@ -31,7 +31,7 @@ public class HandleClarinServiceFactoryImpl extends HandleClarinServiceFactory {
     }
 
     @Override
-    public EpicPidService getEpicPidService() {
-        return epicPidService;
+    public EpicHandleService getEpicHandleService() {
+        return epicHandleService;
     }
 }

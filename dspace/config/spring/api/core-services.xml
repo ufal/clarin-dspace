@@ -123,7 +123,7 @@
 
     <bean class="org.dspace.handle.HandleServiceImpl"/>
     <bean class="org.dspace.handle.HandleClarinServiceImpl"/>
-    <bean class="org.dspace.handle.EpicPidServiceImpl"/>
+    <bean class="org.dspace.handle.EpicHandleServiceImpl"/>
 
     <bean class="org.dspace.harvest.HarvestedCollectionServiceImpl"/>
     <bean class="org.dspace.harvest.HarvestedItemServiceImpl"/>

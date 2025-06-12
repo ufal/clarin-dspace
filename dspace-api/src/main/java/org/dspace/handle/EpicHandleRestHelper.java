@@ -19,11 +19,11 @@ import javax.ws.rs.client.WebTarget;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
-public class EpicPidServiceHelper {
+public class EpicHandleRestHelper {
 
     private static final Client client = ClientBuilder.newClient();
 
-    private EpicPidServiceHelper() {
+    private EpicHandleRestHelper() {
     }
 
     static Response postCommand(String pidServiceURL,

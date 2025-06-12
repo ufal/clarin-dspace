@@ -25,11 +25,11 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import org.dspace.handle.service.EpicPidService;
+import org.dspace.handle.service.EpicHandleService;
 import org.dspace.services.ConfigurationService;
 import org.springframework.beans.factory.annotation.Autowired;
 
-public class EpicPidServiceImpl implements EpicPidService {
+public class EpicHandleServiceImpl implements EpicHandleService {
     private String pidServiceUrl;
     private String pidServiceUser;
     private String pidServicePassword;
@@ -38,7 +38,7 @@ public class EpicPidServiceImpl implements EpicPidService {
     @Autowired
     protected ConfigurationService configurationService;
 
-    public EpicPidServiceImpl() {
+    public EpicHandleServiceImpl() {
         objectMapper = new ObjectMapper();
     }
 
@@ -49,14 +49,14 @@ public class EpicPidServiceImpl implements EpicPidService {
         }
         pidServiceUser = configurationService.getProperty("lr.pid.service.user");
         pidServicePassword = configurationService.getProperty("lr.pid.service.pass");
-        Authenticator authenticator = new EpicPidServiceAuthenticator();
+        Authenticator authenticator = new EpicHandleServiceAuthenticator();
         Authenticator.setDefault(authenticator);
     }
 
     @Override
     public String resolveURLForHandle(String prefix, String suffix) throws IOException {
         initialize();
-        try (Response response = EpicPidServiceHelper.getCommand(pidServiceUrl, prefix, suffix)) {
+        try (Response response = EpicHandleRestHelper.getCommand(pidServiceUrl, prefix, suffix)) {
             if (response.getStatus() == Response.Status.NOT_FOUND.getStatusCode()) {
                 return null;
             }
@@ -65,12 +65,12 @@ public class EpicPidServiceImpl implements EpicPidService {
             }
             String jsonResponse = response.readEntity(String.class);
 
-            List<EpicPidUrl> epicPidUrlList = objectMapper.readValue(jsonResponse, new TypeReference<>() {
+            List<epicPidData> epicPidDataList = objectMapper.readValue(jsonResponse, new TypeReference<>() {
             });
 
-            return epicPidUrlList.stream()
-                    .filter(epicPidUrl -> "URL".equals(epicPidUrl.getType()))
-                    .map(epicPidUrl -> epicPidUrl.getParsedData().toString())
+            return epicPidDataList.stream()
+                    .filter(epicPidData -> "URL".equals(epicPidData.getType()))
+                    .map(epicPidData -> epicPidData.getParsedData().toString())
                     .findFirst().orElse(null);
         }
     }
@@ -89,24 +89,24 @@ public class EpicPidServiceImpl implements EpicPidService {
 
         Map<String, String> headers = Map.of("Depth", "1");
 
-        try (Response response = EpicPidServiceHelper.getAllCommand(pidServiceUrl, prefix, headers, queryParameters)) {
+        try (Response response = EpicHandleRestHelper.getAllCommand(pidServiceUrl, prefix, headers, queryParameters)) {
             if (response.getStatus() != Response.Status.OK.getStatusCode()) {
                 throw new WebApplicationException(response);
             }
 
             String jsonResponse = response.readEntity(String.class);
-            Map<String, List<EpicPidUrl>> epicPidUrlMap = objectMapper.readValue(jsonResponse, new TypeReference<>() {
+            Map<String, List<epicPidData>> epicPidDataMap = objectMapper.readValue(jsonResponse, new TypeReference<>() {
             });
 
-            List<Handle> epicPidHandleList = new ArrayList<>();
-            epicPidUrlMap.forEach((key, value) -> {
+            List<Handle> handleList = new ArrayList<>();
+            epicPidDataMap.forEach((key, value) -> {
                 String url = getUrlFromEpicDataList(value);
                 if (url != null) {
                     String handleKey = key.startsWith("/handles/") ? key.substring(9) : key;
-                    epicPidHandleList.add(new Handle(handleKey, url));
+                    handleList.add(new Handle(handleKey, url));
                 }
             });
-            return epicPidHandleList;
+            return handleList;
         }
     }
 
@@ -121,7 +121,7 @@ public class EpicPidServiceImpl implements EpicPidService {
             queryParameters.put("suffix", subSuffix);
         }
         String jsonData = getJsonDataForUrl(objectMapper, url).toString();
-        try ( Response response = EpicPidServiceHelper.postCommand(
+        try ( Response response = EpicHandleRestHelper.postCommand(
                 pidServiceUrl,
                 prefix,
                 queryParameters,
@@ -138,7 +138,7 @@ public class EpicPidServiceImpl implements EpicPidService {
         initialize();
         String jsonData = getJsonDataForUrl(objectMapper, url).toString();
 
-        try (Response response = EpicPidServiceHelper.putCommand(pidServiceUrl, prefix, suffix, jsonData)) {
+        try (Response response = EpicHandleRestHelper.putCommand(pidServiceUrl, prefix, suffix, jsonData)) {
             if (response.getStatus() != Response.Status.NO_CONTENT.getStatusCode() &&
                     response.getStatus() != Response.Status.OK.getStatusCode()) {
                 throw new WebApplicationException(response);
@@ -149,7 +149,7 @@ public class EpicPidServiceImpl implements EpicPidService {
     @Override
     public void deleteHandle(String prefix, String suffix) throws IOException {
         initialize();
-        try (Response response = EpicPidServiceHelper.deleteCommand(pidServiceUrl, prefix, suffix)) {
+        try (Response response = EpicHandleRestHelper.deleteCommand(pidServiceUrl, prefix, suffix)) {
             if (response.getStatus() != Response.Status.NO_CONTENT.getStatusCode()) {
                 throw new WebApplicationException(response);
             }
@@ -162,7 +162,7 @@ public class EpicPidServiceImpl implements EpicPidService {
         Map<String, String> queryParameters = new HashMap<>();
         queryParameters.put("URL", (urlQuery == null ? "*" : String.format("*%s*", urlQuery)));
 
-        try (Response response = EpicPidServiceHelper.getAllCommand(pidServiceUrl, prefix, null, queryParameters)) {
+        try (Response response = EpicHandleRestHelper.getAllCommand(pidServiceUrl, prefix, null, queryParameters)) {
             if (response.getStatus() != Response.Status.OK.getStatusCode()) {
                 throw new WebApplicationException(response);
             }
@@ -175,21 +175,21 @@ public class EpicPidServiceImpl implements EpicPidService {
 
     private static ArrayNode getJsonDataForUrl(ObjectMapper objectMapper, String url) {
         ArrayNode arrayNode = objectMapper.createArrayNode();
-        ObjectNode epicPidNode = objectMapper.createObjectNode();
-        epicPidNode.put("type", "URL");
-        epicPidNode.put("parsed_data", url);
-        arrayNode.add(epicPidNode);
+        ObjectNode epicPidDataNode = objectMapper.createObjectNode();
+        epicPidDataNode.put("type", "URL");
+        epicPidDataNode.put("parsed_data", url);
+        arrayNode.add(epicPidDataNode);
         return arrayNode;
     }
 
-    private static String getUrlFromEpicDataList(List<EpicPidUrl> epicPidDataList) {
+    private static String getUrlFromEpicDataList(List<epicPidData> epicPidDataList) {
         return epicPidDataList.stream()
-                .filter(epicPidUrl -> "URL".equals(epicPidUrl.getType()))
-                .map(epicPidUrl -> epicPidUrl.getParsedData().toString())
+                .filter(epicPidData -> "URL".equals(epicPidData.getType()))
+                .map(epicPidData -> epicPidData.getParsedData().toString())
                 .findFirst().orElse(null);
     }
 
-    class EpicPidServiceAuthenticator extends Authenticator {
+    class EpicHandleServiceAuthenticator extends Authenticator {
         public PasswordAuthentication getPasswordAuthentication() {
             return new PasswordAuthentication(pidServiceUser, pidServicePassword.toCharArray());
         }
@@ -208,15 +208,15 @@ public class EpicPidServiceImpl implements EpicPidService {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    static class EpicPidUrl {
+    static class epicPidData {
         private final int index;
         private final String type;
         private final Object parsedData;
 
         @JsonCreator
-        public EpicPidUrl(@JsonProperty("idx") int index,
-                          @JsonProperty("type") String type,
-                          @JsonProperty("parsed_data") Object parsedData) {
+        public epicPidData(@JsonProperty("idx") int index,
+                           @JsonProperty("type") String type,
+                           @JsonProperty("parsed_data") Object parsedData) {
             this.index = index;
             this.type = type;
             this.parsedData = parsedData;
@@ -236,7 +236,7 @@ public class EpicPidServiceImpl implements EpicPidService {
 
         @Override
         public String toString() {
-            return "EpicPidUrl[" + index + ", " + type + ", " + parsedData + "]";
+            return "EpicPidData[" + index + ", " + type + ", " + parsedData + "]";
         }
     }
 
