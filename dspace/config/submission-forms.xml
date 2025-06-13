@@ -155,7 +155,7 @@
                     <dc-schema>local</dc-schema>
                     <dc-element>hidden</dc-element>
                     <dc-qualifier/>
-                    <repeatable>true</repeatable>
+                    <repeatable>false</repeatable>
                     <label>Should this item be hidden from browse/search? (Admin only field)</label>
                     <style>col-sm-4</style>
                     <input-type value-pairs-name="hidden_list">list</input-type>
@@ -172,7 +172,7 @@
                 <field>
                     <dc-schema>local</dc-schema>
                     <dc-element>hasCMDI</dc-element>
-                    <repeatable>true</repeatable>
+                    <repeatable>false</repeatable>
                     <label>Are you going to upload cmdi file? (Admin only field)</label>
                     <input-type value-pairs-name="hasCMDI_checkbox">list</input-type>
                     <hint>Indicate whether you will upload cmdi file in the next step. Combine with "hide" for weblicht
@@ -227,7 +227,6 @@
                     <style>col-sm-5</style>
                     <input-type complex-definition-ref="funding">complex</input-type>
                     <hint>Acknowledge sponsors and funding that supported work described by this submission.</hint>
-                    <required></required>
                 </field>
             </row>
         </form>
@@ -250,7 +249,7 @@
                     <dc-schema>dc</dc-schema>
                     <dc-element>language</dc-element>
                     <dc-qualifier>iso</dc-qualifier>
-                    <repeatable>false</repeatable>
+                    <repeatable>true</repeatable>
                     <label>Language</label>
                     <type-bind>corpus,lexicalConceptualResource,languageDescription</type-bind>
                     <input-type autocomplete-custom="json_static-iso_langs.json">autocomplete</input-type>
