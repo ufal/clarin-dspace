@@ -125,7 +125,7 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
     @Test
     public void testFindRootByBitstream() throws Exception {
         List<PreviewContent> previewContentList =
-                previewContentService.hasPreview(context, bitstream1);
+                previewContentService.getPreview(context, bitstream1);
         Assert.assertEquals(previewContentList.size(), 1);
         Assert.assertEquals(previewContent1.getID(), previewContentList.get(0).getID());
     }
