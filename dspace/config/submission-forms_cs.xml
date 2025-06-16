@@ -150,9 +150,8 @@
                     <dc-schema>local</dc-schema>
                     <dc-element>hidden</dc-element>
                     <dc-qualifier/>
-                    <repeatable>false</repeatable>
+                    <repeatable>true</repeatable>
                     <label>Má být tento příspěvek skryt při procházení/vyhledávání? (Admin only field)</label>
-                    <style>col-sm-4</style>
                     <input-type value-pairs-name="hidden_list">list</input-type>
                     <hint>Uveďte, má-li být záznam skryt ve vyhledávání a procházení. Pro příspěvky pro weblicht kombinujte s "Nahrát cmdi".</hint>
                     <required/>
@@ -165,7 +164,7 @@
                 <field>
                     <dc-schema>local</dc-schema>
                     <dc-element>hasCMDI</dc-element>
-                    <repeatable>false</repeatable>
+                    <repeatable>true</repeatable>
                     <label>Chystáte se nahrát cmdi soubor? (Admin only field)</label>
                     <input-type value-pairs-name="hasCMDI_checkbox">list</input-type>
                     <hint>Uveďte, jestli se chystáte v dalším kroku nahrát cmdi soubor. Kombinujte se schováváním záznamů pro weblicht příspěvky.</hint>
@@ -1572,7 +1571,7 @@
                     <dc-schema>local</dc-schema>
                     <dc-element>hidden</dc-element>
                     <dc-qualifier/>
-                    <repeatable>false</repeatable>
+                    <repeatable>true</repeatable>
                     <label>Má být tento příspěvek skryt při procházení/vyhledávání? (Admin only field)</label>
                     <input-type value-pairs-name="hidden_list">list</input-type>
                     <hint>Uveďte, má-li být záznam skryt ve vyhledávání a procházení. Pro příspěvky pro weblicht kombinujte s "Nahrát cmdi".</hint>
@@ -1587,7 +1586,7 @@
                     <dc-schema>local</dc-schema>
                     <dc-element>hasCMDI</dc-element>
                     <dc-qualifier/>
-                    <repeatable>false</repeatable>
+                    <repeatable>true</repeatable>
                     <label>Chystáte se nahrát cmdi soubor? (Admin only field)</label>
                     <input-type value-pairs-name="metashare_languageDependent">list</input-type>
                     <!-- true/false value -->
@@ -1859,7 +1858,7 @@
                     <dc-schema>local</dc-schema>
                     <dc-element>hidden</dc-element>
                     <dc-qualifier/>
-                    <repeatable>false</repeatable>
+                    <repeatable>true</repeatable>
                     <label>Má být tento příspěvek skryt při procházení/vyhledávání? (Admin only field)</label>
                     <input-type value-pairs-name="hidden_list">list</input-type>
                     <hint>Uveďte, má-li být záznam skryt ve vyhledávání a procházení. Pro příspěvky pro weblicht kombinujte s "Nahrát cmdi".</hint>
@@ -1874,7 +1873,7 @@
                     <dc-schema>local</dc-schema>
                     <dc-element>hasCMDI</dc-element>
                     <dc-qualifier/>
-                    <repeatable>false</repeatable>
+                    <repeatable>true</repeatable>
                     <label>Chystáte se nahrát cmdi soubor? (Admin only field)</label>
                     <input-type value-pairs-name="metashare_languageDependent">list</input-type>
                     <!-- true/false value -->

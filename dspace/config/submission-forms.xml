@@ -155,9 +155,8 @@
                     <dc-schema>local</dc-schema>
                     <dc-element>hidden</dc-element>
                     <dc-qualifier/>
-                    <repeatable>false</repeatable>
+                    <repeatable>true</repeatable>
                     <label>Should this item be hidden from browse/search? (Admin only field)</label>
-                    <style>col-sm-4</style>
                     <input-type value-pairs-name="hidden_list">list</input-type>
                     <hint>Indicate whether you want to hide this item from browse and search. Combine with "Upload cmdi"
                         for weblicht submissions.
@@ -172,7 +171,7 @@
                 <field>
                     <dc-schema>local</dc-schema>
                     <dc-element>hasCMDI</dc-element>
-                    <repeatable>false</repeatable>
+                    <repeatable>true</repeatable>
                     <label>Are you going to upload cmdi file? (Admin only field)</label>
                     <input-type value-pairs-name="hasCMDI_checkbox">list</input-type>
                     <hint>Indicate whether you will upload cmdi file in the next step. Combine with "hide" for weblicht
@@ -1600,7 +1599,7 @@
                     <dc-schema>local</dc-schema>
                     <dc-element>hidden</dc-element>
                     <dc-qualifier/>
-                    <repeatable>false</repeatable>
+                    <repeatable>true</repeatable>
                     <label>Should this item be hidden from browse/search? (Admin only field)</label>
                     <input-type value-pairs-name="hidden_list">list</input-type>
                     <hint>Indicate whether you want to hide this item from browse and search. Combine with "Upload cmdi"
@@ -1617,7 +1616,7 @@
                     <dc-schema>local</dc-schema>
                     <dc-element>hasCMDI</dc-element>
                     <dc-qualifier/>
-                    <repeatable>false</repeatable>
+                    <repeatable>true</repeatable>
                     <label>Are you going to upload cmdi file? (Admin only field)</label>
                     <input-type value-pairs-name="metashare_languageDependent">list</input-type>
                     <!-- true/false value -->
@@ -1896,7 +1895,7 @@
                     <dc-schema>local</dc-schema>
                     <dc-element>hidden</dc-element>
                     <dc-qualifier/>
-                    <repeatable>false</repeatable>
+                    <repeatable>true</repeatable>
                     <label>Should this item be hidden from browse/search? (Admin only field)</label>
                     <input-type value-pairs-name="hidden_list">list</input-type>
                     <hint>Indicate whether you want to hide this item from browse and search. Combine with "Upload cmdi"
@@ -1913,7 +1912,7 @@
                     <dc-schema>local</dc-schema>
                     <dc-element>hasCMDI</dc-element>
                     <dc-qualifier/>
-                    <repeatable>false</repeatable>
+                    <repeatable>true</repeatable>
                     <label>Are you going to upload cmdi file? (Admin only field)</label>
                     <input-type value-pairs-name="metashare_languageDependent">list</input-type>
                     <!-- true/false value -->
