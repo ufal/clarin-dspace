@@ -11,7 +11,7 @@ import static org.dspace.app.rest.utils.Utils.DEFAULT_PAGE_SIZE;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertFalse;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -173,7 +173,7 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
                         .value(Matchers.containsInAnyOrder(Matchers.containsString(bts.getChecksum()))))
                 .andExpect(jsonPath("$._embedded.metadatabitstreams[*].href")
                         .value(Matchers.containsInAnyOrder(Matchers.containsString(url))));
-        assertTrue(previewContentService.hasPreview(context, bts).isEmpty());
+        assertFalse(previewContentService.hasPreview(context, bts));
         configurationService.setProperty("file.preview.enabled", canPreview);
         context.restoreAuthSystemState();
     }
