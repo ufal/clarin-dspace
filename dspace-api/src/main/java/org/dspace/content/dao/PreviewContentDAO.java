@@ -34,6 +34,16 @@ public interface PreviewContentDAO extends GenericDAO<PreviewContent> {
     List<PreviewContent> findByBitstream(Context context, UUID bitstreamId) throws SQLException;
 
     /**
+     *  Returns true if the bitstream has associated preview content.
+     *
+     * @param context       DSpace context
+     * @param bitstream     The bitstream to get bitstream UUID
+     * @return              True if preview content exists, false otherwise
+     * @throws SQLException If a database error occurs
+     */
+    boolean hasPreview(Context context, Bitstream bitstream) throws SQLException;
+
+    /**
      *  Find all preview content based on bitstream that are the root directory.
      *
      * @param context       DSpace context
@@ -41,5 +51,5 @@ public interface PreviewContentDAO extends GenericDAO<PreviewContent> {
      * @return              List of found preview content
      * @throws SQLException If a database error occurs
      */
-    List<PreviewContent> hasPreview(Context context, Bitstream bitstream) throws SQLException;
+    List<PreviewContent> getPreview(Context context, Bitstream bitstream) throws SQLException;
 }

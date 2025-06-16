@@ -40,7 +40,16 @@ public class PreviewContentDAOImpl extends AbstractHibernateDAO<PreviewContent> 
     }
 
     @Override
-    public List<PreviewContent> hasPreview(Context context, Bitstream bitstream) throws SQLException {
+    public boolean hasPreview(Context context, Bitstream bitstream) throws SQLException {
+        Query query = createQuery(context,
+                "SELECT COUNT(pc) FROM " + PreviewContent.class.getSimpleName() +
+                        " pc WHERE pc.bitstream.id = :bitstream_id");
+        query.setParameter("bitstream_id", bitstream.getID());
+        return count(query) > 0;
+    }
+
+    @Override
+    public List<PreviewContent> getPreview(Context context, Bitstream bitstream) throws SQLException {
         // select only data from the previewcontent table whose ID is not a child in the preview2preview table
         Query query = getHibernateSession(context).createNativeQuery(
                 "SELECT pc.* FROM previewcontent pc " +

@@ -7,6 +7,7 @@
  */
 package org.dspace.content;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.sql.SQLException;
@@ -313,6 +314,15 @@ public class BitstreamServiceImpl extends DSpaceObjectServiceImpl<Bitstream> imp
         authorizeService.authorizeAction(context, bitstream, Constants.READ);
 
         return bitstreamStorageService.retrieve(context, bitstream);
+    }
+
+    @Override
+    public File retrieveFile(Context context, Bitstream bitstream, boolean authorization)
+            throws IOException, SQLException, AuthorizeException {
+        if (authorization) {
+            authorizeService.authorizeAction(context, bitstream, Constants.READ);
+        }
+        return bitstreamStorageService.retrieveFile(context, bitstream);
     }
 
     @Override

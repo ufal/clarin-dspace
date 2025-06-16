@@ -7,30 +7,33 @@
  */
 package org.dspace.content;
 
+import java.io.BufferedInputStream;
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Enumeration;
 import java.util.Hashtable;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Function;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
+import java.util.zip.ZipFile;
+import javax.xml.stream.XMLOutputFactory;
+import javax.xml.stream.XMLStreamWriter;
 
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
@@ -68,6 +71,8 @@ public class PreviewContentServiceImpl implements PreviewContentService {
     // This constant is used to limit the length of the preview content stored in the database to prevent
     // the database from being overloaded with large amounts of data.
     private static final int MAX_PREVIEW_COUNT_LENGTH = 2000;
+    // Initial capacity for the list of extracted file paths, set to 200 based on typical archive file counts.
+    private static final int ESTIMATED_FILE_COUNT = 200;
 
     // Configured ZIP file preview limit (default: 1000) - if the ZIP file contains more files, it will be truncated
     @Value("${file.preview.zip.limit.length:1000}")
@@ -82,7 +87,6 @@ public class PreviewContentServiceImpl implements PreviewContentService {
     ConfigurationService configurationService;
     @Autowired
     BitstreamService bitstreamService;
-
 
     @Override
     public PreviewContent create(Context context, Bitstream bitstream, String name, String content,
@@ -124,8 +128,13 @@ public class PreviewContentServiceImpl implements PreviewContentService {
     }
 
     @Override
-    public List<PreviewContent> hasPreview(Context context, Bitstream bitstream) throws SQLException {
+    public boolean hasPreview(Context context, Bitstream bitstream) throws SQLException {
         return previewContentDAO.hasPreview(context, bitstream);
+    }
+
+    @Override
+    public List<PreviewContent> getPreview(Context context, Bitstream bitstream) throws SQLException {
+        return previewContentDAO.getPreview(context, bitstream);
     }
 
     @Override
@@ -134,7 +143,8 @@ public class PreviewContentServiceImpl implements PreviewContentService {
     }
 
     @Override
-    public boolean canPreview(Context context, Bitstream bitstream) throws SQLException, AuthorizeException {
+    public boolean canPreview(Context context, Bitstream bitstream, boolean authorization)
+            throws SQLException, AuthorizeException {
         try {
             // Check it is allowed by configuration
             boolean isAllowedByCfg = configurationService.getBooleanProperty("file.preview.enabled", true);
@@ -143,7 +153,9 @@ public class PreviewContentServiceImpl implements PreviewContentService {
             }
 
             // Check it is allowed by license
-            authorizeService.authorizeAction(context, bitstream, Constants.READ);
+            if (authorization) {
+                authorizeService.authorizeAction(context, bitstream, Constants.READ);
+            }
             return true;
         } catch (MissingLicenseAgreementException e) {
             return false;
@@ -151,16 +163,22 @@ public class PreviewContentServiceImpl implements PreviewContentService {
     }
 
     @Override
-    public List<FileInfo> getFilePreviewContent(Context context, Bitstream bitstream)
-            throws Exception {
-        InputStream inputStream = null;
-        List<FileInfo> fileInfos = null;
-        try {
-            inputStream = bitstreamService.retrieve(context, bitstream);
-        } catch (MissingLicenseAgreementException e) { /* Do nothing */ }
+    public List<FileInfo> getFilePreviewContent(Context context, Bitstream bitstream) throws Exception {
+        List<FileInfo> fileInfos = new ArrayList<>();
+        File file = null;
 
-        if (Objects.nonNull(inputStream)) {
-            fileInfos = processInputStreamToFilePreview(context, bitstream, inputStream);
+        try {
+            file = bitstreamService.retrieveFile(context, bitstream, false); // Retrieve the file
+
+            if (Objects.nonNull(file)) {
+                fileInfos = processFileToFilePreview(context, bitstream, file);
+            }
+        } catch (MissingLicenseAgreementException e) {
+            log.error("Missing license agreement: ", e);
+            throw e;
+        } catch (IOException e) {
+            log.error("IOException during file processing: ", e);
+            throw e;
         }
         return fileInfos;
     }
@@ -187,8 +205,8 @@ public class PreviewContentServiceImpl implements PreviewContentService {
     }
 
     @Override
-    public List<FileInfo> processInputStreamToFilePreview(Context context, Bitstream bitstream,
-                                                          InputStream inputStream)
+    public List<FileInfo> processFileToFilePreview(Context context, Bitstream bitstream,
+                                                          File file)
             throws Exception {
         List<FileInfo> fileInfos = new ArrayList<>();
         String bitstreamMimeType = bitstream.getFormat(context).getMIMEType();
@@ -198,10 +216,10 @@ public class PreviewContentServiceImpl implements PreviewContentService {
                         "database. This could cause the ZIP file to be previewed as a text file, potentially leading" +
                         " to a database error.");
             }
-            String data = getFileContent(inputStream, true);
+            String data = getFileContent(file, true);
             fileInfos.add(new FileInfo(data, false));
         } else if (bitstreamMimeType.equals("text/html")) {
-            String data = getFileContent(inputStream, false);
+            String data = getFileContent(file, false);
             fileInfos.add(new FileInfo(data, false));
         } else {
             String data = "";
@@ -209,10 +227,8 @@ public class PreviewContentServiceImpl implements PreviewContentService {
                     "application/zip", ARCHIVE_TYPE_ZIP,
                     "application/x-tar", ARCHIVE_TYPE_TAR
             );
-
-            String mimeType = bitstream.getFormat(context).getMIMEType();
-            if (archiveTypes.containsKey(mimeType)) {
-                data = extractFile(inputStream, archiveTypes.get(mimeType));
+            if (archiveTypes.containsKey(bitstreamMimeType)) {
+                data = extractFile(file, archiveTypes.get(bitstreamMimeType));
                 fileInfos = FileTreeViewGenerator.parse(data);
             }
         }
@@ -295,49 +311,89 @@ public class PreviewContentServiceImpl implements PreviewContentService {
      * @param size the size of the file or directory
      */
     private void addFilePath(List<String> filePaths, String path, long size) {
-        String fileInfo = "";
         try {
-            Path filePath = Paths.get(path);
-            boolean isDir = Files.isDirectory(filePath);
-            fileInfo = (isDir ? path + "/|" : path + "|") + size;
+            boolean isDir = Files.isDirectory(Paths.get(path));
+            StringBuilder sb = new StringBuilder(path.length() + 16);
+            sb.append(path);
+            sb.append(isDir ? "/|" : "|");
+            sb.append(size);
+            filePaths.add(sb.toString());
         } catch (NullPointerException | InvalidPathException | SecurityException e) {
             log.error(String.format("Failed to add file path. Path: '%s', Size: %d", path, size), e);
         }
-        filePaths.add(fileInfo);
     }
 
     /**
      * Processes a TAR file, extracting its entries and adding their paths to the provided list.
      * @param filePaths the list to populate with the extracted file paths
-     * @param inputStream the TAR file data
+     * @param file the TAR file data
      * @throws IOException if an I/O error occurs while reading the TAR file
      */
-    private void processTarFile(List<String> filePaths, InputStream inputStream) throws IOException {
-        try (TarArchiveInputStream tis = new TarArchiveInputStream(inputStream)) {
+    private void processTarFile(List<String> filePaths, File file) throws IOException {
+        try (InputStream fis = new FileInputStream(file);
+             BufferedInputStream bis = new BufferedInputStream(fis);
+             // Use the constructor that accepts LongFileMode
+             TarArchiveInputStream tarInput = new TarArchiveInputStream(bis)) {
+
+
             TarArchiveEntry entry;
-            while ((entry = tis.getNextTarEntry()) != null) {
-                if (!entry.isDirectory()) {
-                    // Add the file path and its size (from the TAR entry)
-                    addFilePath(filePaths, entry.getName(), entry.getSize());
+            while ((entry = tarInput.getNextTarEntry()) != null) {
+                if (filePaths.size() >= maxPreviewCount) {
+                    filePaths.add("... (too many files)");
+                    break;
                 }
+                if (!entry.isDirectory()) {
+                    String name = entry.getName();
+                    long size = entry.getSize();
+                    addFilePath(filePaths, name, size);
+                }
+                // Fully skip entry content to handle large files correctly
+                skipFully(tarInput, entry.getSize());
             }
         }
     }
 
     /**
-     * Processes a ZIP file, extracting its entries and adding their paths to the provided list.
-     * @param filePaths      the list to populate with the extracted file paths
-     * @param inputStream the ZIP file data
-     * @throws IOException   if an I/O error occurs while reading the ZIP file
+     * Fully skips the specified number of bytes from the input stream,
+     * ensuring that all bytes are skipped even if InputStream.skip() skips less.
+     *
+     * @param in the input stream to skip bytes from
+     * @param bytesToSkip the number of bytes to skip
+     * @throws IOException if an I/O error occurs or the end of stream is reached before skipping all bytes
      */
-    private void processZipFile(List<String> filePaths, InputStream inputStream) throws IOException {
-        try (ZipInputStream zipInputStream = new ZipInputStream(inputStream)) {
-            ZipEntry entry;
-            while ((entry = zipInputStream.getNextEntry()) != null) {
+    private void skipFully(InputStream in, long bytesToSkip) throws IOException {
+        long remaining = bytesToSkip;
+        while (remaining > 0) {
+            long skipped = in.skip(remaining);
+            if (skipped <= 0) {
+                // If skip returns 0 or less, try to read a byte to move forward
+                if (in.read() == -1) {
+                    throw new IOException("Unexpected end of stream while skipping");
+                }
+                skipped = 1;
+            }
+            remaining -= skipped;
+        }
+    }
+
+    /**
+     * Parses a ZIP file and extracts the names and sizes of its entries.
+     *
+     * @param filePaths the list to populate with entry names
+     * @param file      the ZIP file to read
+     * @throws IOException if the file is invalid or cannot be read
+     */
+    private void processZipFile(List<String> filePaths, File file) throws IOException {
+        try (ZipFile zipFile = new ZipFile(file)) {
+            Enumeration<? extends ZipEntry> entries = zipFile.entries();
+            while (entries.hasMoreElements()) {
+                if (filePaths.size() >= maxPreviewCount) {
+                    filePaths.add("... (too many files)");
+                    break;
+                }
+                ZipEntry entry = entries.nextElement();
                 if (!entry.isDirectory()) {
-                    // Add the file path and its size (from the ZIP entry)
-                    long fileSize = entry.getSize();
-                    addFilePath(filePaths, entry.getName(), fileSize);
+                    addFilePath(filePaths, entry.getName(), entry.getSize());
                 }
             }
         }
@@ -349,72 +405,86 @@ public class PreviewContentServiceImpl implements PreviewContentService {
      * @return an XML string representation of the file paths
      */
     private String buildXmlResponse(List<String> filePaths) {
-        // Is a folder regex
-        String folderRegex = "/|\\d+";
-        Pattern pattern = Pattern.compile(folderRegex);
+        StringWriter stringWriter = new StringWriter();
+        XMLOutputFactory factory = XMLOutputFactory.newInstance();
+        XMLStreamWriter writer = null;
+        try {
+            writer = factory.createXMLStreamWriter(stringWriter);
 
-        StringBuilder sb = new StringBuilder();
-        sb.append("<root>");
-        Iterator<String> iterator = filePaths.iterator();
-        int fileCounter = 0;
-        while (iterator.hasNext() && fileCounter < maxPreviewCount) {
-            String filePath = iterator.next();
-            // Check if the file is a folder
-            Matcher matcher = pattern.matcher(filePath);
-            if (!matcher.matches()) {
-                // It is a file
-                fileCounter++;
+            writer.writeStartDocument("UTF-8", "1.0");
+            writer.writeStartElement("root");
+
+            int count = 0;
+            for (String filePath : filePaths) {
+                if (count >= maxPreviewCount) {
+                    writer.writeStartElement("element");
+                    writer.writeCharacters("...too many files...|0");
+                    writer.writeEndElement();
+                    break;
+                }
+                writer.writeStartElement("element");
+                writer.writeCharacters(filePath);
+                writer.writeEndElement();
+                count++;
             }
-            sb.append("<element>").append(filePath).append("</element>");
+
+            writer.writeEndElement(); // </root>
+            writer.writeEndDocument();
+            writer.flush();
+            writer.close();
+
+        } catch (Exception e) {
+            log.error("Failed to build XML response", e);
+            return "<root><error>Failed to generate preview</error></root>";
         }
 
-        if (fileCounter > maxPreviewCount) {
-            sb.append("<element>...too many files...|0</element>");
-        }
-        sb.append("</root>");
-        return sb.toString();
+        return stringWriter.toString();
     }
 
     /**
      * Processes  file data based on the specified file type (tar or zip),
      * and returns an XML representation of the file paths.
-     * @param inputStream the InputStream containing the file data
+     * @param file the file data
      * @param fileType    the type of file to extract ("tar" or "zip")
      * @return an XML string representing the extracted file paths
      */
-    private String extractFile(InputStream inputStream, String fileType) throws Exception {
-        List<String> filePaths = new ArrayList<>();
+    private String extractFile(File file, String fileType) throws Exception {
+        List<String> filePaths = new ArrayList<>(ESTIMATED_FILE_COUNT);
         // Process the file based on its type
         if (ARCHIVE_TYPE_TAR.equals(fileType)) {
-            processTarFile(filePaths, inputStream);
+            processTarFile(filePaths, file);
         } else {
-            processZipFile(filePaths, inputStream);
+            processZipFile(filePaths, file);
         }
         return buildXmlResponse(filePaths);
     }
 
     /**
-     * Read input stream and return content as String
-     * @param inputStream to read
-     * @return content of the inputStream as a String
-     * @throws IOException
+     * Read file content and return as String
+     * @param file the file to read
+     * @param cutResult whether to limit the content length
+     * @return content of the file as a String
+     * @throws IOException if an error occurs reading the file
      */
-    private String getFileContent(InputStream inputStream, boolean cutResult) throws IOException {
+    private String getFileContent(File file, boolean cutResult) throws IOException {
         StringBuilder content = new StringBuilder();
-        // Generate the preview content in the UTF-8 encoding
-        BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8));
-        try {
+
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
+
             String line;
             while ((line = reader.readLine()) != null) {
+                if (cutResult && content.length() > MAX_PREVIEW_COUNT_LENGTH) {
+                    content.append(" . . .");
+                    break;
+                }
                 content.append(line).append("\n");
             }
-        } catch (UnsupportedEncodingException e) {
-            log.error("UnsupportedEncodingException during creating the preview content because: ", e);
         } catch (IOException e) {
             log.error("IOException during creating the preview content because: ", e);
+            throw e; // Optional: rethrow if you want the exception to propagate
         }
 
-        reader.close();
         return cutResult ? ensureMaxLength(content.toString()) : content.toString();
     }
 

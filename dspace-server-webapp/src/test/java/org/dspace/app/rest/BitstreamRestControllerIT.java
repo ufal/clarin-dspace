@@ -1414,4 +1414,57 @@ public class BitstreamRestControllerIT extends AbstractControllerIntegrationTest
             configurationService.setProperty("assetstore.s3.bucketName", null);
         }
     }
+
+    // Do not directly download the file which is not in the `ORIGINAL` bundle, because there could be problem
+    // with working with that file, e.g. showing the process output
+    @Test
+    public void testNotS3DirectDownloadWhenSpecificFile() throws Exception {
+        // Enable S3 direct download for test
+        configurationService.setProperty("s3.download.direct.enabled", true);
+        configurationService.setProperty("assetstore.s3.bucketName", "test");
+        try {
+            context.turnOffAuthorisationSystem();
+            //** GIVEN **
+            //1. A community-collection structure with one parent community and one collections.
+            parentCommunity = CommunityBuilder.createCommunity(context)
+                    .withName("Parent Community")
+                    .build();
+
+            Collection col1 = CollectionBuilder.createCollection(context, parentCommunity)
+                    .withName("Collection 1").build();
+            Item item = ItemBuilder.createItem(context, col1)
+                    .withTitle("Public item 1")
+                    .withIssueDate("2017-10-17")
+                    .withAuthor("Smith, Donald").withAuthor("Doe, John")
+                    .build();
+
+            URI expectedUrl = URI.create("https://example.com");
+            doReturn(expectedUrl.toString())
+                    .when(s3DirectDownloadService)
+                    .generatePresignedUrl(anyString(), anyString(), anyInt(), anyString());
+
+            // Create and upload a bitstream
+            bitstream = BitstreamBuilder.createBitstream(context, item, toInputStream("test", UTF_8), false)
+                    .withName("process_output.txt")
+                    .build();
+            String bitstreamId = bitstream.getID().toString();
+            context.restoreAuthSystemState();
+            context.commit();
+
+            String adminToken = getAuthToken(admin.getEmail(), password);
+            // Make a request to the /content endpoint and check the redirect URL
+            getClient(adminToken).perform(get("/api/core/bitstreams/" + bitstreamId + "/content"))
+                    //** THEN **
+                    .andExpect(status().isOk())
+                    // The ETag has to be based on the checksum
+                    // We're checking this with quotes because it is required:
+                    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/ETag
+                    .andExpect(header().string("ETag", "\"" + bitstream.getChecksum() + "\""))
+                    // We expect the content type to match the UNKNOWN because it is standard without bundle
+                    .andExpect(content().contentType("application/octet-stream;charset=UTF-8"));
+        } finally {
+            configurationService.setProperty("s3.download.direct.enabled", false);
+            configurationService.setProperty("assetstore.s3.bucketName", null);
+        }
+    }
 }
