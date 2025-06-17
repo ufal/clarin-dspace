@@ -9,8 +9,6 @@ package org.dspace.app.rest.repository;
 
 import org.dspace.app.rest.model.EpicHandleRest;
 import org.dspace.core.Context;
-import org.dspace.handle.service.EpicHandleService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Component;
@@ -21,13 +19,10 @@ import org.springframework.stereotype.Component;
  * @author Milan Kuchtiak
  */
 @Component(EpicHandleRest.CATEGORY + "." + EpicHandleRest.NAME)
-public class EpicHandleRestRepository extends DSpaceRestRepository<EpicHandleRest, String> {
-
-    @Autowired
-    EpicHandleService epicHandleService;
+public class EpicHandleRestRepository extends DSpaceRestRepository<EpicHandleRest, Integer> {
 
     @Override
-    public EpicHandleRest findOne(Context context, String suffix) {
+    public EpicHandleRest findOne(Context context, Integer prefix) {
         return null;
     }
 

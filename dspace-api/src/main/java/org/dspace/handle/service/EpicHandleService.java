@@ -65,12 +65,12 @@ public interface EpicHandleService {
      *
      * @param prefix            The handle prefix
      * @param urlQuery          part of URL used to search handles, e.g. "www.test.com"
-     * @param limit             sets the limit for response (when -1 use default, which is 1000)
-     * @param page              the offset to start searching from (when -1 use default, which is 1 - first page)
-     * @return                  list iof handles satisfying the URL query
+     * @param page              the one based offset to start searching from (default is 1 - first page)
+     * @param limit             sets the limit for response (default is 1000, limit = 0 - all items will be returned)
+     * @return                  list of handles satisfying the URL query
      * @throws IOException      If request to ePIC handle server fails
      */
-    List<Handle> search(String prefix, String urlQuery, int limit, int page) throws IOException;
+    List<Handle> search(String prefix, String urlQuery, Integer page, Integer limit) throws IOException;
 
     /** Count handles by URL query
      *
@@ -109,6 +109,11 @@ public interface EpicHandleService {
         @Override
         public int hashCode() {
             return Objects.hash(handle, url);
+        }
+
+        @Override
+        public String toString() {
+            return "Handle[" + handle + " -> " + url + "]";
         }
     }
 

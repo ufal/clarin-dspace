@@ -65,7 +65,7 @@ public class EpicHandleServiceImpl implements EpicHandleService {
             }
             String jsonResponse = response.readEntity(String.class);
 
-            List<epicPidData> epicPidDataList = objectMapper.readValue(jsonResponse, new TypeReference<>() {
+            List<EpicPidData> epicPidDataList = objectMapper.readValue(jsonResponse, new TypeReference<>() {
             });
 
             return epicPidDataList.stream()
@@ -76,15 +76,15 @@ public class EpicHandleServiceImpl implements EpicHandleService {
     }
 
     @Override
-    public List<Handle> search(String prefix, String urlQuery, int limit, int page) throws IOException {
+    public List<Handle> search(String prefix, String urlQuery, Integer page, Integer limit) throws IOException {
         initialize();
         Map<String, String> queryParameters = new HashMap<>();
         queryParameters.put("URL", (urlQuery == null ? "*" : String.format("*%s*", urlQuery)));
-        if (limit != -1) {
-            queryParameters.put("limit", String.valueOf(limit));
-        }
-        if (page != -1) {
+        if (page != null) {
             queryParameters.put("page", String.valueOf(page));
+        }
+        if (limit != null) {
+            queryParameters.put("limit", String.valueOf(limit));
         }
 
         Map<String, String> headers = Map.of("Depth", "1");
@@ -95,7 +95,7 @@ public class EpicHandleServiceImpl implements EpicHandleService {
             }
 
             String jsonResponse = response.readEntity(String.class);
-            Map<String, List<epicPidData>> epicPidDataMap = objectMapper.readValue(jsonResponse, new TypeReference<>() {
+            Map<String, List<EpicPidData>> epicPidDataMap = objectMapper.readValue(jsonResponse, new TypeReference<>() {
             });
 
             List<Handle> handleList = new ArrayList<>();
@@ -161,6 +161,8 @@ public class EpicHandleServiceImpl implements EpicHandleService {
         initialize();
         Map<String, String> queryParameters = new HashMap<>();
         queryParameters.put("URL", (urlQuery == null ? "*" : String.format("*%s*", urlQuery)));
+        // search for all records
+        queryParameters.put("limit", "0");
 
         try (Response response = EpicHandleRestHelper.getAllCommand(pidServiceUrl, prefix, null, queryParameters)) {
             if (response.getStatus() != Response.Status.OK.getStatusCode()) {
@@ -182,7 +184,7 @@ public class EpicHandleServiceImpl implements EpicHandleService {
         return arrayNode;
     }
 
-    private static String getUrlFromEpicDataList(List<epicPidData> epicPidDataList) {
+    private static String getUrlFromEpicDataList(List<EpicPidData> epicPidDataList) {
         return epicPidDataList.stream()
                 .filter(epicPidData -> "URL".equals(epicPidData.getType()))
                 .map(epicPidData -> epicPidData.getParsedData().toString())
@@ -208,13 +210,13 @@ public class EpicHandleServiceImpl implements EpicHandleService {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    static class epicPidData {
+    static class EpicPidData {
         private final int index;
         private final String type;
         private final Object parsedData;
 
         @JsonCreator
-        public epicPidData(@JsonProperty("idx") int index,
+        public EpicPidData(@JsonProperty("idx") int index,
                            @JsonProperty("type") String type,
                            @JsonProperty("parsed_data") Object parsedData) {
             this.index = index;

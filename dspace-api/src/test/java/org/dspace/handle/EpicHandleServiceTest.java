@@ -151,7 +151,7 @@ public class EpicHandleServiceTest extends AbstractDSpaceTest {
     public void testSearch() throws IOException {
         String urlQuery = "www.test.cz";
         if (REAL_TEST) {
-            List<EpicHandleService.Handle> handleList = epicHandleService.search(PREFIX, urlQuery, 10, 1);
+            List<EpicHandleService.Handle> handleList = epicHandleService.search(PREFIX, urlQuery, 1, 10);
             System.out.println(handleList);
             handleList.forEach(handle -> System.out.println("handle:" + handle.getHandle() + " -> " + handle.getUrl()));
         } else {
@@ -164,7 +164,7 @@ public class EpicHandleServiceTest extends AbstractDSpaceTest {
                 mockedHelper.when(() ->
                                 EpicHandleRestHelper.getAllCommand(pidServiceUrl, PREFIX, headers, queryParameters))
                         .thenReturn(new MockResponse<>(Response.Status.OK, mockedResponse));
-                List<EpicHandleService.Handle> pids = epicHandleService.search(PREFIX, urlQuery, 10, 1);
+                List<EpicHandleService.Handle> pids = epicHandleService.search(PREFIX, urlQuery, 1, 10);
 
                 EpicHandleService.Handle handle1 = new EpicHandleService.Handle(
                         "11148/TEST-0000-0011-2E07-3",
@@ -178,14 +178,14 @@ public class EpicHandleServiceTest extends AbstractDSpaceTest {
                 mockedHelper.when(() ->
                                 EpicHandleRestHelper.getAllCommand(pidServiceUrl, PREFIX, headers, queryParameters))
                         .thenReturn(new MockResponse<>(Response.Status.OK, "{}"));
-                List<EpicHandleService.Handle> handles = epicHandleService.search(PREFIX, urlQuery, 10, 1);
+                List<EpicHandleService.Handle> handles = epicHandleService.search(PREFIX, urlQuery, 1, 10);
                 assertEquals(0, handles.size());
                 // test 404 response
                 mockedHelper.when(() ->
                                 EpicHandleRestHelper.getAllCommand(pidServiceUrl, PREFIX, headers, queryParameters))
                         .thenReturn(Response.status(Response.Status.NOT_FOUND).build());
                 assertThrows("HTTP 404 Not Found", WebApplicationException.class, () ->
-                        epicHandleService.search(PREFIX, urlQuery, 10, 1));
+                        epicHandleService.search(PREFIX, urlQuery, 1, 10));
             }
         }
     }
@@ -200,7 +200,7 @@ public class EpicHandleServiceTest extends AbstractDSpaceTest {
             String mockedResponse =  getResource("/org/dspace/handle/epicCountResponse.json");
             try (MockedStatic<EpicHandleRestHelper> mockedHelper = Mockito.mockStatic(EpicHandleRestHelper.class)) {
                 // test OK response
-                Map<String, String> queryParameters = Map.of("URL", "*" + urlQuery + "*");
+                Map<String, String> queryParameters = Map.of("URL", "*" + urlQuery + "*", "limit", "0");
                 mockedHelper.when(() ->
                                 EpicHandleRestHelper.getAllCommand(pidServiceUrl, PREFIX, null, queryParameters))
                         .thenReturn(new MockResponse<>(Response.Status.OK, mockedResponse));

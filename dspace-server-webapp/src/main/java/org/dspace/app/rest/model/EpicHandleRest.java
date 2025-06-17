@@ -7,7 +7,7 @@
  */
 package org.dspace.app.rest.model;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import org.dspace.app.rest.RestResourceController;
 
 /**
@@ -15,16 +15,26 @@ import org.dspace.app.rest.RestResourceController;
  *
  * @author Milan Kuchtiak
  */
-public class EpicHandleRest extends BaseObjectRest<Integer> {
+public class EpicHandleRest extends BaseObjectRest<String> {
 
     public static final String NAME = "epichandle";
     public static final String CATEGORY = RestAddressableModel.CORE;
+    public static final String URI_PREFIX = "/api/" + CATEGORY + "/" + NAME;
+    public static final String URI_PREFIX_PLURAL = URI_PREFIX + "s";
 
-    public EpicHandleRest() {
+    private String url;
+
+    public String getUrl() {
+        return url;
+    }
+
+    public void setUrl(String url) {
+        this.url = url;
     }
 
     @Override
-    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    // @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    @JsonIgnore
     public String getType() {
         return NAME;
     }
