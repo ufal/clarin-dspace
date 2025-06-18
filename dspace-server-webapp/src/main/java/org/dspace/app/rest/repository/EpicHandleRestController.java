@@ -21,18 +21,22 @@ import javax.ws.rs.core.Response;
 
 import org.dspace.app.rest.converter.ConverterService;
 import org.dspace.app.rest.exception.DSpaceBadRequestException;
+import org.dspace.app.rest.exception.RepositoryMethodNotImplementedException;
 import org.dspace.app.rest.model.EpicHandleRest;
 import org.dspace.app.rest.model.hateoas.EpicHandleResource;
 import org.dspace.app.rest.projection.Projection;
 import org.dspace.app.rest.utils.Utils;
+import org.dspace.core.Context;
 import org.dspace.handle.service.EpicHandleService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.rest.webmvc.ResourceNotFoundException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.stereotype.Component;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
@@ -45,7 +49,8 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping({EpicHandleRest.URI_PREFIX, EpicHandleRest.URI_PREFIX_PLURAL})
-public class EpicHandleRestController {
+@Component(EpicHandleRest.CATEGORY + "." + EpicHandleRest.NAME)
+public class EpicHandleRestController extends DSpaceRestRepository<EpicHandleRest, String> {
     private static final int DEFAULT_PAGE_SIZE = 10;
 
     @Autowired
@@ -55,6 +60,21 @@ public class EpicHandleRestController {
     @Autowired
     private Utils utils;
 
+    @Override
+    public EpicHandleRest findOne(Context context, String s) {
+        throw new RepositoryMethodNotImplementedException("Method not allowed!", "findOne");
+    }
+
+    @Override
+    public Page<EpicHandleRest> findAll(Context context, Pageable pageable) {
+        throw new RepositoryMethodNotImplementedException("Method not allowed!", "findAll");
+    }
+
+    @Override
+    public Class<EpicHandleRest> getDomainClass() {
+        return EpicHandleRest.class;
+    }
+
     @PreAuthorize("hasAuthority('ADMIN')")
     @RequestMapping(method = RequestMethod.POST, path = "{prefix}")
     public ResponseEntity<EpicHandleResource> createHandle(@PathVariable String prefix, HttpServletRequest request)
@@ -62,8 +82,8 @@ public class EpicHandleRestController {
         if (prefix == null || prefix.isEmpty()) {
             throw new DSpaceBadRequestException("Epic handle prefix cannot be empty string");
         }
-        String subPrefix = request.getParameter("subprefix");
-        String subSuffix = request.getParameter("subsuffix");
+        String subPrefix = request.getParameter("prefix");
+        String subSuffix = request.getParameter("suffix");
         String url = request.getParameter("url");
         if (url == null) {
             throw new DSpaceBadRequestException("Epic handle URL is required");
@@ -136,10 +156,7 @@ public class EpicHandleRestController {
         if (prefix == null || prefix.isEmpty()) {
             throw new DSpaceBadRequestException("Epic handle prefix cannot be empty string");
         }
-        String url = request.getParameter("url");
-        if (url == null) {
-            throw new DSpaceBadRequestException("Epic handle URL is required");
-        }
+        String urlQuery = request.getParameter("url");
         int page = Optional.ofNullable(request.getParameter("page"))
                 .map(Integer::parseInt).orElse(0);
         int size = Optional.ofNullable(request.getParameter("size"))
@@ -147,7 +164,7 @@ public class EpicHandleRestController {
 
         CompletableFuture<Integer> future1 = CompletableFuture.supplyAsync(() -> {
             try {
-                return epicHandleService.count(prefix, url);
+                return epicHandleService.count(prefix, urlQuery);
             } catch (IOException ex) {
                 return -1;
             } catch (WebApplicationException ex) {
@@ -156,7 +173,7 @@ public class EpicHandleRestController {
         });
         CompletableFuture<List<EpicHandleService.Handle>> future2 = CompletableFuture.supplyAsync(() -> {
             try {
-                return epicHandleService.search(prefix, url,page + 1, size);
+                return epicHandleService.search(prefix, urlQuery, page + 1, size);
             } catch (IOException ex) {
                 return null;
             } catch (WebApplicationException ex) {
@@ -201,9 +218,10 @@ public class EpicHandleRestController {
     }
 
     private static RuntimeException toDSpaceException(WebApplicationException ex) {
-        if (ex.getResponse().getStatus() == Response.Status.NOT_FOUND.getStatusCode()) {
+        int responseStatus = ex.getResponse().getStatus();
+        if (responseStatus == Response.Status.NOT_FOUND.getStatusCode()) {
             return new ResourceNotFoundException(ex.getMessage());
-        } else if (ex.getResponse().getStatus() == Response.Status.BAD_REQUEST.getStatusCode()) {
+        } else if (responseStatus == Response.Status.BAD_REQUEST.getStatusCode()) {
             return new DSpaceBadRequestException(ex.getMessage());
         } else {
             return ex;

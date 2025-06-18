@@ -176,12 +176,10 @@ public class EpicHandleServiceImpl implements EpicHandleService {
     }
 
     private static ArrayNode getJsonDataForUrl(ObjectMapper objectMapper, String url) {
-        ArrayNode arrayNode = objectMapper.createArrayNode();
-        ObjectNode epicPidDataNode = objectMapper.createObjectNode();
-        epicPidDataNode.put("type", "URL");
-        epicPidDataNode.put("parsed_data", url);
-        arrayNode.add(epicPidDataNode);
-        return arrayNode;
+        ObjectNode epicPidDataNode = objectMapper.createObjectNode()
+                .put("type", "URL")
+                .put("parsed_data", url);
+        return objectMapper.createArrayNode().add(epicPidDataNode);
     }
 
     private static String getUrlFromEpicDataList(List<EpicPidData> epicPidDataList) {
