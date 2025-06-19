@@ -153,7 +153,7 @@ public class EpicHandleServiceTest extends AbstractDSpaceTest {
             System.out.println(handleList);
             handleList.forEach(handle -> System.out.println("handle:" + handle.getHandle() + " -> " + handle.getUrl()));
         } else {
-            String mockedResponse =  getResource("/org/dspace/handle/epicGetAllResponse.json");
+            String mockedResponse =  getResource("/org/dspace/handle/epicSearchFirstPageResponse.json");
             try (MockedStatic<EpicHandleRestHelper> mockedHelper = Mockito.mockStatic(EpicHandleRestHelper.class)) {
                 String urlParameter = "*" + urlQuery + "*";
 

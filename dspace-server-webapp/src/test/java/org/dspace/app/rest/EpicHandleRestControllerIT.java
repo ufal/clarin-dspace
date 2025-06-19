@@ -83,18 +83,20 @@ public class EpicHandleRestControllerIT extends AbstractControllerIntegrationTes
     @Test
     public void testSearchHandles() throws Exception {
         String urlQuery = "www.test.cz";
-        String mockedResponse = getResource("/org/dspace/handle/epicGetAllResponse.json");
+        String mockedFirstPage = getResource("/org/dspace/handle/epicSearchFirstPageResponse.json");
+        String mockedLastPage = getResource("/org/dspace/handle/epicSearchLastPageResponse.json");
         String mockedCountResponse = getResource("/org/dspace/handle/epicCountResponse.json");
+        String mockedAllItems = getResource("/org/dspace/handle/epicSearchAllResponse.json");
         try (MockedStatic<EpicHandleRestHelper> mockedHelper = Mockito.mockStatic(EpicHandleRestHelper.class)) {
             String urlParameter = "*" + urlQuery + "*";
 
-            // test OK response
+            // test OK response (looking for first page with unknown nr. of totalElements)
             mockedHelper.when(() ->
                             EpicHandleRestHelper.countHandles(pidServiceUrl, PREFIX, urlParameter))
                     .thenReturn(new MockResponse<>(Response.Status.OK, mockedCountResponse));
             mockedHelper.when(() ->
                             EpicHandleRestHelper.searchHandles(pidServiceUrl, PREFIX, urlParameter, 1, 2))
-                    .thenReturn(new MockResponse<>(Response.Status.OK, mockedResponse));
+                    .thenReturn(new MockResponse<>(Response.Status.OK, mockedFirstPage));
             getClient(adminToken).perform(get(PREFIX_URL +
                             "?url=" + urlQuery + "&page=0&size=2&runSynchronously=true"))
                     .andExpect(status().isOk())
@@ -104,14 +106,44 @@ public class EpicHandleRestControllerIT extends AbstractControllerIntegrationTes
                     .andExpect(jsonPath("$.totalElements", is(3)))
                     .andExpect(jsonPath("$.totalPages", is(2)));
 
+            // looking for the first page with known nr. of total elements, which is 1000
             getClient(adminToken).perform(get(PREFIX_URL +
-                            "?url=" + urlQuery + "&page=0&size=2&totalElements=3"))
+                            "?url=" + urlQuery + "&page=0&size=2&totalElements=1000"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.pageable.offset", is(0)))
                     .andExpect(jsonPath("$.pageable.pageSize", is(2)))
                     .andExpect(jsonPath("$.pageable.pageNumber", is(0)))
+                    .andExpect(jsonPath("$.totalElements", is(1000)))
+                    .andExpect(jsonPath("$.totalPages", is(500)));
+
+            // search for the third page (with one item) with known nr. of elements 21
+            // first 20 items are skipped
+            mockedHelper.when(() ->
+                            EpicHandleRestHelper.searchHandles(pidServiceUrl, PREFIX, urlParameter, 3, 10))
+                    .thenReturn(new MockResponse<>(Response.Status.OK, mockedLastPage));
+            getClient(adminToken).perform(get(PREFIX_URL +
+                            "?url=" + urlQuery + "&page=2&totalElements=21"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.pageable.offset", is(20)))
+                    .andExpect(jsonPath("$.pageable.pageSize", is(10)))
+                    .andExpect(jsonPath("$.pageable.pageNumber", is(2)))
+                    .andExpect(jsonPath("$.totalElements", is(21)))
+                    .andExpect(jsonPath("$.totalPages", is(3)));
+
+            // search for all items with any URL
+            mockedHelper.when(() ->
+                            EpicHandleRestHelper.countHandles(pidServiceUrl, PREFIX, "*"))
+                    .thenReturn(new MockResponse<>(Response.Status.OK, mockedCountResponse));
+            mockedHelper.when(() ->
+                            EpicHandleRestHelper.searchHandles(pidServiceUrl, PREFIX, "*", 1, 1000))
+                    .thenReturn(new MockResponse<>(Response.Status.OK, mockedAllItems));
+            getClient(adminToken).perform(get(PREFIX_URL + "?size=1000&runSynchronously=true"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.pageable.offset", is(0)))
+                    .andExpect(jsonPath("$.pageable.pageSize", is(1000)))
+                    .andExpect(jsonPath("$.pageable.pageNumber", is(0)))
                     .andExpect(jsonPath("$.totalElements", is(3)))
-                    .andExpect(jsonPath("$.totalPages", is(2)));
+                    .andExpect(jsonPath("$.totalPages", is(1)));
         }
     }
 
