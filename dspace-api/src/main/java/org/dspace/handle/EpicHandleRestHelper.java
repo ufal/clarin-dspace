@@ -34,7 +34,7 @@ public class EpicHandleRestHelper {
         try {
             uri = new URI(pidServiceURL);
         } catch (URISyntaxException e) {
-            return Response.status(400, "invalid ePIC PID Service URL").build();
+            return invalidUriResponse();
         }
 
         WebTarget webTarget = client.target(uri).path(prefix);
@@ -56,7 +56,7 @@ public class EpicHandleRestHelper {
         try {
             uri = new URI(pidServiceURL);
         } catch (URISyntaxException e) {
-            return Response.status(400, "invalid ePIC PID Service URL").build();
+            return invalidUriResponse();
         }
 
         return client.target(uri).path(prefix).path(suffix)
@@ -69,7 +69,7 @@ public class EpicHandleRestHelper {
         try {
             uri = new URI(pidServiceURL);
         } catch (URISyntaxException e) {
-            return Response.status(400, "invalid ePIC PID Service URL").build();
+            return invalidUriResponse();
         }
 
         return client.target(uri).path(prefix).path(suffix)
@@ -86,7 +86,7 @@ public class EpicHandleRestHelper {
         try {
             uri = new URI(pidServiceURL);
         } catch (URISyntaxException e) {
-            return Response.status(400, "invalid ePIC PID Service URL").build();
+            return invalidUriResponse();
         }
 
         WebTarget webTarget = client.target(uri).path(prefix);
@@ -108,7 +108,7 @@ public class EpicHandleRestHelper {
         try {
             uri = new URI(pidServiceURL);
         } catch (URISyntaxException e) {
-            return Response.status(400, "invalid ePIC PID Service URL").build();
+            return invalidUriResponse();
         }
 
         WebTarget webTarget = client.target(uri).path(prefix)
@@ -123,13 +123,17 @@ public class EpicHandleRestHelper {
         try {
             uri = new URI(pidServiceURL);
         } catch (URISyntaxException e) {
-            return Response.status(400, "invalid ePIC PID Service URL").build();
+            return invalidUriResponse();
         }
 
         return client.target(uri).path(prefix).path(suffix)
                 .request()
                 .accept(MediaType.APPLICATION_JSON)
                 .get();
+    }
+
+    private static Response invalidUriResponse() {
+        return Response.status(400, "invalid ePIC PID Service URL").build();
     }
 
 }

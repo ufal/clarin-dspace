@@ -251,6 +251,12 @@ public class EpicHandleRestController extends DSpaceRestRepository<EpicHandleRes
         }
     }
 
+    /**
+     * This class is used to store the response value, as well as possible exception, when requests are called
+     * in a separate thread.
+     *
+     * @param <T> value to store
+     */
     private static class ValueStorage<T> {
         T value;
         WebApplicationException ex;
