@@ -70,7 +70,7 @@ public interface EpicHandleService {
      * @return                  list of handles satisfying the URL query
      * @throws IOException      If request to ePIC handle server fails
      */
-    List<Handle> search(String prefix, String urlQuery, Integer page, Integer limit) throws IOException;
+    List<Handle> searchHandles(String prefix, String urlQuery, Integer page, Integer limit) throws IOException;
 
     /** Count handles by URL query
      *
@@ -78,7 +78,7 @@ public interface EpicHandleService {
      * @param urlQuery      URL query used to filter handles, when null all handles containing URL part are counted
      * @return              handles count
      */
-    int count(String prefix, String urlQuery) throws IOException;
+    int countHandles(String prefix, String urlQuery) throws IOException;
 
     class Handle {
         private final String handle;

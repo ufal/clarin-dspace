@@ -12,7 +12,6 @@ import java.io.IOException;
 import java.net.Authenticator;
 import java.net.PasswordAuthentication;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import javax.ws.rs.WebApplicationException;
@@ -56,7 +55,7 @@ public class EpicHandleServiceImpl implements EpicHandleService {
     @Override
     public String resolveURLForHandle(String prefix, String suffix) throws IOException {
         initialize();
-        try (Response response = EpicHandleRestHelper.getCommand(pidServiceUrl, prefix, suffix)) {
+        try (Response response = EpicHandleRestHelper.getHandle(pidServiceUrl, prefix, suffix)) {
             if (response.getStatus() == Response.Status.NOT_FOUND.getStatusCode()) {
                 return null;
             }
@@ -76,20 +75,11 @@ public class EpicHandleServiceImpl implements EpicHandleService {
     }
 
     @Override
-    public List<Handle> search(String prefix, String urlQuery, Integer page, Integer limit) throws IOException {
+    public List<Handle> searchHandles(String prefix, String urlQuery, Integer page, Integer limit) throws IOException {
         initialize();
-        Map<String, String> queryParameters = new HashMap<>();
-        queryParameters.put("URL", (urlQuery == null ? "*" : String.format("*%s*", urlQuery)));
-        if (page != null) {
-            queryParameters.put("page", String.valueOf(page));
-        }
-        if (limit != null) {
-            queryParameters.put("limit", String.valueOf(limit));
-        }
+        String urlParameter = (urlQuery == null ? "*" : String.format("*%s*", urlQuery));
 
-        Map<String, String> headers = Map.of("Depth", "1");
-
-        try (Response response = EpicHandleRestHelper.getAllCommand(pidServiceUrl, prefix, headers, queryParameters)) {
+        try (Response response = EpicHandleRestHelper.searchHandles(pidServiceUrl, prefix, urlParameter, page, limit)) {
             if (response.getStatus() != Response.Status.OK.getStatusCode()) {
                 throw new WebApplicationException(response);
             }
@@ -113,18 +103,12 @@ public class EpicHandleServiceImpl implements EpicHandleService {
     @Override
     public String createHandle(String prefix, String subPrefix, String subSuffix, String url) throws IOException {
         initialize();
-        Map<String, String> queryParameters = new HashMap<>();
-        if (subPrefix != null) {
-            queryParameters.put("prefix", subPrefix);
-        }
-        if (subSuffix != null) {
-            queryParameters.put("suffix", subSuffix);
-        }
         String jsonData = getJsonDataForUrl(objectMapper, url).toString();
-        try ( Response response = EpicHandleRestHelper.postCommand(
+        try ( Response response = EpicHandleRestHelper.createHandle(
                 pidServiceUrl,
                 prefix,
-                queryParameters,
+                subPrefix,
+                subSuffix,
                 jsonData)) {
             if (response.getStatus() != Response.Status.CREATED.getStatusCode()) {
                 throw new WebApplicationException(response);
@@ -138,7 +122,7 @@ public class EpicHandleServiceImpl implements EpicHandleService {
         initialize();
         String jsonData = getJsonDataForUrl(objectMapper, url).toString();
 
-        try (Response response = EpicHandleRestHelper.putCommand(pidServiceUrl, prefix, suffix, jsonData)) {
+        try (Response response = EpicHandleRestHelper.updateHandle(pidServiceUrl, prefix, suffix, jsonData)) {
             if (response.getStatus() != Response.Status.NO_CONTENT.getStatusCode() &&
                     response.getStatus() != Response.Status.OK.getStatusCode()) {
                 throw new WebApplicationException(response);
@@ -149,7 +133,7 @@ public class EpicHandleServiceImpl implements EpicHandleService {
     @Override
     public void deleteHandle(String prefix, String suffix) throws IOException {
         initialize();
-        try (Response response = EpicHandleRestHelper.deleteCommand(pidServiceUrl, prefix, suffix)) {
+        try (Response response = EpicHandleRestHelper.deleteHandle(pidServiceUrl, prefix, suffix)) {
             if (response.getStatus() != Response.Status.NO_CONTENT.getStatusCode()) {
                 throw new WebApplicationException(response);
             }
@@ -157,14 +141,11 @@ public class EpicHandleServiceImpl implements EpicHandleService {
     }
 
     @Override
-    public int count(String prefix, String urlQuery) throws IOException {
+    public int countHandles(String prefix, String urlQuery) throws IOException {
         initialize();
-        Map<String, String> queryParameters = new HashMap<>();
-        queryParameters.put("URL", (urlQuery == null ? "*" : String.format("*%s*", urlQuery)));
-        // search for all records
-        queryParameters.put("limit", "0");
+        String urlParameter = urlQuery == null ? "*" : String.format("*%s*", urlQuery);
 
-        try (Response response = EpicHandleRestHelper.getAllCommand(pidServiceUrl, prefix, null, queryParameters)) {
+        try (Response response = EpicHandleRestHelper.countHandles(pidServiceUrl, prefix, urlParameter)) {
             if (response.getStatus() != Response.Status.OK.getStatusCode()) {
                 throw new WebApplicationException(response);
             }

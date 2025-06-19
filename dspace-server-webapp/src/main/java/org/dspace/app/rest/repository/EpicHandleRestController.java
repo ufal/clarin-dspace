@@ -7,6 +7,8 @@
  */
 package org.dspace.app.rest.repository;
 
+import static org.dspace.handle.service.EpicHandleService.Handle;
+
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -90,8 +92,9 @@ public class EpicHandleRestController extends DSpaceRestRepository<EpicHandleRes
         }
         try {
             String pid = epicHandleService.createHandle(prefix, subPrefix, subSuffix, url);
-            EpicHandleService.Handle handle = new EpicHandleService.Handle(pid, url);
+            Handle handle = new Handle(pid, url);
             EpicHandleResource handleResource = converter.toResource(toRest(handle, utils.obtainProjection()));
+            // compute URL of created handle
             URL urlLocation = new URL(request.getRequestURL().append(pid.substring(pid.indexOf("/"))).toString());
             return ResponseEntity.created(urlLocation.toURI()).body(handleResource);
         } catch (WebApplicationException ex) {
@@ -102,9 +105,8 @@ public class EpicHandleRestController extends DSpaceRestRepository<EpicHandleRes
     @PreAuthorize("hasAuthority('ADMIN')")
     @RequestMapping(method = RequestMethod.PUT, path = "{prefix}/{suffix}")
     public ResponseEntity<?> updateHandle(@PathVariable String prefix,
-                                           @PathVariable String suffix,
-                                           HttpServletRequest request)
-            throws IOException {
+                                          @PathVariable String suffix,
+                                          HttpServletRequest request) throws IOException {
         if (prefix == null || prefix.isEmpty()) {
             throw new DSpaceBadRequestException("Epic handle prefix cannot be empty string");
         }
@@ -129,8 +131,7 @@ public class EpicHandleRestController extends DSpaceRestRepository<EpicHandleRes
 
     @PreAuthorize("hasAuthority('ADMIN')")
     @RequestMapping(method = RequestMethod.GET, path = "{prefix}/{suffix}")
-    public EpicHandleResource getHandle(@PathVariable String prefix, @PathVariable String suffix)
-            throws IOException {
+    public EpicHandleResource getHandle(@PathVariable String prefix, @PathVariable String suffix) throws IOException {
         if (prefix == null || prefix.isEmpty()) {
             throw new DSpaceBadRequestException("Epic handle prefix cannot be empty string");
         }
@@ -142,7 +143,7 @@ public class EpicHandleRestController extends DSpaceRestRepository<EpicHandleRes
             if (url == null) {
                 throw new ResourceNotFoundException("Epic handle not found");
             }
-            EpicHandleService.Handle handle = new EpicHandleService.Handle(prefix + "/" + suffix, url);
+            Handle handle = new Handle(prefix + "/" + suffix, url);
             return converter.toResource(toRest(handle, utils.obtainProjection()));
         } catch (WebApplicationException ex) {
             throw toDSpaceException(ex);
@@ -151,8 +152,7 @@ public class EpicHandleRestController extends DSpaceRestRepository<EpicHandleRes
 
     @PreAuthorize("hasAuthority('ADMIN')")
     @RequestMapping(method = RequestMethod.GET, path = "{prefix}")
-    public Page<EpicHandleRest> search(@PathVariable String prefix, HttpServletRequest request)
-            throws IOException {
+    public Page<EpicHandleRest> search(@PathVariable String prefix, HttpServletRequest request) throws IOException {
         if (prefix == null || prefix.isEmpty()) {
             throw new DSpaceBadRequestException("Epic handle prefix cannot be empty string");
         }
@@ -161,37 +161,52 @@ public class EpicHandleRestController extends DSpaceRestRepository<EpicHandleRes
                 .map(Integer::parseInt).orElse(0);
         int size = Optional.ofNullable(request.getParameter("size"))
                 .map(Integer::parseInt).orElse(DEFAULT_PAGE_SIZE);
-
-        CompletableFuture<Integer> future1 = CompletableFuture.supplyAsync(() -> {
-            try {
-                return epicHandleService.count(prefix, urlQuery);
-            } catch (IOException ex) {
-                return -1;
-            } catch (WebApplicationException ex) {
-                throw toDSpaceException(ex);
-            }
-        });
-        CompletableFuture<List<EpicHandleService.Handle>> future2 = CompletableFuture.supplyAsync(() -> {
-            try {
-                return epicHandleService.search(prefix, urlQuery, page + 1, size);
-            } catch (IOException ex) {
-                return null;
-            } catch (WebApplicationException ex) {
-                throw toDSpaceException(ex);
-            }
-        });
+        int totalElements = Optional.ofNullable(request.getParameter("totalElements"))
+                .map(Integer::parseInt).orElse(-1);
+        boolean runSynchronously = Optional.ofNullable(request.getParameter("runSynchronously"))
+                .map(Boolean::parseBoolean).orElse(false);
         try {
-            // wait for both tasks to complete
-            CompletableFuture.allOf(future1, future2).join();
-            int count = future1.get();
-            List<EpicHandleService.Handle> handles = future2.get();
-            Projection proj = utils.obtainProjection();
-            List<EpicHandleRest> restObjects = handles.stream()
-                    .map(h -> toRest(h, proj))
-                    .collect(Collectors.toList());
-            return new PageImpl<>(restObjects, PageRequest.of(page, size), count);
-        } catch (InterruptedException | ExecutionException ex) {
-            throw new RuntimeException(ex);
+            if (totalElements >= 0) {
+                // counting elements is not needed
+                List<Handle> handles = epicHandleService.searchHandles(prefix, urlQuery, page + 1, size);
+                return getPage(handles, page, size, totalElements);
+            } else if (runSynchronously) {
+                // first count elements, then search handles
+                int count = epicHandleService.countHandles(prefix, urlQuery);
+                List<Handle> handles = epicHandleService.searchHandles(prefix, urlQuery, page + 1, size);
+                return getPage(handles, page, size, count);
+            } else {
+                // running elements count and search asynchronously in 2 different threads
+                CompletableFuture<ValueStorage<Integer>> future1 = CompletableFuture.supplyAsync(() -> {
+                    try {
+                        return new ValueStorage<>(epicHandleService.countHandles(prefix, urlQuery));
+                    } catch (IOException ex) {
+                        return new ValueStorage<>(ex);
+                    } catch (WebApplicationException ex) {
+                        return new ValueStorage<>(ex);
+                    }
+                });
+                CompletableFuture<ValueStorage<List<Handle>>> future2 = CompletableFuture.supplyAsync(() -> {
+                    try {
+                        return new ValueStorage<>(epicHandleService.searchHandles(prefix, urlQuery, page + 1, size));
+                    } catch (IOException ex) {
+                        return new ValueStorage<>(ex);
+                    } catch (WebApplicationException ex) {
+                        return new ValueStorage<>(ex);
+                    }
+                });
+                // wait for both threads to complete
+                CompletableFuture.allOf(future1, future2).join();
+                try {
+                    int count = future1.get().getValue();
+                    List<Handle> handles = future2.get().getValue();
+                    return getPage(handles, page, size, count);
+                } catch (InterruptedException | ExecutionException ex) {
+                    throw new RuntimeException(ex);
+                }
+            }
+        } catch (WebApplicationException ex) {
+            throw toDSpaceException(ex);
         }
     }
 
@@ -213,8 +228,16 @@ public class EpicHandleRestController extends DSpaceRestRepository<EpicHandleRes
         }
     }
 
-    private EpicHandleRest toRest(EpicHandleService.Handle handle, Projection projection) {
+    private EpicHandleRest toRest(Handle handle, Projection projection) {
         return converter.toRest(handle, projection);
+    }
+
+    private Page<EpicHandleRest> getPage(List<Handle> handles, int page, int size, int totalElements) {
+        Projection proj = utils.obtainProjection();
+        List<EpicHandleRest> restObjects = handles.stream()
+                .map(h -> toRest(h, proj))
+                .collect(Collectors.toList());
+        return new PageImpl<>(restObjects, PageRequest.of(page, size), totalElements);
     }
 
     private static RuntimeException toDSpaceException(WebApplicationException ex) {
@@ -225,6 +248,34 @@ public class EpicHandleRestController extends DSpaceRestRepository<EpicHandleRes
             return new DSpaceBadRequestException(ex.getMessage());
         } else {
             return ex;
+        }
+    }
+
+    private static class ValueStorage<T> {
+        T value;
+        WebApplicationException ex;
+        IOException ie;
+
+        ValueStorage(T value) {
+            this.value = value;
+        }
+
+        ValueStorage(WebApplicationException ex) {
+            this.ex = ex;
+        }
+
+        ValueStorage(IOException ie) {
+            this.ie = ie;
+        }
+
+        T getValue() throws WebApplicationException, IOException {
+            if (ex != null) {
+                throw ex;
+            }
+            if (ie != null) {
+                throw ie;
+            }
+            return value;
         }
     }
 }

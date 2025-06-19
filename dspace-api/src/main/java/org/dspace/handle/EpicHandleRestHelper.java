@@ -10,7 +10,6 @@ package org.dspace.handle;
 
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.Map;
 import javax.ws.rs.client.Client;
 import javax.ws.rs.client.ClientBuilder;
 import javax.ws.rs.client.Entity;
@@ -26,10 +25,11 @@ public class EpicHandleRestHelper {
     private EpicHandleRestHelper() {
     }
 
-    static Response postCommand(String pidServiceURL,
-                                String prefix,
-                                Map<String, String> queryParameters,
-                                String jsonData) {
+    public static Response createHandle(String pidServiceURL,
+                                        String prefix,
+                                        String subPrefix,
+                                        String subSuffix,
+                                        String jsonData) {
         URI uri;
         try {
             uri = new URI(pidServiceURL);
@@ -38,10 +38,11 @@ public class EpicHandleRestHelper {
         }
 
         WebTarget webTarget = client.target(uri).path(prefix);
-        if (queryParameters != null && !queryParameters.isEmpty()) {
-            for (Map.Entry<String, String> entry : queryParameters.entrySet()) {
-                webTarget = webTarget.queryParam(entry.getKey(), entry.getValue());
-            }
+        if (subPrefix != null) {
+            webTarget = webTarget.queryParam("prefix", subPrefix);
+        }
+        if (subSuffix != null) {
+            webTarget = webTarget.queryParam("suffix", subSuffix);
         }
 
         return webTarget
@@ -50,7 +51,7 @@ public class EpicHandleRestHelper {
                 .post(Entity.json(jsonData));
     }
 
-    static Response putCommand(String pidServiceURL, String prefix, String suffix, String jsonData) {
+    public static Response updateHandle(String pidServiceURL, String prefix, String suffix, String jsonData) {
         URI uri;
         try {
             uri = new URI(pidServiceURL);
@@ -63,7 +64,7 @@ public class EpicHandleRestHelper {
                 .put(Entity.json(jsonData));
     }
 
-    static Response deleteCommand(String pidServiceURL, String prefix, String suffix) {
+    public static Response deleteHandle(String pidServiceURL, String prefix, String suffix) {
         URI uri;
         try {
             uri = new URI(pidServiceURL);
@@ -76,10 +77,11 @@ public class EpicHandleRestHelper {
                 .delete();
     }
 
-    static Response getAllCommand(String pidServiceURL,
-                                  String prefix,
-                                  Map<String, String> headers,
-                                  Map<String, String> queryParameters) {
+    public static Response searchHandles(String pidServiceURL,
+                                         String prefix,
+                                         String urlParameter,
+                                         Integer page,
+                                         Integer limit) {
         URI uri;
         try {
             uri = new URI(pidServiceURL);
@@ -88,23 +90,35 @@ public class EpicHandleRestHelper {
         }
 
         WebTarget webTarget = client.target(uri).path(prefix);
-        if (queryParameters != null && !queryParameters.isEmpty()) {
-            for (Map.Entry<String, String> entry : queryParameters.entrySet()) {
-                webTarget = webTarget.queryParam(entry.getKey(), entry.getValue());
-            }
+        webTarget = webTarget.queryParam("URL", urlParameter);
+        if (page != null) {
+            webTarget = webTarget.queryParam("page", page);
+        }
+        if (limit != null) {
+            webTarget = webTarget.queryParam("limit", limit);
         }
 
-        Invocation.Builder request = webTarget.request();
-        if (headers != null && !headers.isEmpty()) {
-            for (Map.Entry<String, String> entry : headers.entrySet()) {
-                request = request.header(entry.getKey(), entry.getValue());
-            }
-        }
+        Invocation.Builder request = webTarget.request().header("Depth", "1");
 
         return request.accept(MediaType.APPLICATION_JSON).get();
     }
 
-    static Response getCommand(String pidServiceURL, String prefix, String suffix) {
+    public static Response countHandles(String pidServiceURL, String prefix, String urlParameter) {
+        URI uri;
+        try {
+            uri = new URI(pidServiceURL);
+        } catch (URISyntaxException e) {
+            return Response.status(400, "invalid ePIC PID Service URL").build();
+        }
+
+        WebTarget webTarget = client.target(uri).path(prefix)
+                .queryParam("URL", urlParameter)
+                .queryParam("limit", "0");
+
+        return webTarget.request().accept(MediaType.APPLICATION_JSON).get();
+    }
+
+    public static Response getHandle(String pidServiceURL, String prefix, String suffix) {
         URI uri;
         try {
             uri = new URI(pidServiceURL);
