@@ -98,7 +98,7 @@ public class EpicHandleRestControllerIT extends AbstractControllerIntegrationTes
                             EpicHandleRestHelper.searchHandles(pidServiceUrl, PREFIX, urlParameter, 1, 2))
                     .thenReturn(new MockResponse<>(Response.Status.OK, mockedFirstPage));
             getClient(adminToken).perform(get(PREFIX_URL +
-                            "?url=" + urlQuery + "&page=0&size=2&runSynchronously=true"))
+                            "?url=" + urlQuery + "&page=0&size=2&runCountSynchronously=true"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.pageable.offset", is(0)))
                     .andExpect(jsonPath("$.pageable.pageSize", is(2)))
@@ -137,7 +137,7 @@ public class EpicHandleRestControllerIT extends AbstractControllerIntegrationTes
             mockedHelper.when(() ->
                             EpicHandleRestHelper.searchHandles(pidServiceUrl, PREFIX, "*", 1, 1000))
                     .thenReturn(new MockResponse<>(Response.Status.OK, mockedAllItems));
-            getClient(adminToken).perform(get(PREFIX_URL + "?size=1000&runSynchronously=true"))
+            getClient(adminToken).perform(get(PREFIX_URL + "?size=1000&runCountSynchronously=true"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.pageable.offset", is(0)))
                     .andExpect(jsonPath("$.pageable.pageSize", is(1000)))

@@ -163,20 +163,20 @@ public class EpicHandleRestController extends DSpaceRestRepository<EpicHandleRes
                 .map(Integer::parseInt).orElse(DEFAULT_PAGE_SIZE);
         int totalElements = Optional.ofNullable(request.getParameter("totalElements"))
                 .map(Integer::parseInt).orElse(-1);
-        boolean runSynchronously = Optional.ofNullable(request.getParameter("runSynchronously"))
+        boolean runCountSynchronously = Optional.ofNullable(request.getParameter("runCountSynchronously"))
                 .map(Boolean::parseBoolean).orElse(false);
         try {
             if (totalElements >= 0) {
                 // counting elements is not needed
                 List<Handle> handles = epicHandleService.searchHandles(prefix, urlQuery, page + 1, size);
                 return getPage(handles, page, size, totalElements);
-            } else if (runSynchronously) {
+            } else if (runCountSynchronously) {
                 // first count elements, then search handles
                 int count = epicHandleService.countHandles(prefix, urlQuery);
                 List<Handle> handles = epicHandleService.searchHandles(prefix, urlQuery, page + 1, size);
                 return getPage(handles, page, size, count);
             } else {
-                // running elements count and search asynchronously in 2 different threads
+                // running totalElements count and search request asynchronously in 2 different threads
                 CompletableFuture<ValueStorage<Integer>> future1 = CompletableFuture.supplyAsync(() -> {
                     try {
                         return new ValueStorage<>(epicHandleService.countHandles(prefix, urlQuery));
