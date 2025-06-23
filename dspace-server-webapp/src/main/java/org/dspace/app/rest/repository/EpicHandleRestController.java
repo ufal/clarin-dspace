@@ -118,10 +118,6 @@ public class EpicHandleRestController extends DSpaceRestRepository<EpicHandleRes
             throw new DSpaceBadRequestException("Epic handle URL is required");
         }
         try {
-            // check if handle exists
-            if (epicHandleService.resolveURLForHandle(prefix, suffix) == null) {
-                throw new ResourceNotFoundException("Epic handle not found");
-            }
             epicHandleService.updateHandle(prefix, suffix, url);
             return ResponseEntity.noContent().build();
         } catch (WebApplicationException ex) {

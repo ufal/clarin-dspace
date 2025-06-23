@@ -214,16 +214,8 @@ public class EpicHandleRestControllerIT extends AbstractControllerIntegrationTes
             // TEST OK Request
             mockedHelper.when(() -> EpicHandleRestHelper.updateHandle(pidServiceUrl, PREFIX, SUFFIX, requestJson))
                     .thenReturn(Response.status(Response.Status.NO_CONTENT).build());
-            mockedHelper.when(() -> EpicHandleRestHelper.getHandle(pidServiceUrl, PREFIX, SUFFIX))
-                    .thenReturn(new MockResponse<>(Response.Status.OK, mockedGetResponse));
             getClient(adminToken).perform(put(PREFIX_URL + "/" + SUFFIX + "?url=" + UPDATED_TEST_URL))
                     .andExpect(status().isNoContent());
-
-            // test 404 response (try to update non-existing handle)
-            mockedHelper.when(() -> EpicHandleRestHelper.getHandle(pidServiceUrl, PREFIX, SUFFIX))
-                    .thenReturn(Response.status(Response.Status.NOT_FOUND).build());
-            getClient(adminToken).perform(put(PREFIX_URL + "/" + SUFFIX + "?url=" + UPDATED_TEST_URL))
-                    .andExpect(status().isNotFound());
 
             // test 405 response (try to call put request on prefix url)
             getClient(adminToken).perform(put(PREFIX_URL + "?url=" + UPDATED_TEST_URL)
