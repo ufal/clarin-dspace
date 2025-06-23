@@ -8,9 +8,14 @@
 
 package org.dspace.app.rest;
 
+import static com.jayway.jsonpath.matchers.JsonPathMatchers.hasJsonPath;
 import static org.dspace.handle.EpicHandleServiceTest.MockResponse;
 import static org.dspace.handle.EpicHandleServiceTest.getResource;
+import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.endsWith;
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -104,7 +109,20 @@ public class EpicHandleRestControllerIT extends AbstractControllerIntegrationTes
                     .andExpect(jsonPath("$.pageable.pageSize", is(2)))
                     .andExpect(jsonPath("$.pageable.pageNumber", is(0)))
                     .andExpect(jsonPath("$.totalElements", is(3)))
-                    .andExpect(jsonPath("$.totalPages", is(2)));
+                    .andExpect(jsonPath("$.last", is(false)))
+                    .andExpect(jsonPath("$.numberOfElements", is(2)))
+                    .andExpect(jsonPath("$.totalPages", is(2)))
+                    .andExpect(jsonPath("$.content", hasSize(2)))
+                    .andExpect(jsonPath("$.content", containsInAnyOrder(
+                            allOf(
+                                    hasJsonPath("$.id", is("11148/TEST-0000-0011-2E03-7")),
+                                    hasJsonPath("$.url", is("http://www.test.cz/news"))
+                            ),
+                            allOf(
+                                    hasJsonPath("$.id", is("11148/TEST-0000-0011-2E07-3")),
+                                    hasJsonPath("$.url", is("http://www.test.cz/"))
+                            )
+                    )));
 
             // looking for the first page with known nr. of total elements, which is 1000
             getClient(adminToken).perform(get(PREFIX_URL +
@@ -114,7 +132,10 @@ public class EpicHandleRestControllerIT extends AbstractControllerIntegrationTes
                     .andExpect(jsonPath("$.pageable.pageSize", is(2)))
                     .andExpect(jsonPath("$.pageable.pageNumber", is(0)))
                     .andExpect(jsonPath("$.totalElements", is(1000)))
-                    .andExpect(jsonPath("$.totalPages", is(500)));
+                    .andExpect(jsonPath("$.last", is(false)))
+                    .andExpect(jsonPath("$.numberOfElements", is(2)))
+                    .andExpect(jsonPath("$.totalPages", is(500)))
+                    .andExpect(jsonPath("$.content", hasSize(2)));
 
             // search for the third page (with one item) with known nr. of elements 21
             // first 20 items are skipped
@@ -128,7 +149,15 @@ public class EpicHandleRestControllerIT extends AbstractControllerIntegrationTes
                     .andExpect(jsonPath("$.pageable.pageSize", is(10)))
                     .andExpect(jsonPath("$.pageable.pageNumber", is(2)))
                     .andExpect(jsonPath("$.totalElements", is(21)))
-                    .andExpect(jsonPath("$.totalPages", is(3)));
+                    .andExpect(jsonPath("$.last", is(true)))
+                    .andExpect(jsonPath("$.numberOfElements", is(1)))
+                    .andExpect(jsonPath("$.totalPages", is(3)))
+                    .andExpect(jsonPath("$.content", hasSize(1)))
+                    .andExpect(jsonPath("$.content", contains(
+                            allOf(
+                                hasJsonPath("$.id", is("11148/TEST-0000-0011-2E05-5")),
+                                hasJsonPath("$.url", is("http://www.test.cz/sport"))
+                            ))));
 
             // search for all items with any URL
             mockedHelper.when(() ->
@@ -143,7 +172,10 @@ public class EpicHandleRestControllerIT extends AbstractControllerIntegrationTes
                     .andExpect(jsonPath("$.pageable.pageSize", is(1000)))
                     .andExpect(jsonPath("$.pageable.pageNumber", is(0)))
                     .andExpect(jsonPath("$.totalElements", is(3)))
-                    .andExpect(jsonPath("$.totalPages", is(1)));
+                    .andExpect(jsonPath("$.last", is(true)))
+                    .andExpect(jsonPath("$.numberOfElements", is(3)))
+                    .andExpect(jsonPath("$.totalPages", is(1)))
+                    .andExpect(jsonPath("$.content", hasSize(3)));
         }
     }
 
