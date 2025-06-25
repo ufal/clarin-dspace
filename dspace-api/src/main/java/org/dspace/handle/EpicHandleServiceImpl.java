@@ -118,13 +118,16 @@ public class EpicHandleServiceImpl implements EpicHandleService {
     }
 
     @Override
-    public void updateHandle(String prefix, String suffix, String url) throws IOException {
+    public String createOrUpdateHandle(String prefix, String suffix, String url) throws IOException {
         initialize();
         String jsonData = getJsonDataForUrl(objectMapper, url).toString();
 
         try (Response response = EpicHandleRestHelper.updateHandle(pidServiceUrl, prefix, suffix, jsonData)) {
-            if (response.getStatus() != Response.Status.NO_CONTENT.getStatusCode() &&
-                    response.getStatus() != Response.Status.OK.getStatusCode()) {
+            if (response.getStatus() == Response.Status.NO_CONTENT.getStatusCode()) {
+                return null;
+            } else if (response.getStatus() == Response.Status.CREATED.getStatusCode()) {
+                return objectMapper.readValue(response.readEntity(String.class), EpicPid.class).getHandle();
+            } else  {
                 throw new WebApplicationException(response);
             }
         }

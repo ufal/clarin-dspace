@@ -20,7 +20,7 @@ import java.util.Objects;
 public interface EpicHandleService {
 
     /**
-     * Return the URL for handle, or null if handle cannot be found.
+     * Returns the URL for handle, or null if handle cannot be found.
      *
      * @param prefix        The handle prefix
      * @param suffix        The handle suffix
@@ -30,26 +30,30 @@ public interface EpicHandleService {
     String resolveURLForHandle(String prefix, String suffix) throws IOException;
 
     /**
-     * Return the handle created or throws Exception
+     * Creates new handle with unique suffix. The suffix is prefixed with subPrefix, and suffixed with subSuffix.
+     * Returns the handle created or throws Exception.
      *
      * @param prefix            The handle prefix
-     * @param subPrefix         The handle subPrefix
-     * @param subSuffix         The handle subSuffix
-     * @param url               url associated with the handle
+     * @param subPrefix         The handle subPrefix, or null
+     * @param subSuffix         The handle subSuffix, or null
+     * @param url               url associated with the handle (required)
      * @return                  The full handle String (prefix/suffix)
      * @throws IOException      If request to ePIC handle server fails
      */
     String createHandle(String prefix, String subPrefix, String subSuffix, String url) throws IOException;
 
     /**
-     * Returns no content or throws Exception
+     * Creates new handle with given prefix/suffix or updates handle when this handle already exists.
+     * Returns the handle when handle is created or null when handle is updated, or throws Exception.
      *
      * @param prefix            The handle prefix
      * @param suffix            The handle suffix
-     * @param url               url associated with the handle
+     * @param url               url associated with the handle (required)
+     * @return                  The full handle String (prefix/suffix) when handle is created, or null when
+     *                          existing handle is updated
      * @throws IOException      If request to ePIC handle server fails
      */
-    void updateHandle(String prefix, String suffix, String url) throws IOException;
+    String createOrUpdateHandle(String prefix, String suffix, String url) throws IOException;
 
     /**
      * Returns no content or throws Exception

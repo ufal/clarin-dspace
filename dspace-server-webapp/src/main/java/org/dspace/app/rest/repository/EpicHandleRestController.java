@@ -92,11 +92,7 @@ public class EpicHandleRestController extends DSpaceRestRepository<EpicHandleRes
         }
         try {
             String pid = epicHandleService.createHandle(prefix, subPrefix, subSuffix, url);
-            Handle handle = new Handle(pid, url);
-            EpicHandleResource handleResource = converter.toResource(toRest(handle, utils.obtainProjection()));
-            // compute URL of created handle
-            URL urlLocation = new URL(request.getRequestURL().append(pid.substring(pid.indexOf("/"))).toString());
-            return ResponseEntity.created(urlLocation.toURI()).body(handleResource);
+            return getResponseForNewHandle(request, pid, url, true);
         } catch (WebApplicationException ex) {
             throw toDSpaceException(ex);
         }
@@ -106,7 +102,7 @@ public class EpicHandleRestController extends DSpaceRestRepository<EpicHandleRes
     @RequestMapping(method = RequestMethod.PUT, path = "{prefix}/{suffix}")
     public ResponseEntity<?> updateHandle(@PathVariable String prefix,
                                           @PathVariable String suffix,
-                                          HttpServletRequest request) throws IOException {
+                                          HttpServletRequest request) throws IOException, URISyntaxException {
         if (prefix == null || prefix.isEmpty()) {
             throw new DSpaceBadRequestException("Epic handle prefix cannot be empty string");
         }
@@ -118,8 +114,14 @@ public class EpicHandleRestController extends DSpaceRestRepository<EpicHandleRes
             throw new DSpaceBadRequestException("Epic handle URL is required");
         }
         try {
-            epicHandleService.updateHandle(prefix, suffix, url);
-            return ResponseEntity.noContent().build();
+            String pid = epicHandleService.createOrUpdateHandle(prefix, suffix, url);
+            if (pid == null) {
+                // handle was updated
+                return ResponseEntity.noContent().build();
+            } else {
+                // handle was created
+                return getResponseForNewHandle(request, pid, url, false);
+            }
         } catch (WebApplicationException ex) {
             throw toDSpaceException(ex);
         }
@@ -245,6 +247,20 @@ public class EpicHandleRestController extends DSpaceRestRepository<EpicHandleRes
         } else {
             return ex;
         }
+    }
+
+    private ResponseEntity<EpicHandleResource> getResponseForNewHandle(HttpServletRequest request,
+                                                                       String pid,
+                                                                       String url,
+                                                                       boolean forPostRequest)
+            throws URISyntaxException, IOException {
+        Handle handle = new Handle(pid, url);
+        EpicHandleResource handleResource = converter.toResource(toRest(handle, utils.obtainProjection()));
+        // compute URL of created handle
+        URL urlLocation = forPostRequest
+                ? new URL(request.getRequestURL().append(pid.substring(pid.indexOf("/"))).toString())
+                : new URL(request.getRequestURL().toString());
+        return ResponseEntity.created(urlLocation.toURI()).body(handleResource);
     }
 
     /**

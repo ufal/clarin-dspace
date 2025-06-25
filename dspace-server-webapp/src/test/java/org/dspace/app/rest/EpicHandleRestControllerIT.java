@@ -207,11 +207,22 @@ public class EpicHandleRestControllerIT extends AbstractControllerIntegrationTes
     }
 
     @Test
-    public void testUpdateHandle() throws Exception {
+    public void testCreateOrUpdateHandle() throws Exception {
         String requestJson = "[{\"type\":\"URL\",\"parsed_data\":\"" + UPDATED_TEST_URL + "\"}]";
-        String mockedGetResponse = getResource("/org/dspace/handle/epicGetHandleResponse.json");
+        String mockedResponse = getResource("/org/dspace/handle/epicCreateHandleResponse.json");
+        // String mockedGetResponse = getResource("/org/dspace/handle/epicGetHandleResponse.json");
         try (MockedStatic<EpicHandleRestHelper> mockedHelper = Mockito.mockStatic(EpicHandleRestHelper.class)) {
-            // TEST OK Request
+            // TEST OK Request in case handle is created
+            mockedHelper.when(() -> EpicHandleRestHelper.updateHandle(pidServiceUrl, PREFIX, SUFFIX, requestJson))
+                    .thenReturn(new MockResponse<>(Response.Status.CREATED, mockedResponse));
+            getClient(adminToken).perform(put(PREFIX_URL + "/" + SUFFIX + "?url=" + UPDATED_TEST_URL))
+                    .andExpect(status().isCreated())
+                    .andExpect(header().string("Location", endsWith(PREFIX + "/" + SUFFIX)))
+                    .andExpect(jsonPath("$.id", is(PREFIX + "/" + SUFFIX)))
+                    .andExpect(jsonPath("$.url", is(UPDATED_TEST_URL)))
+                    .andExpect(jsonPath("$._links.self.href", endsWith(PREFIX + "/" + SUFFIX)));
+
+            // TEST OK Request in case existing handle is updated
             mockedHelper.when(() -> EpicHandleRestHelper.updateHandle(pidServiceUrl, PREFIX, SUFFIX, requestJson))
                     .thenReturn(Response.status(Response.Status.NO_CONTENT).build());
             getClient(adminToken).perform(put(PREFIX_URL + "/" + SUFFIX + "?url=" + UPDATED_TEST_URL))

@@ -81,24 +81,30 @@ public class EpicHandleServiceTest extends AbstractDSpaceTest {
     }
 
     @Test
-    public void testUpdateHandle() throws IOException {
+    public void testCreateOrUpdateHandle() throws IOException {
         if (REAL_TEST) {
-            epicHandleService.updateHandle(PREFIX, SUFFIX, UPDATED_TEST_URL);
+            epicHandleService.createOrUpdateHandle(PREFIX, SUFFIX, UPDATED_TEST_URL);
         } else {
+            String mockedResponse = getResource("/org/dspace/handle/epicCreateHandleResponse.json");
             String requestJson = "[{\"type\":\"URL\",\"parsed_data\":\"" + UPDATED_TEST_URL + "\"}]";
             try (MockedStatic<EpicHandleRestHelper> mockedHelper = Mockito.mockStatic(EpicHandleRestHelper.class)) {
-                // TEST OK Request
+                // TEST OK Request in case Handle is created
+                mockedHelper.when(() ->
+                                EpicHandleRestHelper.updateHandle(pidServiceUrl, PREFIX, SUFFIX, requestJson))
+                        .thenReturn(new MockResponse<>(Response.Status.CREATED, mockedResponse));
+                assertEquals(TEST_HANDLE, epicHandleService.createOrUpdateHandle(PREFIX, SUFFIX, UPDATED_TEST_URL));
+                // TEST OK Request in case existing  Handle is updated
                 mockedHelper.when(() ->
                                 EpicHandleRestHelper.updateHandle(pidServiceUrl, PREFIX, SUFFIX, requestJson))
                         .thenReturn(Response.status(Response.Status.NO_CONTENT).build());
-                epicHandleService.updateHandle(PREFIX, SUFFIX, UPDATED_TEST_URL);
+                epicHandleService.createOrUpdateHandle(PREFIX, SUFFIX, UPDATED_TEST_URL);
                 // TEST 405
                 mockedHelper.when(() ->
                                 EpicHandleRestHelper.updateHandle(pidServiceUrl, "invalid", SUFFIX, requestJson))
                         .thenReturn(Response.status(Response.Status.METHOD_NOT_ALLOWED).build());
 
                 assertThrows("HTTP 405 Method Not Allowed", WebApplicationException.class, () ->
-                        epicHandleService.updateHandle("invalid", SUFFIX, UPDATED_TEST_URL));
+                        epicHandleService.createOrUpdateHandle("invalid", SUFFIX, UPDATED_TEST_URL));
             }
         }
     }
