@@ -10,8 +10,8 @@ package org.dspace.app.rest.repository;
 import static org.dspace.handle.service.EpicHandleService.Handle;
 
 import java.io.IOException;
+import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.URL;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -253,14 +253,14 @@ public class EpicHandleRestController extends DSpaceRestRepository<EpicHandleRes
                                                                        String pid,
                                                                        String url,
                                                                        boolean forPostRequest)
-            throws URISyntaxException, IOException {
+            throws URISyntaxException {
         Handle handle = new Handle(pid, url);
         EpicHandleResource handleResource = converter.toResource(toRest(handle, utils.obtainProjection()));
         // compute URL of created handle
-        URL urlLocation = forPostRequest
-                ? new URL(request.getRequestURL().append(pid.substring(pid.indexOf("/"))).toString())
-                : new URL(request.getRequestURL().toString());
-        return ResponseEntity.created(urlLocation.toURI()).body(handleResource);
+        URI urlLocation = forPostRequest
+                ? new URI(request.getRequestURL().toString() + pid.substring(pid.indexOf("/")))
+                : new URI(request.getRequestURL().toString());
+        return ResponseEntity.created(urlLocation).body(handleResource);
     }
 
     /**
