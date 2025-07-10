@@ -24,7 +24,10 @@ import org.dspace.app.rest.model.ShareSubmissionLinkDTO;
 import org.dspace.app.rest.model.WorkspaceItemRest;
 import org.dspace.app.rest.utils.Utils;
 import org.dspace.authorize.AuthorizeException;
+import org.dspace.authorize.ResourcePolicy;
 import org.dspace.authorize.service.AuthorizeService;
+import org.dspace.authorize.service.ResourcePolicyService;
+import org.dspace.content.Collection;
 import org.dspace.content.WorkspaceItem;
 import org.dspace.content.service.WorkspaceItemService;
 import org.dspace.core.Constants;
@@ -32,6 +35,8 @@ import org.dspace.core.Context;
 import org.dspace.core.Email;
 import org.dspace.core.I18nUtil;
 import org.dspace.eperson.EPerson;
+import org.dspace.eperson.Group;
+import org.dspace.eperson.service.GroupService;
 import org.dspace.services.ConfigurationService;
 import org.dspace.web.ContextUtil;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -67,6 +72,12 @@ public class SubmissionController {
 
     @Autowired
     AuthorizeService authorizeService;
+
+    @Autowired
+    GroupService groupService;
+
+    @Autowired
+    ResourcePolicyService resourcePolicyService;
 
     @Lazy
     @Autowired
@@ -145,12 +156,6 @@ public class SubmissionController {
         // Check the wsi does exist
         validateWorkspaceItem(wsi, null, shareToken);
 
-        if (!authorizeService.authorizeActionBoolean(context, wsi.getItem(), Constants.READ)) {
-            String errorMessage = "The current user does not have rights to view the WorkflowItem";
-            log.error(errorMessage);
-            throw new AccessDeniedException(errorMessage);
-        }
-
         // Set the owner of the workspace item to the current user
         EPerson currentUser = context.getCurrentUser();
         // If the current user is null, throw an exception
@@ -158,6 +163,25 @@ public class SubmissionController {
             String errorMessage = "The current user is not valid, it cannot be null.";
             log.error(errorMessage);
             throw new DSpaceBadRequestException(errorMessage);
+        }
+
+        Collection collection = wsi.getCollection();
+        Group submittersGroup = collection.getSubmitters();
+        boolean isSubmitterGroupMember = submittersGroup != null &&
+                groupService.isMember(context, currentUser, submittersGroup);
+        boolean canRead = authorizeService.authorizeActionBoolean(context, wsi.getItem(), Constants.READ);
+        if (!canRead && !isSubmitterGroupMember) {
+            String errorMessage = "The current user does not have rights to view or claim the WorkspaceItem";
+            log.error(errorMessage);
+            throw new AccessDeniedException(errorMessage);
+        }
+
+        List<ResourcePolicy> resourcePolicies = resourcePolicyService.find(context,
+                wsi.getItem(), ResourcePolicy.TYPE_SUBMISSION);
+        // Set submitter
+        for (ResourcePolicy resourcePolicy: resourcePolicies) {
+            resourcePolicy.setEPerson(currentUser);
+            resourcePolicyService.update(context, resourcePolicy);
         }
 
         wsi.getItem().setSubmitter(currentUser);
