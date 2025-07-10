@@ -3228,7 +3228,7 @@
             <input name="code"  input-type="autocomplete" label="Grant no. or funding project code" placeholder="Start typing the name/number of the grant..." required="true"/>
             <input name="orgname" input-type="text" label="Funding organization" required="true"/>
             <input name="projname" input-type="autocomplete" label="Funding project name" required="true"/>
-            <input name="openaire_id" input-type="text" label="EU Project Identifier (OpenAIRE)" readonly="true" placeholder="Filled out automatically..." mapped-to-if-not-default="dc.relation" required="true"/>
+            <input name="openaire_id" input-type="text" label="EU Project Identifier (OpenAIRE)" readonly="true" placeholder="Filled out automatically..." mapped-to-if-not-default="dc.relation"/>
         </definition>
 
         <definition name="sizeInfo">

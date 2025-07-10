@@ -9,12 +9,15 @@ package org.dspace.versioning;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 import org.apache.logging.log4j.Logger;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.authorize.ResourcePolicy;
 import org.dspace.content.Item;
+import org.dspace.content.MetadataSchemaEnum;
 import org.dspace.content.Relationship;
 import org.dspace.content.WorkspaceItem;
 import org.dspace.content.service.RelationshipService;
@@ -36,6 +39,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 public class DefaultItemVersionProvider extends AbstractVersionProvider implements ItemVersionProvider {
 
     Logger log = org.apache.logging.log4j.LogManager.getLogger(DefaultItemVersionProvider.class);
+    private static final String UNTITLED = "Untitled"; // Default title for items without a name
 
     @Autowired(required = true)
     protected WorkspaceItemService workspaceItemService;
@@ -127,6 +131,17 @@ public class DefaultItemVersionProvider extends AbstractVersionProvider implemen
             // Add metadata `dc.relation.replaces` to the new item. The metadata `dc.relation.isreplacedby`
             // are added to the previous item in the VersionRestRepository.
             manageRelationMetadata(c, itemNew, previousItem);
+
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+            String formattedDate = LocalDate.now().format(formatter);
+            String itemName = itemNew.getName();
+            if (itemName == null) {
+                itemName = UNTITLED;
+            }
+            String titleWithDate = itemName + " (" + formattedDate + ")";
+            // Set the item's title with the formatted date appended
+            itemService.setMetadataSingleValue(c, itemNew, MetadataSchemaEnum.DC.getName(),
+                    "title", null, Item.ANY, titleWithDate);
 
             itemService.update(c, itemNew);
             return itemNew;

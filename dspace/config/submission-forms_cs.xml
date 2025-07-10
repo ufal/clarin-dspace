@@ -3183,7 +3183,7 @@
             <input name="code"  input-type="autocomplete" label="Číslo grantu, nebo kód financujícího projektu" placeholder="Začněte psát jméno/číslo grantu..." required="true"/>
             <input name="orgname" input-type="text" label="Financující organizace" required="true"/>
             <input name="projname" input-type="autocomplete" label="Zdroj financí (jméno projektku)" required="true"/>
-            <input name="openaire_id" input-type="text" label="EU Project Identifier (OpenAIRE)" readonly="true" placeholder="Vyplněno automaticky..." mapped-to-if-not-default="dc.relation" required="true"/>
+            <input name="openaire_id" input-type="text" label="EU Project Identifier (OpenAIRE)" readonly="true" placeholder="Vyplněno automaticky..." mapped-to-if-not-default="dc.relation"/>
         </definition>
 
         <definition name="sizeInfo">
