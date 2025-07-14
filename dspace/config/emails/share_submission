@@ -4,18 +4,23 @@
 ##
 ## See org.dspace.core.Email for information on the format of this file.
 ##
-#set($subject = 'Submission share link')
+#set($subject = "${config.get('dspace.shortname')}: Submission share link")
+#set($phone = ${config.get('mail.message.helpdesk.telephone')})
 To pass your submission to another user give them the following link:
  ${params[0]}
 
-If you have trouble please contact
-${config.get('lr.help.mail')} or call us at ${config.get('lr.help.phone')}
+If you have trouble please contact ${config.get('lr.help.mail')}
+#if( $phone )
+or call us at ${phone}.
+#end
 
 
 ${config.get('dspace.shortname')} Team
 
 _____________________________________
-${config.get('dspace.name')},
+${config.get('dspace.shortname')},
 WWW: ${config.get('dspace.ui.url')}
 Email: ${config.get('lr.help.mail')}
-Tel.: ${config.get('lr.help.phone')}
+#if( $phone )
+Tel.: ${phone}
+#end

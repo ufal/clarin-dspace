@@ -157,7 +157,6 @@
                     <dc-qualifier/>
                     <repeatable>true</repeatable>
                     <label>Should this item be hidden from browse/search? (Admin only field)</label>
-                    <style>col-sm-4</style>
                     <input-type value-pairs-name="hidden_list">list</input-type>
                     <hint>Indicate whether you want to hide this item from browse and search. Combine with "Upload cmdi"
                         for weblicht submissions.
@@ -227,7 +226,6 @@
                     <style>col-sm-5</style>
                     <input-type complex-definition-ref="funding">complex</input-type>
                     <hint>Acknowledge sponsors and funding that supported work described by this submission.</hint>
-                    <required></required>
                 </field>
             </row>
         </form>
@@ -250,7 +248,7 @@
                     <dc-schema>dc</dc-schema>
                     <dc-element>language</dc-element>
                     <dc-qualifier>iso</dc-qualifier>
-                    <repeatable>false</repeatable>
+                    <repeatable>true</repeatable>
                     <label>Language</label>
                     <type-bind>corpus,lexicalConceptualResource,languageDescription</type-bind>
                     <input-type autocomplete-custom="json_static-iso_langs.json">autocomplete</input-type>
@@ -1601,7 +1599,7 @@
                     <dc-schema>local</dc-schema>
                     <dc-element>hidden</dc-element>
                     <dc-qualifier/>
-                    <repeatable>false</repeatable>
+                    <repeatable>true</repeatable>
                     <label>Should this item be hidden from browse/search? (Admin only field)</label>
                     <input-type value-pairs-name="hidden_list">list</input-type>
                     <hint>Indicate whether you want to hide this item from browse and search. Combine with "Upload cmdi"
@@ -1618,7 +1616,7 @@
                     <dc-schema>local</dc-schema>
                     <dc-element>hasCMDI</dc-element>
                     <dc-qualifier/>
-                    <repeatable>false</repeatable>
+                    <repeatable>true</repeatable>
                     <label>Are you going to upload cmdi file? (Admin only field)</label>
                     <input-type value-pairs-name="metashare_languageDependent">list</input-type>
                     <!-- true/false value -->
@@ -1897,7 +1895,7 @@
                     <dc-schema>local</dc-schema>
                     <dc-element>hidden</dc-element>
                     <dc-qualifier/>
-                    <repeatable>false</repeatable>
+                    <repeatable>true</repeatable>
                     <label>Should this item be hidden from browse/search? (Admin only field)</label>
                     <input-type value-pairs-name="hidden_list">list</input-type>
                     <hint>Indicate whether you want to hide this item from browse and search. Combine with "Upload cmdi"
@@ -1914,7 +1912,7 @@
                     <dc-schema>local</dc-schema>
                     <dc-element>hasCMDI</dc-element>
                     <dc-qualifier/>
-                    <repeatable>false</repeatable>
+                    <repeatable>true</repeatable>
                     <label>Are you going to upload cmdi file? (Admin only field)</label>
                     <input-type value-pairs-name="metashare_languageDependent">list</input-type>
                     <!-- true/false value -->
@@ -3230,7 +3228,7 @@
             <input name="code"  input-type="autocomplete" label="Grant no. or funding project code" placeholder="Start typing the name/number of the grant..." required="true"/>
             <input name="orgname" input-type="text" label="Funding organization" required="true"/>
             <input name="projname" input-type="autocomplete" label="Funding project name" required="true"/>
-            <input name="openaire_id" input-type="text" label="EU Project Identifier (OpenAIRE)" readonly="true" placeholder="Filled out automatically..." mapped-to-if-not-default="dc.relation" required="true"/>
+            <input name="openaire_id" input-type="text" label="EU Project Identifier (OpenAIRE)" readonly="true" placeholder="Filled out automatically..." mapped-to-if-not-default="dc.relation"/>
         </definition>
 
         <definition name="sizeInfo">

@@ -208,7 +208,7 @@ public class DSBitStoreService extends BaseBitStoreService {
      * @return The corresponding file in the file system, or <code>null</code>
      * @throws IOException If a problem occurs while determining the file
      */
-    protected File getFile(Bitstream bitstream) throws IOException {
+    public File getFile(Bitstream bitstream) throws IOException {
         // Check that bitstream is not null
         if (bitstream == null) {
             return null;

@@ -511,12 +511,42 @@
         <xsl:choose>
             <xsl:when test="//dspace:field[@mdschema='dc' and @element='type'][1]">
                 <xsl:variable name="types" select="tokenize(//dspace:field[@mdschema='dc' and @element='type'][1]/text(),';')"/>
-                <xsl:element name="resourceType">
-                    <xsl:attribute name="resourceTypeGeneral">
-                        <xsl:value-of select="$types[1]"/>
-                    </xsl:attribute>
-                    <xsl:value-of select="$types[2]" />
-                </xsl:element>
+                <xsl:variable name="typeValue" select="$types[1]" />
+                <xsl:choose>
+                    <xsl:when test="$typeValue = 'corpus'">
+                        <xsl:element name="resourceType">
+                            <xsl:attribute name="resourceTypeGeneral">Other</xsl:attribute>
+                            <xsl:value-of select="'corpus'"/>
+                        </xsl:element>
+                    </xsl:when>
+                    <xsl:when test="$typeValue = 'lexicalConceptualResource'">
+                        <xsl:element name="resourceType">
+                            <xsl:attribute name="resourceTypeGeneral">Other</xsl:attribute>
+                            <xsl:value-of select="'lexicalConceptualResource'"/>
+                        </xsl:element>
+                    </xsl:when>
+                    <xsl:when test="$typeValue = 'languageDescription'">
+                        <xsl:element name="resourceType">
+                            <xsl:attribute name="resourceTypeGeneral">Other</xsl:attribute>
+                            <xsl:value-of select="'languageDescription'"/>
+                        </xsl:element>
+                    </xsl:when>
+                    <xsl:when test="$typeValue = 'toolService'">
+                        <xsl:element name="resourceType">
+                            <xsl:attribute name="resourceTypeGeneral">Other</xsl:attribute>
+                            <xsl:value-of select="'toolService'"/>
+                        </xsl:element>
+                    </xsl:when>
+                    <!-- If the type is not one of the new ones, proceed with other predefined types -->
+                    <xsl:otherwise>
+                        <xsl:element name="resourceType">
+                            <xsl:attribute name="resourceTypeGeneral">
+                                <xsl:value-of select="$types[1]"/>
+                            </xsl:attribute>
+                            <xsl:value-of select="$types[2]" />
+                        </xsl:element>
+                    </xsl:otherwise>
+                </xsl:choose>
             </xsl:when>
             <xsl:otherwise>
                 <xsl:element name="resourceType">

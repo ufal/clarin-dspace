@@ -305,6 +305,29 @@ public class S3BitStoreService extends BaseBitStoreService {
         }
     }
 
+    @Override
+    public File getFile(Bitstream bitstream) throws IOException {
+        String key = getFullKey(bitstream.getInternalId());
+        // Strip -R from bitstream key if it's registered
+        if (isRegisteredBitstream(key)) {
+            key = key.substring(REGISTERED_FLAG.length());
+        }
+        try {
+            File tempFile = File.createTempFile("s3-disk-copy-" + UUID.randomUUID(), "temp");
+            tempFile.deleteOnExit();
+
+            GetObjectRequest getObjectRequest = new GetObjectRequest(bucketName, key);
+
+            Download download = tm.download(getObjectRequest, tempFile);
+            download.waitForCompletion();
+
+            return tempFile;
+        } catch (AmazonClientException | InterruptedException e) {
+            log.error("getFile(" + key + ")", e);
+            throw new IOException(e);
+        }
+    }
+
     /**
      * Store a stream of bits.
      *

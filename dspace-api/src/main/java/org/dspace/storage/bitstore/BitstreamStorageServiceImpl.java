@@ -7,6 +7,7 @@
  */
 package org.dspace.storage.bitstore;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.sql.SQLException;
@@ -212,6 +213,13 @@ public class BitstreamStorageServiceImpl implements BitstreamStorageService, Ini
         throws SQLException, IOException {
         Integer storeNumber = bitstream.getStoreNumber();
         return this.getStore(storeNumber).get(bitstream);
+    }
+
+    @Override
+    public File retrieveFile(Context context, Bitstream bitstream)
+        throws IOException {
+        Integer storeNumber = bitstream.getStoreNumber();
+        return this.getStore(storeNumber).getFile(bitstream);
     }
 
     @Override

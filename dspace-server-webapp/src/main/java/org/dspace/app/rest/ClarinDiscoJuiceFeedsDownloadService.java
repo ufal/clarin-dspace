@@ -113,36 +113,27 @@ public class ClarinDiscoJuiceFeedsDownloadService implements InitializingBean {
                     "file, maybe it is not set in the configuration file");
         }
 
-        String origSniVal = System.getProperty("jsse.enableSNIExtension");
-        System.setProperty("jsse.enableSNIExtension", "false");
-        try {
+        final Map<String, JSONObject> shibDiscoEntities = toMap(shrink(
+                ClarinDiscoJuiceFeedsDownloadService.downloadJSON(shibbolethDiscoFeedUrl)));
 
-            final Map<String, JSONObject> shibDiscoEntities = toMap(shrink(
-                    ClarinDiscoJuiceFeedsDownloadService.downloadJSON(shibbolethDiscoFeedUrl)));
-
-            // iterate through the entities to update countries as needed
-            shibDiscoEntities.forEach((entityId, shibEntity) -> {
-                if (rewriteCountries.contains(entityId) || StringUtils.isBlank((String) shibEntity.get("country"))) {
-                    String oldCountry = (String) shibEntity.remove("country");
-                    String newCountry = guessCountry(shibEntity);
-                    shibEntity.put("country", newCountry);
-                    log.debug("Changed country for {} from {} to {}", entityId, oldCountry, newCountry);
-                }
-            });
-
-            if (shibDiscoEntities.isEmpty()) {
-                return null;
+        // iterate through the entities to update countries as needed
+        shibDiscoEntities.forEach((entityId, shibEntity) -> {
+            if (rewriteCountries.contains(entityId) || StringUtils.isBlank((String) shibEntity.get("country"))) {
+                String oldCountry = (String) shibEntity.remove("country");
+                String newCountry = guessCountry(shibEntity);
+                shibEntity.put("country", newCountry);
+                log.debug("Changed country for {} from {} to {}", entityId, oldCountry, newCountry);
             }
+        });
 
-            JSONArray ret = new JSONArray();
-            ret.addAll(shibDiscoEntities.values());
-            return ret.toJSONString();
-
-        } finally {
-            // true is the default http://docs.oracle.com/javase/8/docs/technotes/guides/security/jsse/JSSERefGuide.html
-            origSniVal = (origSniVal == null) ? "true" : origSniVal;
-            System.setProperty("jsse.enableSNIExtension", origSniVal);
+        if (shibDiscoEntities.isEmpty()) {
+            return null;
         }
+
+        JSONArray ret = new JSONArray();
+        ret.addAll(shibDiscoEntities.values());
+        return ret.toJSONString();
+
     }
 
     private static Map<String, JSONObject> toMap(JSONArray jsonArray) {

@@ -23,12 +23,15 @@ import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
 import org.dspace.builder.CollectionBuilder;
 import org.dspace.builder.CommunityBuilder;
 import org.dspace.builder.EPersonBuilder;
+import org.dspace.builder.GroupBuilder;
 import org.dspace.builder.WorkspaceItemBuilder;
 import org.dspace.content.Collection;
 import org.dspace.content.WorkspaceItem;
 import org.dspace.content.service.WorkspaceItemService;
 import org.dspace.eperson.EPerson;
+import org.dspace.eperson.Group;
 import org.dspace.eperson.service.EPersonService;
+import org.dspace.eperson.service.GroupService;
 import org.junit.Before;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,6 +48,8 @@ public class SubmissionControllerIT extends AbstractControllerIntegrationTest {
     private WorkspaceItemService workspaceItemService;
     @Autowired
     private EPersonService ePersonService;
+    @Autowired
+    private GroupService groupService;
 
     WorkspaceItem wsi;
 
@@ -112,5 +117,71 @@ public class SubmissionControllerIT extends AbstractControllerIntegrationTest {
         updatedWsi = workspaceItemService.find(context, wsi.getID());
         assertThat(updatedWsi.getSubmitter().getEmail(), is(adminUser.getEmail()));
         assertThat(updatedWsi.getSubmitter().getEmail(), not(SUBMITTER_EMAIL));
+    }
+
+    @Test
+    public void generateShareTokenAndSetOwnerTo3rdPersonTest() throws Exception {
+        context.turnOffAuthorisationSystem();
+        EPerson submitter2 = EPersonBuilder.createEPerson(context)
+                .withEmail("user@test.edu")
+                .withPassword(password)
+                .build();
+        Group group = GroupBuilder.createCollectionSubmitterGroup(context, wsi.getCollection())
+                .withName("Test Submitters Group").build();
+        groupService.addMember(context, group, submitter2);
+        context.restoreAuthSystemState();
+
+        EPerson currentUser = context.getCurrentUser();
+
+        String adminToken = getAuthToken(admin.getEmail(), password);
+        getClient(adminToken).perform(get("/api/submission/share")
+                        .param("workspaceitemid", wsi.getID().toString())
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.shareLink", is(notNullValue())));
+
+        // Check that the share token was set on the WorkspaceItem and persisted into the database
+        WorkspaceItem updatedWsi = workspaceItemService.find(context, wsi.getID());
+        assertThat(wsi.getID(), is(updatedWsi.getID()));
+        assertThat(updatedWsi.getSubmitter().getEmail(), is(SUBMITTER_EMAIL));
+        assertThat(updatedWsi.getSubmitter().getEmail(), not(currentUser.getEmail()));
+
+        EPerson adminUser = ePersonService.findByEmail(context, admin.getEmail());
+        context.setCurrentUser(adminUser);
+        // Set workspace item owner to the current user
+        getClient(adminToken).perform(get("/api/submission/setOwner")
+                        .param("shareToken", updatedWsi.getShareToken())
+                        .param("workspaceitemid", updatedWsi.getID().toString())
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk());
+
+        // Check that the owner of the WorkspaceItem was set to the current user
+        // Check the wsi was persisted into the database
+        updatedWsi = workspaceItemService.find(context, wsi.getID());
+        assertThat(updatedWsi.getSubmitter().getEmail(), is(adminUser.getEmail()));
+        assertThat(updatedWsi.getSubmitter().getEmail(), not(SUBMITTER_EMAIL));
+
+        getClient(adminToken).perform(get("/api/submission/share")
+                        .param("workspaceitemid", wsi.getID().toString())
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.shareLink", is(notNullValue())));
+
+        updatedWsi = workspaceItemService.find(context, wsi.getID());
+
+        context.setCurrentUser(submitter2);
+        String userToken = getAuthToken(submitter2.getEmail(), password);
+        // Set workspace item owner to the 3rd person
+        getClient(userToken).perform(get("/api/submission/setOwner")
+                        .param("shareToken", updatedWsi.getShareToken())
+                        .param("workspaceitemid", updatedWsi.getID().toString())
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk());
+
+        // Check that the owner of the WorkspaceItem was set to the current user
+        // Check the wsi was persisted into the database
+        updatedWsi = workspaceItemService.find(context, wsi.getID());
+        assertThat(updatedWsi.getSubmitter().getEmail(), is(submitter2.getEmail()));
+        assertThat(updatedWsi.getSubmitter().getEmail(), not(adminUser.getEmail()));
     }
 }
