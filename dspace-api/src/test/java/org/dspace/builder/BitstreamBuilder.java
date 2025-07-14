@@ -47,6 +47,15 @@ public class BitstreamBuilder extends AbstractDSpaceObjectBuilder<Bitstream> {
         return builder.create(context, item, is);
     }
 
+    public static BitstreamBuilder createBitstream(Context context, Item item, InputStream is, boolean hasBundle)
+            throws SQLException, AuthorizeException, IOException {
+        BitstreamBuilder builder = new BitstreamBuilder(context);
+        if (hasBundle) {
+           return builder.create(context, item, is, true);
+        }
+        return builder.create(context, item, is, false);
+    }
+
     public static BitstreamBuilder createBitstream(Context context, Bundle bundle, InputStream is)
             throws SQLException, AuthorizeException, IOException {
         BitstreamBuilder builder = new BitstreamBuilder(context);
@@ -74,6 +83,19 @@ public class BitstreamBuilder extends AbstractDSpaceObjectBuilder<Bitstream> {
         Bundle originalBundle = getOriginalBundle(item);
 
         bitstream = bitstreamService.create(context, originalBundle, is);
+
+        return this;
+    }
+
+    private BitstreamBuilder create(Context context, Item item, InputStream is, boolean hasBundle)
+            throws SQLException, AuthorizeException, IOException {
+        if (hasBundle) {
+            return create(context, item, is);
+        }
+        this.context = context;
+        this.item = item;
+
+        bitstream = bitstreamService.create(context, is);
 
         return this;
     }

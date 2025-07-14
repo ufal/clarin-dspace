@@ -7,7 +7,7 @@
  */
 package org.dspace.content.service;
 
-import java.io.InputStream;
+import java.io.File;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
@@ -83,13 +83,24 @@ public interface PreviewContentService {
     List<PreviewContent> findByBitstream(Context context, UUID bitstream_id) throws SQLException;
 
     /**
+     * Returns true if the bitstream has associated preview content.
+     *
+     * @param context        DSpace context
+     * @param bitstream      The bitstream to get bitstream UUID
+     * @return               True if preview content exists, false otherwise
+     * @throws SQLException  If a database error occurs
+     */
+    boolean hasPreview(Context context, Bitstream bitstream) throws SQLException;
+
+    /**
      * Find all preview content based on bitstream that are the root directory.
      *
      * @param context        DSpace context
      * @param bitstream      The bitstream to get bitstream UUID
+     * @return               List of preview contents
      * @throws SQLException  If a database error occurs
      */
-    List<PreviewContent> hasPreview(Context context, Bitstream bitstream) throws SQLException;
+    List<PreviewContent> getPreview(Context context, Bitstream bitstream) throws SQLException;
 
     /**
      * Find all preview contents from database.
@@ -104,9 +115,11 @@ public interface PreviewContentService {
      *
      * @param context DSpace context object
      * @param bitstream check if this bitstream could be previewed
+     * @param authorization true if authorization is required else false
      * @return true if the bitstream could be previewed, false otherwise
      */
-    boolean canPreview(Context context, Bitstream bitstream) throws SQLException, AuthorizeException;
+    boolean canPreview(Context context, Bitstream bitstream, boolean authorization)
+            throws SQLException, AuthorizeException;
 
     /**
      * Return converted ZIP file content into FileInfo classes.
@@ -143,13 +156,13 @@ public interface PreviewContentService {
     FileInfo createFileInfo(PreviewContent pc);
 
     /**
-     * Convert InputStream of the ZIP file into FileInfo classes.
+     * Convert File of the ZIP file into FileInfo classes.
      *
      * @param context DSpace context object
      * @param bitstream previewing bitstream
-     * @param inputStream content of the zip file
+     * @param file content of the zip file
      * @return List of FileInfo classes where is wrapped ZIP file content
      */
-    List<FileInfo> processInputStreamToFilePreview(Context context, Bitstream bitstream, InputStream inputStream)
+    List<FileInfo> processFileToFilePreview(Context context, Bitstream bitstream, File file)
             throws Exception;
 }

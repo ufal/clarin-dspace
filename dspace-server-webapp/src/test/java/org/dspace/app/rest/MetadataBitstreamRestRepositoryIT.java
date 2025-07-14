@@ -11,6 +11,7 @@ import static org.dspace.app.rest.utils.Utils.DEFAULT_PAGE_SIZE;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.junit.Assert.assertFalse;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -34,6 +35,7 @@ import org.dspace.content.Bitstream;
 import org.dspace.content.Collection;
 import org.dspace.content.Item;
 import org.dspace.content.service.BundleService;
+import org.dspace.content.service.PreviewContentService;
 import org.dspace.content.service.clarin.ClarinLicenseResourceMappingService;
 import org.dspace.core.Constants;
 import org.dspace.services.ConfigurationService;
@@ -64,6 +66,9 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
 
     @Autowired
     ConfigurationService configurationService;
+
+    @Autowired
+    PreviewContentService previewContentService;
 
     @Before
     public void setup() throws Exception {
@@ -168,7 +173,59 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
                         .value(Matchers.containsInAnyOrder(Matchers.containsString(bts.getChecksum()))))
                 .andExpect(jsonPath("$._embedded.metadatabitstreams[*].href")
                         .value(Matchers.containsInAnyOrder(Matchers.containsString(url))));
+        assertFalse(previewContentService.hasPreview(context, bts));
+        configurationService.setProperty("file.preview.enabled", canPreview);
+        context.restoreAuthSystemState();
+    }
 
+    @Test
+    public void previewingIsDisabledByCfgForHtml() throws Exception {
+        boolean canPreview = configurationService.getBooleanProperty("file.preview.enabled", true);
+        context.turnOffAuthorisationSystem();
+        Collection col = CollectionBuilder.createCollection(context, parentCommunity).withName("Collection2").build();
+        Item item = ItemBuilder.createItem(context, col)
+                .withAuthor(AUTHOR)
+                .build();
+
+        // create empty THUMBNAIL bundle
+        bundleService.create(context, item, "THUMBNAIL");
+
+        String bitstreamContent = "ThisIsSomeDummyText";
+        InputStream is = IOUtils.toInputStream(bitstreamContent, CharEncoding.UTF_8);
+        Bitstream bitstream = BitstreamBuilder.
+                createBitstream(context, item, is)
+                .withName("Bitstream")
+                .withDescription("Description")
+                .withMimeType("text/html")
+                .build();
+        context.restoreAuthSystemState();
+        // Disable previewing
+        configurationService.setProperty("file.preview.enabled", false);
+        // There is no restriction, so the user could preview the file
+        getClient().perform(get(METADATABITSTREAM_SEARCH_BY_HANDLE_ENDPOINT)
+                        .param("handle", item.getHandle())
+                        .param("fileGrpType", FILE_GRP_TYPE))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(contentType))
+                .andExpect(jsonPath("$._embedded.metadatabitstreams").exists())
+                .andExpect(jsonPath("$._embedded.metadatabitstreams").isArray())
+                .andExpect(jsonPath("$._embedded.metadatabitstreams[*].name")
+                        .value(Matchers.containsInAnyOrder(Matchers.containsString("Bitstream"))))
+                .andExpect(jsonPath("$._embedded.metadatabitstreams[*].description")
+                        .value(Matchers.containsInAnyOrder(
+                                Matchers.containsString(bitstream.getFormatDescription(context)))))
+                .andExpect(jsonPath("$._embedded.metadatabitstreams[*].format")
+                        .value(Matchers.containsInAnyOrder(Matchers.containsString(
+                                bitstream.getFormat(context).getMIMEType()))))
+                .andExpect(jsonPath("$._embedded.metadatabitstreams[*].fileSize")
+                        .value(hasItem(is((int) bitstream.getSizeBytes()))))
+                .andExpect(jsonPath("$._embedded.metadatabitstreams[*].canPreview")
+                        .value(Matchers.containsInAnyOrder(Matchers.is(false))))
+                .andExpect(jsonPath("$._embedded.metadatabitstreams[*].fileInfo").exists())
+                .andExpect(jsonPath("$._embedded.metadatabitstreams[*].checksum")
+                        .value(Matchers.containsInAnyOrder(Matchers.containsString(bitstream.getChecksum()))));
+        ItemBuilder.deleteItem(item.getID());
+        CollectionBuilder.deleteCollection(col.getID());
         configurationService.setProperty("file.preview.enabled", canPreview);
     }
 

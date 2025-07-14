@@ -463,6 +463,7 @@
             <step id="clariahSubmissionsPageThree"/>
             <step id="upload"/>
             <step id="license"/>
+            <step id="clarin-license"/>
             <step id="specialFields"/>
         </submission-process>
 
@@ -474,6 +475,7 @@
             <step id="teachingSubmissionsPageThree"/>
             <step id="upload"/>
             <step id="license"/>
+            <step id="clarin-license"/>
             <step id="specialFields"/>
         </submission-process>
     </submission-definitions>
