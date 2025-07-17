@@ -49,6 +49,7 @@ public class ItemFilesMetadataRepair {
         options.addRequiredOption("e", "email", true, "admin email");
         options.addOption("c", "collection", true, "collection UUID");
         options.addOption("i", "item", true, "item UUID");
+        options.addOption("d", "dry-run", false, "dry run - with no repair");
         options.addOption("h", "help", false, "help");
         options.addOption("v", "verbose", false, "Verbose output");
 
@@ -62,7 +63,8 @@ public class ItemFilesMetadataRepair {
             String collectionUuid = line.getOptionValue('c');
             String itemUuid = line.getOptionValue('i');
             boolean verboseOutput = line.hasOption('v');
-            run(adminEmail, collectionUuid, itemUuid, verboseOutput);
+            boolean dryRun = line.hasOption('d');
+            run(adminEmail, collectionUuid, itemUuid, dryRun, verboseOutput);
         } catch (ParseException e) {
             System.err.println("Cannot read command options");
             printHelpAndExit(options);
@@ -71,10 +73,13 @@ public class ItemFilesMetadataRepair {
         log.info("Fixing item files metadata finished.");
     }
 
-    private static void run(String adminEmail, String collectionUuid, String itemUuid, boolean verboseOutput)
-            throws Exception {
+    private static void run(String adminEmail,
+                            String collectionUuid,
+                            String itemUuid,
+                            boolean dryRun,
+                            boolean verboseOutput) throws Exception {
 
-        System.out.println("ItemFilesMetadataRepair Started");
+        System.out.println("ItemFilesMetadataRepair Started.\n");
 
         try (Context context = new Context(Context.Mode.READ_WRITE)) {
             ItemService itemService = ContentServiceFactory.getInstance().getItemService();
@@ -85,15 +90,19 @@ public class ItemFilesMetadataRepair {
             context.setCurrentUser(eperson);
             context.restoreAuthSystemState();
 
+            String messagePrefix = dryRun ? "Found incorrect files metadata in" : "Updated";
             if (itemUuid != null) {
                 // fixing only one item
                 Item item = itemService.find(context, UUID.fromString(itemUuid));
                 if (item == null) {
                     throw new IllegalArgumentException("InvalidItem UUID");
                 }
-                boolean updated = updateItem(item, context, clarinItemService, itemService, verboseOutput);
-                System.out.printf("Updated %s\n", (updated ? "one item" : "0 items"));
-
+                boolean updated = updateItem(item, context, clarinItemService, itemService, dryRun, verboseOutput);
+                if (updated) {
+                    System.out.println(dryRun ? "Files metadata are incorrect." : "Files metadata were updated.");
+                } else {
+                    System.out.println("Files metadata are correct.");
+                }
             } else if (collectionUuid != null) {
                 // fixing items in collection
                 CollectionService collectionService = ContentServiceFactory.getInstance().getCollectionService();
@@ -102,33 +111,37 @@ public class ItemFilesMetadataRepair {
                     throw new IllegalArgumentException("Invalid Collection UUID");
                 }
                 Iterator<Item> itemIterator = itemService.findAllByCollection(context, collection);
-                Results results = updateItems(itemIterator, context,  clarinItemService, itemService, verboseOutput);
-                System.out.printf("Checked %d items in Collection: \"%s\"\n",
+                Results results =
+                        updateItems(itemIterator, context,  clarinItemService, itemService, dryRun, verboseOutput);
+                System.out.printf("Checked %d items in Collection: \"%s\".\n",
                         results.getItemsCount(), collection.getName());
-                System.out.printf("Updated %d items\n", results.getUpdatedItemsCount());
+                System.out.printf("%s %d items.\n", messagePrefix, results.getUpdatedItemsCount());
             } else {
                 // fixing all items
                 Iterator<Item> itemIterator = itemService.findAll(context);
-                Results results = updateItems(itemIterator, context,  clarinItemService, itemService, verboseOutput);
-                System.out.printf("Checked %d items\n", results.getItemsCount());
-                System.out.printf("Updated %d items\n", results.getUpdatedItemsCount());
+                Results results =
+                        updateItems(itemIterator, context,  clarinItemService, itemService, dryRun, verboseOutput);
+                System.out.printf("Checked %d items.\n", results.getItemsCount());
+                System.out.printf("%s %d items.\n", messagePrefix, results.getUpdatedItemsCount());
             }
             context.complete();
         }
 
-        System.out.println("ItemFilesMetadataRepair Finished");
+        System.out.println("\nItemFilesMetadataRepair Finished");
     }
 
     private static Results updateItems(Iterator<Item> itemIterator,
                                        Context context,
                                        ClarinItemService clarinItemService,
                                        ItemService itemService,
+                                       boolean dryRun,
                                        boolean verboseOutput) throws Exception {
         int itemsCount = 0;
         int updatedItemsCount = 0;
         while (itemIterator.hasNext()) {
             itemsCount++;
-            boolean updated = updateItem(itemIterator.next(), context, clarinItemService, itemService, verboseOutput);
+            boolean updated =
+                    updateItem(itemIterator.next(), context, clarinItemService, itemService, dryRun, verboseOutput);
             if (updated) {
                 updatedItemsCount++;
             }
@@ -141,6 +154,7 @@ public class ItemFilesMetadataRepair {
                                       Context context,
                                       ClarinItemService clarinItemService,
                                       ItemService itemService,
+                                      boolean dryRun,
                                       boolean verboseOutput) throws Exception {
         boolean updated = false;
 
@@ -179,27 +193,34 @@ public class ItemFilesMetadataRepair {
             boolean hasBitstreams = !CollectionUtils.isEmpty(bundle.getBitstreams());
             if (hasBitstreams && (filesCount == 0 || filesSize == 0 || !"yes".equals(hasFiles))) {
                 if (verboseOutput) {
-                    String message = "Item %s with file(s) has incorrect metadata: " +
-                            "[files.count: %s, files.size: %s, has.files: %s]";
-                    System.out.printf((message) + "%n", item.getHandle(), filesCountValue, filesSizeValue, hasFiles);
+                    String message = "Incorrect metadata: [files.count: %s, files.size: %s, has.files: %s], " +
+                            "in item '%s' with files.";
+                    System.out.printf((message) + "%n", filesCountValue, filesSizeValue, hasFiles, item.getHandle());
                 }
-                clarinItemService.updateItemFilesMetadata(context, item, bundle);
+                if (!dryRun) {
+                    clarinItemService.updateItemFilesMetadata(context, item, bundle);
+                }
                 updated = true;
             } else if (!hasBitstreams && (filesCount > 0 || filesSize > 0 || "yes".equals(hasFiles))) {
                 if (verboseOutput) {
-                    String message = "Item %s with missing files has incorrect metadata: " +
-                            "[files.count: %s, files.size: %s, has.files: %s]";
-                    System.out.printf((message) + "%n", item.getHandle(), filesCountValue, filesSizeValue, hasFiles);
+                    String message = "Incorrect metadata: [files.count: %s, files.size: %s, has.files: %s], " +
+                            "in item '%s' without files.";
+                    System.out.printf((message) + "%n", filesCountValue, filesSizeValue, hasFiles, item.getHandle());
                 }
-                itemService.clearMetadata(context, item, "local", "has", "files", Item.ANY);
-                itemService.clearMetadata(context, item, "local", "files", "count", Item.ANY);
-                itemService.clearMetadata(context, item, "local", "files", "size", Item.ANY);
-                itemService.addMetadata(
-                        context, item,"local", "has", "files", Item.ANY, "no");
-                itemService.addMetadata(
-                        context, item,"local", "files", "count", Item.ANY, "" + 0);
-                itemService.addMetadata(
-                        context, item,"local", "files", "size", Item.ANY, "" + 0L);
+                if (!dryRun) {
+                    itemService.clearMetadata(
+                            context, item, "local", "has", "files", Item.ANY);
+                    itemService.clearMetadata(
+                            context, item, "local", "files", "count", Item.ANY);
+                    itemService.clearMetadata(
+                            context, item, "local", "files", "size", Item.ANY);
+                    itemService.addMetadata(
+                            context, item, "local", "has", "files", Item.ANY, "no");
+                    itemService.addMetadata(
+                            context, item, "local", "files", "count", Item.ANY, "" + 0);
+                    itemService.addMetadata(
+                            context, item, "local", "files", "size", Item.ANY, "" + 0L);
+                }
                 updated = true;
             }
         }
