@@ -51,7 +51,7 @@ public class ItemFilesMetadataRepair {
         options.addOption("i", "item", true, "item UUID");
         options.addOption("d", "dry-run", false, "dry run - with no repair");
         options.addOption("h", "help", false, "help");
-        options.addOption("v", "verbose", false, "Verbose output");
+        options.addOption("v", "verbose", false, "verbose output");
 
         CommandLineParser parser = new DefaultParser();
         try {
