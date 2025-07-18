@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Apply reviewer labels
-        uses: mazoea/ga-maz/start@master
+        uses: mazoea/ga-maz/label-review@master
         with:
           target-reviewer: 'vidiecan'
           assigned-label: 'REVIEW-in-progress'
