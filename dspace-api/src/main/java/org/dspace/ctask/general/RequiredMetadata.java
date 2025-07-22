@@ -46,7 +46,7 @@ import org.dspace.workflow.factory.WorkflowServiceFactory;
  *
  * @author richardrodgers
  */
-@Suspendable(statusCodes = {-1})
+@Suspendable(statusCodes = {Curator.CURATE_ERROR})
 public class RequiredMetadata extends AbstractCurationTask {
     // map of DCInputSets
     protected DCInputsReader reader = null;
