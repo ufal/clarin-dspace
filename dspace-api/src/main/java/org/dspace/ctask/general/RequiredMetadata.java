@@ -8,22 +8,35 @@
 package org.dspace.ctask.general;
 
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 import org.dspace.app.util.DCInput;
 import org.dspace.app.util.DCInputSet;
 import org.dspace.app.util.DCInputsReader;
 import org.dspace.app.util.DCInputsReaderException;
+import org.dspace.content.Collection;
 import org.dspace.content.DSpaceObject;
 import org.dspace.content.Item;
+import org.dspace.content.MetadataSchemaEnum;
 import org.dspace.content.MetadataValue;
+import org.dspace.content.WorkspaceItem;
+import org.dspace.content.factory.ContentServiceFactory;
+import org.dspace.content.service.WorkspaceItemService;
 import org.dspace.core.Constants;
+import org.dspace.core.Context;
 import org.dspace.curate.AbstractCurationTask;
 import org.dspace.curate.Curator;
 import org.dspace.curate.Suspendable;
+import org.dspace.workflow.WorkflowItem;
+import org.dspace.workflow.WorkflowItemService;
+import org.dspace.workflow.factory.WorkflowServiceFactory;
 
 /**
  * RequiredMetadata task compares item metadata with fields
@@ -33,12 +46,16 @@ import org.dspace.curate.Suspendable;
  *
  * @author richardrodgers
  */
-@Suspendable
+@Suspendable(statusCodes = {-1})
 public class RequiredMetadata extends AbstractCurationTask {
     // map of DCInputSets
     protected DCInputsReader reader = null;
     // map of required fields
-    protected Map<String, List<String>> reqMap = new HashMap<String, List<String>>();
+    protected Map<ReqKey, List<String>> reqMap = new HashMap<>();
+
+    private Context context;
+    private WorkflowItemService<?> workflowItemService;
+    private WorkspaceItemService workspaceItemService;
 
     @Override
     public void init(Curator curator, String taskId) throws IOException {
@@ -48,6 +65,9 @@ public class RequiredMetadata extends AbstractCurationTask {
         } catch (DCInputsReaderException dcrE) {
             throw new IOException(dcrE.getMessage(), dcrE);
         }
+        context = new Context(Context.Mode.READ_ONLY);
+        this.workflowItemService = WorkflowServiceFactory.getInstance().getWorkflowItemService();
+        this.workspaceItemService = ContentServiceFactory.getInstance().getWorkspaceItemService();
     }
 
     /**
@@ -69,7 +89,31 @@ public class RequiredMetadata extends AbstractCurationTask {
                     handle = "in workflow";
                 }
                 sb.append("Item: ").append(handle);
-                for (String req : getReqList(item.getOwningCollection().getHandle())) {
+
+                Collection collection = item.getOwningCollection();
+
+                // when the owning collection is null it may be the case
+                // when the item is a workspace item or a workflow item
+                try {
+                    if (collection == null && itemService.isInProgressSubmission(context, item)) {
+                        WorkflowItem workflowItem = workflowItemService.findByItem(context, item);
+                        if (workflowItem != null) {
+                            collection = workflowItem.getCollection();
+                        } else {
+                            WorkspaceItem workspaceItem = workspaceItemService.findByItem(context, item);
+                            if (workspaceItem != null) {
+                                collection = workspaceItem.getCollection();
+                            }
+                        }
+                    }
+                } catch (SQLException ex) {
+                    throw new RuntimeException(ex.getMessage(), ex);
+                }
+
+                String resourceType = itemService.getMetadataFirstValue(
+                        item, MetadataSchemaEnum.DC.getName(), "type", null, Item.ANY);
+
+                for (String req : getReqList(collection.getHandle(), resourceType)) {
                     List<MetadataValue> vals = itemService.getMetadataByMetadataString(item, req);
                     if (vals.size() == 0) {
                         sb.append(" missing required field: ").append(req);
@@ -91,18 +135,16 @@ public class RequiredMetadata extends AbstractCurationTask {
         }
     }
 
-    protected List<String> getReqList(String handle) throws DCInputsReaderException {
-        List<String> reqList = reqMap.get(handle);
+    protected List<String> getReqList(String handle, String resourceType) throws DCInputsReaderException {
+        ReqKey reqKey = new ReqKey(handle, resourceType);
+        List<String> reqList = reqMap.get(reqKey);
         if (reqList == null) {
-            reqList = reqMap.get("default");
-        }
-        if (reqList == null) {
-            reqList = new ArrayList<String>();
+            Set<String> reqSet = new LinkedHashSet<>();
             List<DCInputSet> inputSet = reader.getInputsByCollectionHandle(handle);
             for (DCInputSet inputs : inputSet) {
                 for (DCInput[] row : inputs.getFields()) {
                     for (DCInput input : row) {
-                        if (input.isRequired()) {
+                        if (input.isRequired() && ((resourceType == null) || input.isAllowedFor(resourceType))) {
                             StringBuilder sb = new StringBuilder();
                             sb.append(input.getSchema()).append(".");
                             sb.append(input.getElement()).append(".");
@@ -111,13 +153,38 @@ public class RequiredMetadata extends AbstractCurationTask {
                                 qual = "";
                             }
                             sb.append(qual);
-                            reqList.add(sb.toString());
+                            reqSet.add(sb.toString());
                         }
                     }
                 }
-                reqMap.put(inputs.getFormName(), reqList);
             }
+            reqList = new ArrayList<>(reqSet);
+            reqMap.put(reqKey, reqList);
         }
         return reqList;
+    }
+
+    protected static class ReqKey {
+        private final String handle;
+        private final String resourceType;
+
+        protected ReqKey(String handle, String resourceType) {
+            this.handle = handle;
+            this.resourceType = resourceType;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+            ReqKey reqKey = (ReqKey) o;
+            return Objects.equals(handle, reqKey.handle) && Objects.equals(resourceType, reqKey.resourceType);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(handle, resourceType);
+        }
     }
 }
