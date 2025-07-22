@@ -53,7 +53,6 @@ public class RequiredMetadata extends AbstractCurationTask {
     // map of required fields
     protected Map<ReqKey, List<String>> reqMap = new HashMap<>();
 
-    private Context context;
     private WorkflowItemService<?> workflowItemService;
     private WorkspaceItemService workspaceItemService;
 
@@ -65,7 +64,6 @@ public class RequiredMetadata extends AbstractCurationTask {
         } catch (DCInputsReaderException dcrE) {
             throw new IOException(dcrE.getMessage(), dcrE);
         }
-        context = new Context(Context.Mode.READ_ONLY);
         this.workflowItemService = WorkflowServiceFactory.getInstance().getWorkflowItemService();
         this.workspaceItemService = ContentServiceFactory.getInstance().getWorkspaceItemService();
     }
@@ -95,19 +93,22 @@ public class RequiredMetadata extends AbstractCurationTask {
                 // when the owning collection is null it may be the case
                 // when the item is a workspace item or a workflow item
                 try {
-                    if (collection == null && itemService.isInProgressSubmission(context, item)) {
-                        WorkflowItem workflowItem = workflowItemService.findByItem(context, item);
-                        if (workflowItem != null) {
-                            collection = workflowItem.getCollection();
-                        } else {
-                            WorkspaceItem workspaceItem = workspaceItemService.findByItem(context, item);
-                            if (workspaceItem != null) {
-                                collection = workspaceItem.getCollection();
+                    if (collection == null) {
+                        Context context = Curator.curationContext();
+                        if (itemService.isInProgressSubmission(context, item)) {
+                            WorkflowItem workflowItem = workflowItemService.findByItem(context, item);
+                            if (workflowItem != null) {
+                                collection = workflowItem.getCollection();
+                            } else {
+                                WorkspaceItem workspaceItem = workspaceItemService.findByItem(context, item);
+                                if (workspaceItem != null) {
+                                    collection = workspaceItem.getCollection();
+                                }
                             }
                         }
                     }
                 } catch (SQLException ex) {
-                    throw new RuntimeException(ex.getMessage(), ex);
+                    throw new IOException(ex.getMessage(), ex);
                 }
 
                 String resourceType = itemService.getMetadataFirstValue(
@@ -135,12 +136,24 @@ public class RequiredMetadata extends AbstractCurationTask {
         }
     }
 
-    protected List<String> getReqList(String handle, String resourceType) throws DCInputsReaderException {
-        ReqKey reqKey = new ReqKey(handle, resourceType);
+    /**
+     * Get the list of required metadata for given collection and item resource type.
+     * The list is obtained from submission-forms.xml configuration file.
+     * <p>
+     * In order to avoid required metadata list calculation repeatedly,
+     * the lists are cached into reqMap object for given collection handle and item resource type.
+     *
+     * @param collectionHandle item's owning collection handle
+     * @param resourceType item resource type
+     * @return the list of required metadata
+     * @throws DCInputsReaderException when DCInputsReader error occurs
+     */
+    private List<String> getReqList(String collectionHandle, String resourceType) throws DCInputsReaderException {
+        ReqKey reqKey = new ReqKey(collectionHandle, resourceType);
         List<String> reqList = reqMap.get(reqKey);
         if (reqList == null) {
             Set<String> reqSet = new LinkedHashSet<>();
-            List<DCInputSet> inputSet = reader.getInputsByCollectionHandle(handle);
+            List<DCInputSet> inputSet = reader.getInputsByCollectionHandle(collectionHandle);
             for (DCInputSet inputs : inputSet) {
                 for (DCInput[] row : inputs.getFields()) {
                     for (DCInput input : row) {
