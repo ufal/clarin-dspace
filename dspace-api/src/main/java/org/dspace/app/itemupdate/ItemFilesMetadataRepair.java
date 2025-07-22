@@ -217,9 +217,9 @@ public class ItemFilesMetadataRepair {
                     itemService.addMetadata(
                             context, item, "local", "has", "files", Item.ANY, "no");
                     itemService.addMetadata(
-                            context, item, "local", "files", "count", Item.ANY, "" + 0);
+                            context, item, "local", "files", "count", Item.ANY, "0");
                     itemService.addMetadata(
-                            context, item, "local", "files", "size", Item.ANY, "" + 0L);
+                            context, item, "local", "files", "size", Item.ANY, "0");
                 }
                 updated = true;
             }
