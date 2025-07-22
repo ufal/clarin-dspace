@@ -95,7 +95,7 @@ public class ItemFilesMetadataRepair {
                 // fixing only one item
                 Item item = itemService.find(context, UUID.fromString(itemUuid));
                 if (item == null) {
-                    throw new IllegalArgumentException("InvalidItem UUID");
+                    throw new IllegalArgumentException("Item not found with the provided UUID");
                 }
                 boolean updated = updateItem(item, context, clarinItemService, itemService, dryRun, verboseOutput);
                 if (updated) {
