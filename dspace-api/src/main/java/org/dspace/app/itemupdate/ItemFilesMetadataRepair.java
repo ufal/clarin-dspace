@@ -66,7 +66,7 @@ public class ItemFilesMetadataRepair {
             boolean dryRun = line.hasOption('d');
             run(adminEmail, collectionUuid, itemUuid, dryRun, verboseOutput);
         } catch (ParseException e) {
-            System.err.println("Cannot read command options");
+            System.err.println("Failed to parse command line options: " + e.getMessage());
             printHelpAndExit(options);
         }
 
