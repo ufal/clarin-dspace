@@ -40,21 +40,21 @@ public class RequiredMetadataIT extends AbstractIntegrationTestWithDatabase {
         context.setCurrentUser(admin);
         parentCommunity = CommunityBuilder.createCommunity(context).build();
 
-        Collection collection = CollectionBuilder.createCollection(context, parentCommunity, "123456789/2")
+        Collection collection = CollectionBuilder.createCollection(context, parentCommunity, "123456789/113")
                                                  .build();
         Item item1 = ItemBuilder.createItem(context, collection)
-                .withHandle("123456789/2-1")
+                .withHandle("123456789/113-1")
                 .build();
 
         Item item2 = ItemBuilder.createItem(context, collection)
-                .withHandle("123456789/2-2")
+                .withHandle("123456789/113-2")
                 .withMetadata("dc", "title", null, "Test item")
                 .withMetadata("dc", "date", "issued", "2025-07-23")
                 .build();
 
         String failResult =
-                "Item: 123456789/2-1 missing required field: dc.title. missing required field: dc.date.issued";
-        String successResult = "Item: 123456789/2-2 has all required fields";
+                "Item: 123456789/113-1 missing required field: dc.title. missing required field: dc.date.issued";
+        String successResult = "Item: 123456789/113-2 has all required fields";
 
         // run curateTask for item1 - should fail
         curator.curate(context, item1);
