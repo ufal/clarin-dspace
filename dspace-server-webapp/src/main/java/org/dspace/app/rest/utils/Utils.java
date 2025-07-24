@@ -93,9 +93,11 @@ import org.dspace.app.rest.repository.LinkRestRepository;
 import org.dspace.app.rest.repository.ReloadableEntityObjectRepository;
 import org.dspace.content.BitstreamFormat;
 import org.dspace.content.DSpaceObject;
+import org.dspace.content.Item;
 import org.dspace.content.service.BitstreamFormatService;
 import org.dspace.content.service.DSpaceObjectService;
 import org.dspace.core.Context;
+import org.dspace.handle.HandlePlugin;
 import org.dspace.services.ConfigurationService;
 import org.dspace.services.RequestService;
 import org.dspace.services.factory.DSpaceServicesFactory;
@@ -1243,5 +1245,19 @@ public class Utils {
     public static <T> Predicate<T> distinctByKey(Function<? super T, Object> keyExtractor) {
         Map<Object, Boolean> map = new ConcurrentHashMap<>();
         return t -> map.putIfAbsent(keyExtractor.apply(t), Boolean.TRUE) == null;
+    }
+
+    /**
+     * Get the formatted canonical handle URL without the protocol (http:// or https://).
+     * This is used to create a clean URL for the export formats.
+     */
+    public static String getCanonicalHandleUrlNoProtocol(Item item) {
+        String itemHandle = item.getHandle();
+        if (StringUtils.isBlank(itemHandle)) {
+            return "";
+        }
+        String canonicalHandleUrl = HandlePlugin.getCanonicalHandlePrefix() + itemHandle;
+        // Remove protocol (http:// or https://) if present
+        return canonicalHandleUrl.replaceFirst("^https?://", "");
     }
 }
