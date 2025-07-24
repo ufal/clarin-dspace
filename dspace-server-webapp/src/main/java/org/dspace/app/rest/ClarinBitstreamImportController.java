@@ -33,6 +33,7 @@ import org.dspace.content.service.BitstreamService;
 import org.dspace.content.service.BundleService;
 import org.dspace.content.service.ItemService;
 import org.dspace.content.service.clarin.ClarinBitstreamService;
+import org.dspace.content.service.clarin.ClarinItemService;
 import org.dspace.core.Constants;
 import org.dspace.core.Context;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -72,6 +73,8 @@ public class ClarinBitstreamImportController {
     private Utils utils;
     @Autowired
     private MostRecentChecksumService checksumService;
+    @Autowired
+    protected ClarinItemService clarinItemService;
 
     /**
      * Endpoint for import bitstream, whose file already exists in assetstore under internal_id
@@ -197,6 +200,9 @@ public class ClarinBitstreamImportController {
                     throw new AccessDeniedException("You do not have write rights to update the Bundle's item");
                 }
                 if (item != null) {
+                    // Update item file metadata after the bitstream size has changed
+                    clarinItemService.updateItemFilesMetadata(context,
+                            item, bundle);
                     itemService.update(context, item);
                 }
                 bundleService.update(context, bundle);

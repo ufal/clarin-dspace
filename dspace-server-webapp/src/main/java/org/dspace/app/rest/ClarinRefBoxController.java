@@ -25,6 +25,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -47,15 +48,22 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
 import org.dspace.app.rest.converter.ConverterService;
+import org.dspace.app.rest.exception.UnprocessableEntityException;
 import org.dspace.app.rest.model.ClarinFeaturedServiceRest;
+import org.dspace.app.rest.model.refbox.ExportFormatDTO;
+import org.dspace.app.rest.model.refbox.FeaturedServiceDTO;
+import org.dspace.app.rest.model.refbox.FeaturedServiceLinkDTO;
+import org.dspace.app.rest.model.refbox.RefBoxDTO;
 import org.dspace.app.rest.utils.ContextUtil;
 import org.dspace.app.rest.utils.Utils;
+import org.dspace.content.DSpaceObject;
 import org.dspace.content.Item;
 import org.dspace.content.MetadataValue;
 import org.dspace.content.clarin.ClarinFeaturedService;
 import org.dspace.content.clarin.ClarinFeaturedServiceLink;
 import org.dspace.content.service.ItemService;
 import org.dspace.core.Context;
+import org.dspace.handle.service.HandleService;
 import org.dspace.services.ConfigurationService;
 import org.dspace.xoai.services.api.config.XOAIManagerResolver;
 import org.dspace.xoai.services.api.config.XOAIManagerResolverException;
@@ -90,6 +98,13 @@ public class ClarinRefBoxController {
 
     private final static String BIBTEX_TYPE = "bibtex";
 
+    /**
+     * Default language for the RefBox metadata values
+     * This will be changed in the future to support multiple languages, probably fetching the language from the
+     * request, but for now there is a mess in the metadata value languages, so we will use the default.
+     */
+    private final static String DEFAULT_LANGUAGE = "*";
+
     private final Logger log = org.apache.logging.log4j.LogManager.getLogger(ClarinRefBoxController.class);
 
     @Autowired
@@ -118,6 +133,9 @@ public class ClarinRefBoxController {
 
     @Autowired
     private ItemRepositoryResolver itemRepositoryResolver;
+
+    @Autowired
+    private HandleService handleService;
 
     private final DSpaceResumptionTokenFormatter resumptionTokenFormat = new DSpaceResumptionTokenFormatter();
 
@@ -163,7 +181,7 @@ public class ClarinRefBoxController {
             // Check if the item has the metadata for this featured service, if it doesn't have - do NOT return the
             // featured service.
             List<MetadataValue> itemMetadata = itemService.getMetadata(item, "local", "featuredService",
-                    featuredServiceName, Item.ANY, false);
+                    featuredServiceName, DEFAULT_LANGUAGE);
             if (CollectionUtils.isEmpty(itemMetadata)) {
                 continue;
             }
@@ -284,6 +302,190 @@ public class ClarinRefBoxController {
         // Wrap the String output to the class for better parsing in the FE
         OaiMetadataWrapper oaiMetadataWrapper = new OaiMetadataWrapper(StringUtils.defaultIfEmpty(outputString, ""));
         return new ResponseEntity<>(oaiMetadataWrapper, HttpStatus.valueOf(SC_OK));
+    }
+
+    /**
+     * Get the RefBox information based on the handle.
+     * It returns the display text, export formats and featured services.
+     */
+    @RequestMapping(method = RequestMethod.GET, produces = "application/json")
+    public ResponseEntity<RefBoxDTO> getRefboxInfo(
+            @RequestParam(name = "handle") String handle,
+            HttpServletRequest request) throws SQLException {
+
+        Context context = ContextUtil.obtainContext(request);
+        if (context == null) {
+            throw new RuntimeException("Cannot obtain the context from the request.");
+        }
+
+        DSpaceObject dSpaceObject = handleService.resolveToObject(context, handle);
+        if (!(dSpaceObject instanceof Item)) {
+            throw new UnprocessableEntityException("The handle does not resolve to an Item.");
+        }
+        Item item = (Item) dSpaceObject;
+
+        String title = itemService.getMetadataFirstValue(item, "dc", "title", null, DEFAULT_LANGUAGE);
+        String displayText = buildDisplayText(context, item);
+
+        // Build exportFormats as a map with "exportFormat" key
+        Map<String, List<ExportFormatDTO>> exportFormatsMap = new HashMap<>();
+        exportFormatsMap.put("exportFormat", buildExportFormats(item));
+
+        // Build featuredServices as a map with "featuredService" key
+        Map<String, List<FeaturedServiceDTO>> featuredServicesMap = new HashMap<>();
+        featuredServicesMap.put("featuredService", buildFeaturedServices(context, item));
+
+        // Pass these maps to RefBoxDTO
+        RefBoxDTO refBoxDTO = new RefBoxDTO(
+                displayText,
+                exportFormatsMap,
+                featuredServicesMap,
+                title != null ? title : ""
+        );
+        return ResponseEntity.ok(refBoxDTO);
+    }
+
+    /**
+     * Build the display text for the RefBox based on the Item Metadata.
+     */
+    private String buildDisplayText(Context context, Item item) {
+        // 1. Authors
+        List<String> authors = itemService.getMetadata(item, "dc", "contributor", "author", DEFAULT_LANGUAGE)
+                .stream().map(MetadataValue::getValue).collect(Collectors.toList());
+        // If there are no authors, try to get the publisher metadata
+        if (authors.isEmpty()) {
+            authors = itemService.getMetadata(item, "dc", "publisher", null, DEFAULT_LANGUAGE)
+                    .stream().map(MetadataValue::getValue).collect(Collectors.toList());
+        }
+        String authorText = formatAuthors(authors);
+
+        // 2. Year
+        String year = "";
+        String issued = itemService.getMetadataFirstValue(item, "dc", "date", "issued", DEFAULT_LANGUAGE);
+        if (issued != null && !issued.isEmpty()) {
+            // The issued date is in the format YYYY-MM-DD, we take the year part
+            year = issued.split("-")[0];
+        }
+
+        // 3. Title
+        String title = itemService.getMetadataFirstValue(item, "dc", "title", null, DEFAULT_LANGUAGE);
+
+        // 4. Repository name
+        String repository = configurationService.getProperty("dspace.name");
+
+        // 5. Identifier URI (prefer DOI)
+        String identifier = itemService.getMetadataFirstValue(item, "dc", "identifier", "doi", DEFAULT_LANGUAGE);
+        if (identifier == null) {
+            identifier = itemService.getMetadataFirstValue(item, "dc", "identifier", "uri", DEFAULT_LANGUAGE);
+        }
+
+        // 6. Format
+        // Using html tags to format the output because this display text will be rendered in the UI
+        StringBuilder sb = new StringBuilder();
+        if (authorText != null && !authorText.isEmpty()) {
+            sb.append(authorText);
+        }
+        if (year != null && !year.isEmpty()) {
+            if (sb.length() > 0) {
+                sb.append(", ");
+            }
+            sb.append(year);
+        }
+        sb.append(", \n  <i>").append(title != null ? title : "").append("</i>");
+        if (repository != null && !repository.isEmpty()) {
+            sb.append(", ").append(repository);
+        }
+        sb.append(", \n  <a href=\"").append(identifier != null ? identifier : "").append("\">")
+                .append(identifier != null ? identifier : "").append("</a>.");
+        return sb.toString();
+    }
+
+    /**
+     * Format the authors for the display text.
+     * If there is one author, it will return that author.
+     * If there are 2-5 authors, it will join them with "; " and replace the last ";" with " and".
+     * If there are more than 5 authors, it will return the first author and "et al.".
+     */
+    private String formatAuthors(List<String> authors) {
+        String authorText = "";
+        if (authors.size() == 1) {
+            authorText = authors.get(0);
+        } else if (authors.size() <= 5) {
+            authorText = String.join("; ", authors);
+            authorText = authorText.replaceAll("; ([^;]*)$", " and $1");
+        } else {
+            authorText = authors.get(0) + "; et al.";
+        }
+        return authorText;
+    }
+
+    /**
+     * Build the export formats for the RefBox based on the Item handle.
+     * It returns a list of ExportFormatDTO objects with the URL to the citation data.
+     */
+    private List<ExportFormatDTO> buildExportFormats(Item item) {
+        List<ExportFormatDTO> exportFormats = new ArrayList<>();
+        String itemHandle = item.getHandle();
+        if (itemHandle != null) {
+            String baseUrl = configurationService.getProperty("dspace.server.url") +
+                    "/api/core/refbox/citations?handle=/" + Utils.getCanonicalHandleUrlNoProtocol(item);
+
+            String bibtexUrl = baseUrl + "&type=bibtex";
+            String cmdiUrl = baseUrl + "&type=cmdi";
+
+            exportFormats.add(new ExportFormatDTO("bibtex", bibtexUrl, "json", ""));
+            exportFormats.add(new ExportFormatDTO("cmdi", cmdiUrl, "json", ""));
+        } else {
+            log.error("Item with ID {} does not have a handle, export formats cannot be built.", item.getID());
+        }
+        return exportFormats;
+    }
+
+    /**
+     * Build the featured services for the RefBox based on the Item Metadata.
+     * This method retrieves the metadata values for the featured services,
+     * groups them by service name (qualifier),
+     * and constructs a list of FeaturedServiceDTO objects
+     * with the full name, URL, description, and links.
+     */
+    private List<FeaturedServiceDTO> buildFeaturedServices(Context context, Item item) {
+        List<MetadataValue> fsMeta = itemService.getMetadata(item, "local", "featuredService", "*", DEFAULT_LANGUAGE);
+        Map<String, List<FeaturedServiceLinkDTO>> serviceLinksMap = new HashMap<>();
+
+        // Group links by service name (qualifier)
+        for (MetadataValue mv : fsMeta) {
+            String qualifier = mv.getMetadataField().getQualifier();
+            if (qualifier == null) {
+                continue;
+            }
+            String[] parts = mv.getValue().split("\\|");
+            if (parts.length == 2) {
+                serviceLinksMap
+                        .computeIfAbsent(qualifier, k -> new ArrayList<>())
+                        .add(new FeaturedServiceLinkDTO(parts[0], parts[1]));
+            } else {
+                log.error("Invalid metadata value format for featured service: {}. " +
+                        "Expected format is '<KEY>|<VALUE>'.", mv.getValue());
+            }
+        }
+
+        List<FeaturedServiceDTO> featuredServiceList = new ArrayList<>();
+        // Iterate over the grouped service links and create FeaturedServiceDTO objects
+        for (Map.Entry<String, List<FeaturedServiceLinkDTO>> entry : serviceLinksMap.entrySet()) {
+            String name = entry.getKey();
+            String fullname = configurationService.getProperty("featured.service." + name + ".fullname");
+            String url = configurationService.getProperty("featured.service." + name + ".url");
+            String description = configurationService.getProperty("featured.service." + name + ".description");
+            Map<String, List<FeaturedServiceLinkDTO>> linksMap = new HashMap<>();
+            linksMap.put("entry", entry.getValue());
+            featuredServiceList.add(new FeaturedServiceDTO(
+                    fullname != null ? fullname : name,
+                    url != null ? url : "",
+                    description != null ? description : "",
+                    linksMap
+            ));
+        }
+        return featuredServiceList;
     }
 
     private void closeContext(Context context) {
@@ -422,20 +624,17 @@ class UTF8ClarinOutputStream extends OutputStream {
  * For better response parsing wrap the OAI data to the object.
  */
 class OaiMetadataWrapper {
-    private String metadata;
+    private String value;
 
-    public OaiMetadataWrapper() {
-    }
-
-    public OaiMetadataWrapper(String metadata) {
-        this.metadata = metadata;
+    public OaiMetadataWrapper(String value) {
+        this.value = value;
     }
 
     public String getMetadata() {
-        return metadata;
+        return value;
     }
 
-    public void setMetadata(String metadata) {
-        this.metadata = metadata;
+    public void setMetadata(String value) {
+        this.value = value;
     }
 }
