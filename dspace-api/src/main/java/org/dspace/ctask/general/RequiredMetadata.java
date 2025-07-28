@@ -92,8 +92,8 @@ public class RequiredMetadata extends AbstractCurationTask {
 
                 // when the owning collection is null it may be the case
                 // when the item is a workspace item or a workflow item
-                try {
-                    if (collection == null) {
+                if (collection == null) {
+                    try {
                         Context context = Curator.curationContext();
                         if (itemService.isInProgressSubmission(context, item)) {
                             WorkflowItem workflowItem = workflowItemService.findByItem(context, item);
@@ -106,9 +106,9 @@ public class RequiredMetadata extends AbstractCurationTask {
                                 }
                             }
                         }
+                    } catch (SQLException ex) {
+                        throw new IOException(ex.getMessage(), ex);
                     }
-                } catch (SQLException ex) {
-                    throw new IOException(ex.getMessage(), ex);
                 }
 
                 String resourceType = itemService.getMetadataFirstValue(
