@@ -176,7 +176,7 @@ public class MatomoPDFExporter {
             }
         }
 
-        HashSet<Item> done = new HashSet<Item>();
+        HashSet<Item> done = new HashSet<>();
 
         for (MatomoReportSubscription mr : matomoReports) {
             Item item = mr.getItem();
@@ -208,7 +208,8 @@ public class MatomoPDFExporter {
                 try {
                     sendEmail(to, item, verboseOutput);
                 } catch (Exception e) {
-                    log.error(e);
+                    log.error("Failed to send email to recipient: {} for item ID: {}. Error: {}",
+                            to.getEmail(), item.getID(), e.getMessage(), e);
                 }
             }
         }
@@ -217,7 +218,7 @@ public class MatomoPDFExporter {
             try {
                 FileUtils.deleteDirectory(outputDir);
             } catch (IOException e) {
-                log.error(e);
+                log.error("Failed to delete directory: {}", outputDir.getAbsolutePath(), e);
             }
         }
     }

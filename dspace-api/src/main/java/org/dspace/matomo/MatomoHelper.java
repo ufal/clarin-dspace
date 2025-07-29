@@ -15,10 +15,12 @@ import java.io.UnsupportedEncodingException;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.text.ParseException;
-import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAccessor;
 import java.util.ArrayList;
 import java.util.Calendar;
-import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
@@ -505,12 +507,12 @@ public class MatomoHelper {
         try {
             builder = builderFactory.newDocumentBuilder();
         } catch (ParserConfigurationException e) {
-            e.printStackTrace();
+            log.error("Error creating DocumentBuilder", e);
         }
         try {
             doc = builder.parse(new StringInputStream(xml));
         } catch (Exception e) {
-            log.error(e);
+            log.error("Error occurred while parsing XML document.", e);
         }
         return doc;
     }
@@ -618,20 +620,20 @@ public class MatomoHelper {
     }
 
     private static class DateRange {
-        private static final SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd");
-        private static final SimpleDateFormat odf = new SimpleDateFormat("yyyy-MM");
+        private static final DateTimeFormatter df = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        private static final DateTimeFormatter odf = DateTimeFormatter.ofPattern("yyyy-MM");
 
-        private final Date startDate;
-        private final Date endDate;
+        private final TemporalAccessor startDate;
+        private final TemporalAccessor endDate;
 
-        private DateRange(Date startDate, Date endDate) {
+        private DateRange(TemporalAccessor startDate, TemporalAccessor endDate) {
             this.startDate = startDate;
             this.endDate = endDate;
         }
 
         private static DateRange fromDateString(String date) throws ParseException {
-            Date startDate;
-            Date endDate;
+            TemporalAccessor startDate;
+            TemporalAccessor endDate;
             if (date != null) {
                 String sdate = date;
                 String edate = date;
@@ -643,15 +645,16 @@ public class MatomoHelper {
                     cal.set(Calendar.YEAR, Integer.parseInt(sdate.substring(0,4)));
                     cal.set(Calendar.MONTH, Integer.parseInt(sdate.substring(5)) - 1);
                     cal.set(Calendar.DATE, cal.getActualMaximum(Calendar.DATE));
-                    sdate = odf.format(cal.getTime()) + "-01";
-                    edate = df.format(cal.getTime());
+                    LocalDate localDate = LocalDate.ofInstant(cal.toInstant(), ZoneId.systemDefault());
+                    sdate = odf.format(localDate) + "-01";
+                    edate = df.format(localDate);
                 }
                 startDate = df.parse(sdate);
                 endDate = df.parse(edate);
             } else {
                 // default start and end data
                 startDate = df.parse("2014-01-01");
-                endDate = Calendar.getInstance().getTime();
+                endDate = LocalDate.ofInstant(Calendar.getInstance().getTime().toInstant(), ZoneId.systemDefault());
             }
             return new DateRange(startDate, endDate);
         }
