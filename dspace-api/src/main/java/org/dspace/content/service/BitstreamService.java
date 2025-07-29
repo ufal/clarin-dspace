@@ -7,6 +7,7 @@
  */
 package org.dspace.content.service;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.sql.SQLException;
@@ -154,7 +155,7 @@ public interface BitstreamService extends DSpaceObjectService<Bitstream>, DSpace
     public void setFormat(Context context, Bitstream bitstream, BitstreamFormat bitstreamFormat) throws SQLException;
 
     /**
-     * Retrieve the contents of the bitstream
+     * Retrieve the contents of the bitstream.
      *
      * @param context   DSpace context object
      * @param bitstream DSpace bitstream
@@ -165,6 +166,20 @@ public interface BitstreamService extends DSpaceObjectService<Bitstream>, DSpace
      */
     public InputStream retrieve(Context context, Bitstream bitstream)
         throws IOException, SQLException, AuthorizeException;
+
+    /**
+     * Retrieve the contents of the bitstream.
+     *
+     * @param context   DSpace context object
+     * @param bitstream DSpace bitstream
+     * @param authorization true if authorization is required else false
+     * @return a File from which the bitstream can be read.
+     * @throws IOException        if IO error
+     * @throws SQLException       if database error
+     * @throws AuthorizeException if authorization error
+     */
+    public File retrieveFile(Context context, Bitstream bitstream, boolean authorization)
+            throws IOException, SQLException, AuthorizeException;
 
     /**
      * Determine if this bitstream is registered (available elsewhere on

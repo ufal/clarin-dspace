@@ -7,6 +7,7 @@
  */
 package org.dspace.storage.bitstore.service;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.sql.SQLException;
@@ -125,6 +126,18 @@ public interface BitstreamStorageService {
      */
     public InputStream retrieve(Context context, Bitstream bitstream)
         throws SQLException, IOException;
+
+    /**
+     * Retrieve the file of the bitstream with ID. If the bitstream does not
+     * exist, or is marked deleted, returns null.
+     *
+     * @param context   The current context
+     * @param bitstream The bitstream to retrieve
+     * @return The file, or null
+     * @throws IOException  If a problem occurs while retrieving the bits
+     * @throws SQLException If a problem occurs accessing the RDBMS
+     */
+    public File retrieveFile(Context context, Bitstream bitstream) throws SQLException, IOException;
 
     /**
      * Clean up the bitstream storage area. This method deletes any bitstreams

@@ -11,7 +11,8 @@
 ##
 ## See org.dspace.core.Email for information on the format of this file.
 ##
-#set($subject = 'Download instructions')
+#set($subject = "${config.get('dspace.shortname')}: Download instructions")
+#set($phone = ${config.get('mail.message.helpdesk.telephone')})
 To download the file you have requested, please click the link below:
  ${params[1]}
   
@@ -19,7 +20,10 @@ Remember, the file is distributed under specific license:
  ${params[2]}
 
 If you have trouble downloading the file or if you did not request this download please contact
-${params[3]} or call us at ${params[4]}
+${params[3]}
+#if( $phone )
+or call us at ${phone}.
+#end
 
 
 ${params[5]} Team
@@ -28,4 +32,6 @@ _____________________________________
 ${params[6]},
 WWW: ${params[7]}
 Email: ${params[3]}
-Tel.: ${params[4]}
+#if( $phone )
+Tel.: ${phone}
+#end

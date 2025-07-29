@@ -47,6 +47,7 @@ import org.dspace.content.clarin.ClarinUserMetadata;
 import org.dspace.content.clarin.ClarinUserRegistration;
 import org.dspace.content.service.BitstreamService;
 import org.dspace.content.service.ItemService;
+import org.dspace.content.service.clarin.ClarinItemService;
 import org.dspace.content.service.clarin.ClarinLicenseResourceMappingService;
 import org.dspace.content.service.clarin.ClarinLicenseResourceUserAllowanceService;
 import org.dspace.content.service.clarin.ClarinUserMetadataService;
@@ -86,6 +87,8 @@ public class ClarinUserMetadataRestController {
 
     @Autowired
     ItemService itemService;
+    @Autowired
+    ClarinItemService clarinItemService;
 
     @Autowired
     ConfigurationService configurationService;
@@ -172,7 +175,7 @@ public class ClarinUserMetadataRestController {
             try {
                 String email = getEmailFromUserMetadata(clarinUserMetadataRestList);
                 this.sendEmailWithDownloadLink(context, item, clarinLicense,
-                        email, downloadToken, MailType.ALLZIP, clarinUserMetadataRestList);
+                        email, downloadToken, MailType.ALLZIP, clarinUserMetadataRestList, item.getHandle());
             } catch (MessagingException e) {
                 log.error("Cannot send the download email because: " + e.getMessage());
                 throw new RuntimeException("Cannot send the download email because: " + e.getMessage());
@@ -252,8 +255,16 @@ public class ClarinUserMetadataRestController {
             // If yes - send token to e-mail
             try {
                 String email = getEmailFromUserMetadata(clarinUserMetadataRestList);
+                List<Item> items = clarinItemService.findByBitstreamUUID(context, bitstreamUUID);
+                if (CollectionUtils.isEmpty(items)) {
+                    throw new NotFoundException("No items found for the given bitstream UUID: " + bitstreamUUID);
+                } else if (items.size() > 1) {
+                    // This situation is not expected. A bitstream should be linked to only one item.
+                    log.error("Multiple items ({}) found for bitstream UUID: {}. Expected only one.",
+                            items.size(), bitstreamUUID);
+                }
                 this.sendEmailWithDownloadLink(context, bitstream, clarinLicense,
-                        email, downloadToken, MailType.BITSTREAM, clarinUserMetadataRestList);
+                        email, downloadToken, MailType.BITSTREAM, clarinUserMetadataRestList, items.get(0).getHandle());
             } catch (MessagingException e) {
                 log.error("Cannot send the download email because: " + e.getMessage());
                 throw new RuntimeException("Cannot send the download email because: " + e.getMessage());
@@ -271,7 +282,8 @@ public class ClarinUserMetadataRestController {
                                            String email,
                                            String downloadToken,
                                            MailType mailType,
-                                           List<ClarinUserMetadataRest> clarinUserMetadataRestList)
+                                           List<ClarinUserMetadataRest> clarinUserMetadataRestList,
+                                           String itemHandle)
             throws IOException, SQLException, MessagingException {
         if (StringUtils.isBlank(email)) {
             log.error("Cannot send email with download link because the email is empty.");
@@ -287,7 +299,7 @@ public class ClarinUserMetadataRestController {
         // Fetch DSpace main cfg info and send it in the email
         String uiUrl = configurationService.getProperty("dspace.ui.url", "");
         String helpDeskEmail = configurationService.getProperty("lr.help.mail", "");
-        String helpDeskPhoneNum = configurationService.getProperty("lr.help.phone", "");
+        String helpDeskPhoneNum = configurationService.getProperty("mail.message.helpdesk.telephone", "");
         String dspaceName = configurationService.getProperty("dspace.name", "");
         String dspaceNameShort = configurationService.getProperty("dspace.shortname", "");
 
@@ -320,7 +332,8 @@ public class ClarinUserMetadataRestController {
         }
         // If previous mail fails with exception, this block never executes = admin is NOT
         // notified, if the mail is not really sent (if it fails HERE, not later, e.g. due to mail server issue).
-        sendAdminNotificationEmail(context, downloadLink, dso, clarinLicense, mailType, clarinUserMetadataRestList);
+        sendAdminNotificationEmail(context, downloadLink, dso, clarinLicense,
+                                    mailType, clarinUserMetadataRestList, itemHandle);
 
     }
 
@@ -347,7 +360,8 @@ public class ClarinUserMetadataRestController {
 
     private void addAdminEmailArguments(Email mail, MailType mailType, DSpaceObject dso, String downloadLink,
                                         ClarinLicense clarinLicense, Context context,
-                                        List<ClarinUserMetadataRest> extraMetadata) {
+                                        List<ClarinUserMetadataRest> extraMetadata,
+                                        String itemHandle) {
         if (mailType == MailType.ALLZIP) {
             mail.addArgument("all files requested");
         } else if (mailType == MailType.BITSTREAM) {
@@ -372,6 +386,7 @@ public class ClarinUserMetadataRestController {
             exdata.append(data.getMetadataKey()).append(": ").append(data.getMetadataValue()).append(", ");
         }
         mail.addArgument(exdata.toString());
+        mail.addArgument(itemHandle);
     }
 
     private void sendAdminNotificationEmail(Context context,
@@ -379,7 +394,8 @@ public class ClarinUserMetadataRestController {
                                             DSpaceObject dso,
                                             ClarinLicense clarinLicense,
                                             MailType mailType,
-                                            List<ClarinUserMetadataRest> extraMetadata)
+                                            List<ClarinUserMetadataRest> extraMetadata,
+                                            String itemHandle)
             throws MessagingException, IOException {
         try {
             Locale locale = context.getCurrentLocale();
@@ -391,7 +407,8 @@ public class ClarinUserMetadataRestController {
                 for (String cc : ccEmails) {
                     email2Admin.addRecipient(cc);
                 }
-                addAdminEmailArguments(email2Admin, mailType, dso, downloadLink, clarinLicense, context, extraMetadata);
+                addAdminEmailArguments(email2Admin, mailType, dso, downloadLink,
+                                            clarinLicense, context, extraMetadata, itemHandle);
 
             }
             email2Admin.send();

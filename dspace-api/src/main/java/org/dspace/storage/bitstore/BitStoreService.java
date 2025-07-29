@@ -7,6 +7,7 @@
  */
 package org.dspace.storage.bitstore;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
@@ -44,6 +45,16 @@ public interface BitStoreService {
      *                             asset with ID exists in the store
      */
     public InputStream get(Bitstream bitstream) throws IOException;
+
+    /**
+     * Retrieve the bits for bitstream
+     *
+     * @param bitstream DSpace Bitstream object
+     * @return The File
+     * @throws java.io.IOException If a problem occurs while retrieving the bits, or if no
+     *                             asset with ID exists in the store
+     */
+    public File getFile(Bitstream bitstream) throws IOException;
 
     /**
      * Store a stream of bits.
