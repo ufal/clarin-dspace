@@ -74,7 +74,11 @@ public class ClarinEPersonImportControllerIT  extends AbstractControllerIntegrat
                             .contentType(contentType)
                             .param("projection", "full")
                             .param("selfRegistered", "true")
-                            .param("lastActive", "2018-02-10T13:21:29.733"))
+                            .param("lastActive", "2018-02-10T13:21:29.733")
+                            .param("passwordHashStr",
+                                    "5b62ec4a3492ec34f1e659e93a6c204c8a72b2f53d1a60e83f48bdb2e5718ebf")
+                            .param("salt", "7f9d4e63bde7a0d546d8e6f4e32870f3")
+                            .param("digestAlgorithm", "SHA-512"))
                     .andExpect(status().isOk())
                     .andDo(result -> idRef
                             .set(UUID.fromString(read(result.getResponse().getContentAsString(), "$.id"))));
@@ -88,7 +92,7 @@ public class ClarinEPersonImportControllerIT  extends AbstractControllerIntegrat
             assertFalse(createdEperson.getRequireCertificate());
             assertEquals(createdEperson.getFirstName(), "John");
             assertEquals(createdEperson.getLastName(), "Doe");
-
+            assertTrue(createdEperson.hasPasswordSet());
         } finally {
             EPersonBuilder.deleteEPerson(idRef.get());
         }

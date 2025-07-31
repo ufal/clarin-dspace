@@ -1,0 +1,22 @@
+name: Reviewer Label Management
+
+on:
+  pull_request:
+    types: [review_requested]
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  manage-reviewer-labels:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Apply reviewer labels
+        uses: mazoea/ga-maz/label-review@master
+        with:
+          target-reviewer: 'vidiecan'
+          assigned-label: 'REVIEW-in-progress'
+          completed-label: 'REVIEW-done'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
