@@ -21,6 +21,7 @@ import javax.servlet.ServletInputStream;
 import javax.servlet.http.HttpServletRequest;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.commons.codec.DecoderException;
 import org.apache.commons.lang3.StringUtils;
 import org.dspace.app.rest.converter.ConverterService;
 import org.dspace.app.rest.exception.UnprocessableEntityException;
@@ -32,6 +33,7 @@ import org.dspace.content.clarin.ClarinUserRegistration;
 import org.dspace.content.service.clarin.ClarinUserRegistrationService;
 import org.dspace.core.Context;
 import org.dspace.eperson.EPerson;
+import org.dspace.eperson.PasswordHash;
 import org.dspace.eperson.service.EPersonService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -74,7 +76,7 @@ public class ClarinEPersonImportController {
     @PreAuthorize("hasAuthority('ADMIN')")
     @RequestMapping(method = RequestMethod.POST, value = "/eperson")
     public EPersonRest importEPerson(HttpServletRequest request)
-            throws AuthorizeException, SQLException {
+            throws AuthorizeException, SQLException, DecoderException {
         Context context = obtainContext(request);
         if (Objects.isNull(context)) {
             throw new RuntimeException("Context is null!");
@@ -84,6 +86,9 @@ public class ClarinEPersonImportController {
         String selfRegisteredString = request.getParameter("selfRegistered");
         boolean selfRegistered = getBooleanFromString(selfRegisteredString);
         String lastActiveString = request.getParameter("lastActive");
+        String passwordHashStr = request.getParameter("passwordHashStr");
+        String algorithm = request.getParameter("digestAlgorithm");
+        String salt = request.getParameter("salt");
         Date lastActive;
         try {
             lastActive = getDateFromString(lastActiveString);
@@ -95,6 +100,9 @@ public class ClarinEPersonImportController {
         EPerson eperson = ePersonService.find(context, UUID.fromString(epersonRest.getUuid()));
         eperson.setSelfRegistered(selfRegistered);
         eperson.setLastActive(lastActive);
+        //the password is already hashed in the request
+        PasswordHash passwordHash = new PasswordHash(algorithm, salt, passwordHashStr);
+        ePersonService.setPasswordHash(eperson, passwordHash);
         ePersonService.update(context, eperson);
 
         epersonRest = converter.toRest(eperson, utils.obtainProjection());
