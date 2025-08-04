@@ -426,6 +426,8 @@ public class VersionRestRepositoryIT extends AbstractControllerIntegrationTest {
 
     @Test
     public void createFirstVersionItemForbiddenTest() throws Exception {
+        configurationService.setProperty("versioning.submitterCanCreateNewVersion", false);
+
         String epersonToken = getAuthToken(eperson.getEmail(), password);
         getClient(epersonToken).perform(post("/api/versioning/versions")
                                .param("summary", "test summary!")
