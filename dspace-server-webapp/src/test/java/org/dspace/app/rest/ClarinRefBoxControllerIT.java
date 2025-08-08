@@ -258,6 +258,24 @@ public class ClarinRefBoxControllerIT extends AbstractControllerIntegrationTest 
     }
 
     @Test
+    public void testRefboxInfoWithBothAuthorAndPublisher() throws Exception {
+        context.turnOffAuthorisationSystem();
+        Item itemWithBoth = ItemBuilder.createItem(context, collection)
+                .withTitle("Test Item")
+                .withAuthor("Test Author")
+                .withMetadata("dc", "publisher", null, "Test Publisher")
+                .withIssueDate("2023-01-01")
+                .build();
+        context.restoreAuthSystemState();
+
+        String token = getAuthToken(admin.getEmail(), password);
+        getClient(token).perform(get("/api/core/refbox?handle=" + itemWithBoth.getHandle()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.displayText").value(org.hamcrest.Matchers.containsString("Test Author")))
+                .andExpect(jsonPath("$.displayText").value(org.hamcrest.Matchers.containsString("Test Publisher")));
+    }
+
+    @Test
     public void testDisplayTextWithOneAuthor() throws Exception {
         context.turnOffAuthorisationSystem();
         Item itemOneAuthor = ItemBuilder.createItem(context, collection)

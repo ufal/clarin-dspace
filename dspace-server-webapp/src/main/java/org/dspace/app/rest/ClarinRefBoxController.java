@@ -352,11 +352,6 @@ public class ClarinRefBoxController {
         // 1. Authors
         List<String> authors = itemService.getMetadata(item, "dc", "contributor", "author", DEFAULT_LANGUAGE)
                 .stream().map(MetadataValue::getValue).collect(Collectors.toList());
-        // If there are no authors, try to get the publisher metadata
-        if (authors.isEmpty()) {
-            authors = itemService.getMetadata(item, "dc", "publisher", null, DEFAULT_LANGUAGE)
-                    .stream().map(MetadataValue::getValue).collect(Collectors.toList());
-        }
         String authorText = formatAuthors(authors);
 
         // 2. Year
@@ -370,16 +365,26 @@ public class ClarinRefBoxController {
         // 3. Title
         String title = itemService.getMetadataFirstValue(item, "dc", "title", null, DEFAULT_LANGUAGE);
 
-        // 4. Repository name
+        // 4. Publisher
+        String publisher = itemService.getMetadataFirstValue(item, "dc", "publisher", null, DEFAULT_LANGUAGE);
+
+        // 5. Repository name
         String repository = configurationService.getProperty("dspace.name");
 
-        // 5. Identifier URI (prefer DOI)
+        // 6. Identifier URI (prefer DOI)
         String identifier = itemService.getMetadataFirstValue(item, "dc", "identifier", "doi", DEFAULT_LANGUAGE);
         if (identifier == null) {
             identifier = itemService.getMetadataFirstValue(item, "dc", "identifier", "uri", DEFAULT_LANGUAGE);
         }
 
-        // 6. Format
+        // 7. Format as: {authors}, {year}, {title}, {publisher}, {repository}, {identifier}
+        // If no authors, use publisher as author fallback for backwards compatibility
+        if (authorText == null || authorText.isEmpty()) {
+            if (publisher != null && !publisher.isEmpty()) {
+                authorText = publisher;
+            }
+        }
+
         // Using html tags to format the output because this display text will be rendered in the UI
         StringBuilder sb = new StringBuilder();
         if (authorText != null && !authorText.isEmpty()) {
@@ -392,6 +397,10 @@ public class ClarinRefBoxController {
             sb.append(year);
         }
         sb.append(", \n  <i>").append(title != null ? title : "").append("</i>");
+        if (publisher != null && !publisher.isEmpty() &&
+            (authorText == null || authorText.isEmpty() || !authorText.equals(publisher))) {
+            sb.append(", ").append(publisher);
+        }
         if (repository != null && !repository.isEmpty()) {
             sb.append(", ").append(repository);
         }
