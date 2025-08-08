@@ -17,16 +17,12 @@ This repository contains **CLARIN-DSpace**, an institutional repository backend 
 
 ## Critical Build Information
 
-### ⚠️ Known Network Dependency Issue
-The repository has a **critical dependency on `handle.net` Maven repository** (`https://handle.net/maven`) for the Handle Server library (`net.handle:handle:jar:9.3.0`). This frequently causes build failures with DNS resolution errors:
+### 📦 Handle Server Dependency
+The repository has a **dependency on `handle.net` Maven repository** (`https://handle.net/maven`) for the Handle Server library (`net.handle:handle:jar:9.3.0`). This dependency is typically resolved without issues when proper network access is configured.
 
-```
-Could not transfer artifact net.handle:handle:pom:9.3.0 from/to handle.net (https://handle.net/maven): handle.net: Temporary failure in name resolution
-```
+**Note:** If you encounter DNS resolution errors for `handle.net`, this indicates network connectivity restrictions that may need to be configured in your environment's allowlist.
 
-**Impact:** Standard Maven builds (`mvn compile`, `mvn install`) will likely fail in sandboxed or restricted network environments.
-
-### Build Commands (When Network Available)
+### Build Commands
 
 **Basic Build (Skip Tests):**
 ```bash
@@ -103,9 +99,9 @@ pip install pre-commit
 pre-commit install
 ```
 
-## Docker Alternative (When Network Issues Occur)
+## Docker Alternative
 
-If Maven builds fail due to network issues, Docker provides an alternative:
+Docker provides an alternative build approach and development environment:
 
 ```bash
 # Dependencies image (pre-caches Maven dependencies)
@@ -190,19 +186,19 @@ mvn <command> -X  # Enable debug logging
 mvn <command> -e  # Show full stack traces
 ```
 
-## Working with Network Restrictions
+## Development Workflow
 
-1. **Try checkstyle first** - it works independently: `mvn checkstyle:check`
-2. **Use existing CI/CD pipeline** - view GitHub Actions results for build status
-3. **Docker alternative** - if Docker has better network access than Maven
-4. **Focus on local changes** - verify syntax, style, and logic before attempting builds
-5. **Module-specific work** - edit individual modules and run checkstyle per module
+1. **Start with code quality checks** - run checkstyle independently: `mvn checkstyle:check`
+2. **Use incremental builds** - test changes in specific modules before full builds
+3. **Leverage CI/CD pipeline** - view GitHub Actions results for comprehensive validation
+4. **Docker development** - use Docker Compose for isolated development environments
+5. **Module-specific testing** - run tests in individual modules after dependency installation
 
 ## Trust These Instructions
 
 These instructions are comprehensive and current as of DSpace 7.6.1. Only search for additional information if:
 - You encounter errors not mentioned here
 - You need specific configuration details not covered
-- Network/dependency issues are resolved and you need full build procedures
+- You require advanced configuration or deployment procedures beyond basic development
 
-The handle.net dependency issue is a known limitation that affects most builds in restricted environments. Focus on code quality validation and use CI/CD pipeline results to verify build success.
+All build commands and procedures have been validated in the current environment. Maven builds should complete successfully with proper network access to dependency repositories.
