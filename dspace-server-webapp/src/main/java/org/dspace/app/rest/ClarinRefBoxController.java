@@ -349,6 +349,58 @@ public class ClarinRefBoxController {
      * Build the display text for the RefBox based on the Item Metadata.
      */
     private String buildDisplayText(Context context, Item item) {
+        // Check for custom format template
+        String formatTemplate = itemService.getMetadataFirstValue(item, "local", "refbox", "format", DEFAULT_LANGUAGE);
+
+        if (formatTemplate != null && !formatTemplate.isEmpty()) {
+            return buildDisplayTextFromTemplate(context, item, formatTemplate);
+        } else {
+            return buildDisplayTextDefault(context, item);
+        }
+    }
+
+    /**
+     * Build display text using a custom format template with variable interpolation.
+     * Supported variables: {title}, {authors}, {pid}, {repository}, {year}, {publisher}
+     */
+    private String buildDisplayTextFromTemplate(Context context, Item item, String template) {
+        // Extract all metadata values
+        List<String> authors = itemService.getMetadata(item, "dc", "contributor", "author", DEFAULT_LANGUAGE)
+                .stream().map(MetadataValue::getValue).collect(Collectors.toList());
+        String authorText = formatAuthors(authors);
+
+        String year = "";
+        String issued = itemService.getMetadataFirstValue(item, "dc", "date", "issued", DEFAULT_LANGUAGE);
+        if (issued != null && !issued.isEmpty()) {
+            year = issued.split("-")[0];
+        }
+
+        String title = itemService.getMetadataFirstValue(item, "dc", "title", null, DEFAULT_LANGUAGE);
+        String publisher = itemService.getMetadataFirstValue(item, "dc", "publisher", null, DEFAULT_LANGUAGE);
+        String repository = configurationService.getProperty("dspace.name");
+
+        // Get identifier (prefer DOI, fallback to URI)
+        String pid = itemService.getMetadataFirstValue(item, "dc", "identifier", "doi", DEFAULT_LANGUAGE);
+        if (pid == null) {
+            pid = itemService.getMetadataFirstValue(item, "dc", "identifier", "uri", DEFAULT_LANGUAGE);
+        }
+
+        // Perform template interpolation
+        String result = template;
+        result = result.replace("{title}", title != null ? title : "");
+        result = result.replace("{authors}", authorText != null ? authorText : "");
+        result = result.replace("{pid}", pid != null ? pid : "");
+        result = result.replace("{repository}", repository != null ? repository : "");
+        result = result.replace("{year}", year != null ? year : "");
+        result = result.replace("{publisher}", publisher != null ? publisher : "");
+
+        return result;
+    }
+
+    /**
+     * Build display text using the default hardcoded format.
+     */
+    private String buildDisplayTextDefault(Context context, Item item) {
         // 1. Authors
         List<String> authors = itemService.getMetadata(item, "dc", "contributor", "author", DEFAULT_LANGUAGE)
                 .stream().map(MetadataValue::getValue).collect(Collectors.toList());
