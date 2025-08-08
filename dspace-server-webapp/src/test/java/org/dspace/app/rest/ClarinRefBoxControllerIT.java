@@ -258,6 +258,84 @@ public class ClarinRefBoxControllerIT extends AbstractControllerIntegrationTest 
     }
 
     @Test
+    public void testRefboxInfoWithBothAuthorAndPublisher() throws Exception {
+        context.turnOffAuthorisationSystem();
+        Item itemWithBoth = ItemBuilder.createItem(context, collection)
+                .withTitle("Test Item")
+                .withAuthor("Test Author")
+                .withMetadata("dc", "publisher", null, "Test Publisher")
+                .withIssueDate("2023-01-01")
+                .build();
+        context.restoreAuthSystemState();
+
+        String token = getAuthToken(admin.getEmail(), password);
+        getClient(token).perform(get("/api/core/refbox?handle=" + itemWithBoth.getHandle()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.displayText").value(org.hamcrest.Matchers.containsString("Test Author")))
+                .andExpect(jsonPath("$.displayText").value(org.hamcrest.Matchers.containsString("Test Publisher")));
+    }
+
+    @Test
+    public void testRefboxInfoWithCustomFormatTemplate() throws Exception {
+        context.turnOffAuthorisationSystem();
+        Item itemWithTemplate = ItemBuilder.createItem(context, collection)
+                .withTitle("Custom Title")
+                .withAuthor("Custom Author")
+                .withMetadata("dc", "publisher", null, "Custom Publisher")
+                .withMetadata("local", "refbox", "format",
+                    "{authors} ({year}). {title}. {publisher}. {repository}. {pid}")
+                .withIssueDate("2024-01-01")
+                .build();
+        context.restoreAuthSystemState();
+
+        String token = getAuthToken(admin.getEmail(), password);
+        getClient(token).perform(get("/api/core/refbox?handle=" + itemWithTemplate.getHandle()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.displayText").value(org.hamcrest.Matchers
+                    .containsString("Custom Author (2024). Custom Title. Custom Publisher.")));
+    }
+
+    @Test
+    public void testRefboxInfoWithCustomFormatTemplatePartialVariables() throws Exception {
+        context.turnOffAuthorisationSystem();
+        Item itemWithPartialTemplate = ItemBuilder.createItem(context, collection)
+                .withTitle("Partial Title")
+                .withAuthor("Partial Author")
+                .withMetadata("local", "refbox", "format", "{authors}: {title} [{year}]")
+                .withIssueDate("2023-12-31")
+                .build();
+        context.restoreAuthSystemState();
+
+        String token = getAuthToken(admin.getEmail(), password);
+        getClient(token).perform(get("/api/core/refbox?handle=" + itemWithPartialTemplate.getHandle()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.displayText").value(org.hamcrest.Matchers
+                    .containsString("Partial Author: Partial Title [2023]")));
+    }
+
+    @Test
+    public void testRefboxInfoWithoutCustomFormatUsesDefault() throws Exception {
+        context.turnOffAuthorisationSystem();
+        Item itemWithoutTemplate = ItemBuilder.createItem(context, collection)
+                .withTitle("Default Title")
+                .withAuthor("Default Author")
+                .withMetadata("dc", "publisher", null, "Default Publisher")
+                .withIssueDate("2024-02-01")
+                .build();
+        context.restoreAuthSystemState();
+
+        String token = getAuthToken(admin.getEmail(), password);
+        getClient(token).perform(get("/api/core/refbox?handle=" + itemWithoutTemplate.getHandle()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.displayText").value(org.hamcrest.Matchers
+                    .containsString("Default Author")))
+                .andExpect(jsonPath("$.displayText").value(org.hamcrest.Matchers
+                    .containsString("Default Publisher")))
+                .andExpect(jsonPath("$.displayText").value(org.hamcrest.Matchers
+                    .containsString("<i>Default Title</i>")));
+    }
+
+    @Test
     public void testDisplayTextWithOneAuthor() throws Exception {
         context.turnOffAuthorisationSystem();
         Item itemOneAuthor = ItemBuilder.createItem(context, collection)

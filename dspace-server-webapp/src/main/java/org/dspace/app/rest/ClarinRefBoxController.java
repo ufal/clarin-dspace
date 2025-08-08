@@ -349,14 +349,61 @@ public class ClarinRefBoxController {
      * Build the display text for the RefBox based on the Item Metadata.
      */
     private String buildDisplayText(Context context, Item item) {
+        // Check for custom format template
+        String formatTemplate = itemService.getMetadataFirstValue(item, "local", "refbox", "format", DEFAULT_LANGUAGE);
+
+        if (formatTemplate != null && !formatTemplate.isEmpty()) {
+            return buildDisplayTextFromTemplate(context, item, formatTemplate);
+        } else {
+            return buildDisplayTextDefault(context, item);
+        }
+    }
+
+    /**
+     * Build display text using a custom format template with variable interpolation.
+     * Supported variables: {title}, {authors}, {pid}, {repository}, {year}, {publisher}
+     */
+    private String buildDisplayTextFromTemplate(Context context, Item item, String template) {
+        // Extract all metadata values
+        List<String> authors = itemService.getMetadata(item, "dc", "contributor", "author", DEFAULT_LANGUAGE)
+                .stream().map(MetadataValue::getValue).collect(Collectors.toList());
+        String authorText = formatAuthors(authors);
+
+        String year = "";
+        String issued = itemService.getMetadataFirstValue(item, "dc", "date", "issued", DEFAULT_LANGUAGE);
+        if (issued != null && !issued.isEmpty()) {
+            year = issued.split("-")[0];
+        }
+
+        String title = itemService.getMetadataFirstValue(item, "dc", "title", null, DEFAULT_LANGUAGE);
+        String publisher = itemService.getMetadataFirstValue(item, "dc", "publisher", null, DEFAULT_LANGUAGE);
+        String repository = configurationService.getProperty("dspace.name");
+
+        // Get identifier (prefer DOI, fallback to URI)
+        String pid = itemService.getMetadataFirstValue(item, "dc", "identifier", "doi", DEFAULT_LANGUAGE);
+        if (pid == null) {
+            pid = itemService.getMetadataFirstValue(item, "dc", "identifier", "uri", DEFAULT_LANGUAGE);
+        }
+
+        // Perform template interpolation
+        String result = template;
+        result = result.replace("{title}", title != null ? title : "");
+        result = result.replace("{authors}", authorText != null ? authorText : "");
+        result = result.replace("{pid}", pid != null ? pid : "");
+        result = result.replace("{repository}", repository != null ? repository : "");
+        result = result.replace("{year}", year != null ? year : "");
+        result = result.replace("{publisher}", publisher != null ? publisher : "");
+
+        return result;
+    }
+
+    /**
+     * Build display text using the default hardcoded format.
+     */
+    private String buildDisplayTextDefault(Context context, Item item) {
         // 1. Authors
         List<String> authors = itemService.getMetadata(item, "dc", "contributor", "author", DEFAULT_LANGUAGE)
                 .stream().map(MetadataValue::getValue).collect(Collectors.toList());
-        // If there are no authors, try to get the publisher metadata
-        if (authors.isEmpty()) {
-            authors = itemService.getMetadata(item, "dc", "publisher", null, DEFAULT_LANGUAGE)
-                    .stream().map(MetadataValue::getValue).collect(Collectors.toList());
-        }
         String authorText = formatAuthors(authors);
 
         // 2. Year
@@ -370,16 +417,26 @@ public class ClarinRefBoxController {
         // 3. Title
         String title = itemService.getMetadataFirstValue(item, "dc", "title", null, DEFAULT_LANGUAGE);
 
-        // 4. Repository name
+        // 4. Publisher
+        String publisher = itemService.getMetadataFirstValue(item, "dc", "publisher", null, DEFAULT_LANGUAGE);
+
+        // 5. Repository name
         String repository = configurationService.getProperty("dspace.name");
 
-        // 5. Identifier URI (prefer DOI)
+        // 6. Identifier URI (prefer DOI)
         String identifier = itemService.getMetadataFirstValue(item, "dc", "identifier", "doi", DEFAULT_LANGUAGE);
         if (identifier == null) {
             identifier = itemService.getMetadataFirstValue(item, "dc", "identifier", "uri", DEFAULT_LANGUAGE);
         }
 
-        // 6. Format
+        // 7. Format as: {authors}, {year}, {title}, {publisher}, {repository}, {identifier}
+        // If no authors, use publisher as author fallback for backwards compatibility
+        if (authorText == null || authorText.isEmpty()) {
+            if (publisher != null && !publisher.isEmpty()) {
+                authorText = publisher;
+            }
+        }
+
         // Using html tags to format the output because this display text will be rendered in the UI
         StringBuilder sb = new StringBuilder();
         if (authorText != null && !authorText.isEmpty()) {
@@ -392,6 +449,10 @@ public class ClarinRefBoxController {
             sb.append(year);
         }
         sb.append(", \n  <i>").append(title != null ? title : "").append("</i>");
+        if (publisher != null && !publisher.isEmpty() &&
+            (authorText == null || authorText.isEmpty() || !authorText.equals(publisher))) {
+            sb.append(", ").append(publisher);
+        }
         if (repository != null && !repository.isEmpty()) {
             sb.append(", ").append(repository);
         }
