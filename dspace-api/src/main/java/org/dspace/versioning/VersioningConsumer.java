@@ -33,6 +33,7 @@ import org.dspace.core.Context;
 import org.dspace.discovery.IndexEventConsumer;
 import org.dspace.event.Consumer;
 import org.dspace.event.Event;
+import org.dspace.services.factory.DSpaceServicesFactory;
 import org.dspace.versioning.factory.VersionServiceFactory;
 import org.dspace.versioning.service.VersionHistoryService;
 import org.dspace.versioning.utils.RelationshipVersioningUtils;
@@ -58,6 +59,7 @@ public class VersioningConsumer implements Consumer {
     private RelationshipTypeService relationshipTypeService;
     private RelationshipService relationshipService;
     private RelationshipVersioningUtils relationshipVersioningUtils;
+    private boolean unarchivePreviousItem;
 
     @Override
     public void initialize() throws Exception {
@@ -67,6 +69,9 @@ public class VersioningConsumer implements Consumer {
         relationshipTypeService = ContentServiceFactory.getInstance().getRelationshipTypeService();
         relationshipService = ContentServiceFactory.getInstance().getRelationshipService();
         relationshipVersioningUtils = VersionServiceFactory.getInstance().getRelationshipVersioningUtils();
+        // this configuration property controls whether previous item should be unarchived or not
+        unarchivePreviousItem = DSpaceServicesFactory.getInstance().getConfigurationService().getBooleanProperty(
+                "versioning.unarchive.previous.version", true);
     }
 
     @Override
@@ -131,8 +136,9 @@ public class VersioningConsumer implements Consumer {
         }
 
         // unarchive previous item
-        // clarin-dspace will not unarchive previous item versions
-        // unarchiveItem(ctx, previousItem);
+        if (unarchivePreviousItem) {
+            unarchiveItem(ctx, previousItem);
+        }
 
         // update relationships
         updateRelationships(ctx, latestItem, previousItem);
