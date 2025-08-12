@@ -131,7 +131,8 @@ public class VersioningConsumer implements Consumer {
         }
 
         // unarchive previous item
-        unarchiveItem(ctx, previousItem);
+        // clarin-dspace will not unarchive previous item versions
+        // unarchiveItem(ctx, previousItem);
 
         // update relationships
         updateRelationships(ctx, latestItem, previousItem);
