@@ -137,7 +137,8 @@ public class VersioningConsumer implements Consumer {
 
         // unarchive previous item
         // the "versioning.unarchive.previous.version" property controls whether previous item is unarchived or not
-        if (configurationService.getBooleanProperty("versioning.unarchive.previous.version", true)) {
+        if (!latestItem.isArchived() ||
+                configurationService.getBooleanProperty("versioning.unarchive.previous.version", true)) {
             unarchiveItem(ctx, previousItem);
         }
 
