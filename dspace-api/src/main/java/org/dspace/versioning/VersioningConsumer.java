@@ -33,6 +33,8 @@ import org.dspace.core.Context;
 import org.dspace.discovery.IndexEventConsumer;
 import org.dspace.event.Consumer;
 import org.dspace.event.Event;
+import org.dspace.services.ConfigurationService;
+import org.dspace.services.factory.DSpaceServicesFactory;
 import org.dspace.versioning.factory.VersionServiceFactory;
 import org.dspace.versioning.service.VersionHistoryService;
 import org.dspace.versioning.utils.RelationshipVersioningUtils;
@@ -58,6 +60,8 @@ public class VersioningConsumer implements Consumer {
     private RelationshipTypeService relationshipTypeService;
     private RelationshipService relationshipService;
     private RelationshipVersioningUtils relationshipVersioningUtils;
+    private ConfigurationService configurationService;
+    private boolean unarchivePreviousItem;
 
     @Override
     public void initialize() throws Exception {
@@ -67,6 +71,7 @@ public class VersioningConsumer implements Consumer {
         relationshipTypeService = ContentServiceFactory.getInstance().getRelationshipTypeService();
         relationshipService = ContentServiceFactory.getInstance().getRelationshipService();
         relationshipVersioningUtils = VersionServiceFactory.getInstance().getRelationshipVersioningUtils();
+        configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
     }
 
     @Override
@@ -131,7 +136,11 @@ public class VersioningConsumer implements Consumer {
         }
 
         // unarchive previous item
-        unarchiveItem(ctx, previousItem);
+        // the "versioning.unarchive.previous.version" property controls whether previous item is unarchived or not
+        if (!latestItem.isArchived() ||
+                configurationService.getBooleanProperty("versioning.unarchive.previous.version", true)) {
+            unarchiveItem(ctx, previousItem);
+        }
 
         // update relationships
         updateRelationships(ctx, latestItem, previousItem);
