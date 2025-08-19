@@ -760,6 +760,9 @@ public class CollectionServiceImpl extends DSpaceObjectServiceImpl<Collection> i
             if (itemService.isOwningCollection(item, collection)) {
                 // the collection to be deleted is the owning collection, thus remove
                 // the item from all collections it belongs to
+                if (item.isArchived()) {
+                    item.setArchived(false);
+                }
                 itemService.delete(context, item);
             } else {
                 // the item was only mapped to this collection, so just remove it
