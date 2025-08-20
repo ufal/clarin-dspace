@@ -106,9 +106,6 @@ public class VersioningServiceImpl implements VersioningService {
 
             VersionHistory history = version.getVersionHistory();
             if (item != null) {
-                if (item.isArchived() && !versionHistoryService.isLastVersion(c, item)) {
-                    item.setArchived(false);
-                }
                 // take care of the item identifiers
                 provider.deleteVersionedItem(c, version, history);
             }
@@ -148,9 +145,8 @@ public class VersioningServiceImpl implements VersioningService {
                             workflowItemService.delete(c, wfi);
                         }
                     }
-                } else {
-                    itemService.delete(c, item);
                 }
+                itemService.delete(c, item);
             }
         } catch (Exception e) {
             c.abort();
