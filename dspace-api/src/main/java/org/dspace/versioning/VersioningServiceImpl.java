@@ -12,6 +12,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Objects;
 
+import com.ibm.icu.impl.Assert;
 import org.dspace.content.DCDate;
 import org.dspace.content.Item;
 import org.dspace.content.MetadataValue;
@@ -138,14 +139,17 @@ public class VersioningServiceImpl implements VersioningService {
                 if (!item.isArchived()) {
                     WorkspaceItem wsi = workspaceItemService.findByItem(c, item);
                     if (wsi != null) {
+                        Assert.fail("Item is not archived: workspaceItemService.deleteAll");
                         workspaceItemService.deleteAll(c, wsi);
                     } else {
                         WorkflowItem wfi = workflowItemService.findByItem(c, item);
                         if (wfi != null) {
+                            Assert.fail("Item is not archived: workflowItemService.delete");
                             workflowItemService.delete(c, wfi);
                         }
                     }
                 } else {
+                    Assert.fail("Item is archived");
                     itemService.delete(c, item);
                 }
             }
