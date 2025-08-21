@@ -833,7 +833,9 @@ public class ItemServiceImpl extends DSpaceObjectServiceImpl<Item> implements It
         item.setOwningCollection(null);
 
         // Finally remove item row
-        itemDAO.delete(context, item);
+        if (itemDAO.findByID(context, Item.class, item.getID()) != null) {
+            itemDAO.delete(context, item);
+        }
     }
 
     protected void removeRequest(Context context, Item item) throws SQLException {

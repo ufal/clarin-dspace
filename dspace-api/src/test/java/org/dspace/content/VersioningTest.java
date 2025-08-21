@@ -89,6 +89,8 @@ public class VersioningTest extends AbstractUnitTest {
             WorkspaceItem wsi = workspaceItemService.findByItem(context, version.getItem());
 
             versionedItem = installItemService.installItem(context, wsi);
+
+            context.commit();
             context.restoreAuthSystemState();
         } catch (AuthorizeException ex) {
             log.error("Authorization Error in init", ex);
@@ -167,6 +169,16 @@ public class VersioningTest extends AbstractUnitTest {
         String handle = versionedItem.getHandle();
         versionService.removeVersion(context, versionedItem);
         assertThat("Test_version_delete", itemService.find(context, versionedItem.getID()), nullValue());
+        assertThat("Test_version_handle_delete", handleService.resolveToObject(context, handle), nullValue());
+        context.restoreAuthSystemState();
+    }
+
+    @Test
+    public void testOriginalVersionDelete() throws Exception {
+        context.turnOffAuthorisationSystem();
+        String handle = originalItem.getHandle();
+        versionService.removeVersion(context, originalItem);
+        assertThat("Test_version_delete", itemService.find(context, originalItem.getID()), nullValue());
         assertThat("Test_version_handle_delete", handleService.resolveToObject(context, handle), nullValue());
         context.restoreAuthSystemState();
     }
