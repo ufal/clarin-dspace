@@ -146,6 +146,7 @@ public class VersioningServiceImpl implements VersioningService {
                         }
                     }
                 }
+                // item must be deleted regardless item is archived or not
                 itemService.delete(c, item);
             }
         } catch (Exception e) {

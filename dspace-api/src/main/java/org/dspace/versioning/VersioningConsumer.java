@@ -61,7 +61,6 @@ public class VersioningConsumer implements Consumer {
     private RelationshipService relationshipService;
     private RelationshipVersioningUtils relationshipVersioningUtils;
     private ConfigurationService configurationService;
-    private boolean unarchivePreviousItem;
 
     @Override
     public void initialize() throws Exception {
