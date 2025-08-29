@@ -178,7 +178,9 @@ public class VersioningTest extends AbstractUnitTest {
         context.turnOffAuthorisationSystem();
         String handle = originalItem.getHandle();
         versionService.removeVersion(context, originalItem);
-        assertThat("Test_version_delete", itemService.find(context, originalItem.getID()), nullValue());
+        // org.dspace.versioning.VersioningServiceImpl.delete
+        assertThat("The item should not exist after removeVersion",
+                itemService.find(context, originalItem.getID()), nullValue());
         assertThat("Test_version_handle_delete", handleService.resolveToObject(context, handle), nullValue());
         context.restoreAuthSystemState();
     }
