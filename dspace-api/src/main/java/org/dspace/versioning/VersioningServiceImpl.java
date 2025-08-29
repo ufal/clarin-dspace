@@ -145,6 +145,7 @@ public class VersioningServiceImpl implements VersioningService {
                             workflowItemService.delete(c, wfi);
                         }
                     }
+                }
                 // item must be deleted regardless of whether the item is archived or not
                 itemService.delete(c, item);
             }
