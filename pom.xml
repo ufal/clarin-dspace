@@ -1825,6 +1825,11 @@
                 <artifactId>byte-buddy</artifactId>
                 <version>1.11.13</version>
             </dependency>
+            <dependency>
+                <groupId>net.minidev</groupId>
+                <artifactId>json-smart</artifactId>
+                <version>2.5.1</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 

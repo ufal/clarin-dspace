@@ -318,7 +318,7 @@ public abstract class JWTTokenHandler {
      * @return EPerson object (or null, if not found)
      * @throws SQLException
      */
-    private EPerson getEPerson(Context context, JWTClaimsSet jwtClaimsSet) throws SQLException {
+    protected EPerson getEPerson(Context context, JWTClaimsSet jwtClaimsSet) throws SQLException {
         return ePersonClaimProvider.getEPerson(context, jwtClaimsSet);
     }
 

@@ -24,6 +24,7 @@ import org.dspace.app.rest.security.RestAuthenticationService;
 import org.dspace.app.rest.utils.ContextUtil;
 import org.dspace.authenticate.AuthenticationMethod;
 import org.dspace.authenticate.service.AuthenticationService;
+import org.dspace.content.clarin.PersonalAccessToken;
 import org.dspace.core.Context;
 import org.dspace.eperson.EPerson;
 import org.dspace.eperson.service.EPersonService;
@@ -125,7 +126,12 @@ public class JWTTokenRestAuthenticationServiceImpl implements RestAuthentication
                 token = getShortLivedToken(request);
                 ePerson = shortLivedJWTTokenHandler.parseEPersonFromToken(token, request, context);
             } else {
-                ePerson = loginJWTTokenHandler.parseEPersonFromToken(token, request, context);
+                if (token.startsWith(PersonalAccessToken.PREFIX)) {
+                    ePerson = loginJWTTokenHandler.parseEPersonFromPersonalAccessToken(
+                            token.substring(PersonalAccessToken.PREFIX.length()), context);
+                } else {
+                    ePerson = loginJWTTokenHandler.parseEPersonFromToken(token, request, context);
+                }
             }
             return ePerson;
         } catch (JOSEException e) {
