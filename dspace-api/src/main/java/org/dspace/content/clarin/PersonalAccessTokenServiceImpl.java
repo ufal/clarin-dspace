@@ -56,11 +56,13 @@ public class PersonalAccessTokenServiceImpl implements PersonalAccessTokenServic
     @Override
     public String createToken(Context context, UUID uuid, Date expirationTime) throws SQLException, AuthorizeException {
 
-        if (context.getCurrentUser() == null) {
+        boolean ignoreAuth = context.ignoreAuthorization();
+
+        if (!ignoreAuth && context.getCurrentUser() == null) {
             throw new AuthorizeException("You must be authenticated user");
         }
 
-        if (!authorizeService.isAdmin(context) && !context.getCurrentUser().getID().equals(uuid)) {
+        if (!ignoreAuth && !authorizeService.isAdmin(context) && !context.getCurrentUser().getID().equals(uuid)) {
             throw new AuthorizeException("You must be admin user to create personal access token for this User ID");
         }
 
@@ -96,28 +98,28 @@ public class PersonalAccessTokenServiceImpl implements PersonalAccessTokenServic
 
     @Override
     public void delete(Context context, UUID uuid) throws SQLException, AuthorizeException {
-        if (!authorizeService.isAdmin(context)) {
+        boolean ignoreAuth = context.ignoreAuthorization();
+        if (!ignoreAuth && !authorizeService.isAdmin(context)) {
             throw new AuthorizeException("You must be admin user");
         }
         PersonalAccessToken personalAccessToken = find(context, uuid);
         if (personalAccessToken != null) {
             personalAccessTokenDAO.delete(context, personalAccessToken);
         } else {
-            throw new BadRequestException("PersonalAccessToken doesn't exist");
+            throw new BadRequestException("PersonalAccessToken for user with ID: " + uuid + " doesn't exist");
         }
     }
 
     @Override
     public void deleteAll(Context context) throws SQLException, AuthorizeException {
-        if (!authorizeService.isAdmin(context)) {
+        boolean ignoreAuth = context.ignoreAuthorization();
+        if (!ignoreAuth && !authorizeService.isAdmin(context)) {
             throw new AuthorizeException("You must be admin user");
         }
         personalAccessTokenDAO.deleteAll(context);
     }
 
-    private void createToken(Context context, PersonalAccessToken pat)
-            throws SQLException {
-
+    private void createToken(Context context, PersonalAccessToken pat) throws SQLException {
         EPerson ePerson = ePersonDAO.findByID(context, EPerson.class, pat.getID());
 
         if (ePerson == null) {

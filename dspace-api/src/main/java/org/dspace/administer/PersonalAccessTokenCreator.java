@@ -35,7 +35,6 @@ public class PersonalAccessTokenCreator extends DSpaceRunnable<PersonalAccessTok
     private static final Logger log = LoggerFactory.getLogger(PersonalAccessTokenCreator.class);
     private static final int TOKEN_END_LENGTH = 3;
     private boolean help = false;
-    private UUID epersonUUID;
     private String email;
     private Date expirationDate;
     private PersonalAccessTokenService personalAccessTokenService;
@@ -73,14 +72,10 @@ public class PersonalAccessTokenCreator extends DSpaceRunnable<PersonalAccessTok
         personalAccessTokenService = ClarinServiceFactory.getInstance().getPersonalAccessTokenService();
         ePersonService = EPersonServiceFactory.getInstance().getEPersonService();
 
-        if (commandLine.hasOption("u")) {
-            epersonUUID = UUID.fromString(commandLine.getOptionValue("u"));
-        }
-
         expirationDate = getExpirationDate(commandLine.getOptionValue("x").toLowerCase());
 
-        if (commandLine.hasOption("e")) {
-            email = commandLine.getOptionValue("e");
+        if (commandLine.hasOption("m")) {
+            email = commandLine.getOptionValue("m");
         }
     }
 
@@ -99,38 +94,40 @@ public class PersonalAccessTokenCreator extends DSpaceRunnable<PersonalAccessTok
         }
 
         Context context = new Context();
+        try {
+            performScript(context);
+        } finally {
+            context.complete();
+        }
+
+    }
+
+    protected void performScript(Context context) throws Exception {
         EPerson ePerson = getEperson(context);
 
         if (ePerson == null) {
-            throw new IllegalArgumentException("Cannot find ePerson for this UUID");
+            throw new RuntimeException("Only authenticated user can run the script");
         }
         context.setCurrentUser(ePerson);
 
         String token = personalAccessTokenService.createToken(context, ePerson.getID(), expirationDate);
 
-        log.debug("Personal Access Token created: {}", token);
+        log.debug("Personal Access Token created: {}", getSecureToken(token));
 
         String emailToSend = email != null ? email : ePerson.getEmail();
 
         sendEmail(ePerson, emailToSend, token, expirationDate);
 
-        context.commit();
-
-        handler.logInfo("Personal Access Token was created: " + getSecureToken(token));
+        handler.logInfo("Personal Access Token created: " + getSecureToken(token));
         handler.logInfo("Exact token string has been sent to: " + emailToSend);
     }
 
     private EPerson getEperson(Context context) throws SQLException {
-        if (epersonUUID != null) {
-            return ePersonService.find(context, epersonUUID);
-        } else if (getEpersonIdentifier() != null) {
-            return ePersonService.find(context, getEpersonIdentifier());
-        } else {
-            return null;
-        }
+        UUID ePersonIdentifier = getEpersonIdentifier();
+        return ePersonIdentifier == null ? null : ePersonService.find(context, ePersonIdentifier);
     }
 
-    private Date getExpirationDate(String expiration) throws ParseException {
+    static Date getExpirationDate(String expiration) throws ParseException {
         if (expiration.length() < 2 || (!expiration.endsWith("d") && !expiration.endsWith("h"))) {
             throw new ParseException("Invalid expiration value");
         }
@@ -158,7 +155,7 @@ public class PersonalAccessTokenCreator extends DSpaceRunnable<PersonalAccessTok
         }
     }
 
-    private static String getSecureToken(String token) {
+    static String getSecureToken(String token) {
         String hiddenTokenPart = "*".repeat(token.length() - PersonalAccessToken.PREFIX.length() - TOKEN_END_LENGTH);
         return PersonalAccessToken.PREFIX + hiddenTokenPart + token.substring(token.length() - TOKEN_END_LENGTH);
     }
@@ -173,7 +170,6 @@ public class PersonalAccessTokenCreator extends DSpaceRunnable<PersonalAccessTok
         email.addArgument(token);
         email.addArgument(ePerson.getFullName());
         email.addArgument(validUntil.toString());
-
 
         email.addRecipient(to);
         email.send();

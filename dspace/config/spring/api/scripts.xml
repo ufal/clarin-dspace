@@ -101,4 +101,9 @@
         <property name="dspaceRunnableClass" value="org.dspace.scripts.filepreview.FilePreview"/>
     </bean>
 
+    <bean id="personal-access-token-manager" class="org.dspace.administer.PersonalAccessTokenCliConfiguration" primary="true">
+        <property name="description" value="Manage personal access tokens"/>
+        <property name="dspaceRunnableClass" value="org.dspace.administer.PersonalAccessTokenCli"/>
+    </bean>
+
 </beans>
