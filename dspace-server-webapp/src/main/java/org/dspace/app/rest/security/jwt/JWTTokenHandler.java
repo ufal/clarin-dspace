@@ -11,6 +11,7 @@ import java.sql.SQLException;
 import java.text.ParseException;
 import java.util.Date;
 import java.util.List;
+import java.util.UUID;
 import javax.servlet.http.HttpServletRequest;
 
 import com.nimbusds.jose.CompressionAlgorithm;
@@ -34,6 +35,8 @@ import com.nimbusds.jwt.util.DateUtils;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.lang3.StringUtils;
 import org.dspace.authorize.AuthorizeException;
+import org.dspace.content.clarin.PersonalAccessToken;
+import org.dspace.content.service.clarin.PersonalAccessTokenService;
 import org.dspace.core.Context;
 import org.dspace.eperson.EPerson;
 import org.dspace.eperson.service.EPersonService;
@@ -75,6 +78,9 @@ public abstract class JWTTokenHandler {
 
     @Autowired
     private ClientInfoService clientInfoService;
+
+    @Autowired
+    PersonalAccessTokenService personalAccessTokenService;
 
     private String generatedJwtKey;
     private String generatedEncryptionKey;
@@ -132,18 +138,35 @@ public abstract class JWTTokenHandler {
         // retrieve the EPerson from the claims set
         EPerson ePerson = getEPerson(context, jwtClaimsSet);
 
-        // As long as the JWT is valid, parse all claims and return the EPerson
-        if (isValidToken(request, signedJWT, jwtClaimsSet, ePerson)) {
+        if (ePerson != null) {
+            if (PersonalAccessToken.AUTHENTICATION_METHOD.equals(
+                    jwtClaimsSet.getClaim(AuthenticationMethodClaimProvider.AUTHENTICATION_METHOD))) {
 
-            log.debug("Received valid token for username: " + ePerson.getEmail());
+                SignedJWT signedJWTNonEncrypted = SignedJWT.parse(token);
+                if (isPersonalAccessTokenValid(ePerson.getID(), signedJWTNonEncrypted, jwtClaimsSet, context)) {
+                    context.setCurrentUser(ePerson);
+                    return ePerson;
+                } else {
+                    return null;
+                }
+            } else {
+                // As long as the JWT is valid, parse all claims and return the EPerson
+                if (isValidToken(request, signedJWT, jwtClaimsSet, ePerson)) {
 
-            for (JWTClaimProvider jwtClaimProvider : jwtClaimProviders) {
-                jwtClaimProvider.parseClaim(context, request, jwtClaimsSet);
+                    log.debug("Received valid token for username: " + ePerson.getEmail());
+
+                    for (JWTClaimProvider jwtClaimProvider : jwtClaimProviders) {
+                        jwtClaimProvider.parseClaim(context, request, jwtClaimsSet);
+                    }
+
+                    return ePerson;
+                } else {
+                    log.warn(getIpAddress(request) + " tried to use an expired or non-valid token");
+                    return null;
+                }
             }
-
-            return ePerson;
         } else {
-            log.warn(getIpAddress(request) + " tried to use an expired or non-valid token");
+            log.warn("token is not related to any user");
             return null;
         }
     }
@@ -432,5 +455,22 @@ public abstract class JWTTokenHandler {
         BytesKeyGenerator bytesKeyGenerator = KeyGenerators.secureRandom(24);
         byte[] secretKey = bytesKeyGenerator.generateKey();
         return Base64.encodeBase64String(secretKey);
+    }
+
+    private boolean isPersonalAccessTokenValid(UUID ePersonID,
+                                               SignedJWT signedJWT,
+                                               JWTClaimsSet jwtClaimsSet,
+                                               Context context) throws SQLException, JOSEException {
+        PersonalAccessToken pat = personalAccessTokenService.find(context, ePersonID);
+        if (pat != null) {
+            JWSVerifier verifier = new MACVerifier(pat.getSharedSecret());
+            if (signedJWT.verify(verifier)) {
+                Date expirationTime = jwtClaimsSet.getExpirationTime();
+                return expirationTime != null
+                        // Ensure expiration timestamp is after the current time, with zero acceptable clock skew
+                        && DateUtils.isAfter(expirationTime, new Date(), 0);
+            }
+        }
+        return false;
     }
 }

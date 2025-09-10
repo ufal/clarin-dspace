@@ -7,6 +7,8 @@
  */
 package org.dspace.administer;
 
+import static org.dspace.content.clarin.PersonalAccessToken.UNMASKED_TOKEN_SIZE;
+
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Date;
@@ -15,7 +17,6 @@ import java.util.UUID;
 import javax.mail.MessagingException;
 
 import org.apache.commons.cli.ParseException;
-import org.dspace.content.clarin.PersonalAccessToken;
 import org.dspace.content.factory.ClarinServiceFactory;
 import org.dspace.content.service.clarin.PersonalAccessTokenService;
 import org.dspace.core.Context;
@@ -33,7 +34,6 @@ import org.slf4j.LoggerFactory;
 public class PersonalAccessTokenCreator extends DSpaceRunnable<PersonalAccessTokenConfiguration> {
 
     private static final Logger log = LoggerFactory.getLogger(PersonalAccessTokenCreator.class);
-    private static final int UNMASKED_TOKEN_SIZE = 3;
     private static final int MAX_EXPIRATION_TIME_IN_DAYS = 90;
     private boolean help = false;
     private String email;
@@ -158,9 +158,9 @@ public class PersonalAccessTokenCreator extends DSpaceRunnable<PersonalAccessTok
     }
 
     static String getMaskedToken(String token) {
-        String maskedTokenPart = "*".repeat(token.length() - PersonalAccessToken.PREFIX.length() - UNMASKED_TOKEN_SIZE);
+        String maskedTokenPart = "*".repeat(token.length() - UNMASKED_TOKEN_SIZE);
         String unmaskedTokenPart = token.substring(token.length() - UNMASKED_TOKEN_SIZE);
-        return PersonalAccessToken.PREFIX + maskedTokenPart + unmaskedTokenPart;
+        return maskedTokenPart + unmaskedTokenPart;
     }
 
     private static void sendEmail(EPerson ePerson, String to, String token, Date validUntil)

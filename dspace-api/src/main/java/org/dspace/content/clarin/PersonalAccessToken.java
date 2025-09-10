@@ -25,8 +25,9 @@ import org.dspace.core.ReloadableEntity;
 @Table(name = "personal_access_token")
 public class PersonalAccessToken implements ReloadableEntity<UUID> {
 
-    public static final String PREFIX = "PAT_";
     public static final String E_PERSON_ID = "eid";
+    public static final String AUTHENTICATION_METHOD = "personal_access_token";
+    public static final int UNMASKED_TOKEN_SIZE = 3;
 
     @Id
     @Column(name = "eperson_id")

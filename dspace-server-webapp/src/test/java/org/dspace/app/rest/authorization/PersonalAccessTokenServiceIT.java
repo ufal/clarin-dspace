@@ -7,6 +7,7 @@
  */
 package org.dspace.app.rest.authorization;
 
+import static org.dspace.content.clarin.PersonalAccessToken.UNMASKED_TOKEN_SIZE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -25,8 +26,6 @@ import org.junit.Before;
 import org.junit.Test;
 
 public class PersonalAccessTokenServiceIT extends AbstractControllerIntegrationTest {
-
-    private static final int UNMASKED_TOKEN_SIZE = PersonalAccessToken.PREFIX.length();
 
     private PersonalAccessTokenService personalAccessTokenService;
     private UUID ePersonID;
@@ -125,8 +124,8 @@ public class PersonalAccessTokenServiceIT extends AbstractControllerIntegrationT
     }
 
     static String getMaskedToken(String token) {
-        String maskedTokenPart = "*".repeat(token.length() - PersonalAccessToken.PREFIX.length() - UNMASKED_TOKEN_SIZE);
+        String maskedTokenPart = "*".repeat(token.length()  - UNMASKED_TOKEN_SIZE);
         String unmaskedTokenPart = token.substring(token.length() - UNMASKED_TOKEN_SIZE);
-        return PersonalAccessToken.PREFIX + maskedTokenPart + unmaskedTokenPart;
+        return maskedTokenPart + unmaskedTokenPart;
     }
 }

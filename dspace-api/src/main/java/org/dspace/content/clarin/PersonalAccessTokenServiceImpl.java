@@ -92,7 +92,7 @@ public class PersonalAccessTokenServiceImpl implements PersonalAccessTokenServic
 
         this.createToken(context, pat);
 
-        return PersonalAccessToken.PREFIX + signedJWT.serialize();
+        return signedJWT.serialize();
     }
 
     @Override
