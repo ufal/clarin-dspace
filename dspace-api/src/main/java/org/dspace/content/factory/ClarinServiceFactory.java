@@ -53,7 +53,6 @@ public abstract class ClarinServiceFactory {
 
     public abstract PersonalAccessTokenService getPersonalAccessTokenService();
 
-
     public static ClarinServiceFactory getInstance() {
         return DSpaceServicesFactory.getInstance().getServiceManager()
                 .getServiceByName("clarinServiceFactory", ClarinServiceFactory.class);
