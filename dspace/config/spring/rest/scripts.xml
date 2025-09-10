@@ -84,7 +84,7 @@
         <property name="dspaceRunnableClass" value="org.dspace.scripts.filepreview.FilePreview"/>
     </bean>
 
-    <bean id="personal-access-token-creator" class="org.dspace.administer.PersonalAccessTokenConfiguration" primary="true">
+    <bean id="personal-access-token" class="org.dspace.administer.PersonalAccessTokenConfiguration" primary="true">
         <property name="description" value="Create personal access token"/>
         <property name="dspaceRunnableClass" value="org.dspace.administer.PersonalAccessTokenCreator"/>
     </bean>

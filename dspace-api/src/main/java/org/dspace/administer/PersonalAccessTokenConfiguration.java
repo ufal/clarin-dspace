@@ -68,7 +68,7 @@ public class PersonalAccessTokenConfiguration extends ScriptConfiguration<Person
             options.addOption("x", "expiration", true, "token expiration in days or hours, (e.g. 3d or 48h)");
             options.getOption("x").setRequired(true);
 
-            options.addOption("m", "e-mail", true, "e-mail to send access token");
+            options.addOption("e", "email", true, "e-mail to send access token");
 
             super.options = options;
         }

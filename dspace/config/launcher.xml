@@ -352,4 +352,11 @@
             <class>org.dspace.matomo.MatomoPDFExporter</class>
         </step>
     </command>
+    <command>
+        <name>personal-access-token</name>
+        <description>Personal Access Token Administrator</description>
+        <step>
+            <class>org.dspace.administer.PersonalAccessTokenAdministrator</class>
+        </step>
+    </command>
 </commands>

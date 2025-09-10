@@ -47,7 +47,7 @@ public class PersonalAccessTokenCreator extends DSpaceRunnable<PersonalAccessTok
      */
     @Override
     public PersonalAccessTokenConfiguration getScriptConfiguration() {
-        return new DSpace().getServiceManager().getServiceByName("personal-access-token-creator",
+        return new DSpace().getServiceManager().getServiceByName("personal-access-token",
                 PersonalAccessTokenConfiguration.class);
     }
 
@@ -74,8 +74,8 @@ public class PersonalAccessTokenCreator extends DSpaceRunnable<PersonalAccessTok
 
         expirationDate = getExpirationDate(commandLine.getOptionValue("x").toLowerCase());
 
-        if (commandLine.hasOption("m")) {
-            email = commandLine.getOptionValue("m");
+        if (commandLine.hasOption("e")) {
+            email = commandLine.getOptionValue("e");
         }
     }
 
@@ -129,16 +129,16 @@ public class PersonalAccessTokenCreator extends DSpaceRunnable<PersonalAccessTok
 
     static Date getExpirationDate(String expiration) throws ParseException {
         if (expiration.length() < 2 || (!expiration.endsWith("d") && !expiration.endsWith("h"))) {
-            throw new ParseException("Invalid expiration value");
+            throw new ParseException("Invalid expiration time value");
         }
         long expirationTime;
         try {
             expirationTime = Integer.parseInt(expiration.substring(0, expiration.length() - 1));
         } catch (NumberFormatException e) {
-            throw new ParseException("Invalid expiration value");
+            throw new ParseException("Invalid expiration time value");
         }
         if (expirationTime < 0) {
-            throw new ParseException("Invalid expiration value");
+            throw new ParseException("Invalid expiration time value");
         }
         boolean inDays = expiration.endsWith("d");
         boolean inHours = !inDays;
