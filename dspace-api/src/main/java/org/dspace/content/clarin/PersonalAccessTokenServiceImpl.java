@@ -30,8 +30,8 @@ import org.dspace.eperson.dao.EPersonDAO;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
- * Service implementation for MatomoReportSubscription object.
- * This class is responsible for all business logic calls for the MatomoReportSubscription object and is autowired
+ * Service implementation for PersonalAccessToken object.
+ * This class is responsible for all business logic calls for the PersonalAccessToken object and is autowired
  * by spring.
  * This class should never be accessed directly.
  *
@@ -55,7 +55,6 @@ public class PersonalAccessTokenServiceImpl implements PersonalAccessTokenServic
 
     @Override
     public String createToken(Context context, UUID uuid, Date expirationTime) throws SQLException, AuthorizeException {
-
         boolean ignoreAuth = context.ignoreAuthorization();
 
         if (!ignoreAuth && context.getCurrentUser() == null) {

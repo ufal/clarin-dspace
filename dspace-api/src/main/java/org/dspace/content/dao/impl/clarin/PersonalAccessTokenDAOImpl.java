@@ -37,5 +37,6 @@ public class PersonalAccessTokenDAOImpl extends AbstractHibernateDAO<PersonalAcc
     public void deleteAll(Context context) throws SQLException {
         String stringQuery = "DELETE FROM PersonalAccessToken";
         createQuery(context, stringQuery).executeUpdate();
+        context.commit();
     }
 }

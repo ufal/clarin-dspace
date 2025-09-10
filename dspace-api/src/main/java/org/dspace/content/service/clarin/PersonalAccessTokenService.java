@@ -26,6 +26,7 @@ public interface PersonalAccessTokenService {
 
     /**
      * Find the PersonalAccessToken object by id
+     *
      * @param context DSpace context object
      * @param uuid ePerson ID of the searching PersonalAccessToken object
      * @return found PersonalAccessToken object or null
@@ -33,10 +34,36 @@ public interface PersonalAccessTokenService {
      */
     PersonalAccessToken find(Context context, UUID uuid) throws SQLException;
 
-    String createToken(Context context, UUID uuid, Date expirationTime) throws SQLException, AuthorizeException;
+    /**
+     * Create token for ePerson, with given ID, and create PersonalAccessToken object containing shared secret string
+     * used to verify token.
+     *
+     * @param context DSpace context object
+     * @param ePersonID ePerson ID
+     * @param expirationTime expiration time when token becomes expired
+     * @return token string
+     * @throws SQLException if database error
+     * @throws AuthorizeException when user is not allowed to create token
+     */
+    String createToken(Context context, UUID ePersonID, Date expirationTime) throws SQLException, AuthorizeException;
 
-    void delete(Context context, UUID uuid) throws SQLException, AuthorizeException;
+    /**
+     *  Delete PersonalAccessToken object for ePerson, with given ID.
+     *
+     * @param context DSpace context object
+     * @param ePersonID ePerson ID
+     * @throws SQLException if database error
+     * @throws AuthorizeException when user is not admin user
+     */
+    void delete(Context context, UUID ePersonID) throws SQLException, AuthorizeException;
 
+    /**
+     * Delete all PersonalAccessToken objects.
+     *
+     * @param context DSpace context object
+     * @throws SQLException if database error
+     * @throws AuthorizeException when user is not admin user
+     */
     void deleteAll(Context context) throws SQLException, AuthorizeException;
 
 }

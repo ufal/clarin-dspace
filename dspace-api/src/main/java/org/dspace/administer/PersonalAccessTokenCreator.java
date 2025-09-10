@@ -33,7 +33,7 @@ import org.slf4j.LoggerFactory;
 public class PersonalAccessTokenCreator extends DSpaceRunnable<PersonalAccessTokenConfiguration> {
 
     private static final Logger log = LoggerFactory.getLogger(PersonalAccessTokenCreator.class);
-    private static final int TOKEN_END_LENGTH = 3;
+    private static final int UNMASKED_TOKEN_SIZE = 3;
     private boolean help = false;
     private String email;
     private Date expirationDate;
@@ -112,13 +112,13 @@ public class PersonalAccessTokenCreator extends DSpaceRunnable<PersonalAccessTok
 
         String token = personalAccessTokenService.createToken(context, ePerson.getID(), expirationDate);
 
-        log.debug("Personal Access Token created: {}", getSecureToken(token));
+        log.debug("Personal Access Token created: {}", getMaskedToken(token));
 
         String emailToSend = email != null ? email : ePerson.getEmail();
 
         sendEmail(ePerson, emailToSend, token, expirationDate);
 
-        handler.logInfo("Personal Access Token created: " + getSecureToken(token));
+        handler.logInfo("Personal Access Token created: " + getMaskedToken(token));
         handler.logInfo("Exact token string has been sent to: " + emailToSend);
     }
 
@@ -155,9 +155,10 @@ public class PersonalAccessTokenCreator extends DSpaceRunnable<PersonalAccessTok
         }
     }
 
-    static String getSecureToken(String token) {
-        String hiddenTokenPart = "*".repeat(token.length() - PersonalAccessToken.PREFIX.length() - TOKEN_END_LENGTH);
-        return PersonalAccessToken.PREFIX + hiddenTokenPart + token.substring(token.length() - TOKEN_END_LENGTH);
+    static String getMaskedToken(String token) {
+        String maskedTokenPart = "*".repeat(token.length() - PersonalAccessToken.PREFIX.length() - UNMASKED_TOKEN_SIZE);
+        String unmaskedTokenPart = token.substring(token.length() - UNMASKED_TOKEN_SIZE);
+        return PersonalAccessToken.PREFIX + maskedTokenPart + unmaskedTokenPart;
     }
 
     private static void sendEmail(EPerson ePerson, String to, String token, Date validUntil)

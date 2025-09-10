@@ -7,6 +7,9 @@
  */
 package org.dspace.administer;
 
+import static org.dspace.administer.PersonalAccessTokenCreator.getExpirationDate;
+import static org.dspace.administer.PersonalAccessTokenCreator.getMaskedToken;
+
 import java.sql.SQLException;
 import java.util.Date;
 import java.util.UUID;
@@ -90,8 +93,7 @@ public class PersonalAccessTokenAdministrator {
                         if (ePerson == null) {
                             throw new IllegalArgumentException("Invalid ePerson UUID or email");
                         }
-                        Date expirationDate = PersonalAccessTokenCreator.getExpirationDate(
-                                line.getOptionValue("x").toLowerCase());
+                        Date expirationDate = getExpirationDate(line.getOptionValue("x").toLowerCase());
                         createToken(context, personalAccessTokenService, ePerson, expirationDate);
                     } else {
                         deleteToken(context, personalAccessTokenService, ePerson);
@@ -115,7 +117,7 @@ public class PersonalAccessTokenAdministrator {
                                     EPerson ePerson,
                                     Date expirationDate) throws SQLException, AuthorizeException {
         String token = personalAccessTokenService.createToken(context, ePerson.getID(), expirationDate);
-        log.debug("Personal Access Token created: {}", PersonalAccessTokenCreator.getSecureToken(token));
+        log.debug("Personal Access Token created: {}", getMaskedToken(token));
         System.out.printf("Personal Access Token created: %s\n", token);
         System.out.printf("For user: %s, with ID: %s\n", ePerson.getEmail(), ePerson.getID());
     }
