@@ -34,6 +34,7 @@ public class PersonalAccessTokenCreator extends DSpaceRunnable<PersonalAccessTok
 
     private static final Logger log = LoggerFactory.getLogger(PersonalAccessTokenCreator.class);
     private static final int UNMASKED_TOKEN_SIZE = 3;
+    private static final int MAX_EXPIRATION_TIME_IN_DAYS = 90;
     private boolean help = false;
     private String email;
     private Date expirationDate;
@@ -143,8 +144,9 @@ public class PersonalAccessTokenCreator extends DSpaceRunnable<PersonalAccessTok
         boolean inDays = expiration.endsWith("d");
         boolean inHours = !inDays;
 
-        if ((inDays && expirationTime > 90) || (inHours && expirationTime > 90 * 24)) {
-            throw new ParseException("Maximal expiration time is 90 days");
+        if ((inDays && expirationTime > MAX_EXPIRATION_TIME_IN_DAYS) ||
+                (inHours && expirationTime > MAX_EXPIRATION_TIME_IN_DAYS * 24)) {
+            throw new ParseException("The maximum expiration time is " + MAX_EXPIRATION_TIME_IN_DAYS + " days");
         }
 
         long currentDate = new Date().getTime();
