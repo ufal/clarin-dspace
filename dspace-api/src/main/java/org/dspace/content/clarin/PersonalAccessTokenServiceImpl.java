@@ -72,7 +72,7 @@ public class PersonalAccessTokenServiceImpl implements PersonalAccessTokenServic
         String sharedSecret = Base64.getEncoder().encodeToString(sharedSecretArray);
 
         JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
-                .claim("authenticationMethod", "personal_access_token")
+                .claim("authenticationMethod", PersonalAccessToken.AUTHENTICATION_METHOD)
                 .claim(PersonalAccessToken.E_PERSON_ID, uuid.toString())
                 .expirationTime(expirationTime)
                 .build();
@@ -92,7 +92,7 @@ public class PersonalAccessTokenServiceImpl implements PersonalAccessTokenServic
 
         this.createToken(context, pat);
 
-        return signedJWT.serialize();
+        return PersonalAccessToken.PREFIX + signedJWT.serialize();
     }
 
     @Override

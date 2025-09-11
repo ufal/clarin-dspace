@@ -12,6 +12,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
 import java.sql.SQLException;
 import java.util.Date;
@@ -45,7 +46,7 @@ public class PersonalAccessTokenServiceTest extends AbstractIntegrationTestWithD
     public void testCreateToken() throws Exception {
         String token = personalAccessTokenService.createToken(context, ePersonID, expirationTimeIn24Hours);
 
-        assertFalse(token.isBlank());
+        assertTrue(token.startsWith(PersonalAccessToken.PREFIX));
         assertToken(ePersonID);
     }
 
@@ -54,8 +55,7 @@ public class PersonalAccessTokenServiceTest extends AbstractIntegrationTestWithD
         context.setCurrentUser(admin);
         String token = personalAccessTokenService.createToken(context, ePersonID, expirationTimeIn24Hours);
 
-        assertNotNull(token);
-        assertFalse(token.isBlank());
+        assertTrue(token.startsWith(PersonalAccessToken.PREFIX));
         assertToken(ePersonID);
     }
 
@@ -78,8 +78,7 @@ public class PersonalAccessTokenServiceTest extends AbstractIntegrationTestWithD
         String token = personalAccessTokenService.createToken(context, ePersonID,
                 new Date(new Date().getTime() - 1000 * 60 * 60 * 24));
 
-        assertNotNull(token);
-        assertFalse(token.isBlank());
+        assertTrue(token.startsWith(PersonalAccessToken.PREFIX));
         assertToken(ePersonID);
     }
 

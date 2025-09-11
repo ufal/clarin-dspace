@@ -131,19 +131,20 @@ public abstract class JWTTokenHandler {
         if (StringUtils.isBlank(token)) {
             return null;
         }
+
+        boolean isPersonalAccessToken = token.startsWith(PersonalAccessToken.PREFIX);
         // parse/decrypt the token
-        SignedJWT signedJWT = getSignedJWT(token);
+        SignedJWT signedJWT = isPersonalAccessToken
+                ? SignedJWT.parse(token.substring(PersonalAccessToken.PREFIX.length()))
+                : getSignedJWT(token);
         // get the claims set from the parsed token
         JWTClaimsSet jwtClaimsSet = signedJWT.getJWTClaimsSet();
         // retrieve the EPerson from the claims set
         EPerson ePerson = getEPerson(context, jwtClaimsSet);
 
         if (ePerson != null) {
-            if (PersonalAccessToken.AUTHENTICATION_METHOD.equals(
-                    jwtClaimsSet.getClaim(AuthenticationMethodClaimProvider.AUTHENTICATION_METHOD))) {
-
-                SignedJWT signedJWTNonEncrypted = SignedJWT.parse(token);
-                if (isPersonalAccessTokenValid(ePerson.getID(), signedJWTNonEncrypted, jwtClaimsSet, context)) {
+            if (isPersonalAccessToken) {
+                if (isPersonalAccessTokenValid(ePerson.getID(), signedJWT, jwtClaimsSet, context)) {
                     context.setCurrentUser(ePerson);
                     return ePerson;
                 } else {

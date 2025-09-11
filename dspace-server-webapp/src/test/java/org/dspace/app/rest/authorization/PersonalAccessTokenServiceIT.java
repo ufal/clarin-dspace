@@ -124,8 +124,8 @@ public class PersonalAccessTokenServiceIT extends AbstractControllerIntegrationT
     }
 
     static String getMaskedToken(String token) {
-        String maskedTokenPart = "*".repeat(token.length()  - UNMASKED_TOKEN_SIZE);
+        String maskedTokenPart = "*".repeat(token.length() - PersonalAccessToken.PREFIX.length() - UNMASKED_TOKEN_SIZE);
         String unmaskedTokenPart = token.substring(token.length() - UNMASKED_TOKEN_SIZE);
-        return maskedTokenPart + unmaskedTokenPart;
+        return PersonalAccessToken.PREFIX + maskedTokenPart + unmaskedTokenPart;
     }
 }
