@@ -7,16 +7,26 @@
  */
 package org.dspace.content.clarin;
 
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.sql.SQLException;
 import java.util.Base64;
 import java.util.Date;
 import java.util.UUID;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
 import javax.ws.rs.BadRequestException;
 
+import com.nimbusds.jose.EncryptionMethod;
+import com.nimbusds.jose.JOSEException;
+import com.nimbusds.jose.JWEAlgorithm;
+import com.nimbusds.jose.JWEHeader;
+import com.nimbusds.jose.JWEObject;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;
 import com.nimbusds.jose.JWSSigner;
+import com.nimbusds.jose.Payload;
+import com.nimbusds.jose.crypto.DirectEncrypter;
 import com.nimbusds.jose.crypto.MACSigner;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
@@ -49,19 +59,36 @@ public class PersonalAccessTokenServiceImpl implements PersonalAccessTokenServic
     AuthorizeService authorizeService;
 
     @Override
-    public PersonalAccessToken find(Context context, UUID uuid) throws SQLException {
-        return personalAccessTokenDAO.findByID(context, PersonalAccessToken.class, uuid);
+    public PersonalAccessToken find(Context context, Integer id) throws SQLException {
+        return personalAccessTokenDAO.findByID(context, PersonalAccessToken.class, id);
     }
 
     @Override
-    public String createToken(Context context, UUID uuid, Date expirationTime) throws SQLException, AuthorizeException {
+    public PersonalAccessToken findByEPersonID(Context context, UUID ePersonID)
+            throws SQLException, AuthorizeException {
         boolean ignoreAuth = context.ignoreAuthorization();
 
         if (!ignoreAuth && context.getCurrentUser() == null) {
             throw new AuthorizeException("You must be authenticated user");
         }
 
-        if (!ignoreAuth && !authorizeService.isAdmin(context) && !context.getCurrentUser().getID().equals(uuid)) {
+        if (!ignoreAuth && !authorizeService.isAdmin(context) && !context.getCurrentUser().getID().equals(ePersonID)) {
+            throw new AuthorizeException("You must be admin user to create personal access token for this User ID");
+        }
+
+        return personalAccessTokenDAO.findByEPersonUUID(context, ePersonID);
+    }
+
+    @Override
+    public String createToken(Context context, UUID ePersonID, Date expirationTime)
+            throws SQLException, AuthorizeException {
+        boolean ignoreAuth = context.ignoreAuthorization();
+
+        if (!ignoreAuth && context.getCurrentUser() == null) {
+            throw new AuthorizeException("You must be authenticated user");
+        }
+
+        if (!ignoreAuth && !authorizeService.isAdmin(context) && !context.getCurrentUser().getID().equals(ePersonID)) {
             throw new AuthorizeException("You must be admin user to create personal access token for this User ID");
         }
 
@@ -69,30 +96,52 @@ public class PersonalAccessTokenServiceImpl implements PersonalAccessTokenServic
         byte[] sharedSecretArray = new byte[32];
         random.nextBytes(sharedSecretArray);
 
-        String sharedSecret = Base64.getEncoder().encodeToString(sharedSecretArray);
+        String macSecret = Base64.getEncoder().encodeToString(sharedSecretArray);
 
         JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
-                .claim("authenticationMethod", PersonalAccessToken.AUTHENTICATION_METHOD)
-                .claim(PersonalAccessToken.E_PERSON_ID, uuid.toString())
+                .issuer(PersonalAccessToken.TOKEN_ISSUER)
+                .claim(PersonalAccessToken.E_PERSON_ID, ePersonID.toString())
                 .expirationTime(expirationTime)
                 .build();
 
         SignedJWT signedJWT = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claimsSet);
 
+        // sign JWT token
         try {
-            JWSSigner signer = new MACSigner(sharedSecret);
+            JWSSigner signer = new MACSigner(macSecret);
             signedJWT.sign(signer);
         } catch (Exception ex) {
             throw new RuntimeException(ex);
         }
 
-        PersonalAccessToken pat = new PersonalAccessToken();
-        pat.setId(uuid);
-        pat.setSharedSecret(sharedSecret);
+        // encode JWT token
+        JWEObject jweObject;
+        try {
+            KeyGenerator keyGen = KeyGenerator.getInstance("AES");
+            keyGen.init(EncryptionMethod.A256GCM.cekBitLength());
+            SecretKey aesKey = keyGen.generateKey();
 
-        this.createToken(context, pat);
+            String encodedAesKey = Base64.getEncoder().encodeToString(aesKey.getEncoded());
 
-        return PersonalAccessToken.PREFIX + signedJWT.serialize();
+            PersonalAccessToken pat = new PersonalAccessToken();
+            pat.setEPersonID(ePersonID);
+            pat.setMacSecret(macSecret);
+            pat.setAesKey(encodedAesKey);
+
+            pat = this.createToken(context, pat);
+
+            JWEHeader header = new JWEHeader.Builder(JWEAlgorithm.DIR, EncryptionMethod.A256GCM)
+                    .keyID(String.valueOf(pat.getID()))
+                    .type(PersonalAccessToken.JWE_TOKEN_CLARIN_TYPE)
+                    .build();
+            jweObject = new JWEObject(header, new Payload(signedJWT));
+            jweObject.encrypt(new DirectEncrypter(aesKey));
+
+        } catch (JOSEException | NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
+        }
+
+        return jweObject.serialize();
     }
 
     @Override
@@ -101,7 +150,7 @@ public class PersonalAccessTokenServiceImpl implements PersonalAccessTokenServic
         if (!ignoreAuth && !authorizeService.isAdmin(context)) {
             throw new AuthorizeException("You must be admin user");
         }
-        PersonalAccessToken personalAccessToken = find(context, uuid);
+        PersonalAccessToken personalAccessToken = findByEPersonID(context, uuid);
         if (personalAccessToken != null) {
             personalAccessTokenDAO.delete(context, personalAccessToken);
         } else {
@@ -118,14 +167,14 @@ public class PersonalAccessTokenServiceImpl implements PersonalAccessTokenServic
         personalAccessTokenDAO.deleteAll(context);
     }
 
-    private void createToken(Context context, PersonalAccessToken pat) throws SQLException {
-        EPerson ePerson = ePersonDAO.findByID(context, EPerson.class, pat.getID());
+    private PersonalAccessToken createToken(Context context, PersonalAccessToken pat) throws SQLException {
+        EPerson ePerson = ePersonDAO.findByID(context, EPerson.class, pat.getEPersonID());
 
         if (ePerson == null) {
             throw new BadRequestException("EPerson with this ID doesn't exist");
         }
 
-        personalAccessTokenDAO.createOrUpdate(context, pat);
+        return personalAccessTokenDAO.createOrUpdate(context, pat);
     }
 
 }

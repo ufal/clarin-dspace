@@ -19,6 +19,7 @@ import java.util.Date;
 import java.util.UUID;
 
 import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
+import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.clarin.PersonalAccessToken;
 import org.dspace.content.factory.ClarinServiceFactory;
 import org.dspace.content.service.clarin.PersonalAccessTokenService;
@@ -116,16 +117,17 @@ public class PersonalAccessTokenServiceIT extends AbstractControllerIntegrationT
                 .andExpect(status().isOk());
     }
 
-    private void assertToken(UUID ePersonID) throws SQLException {
-        PersonalAccessToken pat = personalAccessTokenService.find(context, ePersonID);
+    private void assertToken(UUID ePersonID) throws SQLException, AuthorizeException {
+        PersonalAccessToken pat = personalAccessTokenService.findByEPersonID(context, ePersonID);
         assertNotNull(pat);
-        assertEquals(ePersonID, pat.getID());
-        assertFalse(pat.getSharedSecret().isBlank());
+        assertEquals(ePersonID, pat.getEPersonID());
+        assertFalse(pat.getMacSecret().isBlank());
+        assertFalse(pat.getAesKey().isBlank());
     }
 
     static String getMaskedToken(String token) {
-        String maskedTokenPart = "*".repeat(token.length() - PersonalAccessToken.PREFIX.length() - UNMASKED_TOKEN_SIZE);
+        String maskedTokenPart = "*".repeat(token.length() - UNMASKED_TOKEN_SIZE);
         String unmaskedTokenPart = token.substring(token.length() - UNMASKED_TOKEN_SIZE);
-        return PersonalAccessToken.PREFIX + maskedTokenPart + unmaskedTokenPart;
+        return maskedTokenPart + unmaskedTokenPart;
     }
 }

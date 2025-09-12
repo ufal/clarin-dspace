@@ -12,7 +12,6 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
-import static org.junit.Assert.assertTrue;
 
 import java.sql.SQLException;
 import java.util.Date;
@@ -46,7 +45,7 @@ public class PersonalAccessTokenServiceTest extends AbstractIntegrationTestWithD
     public void testCreateToken() throws Exception {
         String token = personalAccessTokenService.createToken(context, ePersonID, expirationTimeIn24Hours);
 
-        assertTrue(token.startsWith(PersonalAccessToken.PREFIX));
+        assertFalse(token.isBlank());
         assertToken(ePersonID);
     }
 
@@ -55,7 +54,7 @@ public class PersonalAccessTokenServiceTest extends AbstractIntegrationTestWithD
         context.setCurrentUser(admin);
         String token = personalAccessTokenService.createToken(context, ePersonID, expirationTimeIn24Hours);
 
-        assertTrue(token.startsWith(PersonalAccessToken.PREFIX));
+        assertFalse(token.isBlank());
         assertToken(ePersonID);
     }
 
@@ -78,7 +77,7 @@ public class PersonalAccessTokenServiceTest extends AbstractIntegrationTestWithD
         String token = personalAccessTokenService.createToken(context, ePersonID,
                 new Date(new Date().getTime() - 1000 * 60 * 60 * 24));
 
-        assertTrue(token.startsWith(PersonalAccessToken.PREFIX));
+        assertFalse(token.isBlank());
         assertToken(ePersonID);
     }
 
@@ -88,7 +87,7 @@ public class PersonalAccessTokenServiceTest extends AbstractIntegrationTestWithD
         personalAccessTokenService.createToken(context, ePersonID, expirationTimeIn24Hours);
         assertToken(ePersonID);
         personalAccessTokenService.delete(context, ePersonID);
-        assertNull(personalAccessTokenService.find(context, ePersonID));
+        assertNull(personalAccessTokenService.findByEPersonID(context, ePersonID));
     }
 
     @Test
@@ -109,8 +108,8 @@ public class PersonalAccessTokenServiceTest extends AbstractIntegrationTestWithD
         personalAccessTokenService.createToken(context, ePersonID, expirationTimeIn24Hours);
         personalAccessTokenService.createToken(context, admin.getID(), expirationTimeIn24Hours);
         personalAccessTokenService.deleteAll(context);
-        assertNull(personalAccessTokenService.find(context, ePersonID));
-        assertNull(personalAccessTokenService.find(context, admin.getID()));
+        assertNull(personalAccessTokenService.findByEPersonID(context, ePersonID));
+        assertNull(personalAccessTokenService.findByEPersonID(context, admin.getID()));
     }
 
     @Test
@@ -119,10 +118,35 @@ public class PersonalAccessTokenServiceTest extends AbstractIntegrationTestWithD
         assertThrows(AuthorizeException.class, () -> personalAccessTokenService.deleteAll(context));
     }
 
-    private void assertToken(UUID ePersonID) throws SQLException {
-        PersonalAccessToken pat = personalAccessTokenService.find(context, ePersonID);
+    @Test
+    public void testFindToken() throws Exception {
+        context.setCurrentUser(admin);
+        personalAccessTokenService.createToken(context, admin.getID(), expirationTimeIn24Hours);
+
+        personalAccessTokenService.createToken(context, ePersonID, expirationTimeIn24Hours);
+
+        PersonalAccessToken pat1 = personalAccessTokenService.findByEPersonID(context, admin.getID());
+        assertNotNull(pat1);
+
+        context.setCurrentUser(eperson);
+
+        PersonalAccessToken pat2 = personalAccessTokenService.findByEPersonID(context, ePersonID);
+        assertNotNull(pat2);
+
+        // regular (non admin) user is not authorized to get personal access token for another user
+        assertThrows(AuthorizeException.class, () ->
+                personalAccessTokenService.findByEPersonID(context, admin.getID()));
+
+        // any user can get personal access token for given ID
+        PersonalAccessToken pat3 = personalAccessTokenService.find(context, pat1.getID());
+        assertEquals(pat1, pat3);
+    }
+
+    private void assertToken(UUID ePersonID) throws SQLException, AuthorizeException {
+        PersonalAccessToken pat = personalAccessTokenService.findByEPersonID(context, ePersonID);
         assertNotNull(pat);
-        assertEquals(ePersonID, pat.getID());
-        assertFalse(pat.getSharedSecret().isBlank());
+        assertEquals(ePersonID, pat.getEPersonID());
+        assertFalse(pat.getMacSecret().isBlank());
+        assertFalse(pat.getAesKey().isBlank());
     }
 }

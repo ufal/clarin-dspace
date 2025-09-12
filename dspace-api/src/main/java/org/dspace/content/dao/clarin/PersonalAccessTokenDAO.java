@@ -8,6 +8,7 @@
 package org.dspace.content.dao.clarin;
 
 import java.sql.SQLException;
+import java.util.UUID;
 
 import org.dspace.content.clarin.PersonalAccessToken;
 import org.dspace.core.Context;
@@ -23,8 +24,10 @@ import org.dspace.core.GenericDAO;
  */
 public interface PersonalAccessTokenDAO extends GenericDAO<PersonalAccessToken> {
 
-    void createOrUpdate(Context context, PersonalAccessToken pat) throws SQLException;
+    PersonalAccessToken createOrUpdate(Context context, PersonalAccessToken pat) throws SQLException;
 
     void deleteAll(Context context) throws SQLException;
+
+    PersonalAccessToken findByEPersonUUID(Context context, UUID epersonUUID) throws SQLException;
 
 }

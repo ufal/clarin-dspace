@@ -17,7 +17,6 @@ import java.util.UUID;
 import javax.mail.MessagingException;
 
 import org.apache.commons.cli.ParseException;
-import org.dspace.content.clarin.PersonalAccessToken;
 import org.dspace.content.factory.ClarinServiceFactory;
 import org.dspace.content.service.clarin.PersonalAccessTokenService;
 import org.dspace.core.Context;
@@ -159,9 +158,9 @@ public class PersonalAccessTokenCreator extends DSpaceRunnable<PersonalAccessTok
     }
 
     static String getMaskedToken(String token) {
-        String maskedTokenPart = "*".repeat(token.length() - PersonalAccessToken.PREFIX.length() - UNMASKED_TOKEN_SIZE);
+        String maskedTokenPart = "*".repeat(token.length() - UNMASKED_TOKEN_SIZE);
         String unmaskedTokenPart = token.substring(token.length() - UNMASKED_TOKEN_SIZE);
-        return PersonalAccessToken.PREFIX + maskedTokenPart + unmaskedTokenPart;
+        return maskedTokenPart + unmaskedTokenPart;
     }
 
     private static void sendEmail(EPerson ePerson, String to, String token, Date validUntil)

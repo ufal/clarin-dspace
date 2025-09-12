@@ -8,6 +8,9 @@
 package org.dspace.content.dao.impl.clarin;
 
 import java.sql.SQLException;
+import java.util.List;
+import java.util.UUID;
+import javax.persistence.Query;
 
 import org.dspace.content.clarin.PersonalAccessToken;
 import org.dspace.content.dao.clarin.PersonalAccessTokenDAO;
@@ -25,12 +28,24 @@ public class PersonalAccessTokenDAOImpl extends AbstractHibernateDAO<PersonalAcc
         implements PersonalAccessTokenDAO {
 
     @Override
-    public void createOrUpdate(Context context, PersonalAccessToken pat) throws SQLException {
-        if (findByID(context, PersonalAccessToken.class, pat.getID()) == null) {
-            getHibernateSession(context).persist(pat);
-        } else {
+    public PersonalAccessToken createOrUpdate(Context context, PersonalAccessToken pat) throws SQLException {
+        PersonalAccessToken existingPat = findByEPersonUUID(context, pat.getEPersonID());
+        if (existingPat != null) {
+            pat.setId(existingPat.getID());
             getHibernateSession(context).merge(pat);
+            return pat;
+        } else {
+            return create(context, pat);
         }
+    }
+
+    @Override
+    public PersonalAccessToken findByEPersonUUID(Context context, UUID epersonUUID) throws SQLException {
+        Query query = createQuery(context, "SELECT pat FROM PersonalAccessToken as pat " +
+                "WHERE pat.ePersonID = :epersonUUID");
+        query.setParameter("epersonUUID", epersonUUID);
+        List<PersonalAccessToken> resultList = list(query);
+        return resultList.isEmpty() ? null : resultList.get(0);
     }
 
     @Override

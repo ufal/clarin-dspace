@@ -9,10 +9,13 @@
 -----------------------------------------------------------------------------------
 -- Create table for personal access token entity
 -----------------------------------------------------------------------------------
+CREATE SEQUENCE personal_access_token_id_seq;
+
 CREATE TABLE personal_access_token
 (
-    eperson_id UUID NOT NULL,
-    shared_secret VARCHAR(50) NOT NULL,
-    CONSTRAINT personal_access_token_pkey PRIMARY KEY (eperson_id),
+    id INTEGER PRIMARY KEY,
+    eperson_id UUID NOT NULL UNIQUE,
+    mac_secret VARCHAR(50) NOT NULL,
+    aes_key VARCHAR(50) NOT NULL,
     CONSTRAINT personal_access_token_eperson_id_fkey FOREIGN KEY (eperson_id) REFERENCES eperson (uuid) ON DELETE CASCADE
 );

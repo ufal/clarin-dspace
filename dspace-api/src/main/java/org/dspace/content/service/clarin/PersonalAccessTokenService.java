@@ -28,11 +28,22 @@ public interface PersonalAccessTokenService {
      * Find the PersonalAccessToken object by id
      *
      * @param context DSpace context object
-     * @param uuid ePerson ID of the searching PersonalAccessToken object
+     * @param id ID of the searching PersonalAccessToken object
      * @return found PersonalAccessToken object or null
      * @throws SQLException if database error
      */
-    PersonalAccessToken find(Context context, UUID uuid) throws SQLException;
+    PersonalAccessToken find(Context context, Integer id) throws SQLException;
+
+    /**
+     * Find the PersonalAccessToken object by id
+     *
+     * @param context DSpace context object
+     * @param ePersonID ePerson UUID used to search PersonalAccessToken
+     * @return found PersonalAccessToken object or null
+     * @throws SQLException if database error
+     * @throws AuthorizeException when user is not allowed to get token for EPerson ID
+     */
+    PersonalAccessToken findByEPersonID(Context context, UUID ePersonID) throws SQLException, AuthorizeException;
 
     /**
      * Create token for ePerson, with given ID, and create PersonalAccessToken object containing shared secret string

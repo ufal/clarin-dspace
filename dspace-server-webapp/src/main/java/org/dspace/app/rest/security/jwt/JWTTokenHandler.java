@@ -11,7 +11,8 @@ import java.sql.SQLException;
 import java.text.ParseException;
 import java.util.Date;
 import java.util.List;
-import java.util.UUID;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
 import javax.servlet.http.HttpServletRequest;
 
 import com.nimbusds.jose.CompressionAlgorithm;
@@ -29,7 +30,9 @@ import com.nimbusds.jose.crypto.DirectDecrypter;
 import com.nimbusds.jose.crypto.DirectEncrypter;
 import com.nimbusds.jose.crypto.MACSigner;
 import com.nimbusds.jose.crypto.MACVerifier;
+import com.nimbusds.jwt.JWT;
 import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.JWTParser;
 import com.nimbusds.jwt.SignedJWT;
 import com.nimbusds.jwt.util.DateUtils;
 import org.apache.commons.codec.binary.Base64;
@@ -132,43 +135,36 @@ public abstract class JWTTokenHandler {
             return null;
         }
 
-        boolean isPersonalAccessToken = token.startsWith(PersonalAccessToken.PREFIX);
         // parse/decrypt the token
-        SignedJWT signedJWT = isPersonalAccessToken
-                ? SignedJWT.parse(token.substring(PersonalAccessToken.PREFIX.length()))
-                : getSignedJWT(token);
-        // get the claims set from the parsed token
-        JWTClaimsSet jwtClaimsSet = signedJWT.getJWTClaimsSet();
-        // retrieve the EPerson from the claims set
-        EPerson ePerson = getEPerson(context, jwtClaimsSet);
-
-        if (ePerson != null) {
-            if (isPersonalAccessToken) {
-                if (isPersonalAccessTokenValid(ePerson.getID(), signedJWT, jwtClaimsSet, context)) {
-                    context.setCurrentUser(ePerson);
-                    return ePerson;
-                } else {
-                    return null;
-                }
-            } else {
-                // As long as the JWT is valid, parse all claims and return the EPerson
-                if (isValidToken(request, signedJWT, jwtClaimsSet, ePerson)) {
-
-                    log.debug("Received valid token for username: " + ePerson.getEmail());
-
-                    for (JWTClaimProvider jwtClaimProvider : jwtClaimProviders) {
-                        jwtClaimProvider.parseClaim(context, request, jwtClaimsSet);
-                    }
-
-                    return ePerson;
-                } else {
-                    log.warn(getIpAddress(request) + " tried to use an expired or non-valid token");
-                    return null;
-                }
+        if (isClarinJWEToken(token)) {
+            EPerson ePerson =
+                    getEPersonFromPersonalAccessToken(context, token);
+            if (ePerson != null) {
+                context.setCurrentUser(ePerson);
+                return ePerson;
             }
-        } else {
-            log.warn("token is not related to any user");
             return null;
+        } else {
+            SignedJWT signedJWT = getSignedJWT(token);
+            // get the claims set from the parsed token
+            JWTClaimsSet jwtClaimsSet = signedJWT.getJWTClaimsSet();
+            // retrieve the EPerson from the claims set
+            EPerson ePerson = getEPerson(context, jwtClaimsSet);
+
+            // As long as the JWT is valid, parse all claims and return the EPerson
+            if (isValidToken(request, signedJWT, jwtClaimsSet, ePerson)) {
+
+                log.debug("Received valid token for username: " + ePerson.getEmail());
+
+                for (JWTClaimProvider jwtClaimProvider : jwtClaimProviders) {
+                    jwtClaimProvider.parseClaim(context, request, jwtClaimsSet);
+                }
+
+                return ePerson;
+            } else {
+                log.warn(getIpAddress(request) + " tried to use an expired or non-valid token");
+                return null;
+            }
         }
     }
 
@@ -342,7 +338,7 @@ public abstract class JWTTokenHandler {
      * @return EPerson object (or null, if not found)
      * @throws SQLException
      */
-    protected EPerson getEPerson(Context context, JWTClaimsSet jwtClaimsSet) throws SQLException {
+    private EPerson getEPerson(Context context, JWTClaimsSet jwtClaimsSet) throws SQLException {
         return ePersonClaimProvider.getEPerson(context, jwtClaimsSet);
     }
 
@@ -458,14 +454,30 @@ public abstract class JWTTokenHandler {
         return Base64.encodeBase64String(secretKey);
     }
 
-    private boolean isPersonalAccessTokenValid(UUID ePersonID,
-                                               SignedJWT signedJWT,
-                                               JWTClaimsSet jwtClaimsSet,
-                                               Context context) throws SQLException, JOSEException {
-        PersonalAccessToken pat = personalAccessTokenService.find(context, ePersonID);
-        if (pat != null) {
-            JWSVerifier verifier = new MACVerifier(pat.getSharedSecret());
-            if (signedJWT.verify(verifier)) {
+    private EPerson getEPersonFromPersonalAccessToken(Context context, String token)
+            throws SQLException, ParseException, JOSEException {
+        JWEObject jweObj = JWEObject.parse(token);
+        String eId = jweObj.getHeader().getKeyID();
+        if (eId != null) {
+            PersonalAccessToken pat = personalAccessTokenService.find(context, Integer.valueOf(eId));
+            if (pat != null) {
+                jweObj.decrypt(new DirectDecrypter(getSecretKey(pat.getAesKey())));
+                SignedJWT signedJWT = jweObj.getPayload().toSignedJWT();
+                if (isPersonalAccessTokenValid(signedJWT, pat)) {
+                    return getEPerson(context, signedJWT.getJWTClaimsSet());
+                }
+            }
+        }
+        return null;
+    }
+
+    private static boolean isPersonalAccessTokenValid(SignedJWT signedJWT, PersonalAccessToken pat)
+            throws ParseException, JOSEException {
+        JWSVerifier verifier = new MACVerifier(pat.getMacSecret());
+        if (signedJWT.verify(verifier)) {
+            JWTClaimsSet jwtClaimsSet = signedJWT.getJWTClaimsSet();
+            if (PersonalAccessToken.TOKEN_ISSUER.equals(jwtClaimsSet.getIssuer()) &&
+                    pat.getEPersonID().toString().equals(jwtClaimsSet.getClaim(PersonalAccessToken.E_PERSON_ID))) {
                 Date expirationTime = jwtClaimsSet.getExpirationTime();
                 return expirationTime != null
                         // Ensure expiration timestamp is after the current time, with zero acceptable clock skew
@@ -473,5 +485,15 @@ public abstract class JWTTokenHandler {
             }
         }
         return false;
+    }
+
+    private static SecretKey getSecretKey(String encodedSecretKey) {
+        byte[] decodedKey = java.util.Base64.getDecoder().decode(encodedSecretKey);
+        return new SecretKeySpec(decodedKey, 0, decodedKey.length, "AES");
+    }
+
+    private static boolean isClarinJWEToken(String token) throws ParseException {
+        JWT jwtToken = JWTParser.parse(token);
+        return PersonalAccessToken.JWE_TOKEN_CLARIN_TYPE.equals(jwtToken.getHeader().getType());
     }
 }
