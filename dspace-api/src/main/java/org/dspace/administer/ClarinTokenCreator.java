@@ -77,17 +77,13 @@ public class ClarinTokenCreator extends DSpaceRunnable<ClarinTokenConfiguration>
             throw new ParseException("No token expiration time specified");
         }
 
-        if (commandLine.hasOption("d") && !commandLine.hasOption("t")) {
-            throw new ParseException("No token specified");
-        }
-
         if (commandLine.hasOption("c")) {
             expirationDate = getExpirationDate(commandLine.getOptionValue("x").toLowerCase());
             if (commandLine.hasOption("e")) {
                 email = commandLine.getOptionValue("e");
             }
         } else if (commandLine.hasOption("d")) {
-            token = commandLine.getOptionValue("t");
+            token = commandLine.getOptionValue("d");
         }
 
         clarinTokenService = ClarinServiceFactory.getInstance().getClarinTokenService();

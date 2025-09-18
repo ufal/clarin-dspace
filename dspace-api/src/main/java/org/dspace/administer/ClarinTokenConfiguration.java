@@ -65,14 +65,13 @@ public class ClarinTokenConfiguration extends ScriptConfiguration<ClarinTokenCre
 
             options.addOption("h", "help", false, "help");
 
-            options.addOption("c", "crete", false, "create new token");
-            options.addOption("d", "delete", false, "delete/deactivate token");
+            options.addOption("c", "create", false, "create new token");
+            options.addOption("d", "delete", true, "delete/deactivate token");
 
             options.addOption("x", "expiration", true,
                     "token expiration in days or hours, e.g. 3d or 48h [required for token create]");
             options.addOption("e", "email", true,
                     "e-mail to send newly created access token [optional for token create]");
-            options.addOption("t", "token", true, "token to delete/deactivate [required for token delete]");
 
             super.options = options;
         }

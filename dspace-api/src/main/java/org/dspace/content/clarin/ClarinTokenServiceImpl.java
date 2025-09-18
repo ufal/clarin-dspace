@@ -112,18 +112,11 @@ public class ClarinTokenServiceImpl implements ClarinTokenService {
         // encode JWT token
         JWEObject jweObject;
         try {
-            // KeyGenerator keyGen = KeyGenerator.getInstance("AES");
-            // keyGen.init(EncryptionMethod.A256GCM.cekBitLength());
-            // SecretKey aesKey = keyGen.generateKey();
-
-            // String encodedAesKey = Base64.getEncoder().encodeToString(aesKey.getEncoded());
-
             SecretKey aesKey = ClarinTokenUtils.getSecretKeyFromBase64EncodedString(encryptionSecret);
 
             ClarinToken pat = new ClarinToken();
             pat.setEPersonID(ePersonID);
             pat.setSignKey(macSecret);
-            // pat.setAesKey(encodedAesKey);
 
             pat = this.createToken(context, pat);
 

@@ -10,10 +10,15 @@ package org.dspace.administer;
 import static org.dspace.administer.ClarinTokenCreator.getExpirationDate;
 import static org.dspace.administer.ClarinTokenCreator.getMaskedToken;
 
+import java.security.NoSuchAlgorithmException;
 import java.sql.SQLException;
+import java.util.Base64;
 import java.util.Date;
 import java.util.UUID;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
 
+import com.nimbusds.jose.EncryptionMethod;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
@@ -45,6 +50,8 @@ public class ClarinTokenAdministrator {
         options.addOption("d", "delete", false,
                 "delete specified token, or delete all tokens for given ePerson, " +
                         "or delete all tokens when -t, -u, and -e options are missing)");
+        options.addOption("g", "generateEncryptionKey", false,
+                "generate encryption/decryption secret key for clarin.token.encryption.secret property");
         options.addOption("u", "ePerson_ID", true, "ePerson UUID");
         options.addOption("e", "email", true, "ePerson email");
         options.addOption("x", "expiration", true,
@@ -56,14 +63,15 @@ public class ClarinTokenAdministrator {
         CommandLineParser parser = new DefaultParser();
         try {
             CommandLine line = parser.parse(options, args);
-            if (line.hasOption('h') || (!line.hasOption('c') && !line.hasOption('d')) ) {
+            if (line.hasOption('h') || (!line.hasOption('c') && !line.hasOption('d') && !line.hasOption('g')) ) {
                 printHelpAndExit(options);
             }
             boolean isCreate = line.hasOption('c');
             boolean isDelete = line.hasOption('d');
+            boolean generateEncryptionGey = line.hasOption('g');
 
-            if (isCreate && isDelete) {
-                throw new ParseException("Create and delete options are mutually exclusive");
+            if (isCreate && isDelete || isCreate && generateEncryptionGey || isDelete && generateEncryptionGey) {
+                throw new ParseException("Create, delete and generate options are mutually exclusive");
             }
 
             if (isCreate && !line.hasOption("u") && !line.hasOption("e")) {
@@ -103,8 +111,10 @@ public class ClarinTokenAdministrator {
                         }
                         Date expirationDate = getExpirationDate(line.getOptionValue("x").toLowerCase());
                         createToken(context, clarinTokenService, ePerson, expirationDate);
-                    } else {
+                    } else if (isDelete) {
                         deleteToken(context, clarinTokenService, token, ePerson);
+                    } else {
+                        generateEncryptionKey();
                     }
                 } finally {
                     context.restoreAuthSystemState();
@@ -146,6 +156,17 @@ public class ClarinTokenAdministrator {
             System.out.println("All Clarin Tokens removed");
         }
     }
+
+    private static void generateEncryptionKey() throws NoSuchAlgorithmException {
+        KeyGenerator keyGen = KeyGenerator.getInstance("AES");
+        keyGen.init(EncryptionMethod.A256GCM.cekBitLength());
+        SecretKey aesKey = keyGen.generateKey();
+
+        String encodedAesKey = Base64.getEncoder().encodeToString(aesKey.getEncoded());
+        log.debug("Encryption Key generated: {}", getMaskedToken(encodedAesKey));
+        System.out.printf("Encryption Key: %s\n", encodedAesKey);
+    }
+
 
     private static void printHelpAndExit(Options options) {
         // print the help message
