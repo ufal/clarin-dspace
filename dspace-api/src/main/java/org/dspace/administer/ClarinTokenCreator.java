@@ -7,7 +7,8 @@
  */
 package org.dspace.administer;
 
-import static org.dspace.content.clarin.PersonalAccessToken.UNMASKED_TOKEN_SIZE;
+import static org.dspace.content.clarin.ClarinToken.MASKED_TOKEN_SIZE;
+import static org.dspace.content.clarin.ClarinToken.UNMASKED_TOKEN_SIZE;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -18,7 +19,7 @@ import javax.mail.MessagingException;
 
 import org.apache.commons.cli.ParseException;
 import org.dspace.content.factory.ClarinServiceFactory;
-import org.dspace.content.service.clarin.PersonalAccessTokenService;
+import org.dspace.content.service.clarin.ClarinTokenService;
 import org.dspace.core.Context;
 import org.dspace.core.Email;
 import org.dspace.core.I18nUtil;
@@ -31,14 +32,15 @@ import org.dspace.utils.DSpace;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class PersonalAccessTokenCreator extends DSpaceRunnable<PersonalAccessTokenConfiguration> {
+public class ClarinTokenCreator extends DSpaceRunnable<ClarinTokenConfiguration> {
 
-    private static final Logger log = LoggerFactory.getLogger(PersonalAccessTokenCreator.class);
+    private static final Logger log = LoggerFactory.getLogger(ClarinTokenCreator.class);
     private static final int MAX_EXPIRATION_TIME_IN_DAYS = 90;
     private boolean help = false;
     private String email;
     private Date expirationDate;
-    private PersonalAccessTokenService personalAccessTokenService;
+    private String token;
+    private ClarinTokenService clarinTokenService;
     private EPersonService ePersonService;
 
     /**
@@ -47,9 +49,9 @@ public class PersonalAccessTokenCreator extends DSpaceRunnable<PersonalAccessTok
      * @return The {@link ScriptConfiguration} that this implementing DspaceRunnable uses
      */
     @Override
-    public PersonalAccessTokenConfiguration getScriptConfiguration() {
-        return new DSpace().getServiceManager().getServiceByName("personal-access-token",
-                PersonalAccessTokenConfiguration.class);
+    public ClarinTokenConfiguration getScriptConfiguration() {
+        return new DSpace().getServiceManager().getServiceByName("clarin-token",
+                ClarinTokenConfiguration.class);
     }
 
     /**
@@ -60,24 +62,37 @@ public class PersonalAccessTokenCreator extends DSpaceRunnable<PersonalAccessTok
      */
     @Override
     public void setup() throws ParseException {
-        log.debug("Setting up {}", PersonalAccessTokenCreator.class.getName());
+        log.debug("Setting up {}", ClarinTokenCreator.class.getName());
         if (commandLine.hasOption("h")) {
             help = true;
             return;
         }
 
-        if (!commandLine.hasOption("x")) {
-            throw new ParseException("No token expiration specified");
+        if ((!commandLine.hasOption("c") && !commandLine.hasOption("d")) ||
+                (commandLine.hasOption("c") && commandLine.hasOption("d"))) {
+            throw new ParseException("Either create or delete option must be specified");
         }
 
-        personalAccessTokenService = ClarinServiceFactory.getInstance().getPersonalAccessTokenService();
+        if (commandLine.hasOption("c") && !commandLine.hasOption("x")) {
+            throw new ParseException("No token expiration time specified");
+        }
+
+        if (commandLine.hasOption("d") && !commandLine.hasOption("t")) {
+            throw new ParseException("No token specified");
+        }
+
+        if (commandLine.hasOption("c")) {
+            expirationDate = getExpirationDate(commandLine.getOptionValue("x").toLowerCase());
+            if (commandLine.hasOption("e")) {
+                email = commandLine.getOptionValue("e");
+            }
+        } else if (commandLine.hasOption("d")) {
+            token = commandLine.getOptionValue("t");
+        }
+
+        clarinTokenService = ClarinServiceFactory.getInstance().getClarinTokenService();
         ePersonService = EPersonServiceFactory.getInstance().getEPersonService();
 
-        expirationDate = getExpirationDate(commandLine.getOptionValue("x").toLowerCase());
-
-        if (commandLine.hasOption("e")) {
-            email = commandLine.getOptionValue("e");
-        }
     }
 
     /**
@@ -88,39 +103,49 @@ public class PersonalAccessTokenCreator extends DSpaceRunnable<PersonalAccessTok
      */
     @Override
     public void internalRun() throws Exception {
-        log.debug("Running {}", PersonalAccessTokenCreator.class.getName());
+        log.debug("Running {}", ClarinTokenCreator.class.getName());
         if (help) {
             printHelp();
             return;
         }
 
         Context context = new Context();
+        EPerson ePerson = getEperson(context);
+        if (ePerson == null) {
+            throw new RuntimeException("Only authenticated user can run the script");
+        }
+        context.setCurrentUser(ePerson);
         try {
-            performScript(context);
+            if (token != null) {
+                performDelete(context, token);
+            } else {
+                performCreate(context, ePerson);
+            }
         } finally {
             context.complete();
         }
 
     }
 
-    protected void performScript(Context context) throws Exception {
-        EPerson ePerson = getEperson(context);
+    protected void performCreate(Context context, EPerson ePerson) throws Exception {
+        String token = clarinTokenService.createToken(context, ePerson.getID(), expirationDate);
 
-        if (ePerson == null) {
-            throw new RuntimeException("Only authenticated user can run the script");
-        }
-        context.setCurrentUser(ePerson);
-
-        String token = personalAccessTokenService.createToken(context, ePerson.getID(), expirationDate);
-
-        log.debug("Personal Access Token created: {}", getMaskedToken(token));
+        log.debug("Clarin Token created: {}", getMaskedToken(token));
 
         String emailToSend = email != null ? email : ePerson.getEmail();
 
         sendEmail(ePerson, emailToSend, token, expirationDate);
 
-        handler.logInfo("Personal Access Token created: " + getMaskedToken(token));
+        handler.logInfo("Clarin Token created: " + getMaskedToken(token));
         handler.logInfo("Exact token string has been sent to: " + emailToSend);
+    }
+
+    protected void performDelete(Context context, String token) throws Exception {
+        clarinTokenService.delete(context, token);
+
+        log.debug("Clarin Token deleted: {}", getMaskedToken(token));
+
+        handler.logInfo("Clarin Token deleted");
     }
 
     private EPerson getEperson(Context context) throws SQLException {
@@ -158,7 +183,7 @@ public class PersonalAccessTokenCreator extends DSpaceRunnable<PersonalAccessTok
     }
 
     static String getMaskedToken(String token) {
-        String maskedTokenPart = "*".repeat(token.length() - UNMASKED_TOKEN_SIZE);
+        String maskedTokenPart = "*".repeat(MASKED_TOKEN_SIZE);
         String unmaskedTokenPart = token.substring(token.length() - UNMASKED_TOKEN_SIZE);
         return maskedTokenPart + unmaskedTokenPart;
     }
@@ -169,7 +194,7 @@ public class PersonalAccessTokenCreator extends DSpaceRunnable<PersonalAccessTok
         // Get a resource bundle according to the ePerson language preferences
         Locale supportedLocale = I18nUtil.getEPersonLocale(ePerson);
 
-        Email email = Email.getEmail(I18nUtil.getEmailFilename(supportedLocale, "personal_access_token"));
+        Email email = Email.getEmail(I18nUtil.getEmailFilename(supportedLocale, "clarin_token"));
         email.addArgument(token);
         email.addArgument(ePerson.getFullName());
         email.addArgument(validUntil.toString());

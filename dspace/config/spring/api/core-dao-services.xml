@@ -56,7 +56,7 @@
     <bean class="org.dspace.content.dao.impl.clarin.ClarinItemDAOImpl"/>
     <bean class="org.dspace.content.dao.impl.clarin.ClarinVerificationTokenDAOImpl"/>
     <bean class="org.dspace.content.dao.impl.clarin.MatomoReportSubscriptionDAOImpl"/>
-    <bean class="org.dspace.content.dao.impl.clarin.PersonalAccessTokenDAOImpl"/>
+    <bean class="org.dspace.content.dao.impl.clarin.ClarinTokenDAOImpl"/>
 
     <bean class="org.dspace.harvest.dao.impl.HarvestedItemDAOImpl"/>
     <bean class="org.dspace.harvest.dao.impl.HarvestedCollectionDAOImpl"/>

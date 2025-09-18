@@ -7,8 +7,8 @@
  */
 package org.dspace.administer;
 
-import static org.dspace.administer.PersonalAccessTokenCreator.getExpirationDate;
-import static org.dspace.administer.PersonalAccessTokenCreator.getMaskedToken;
+import static org.dspace.administer.ClarinTokenCreator.getExpirationDate;
+import static org.dspace.administer.ClarinTokenCreator.getMaskedToken;
 
 import java.sql.SQLException;
 import java.util.Date;
@@ -24,30 +24,33 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.factory.ClarinServiceFactory;
-import org.dspace.content.service.clarin.PersonalAccessTokenService;
+import org.dspace.content.service.clarin.ClarinTokenService;
 import org.dspace.core.Context;
 import org.dspace.eperson.EPerson;
 import org.dspace.eperson.factory.EPersonServiceFactory;
 import org.dspace.eperson.service.EPersonService;
 
-public class PersonalAccessTokenAdministrator {
+public class ClarinTokenAdministrator {
 
-    private static final Logger log = LogManager.getLogger(PersonalAccessTokenAdministrator.class);
+    private static final Logger log = LogManager.getLogger(ClarinTokenAdministrator.class);
 
-    private PersonalAccessTokenAdministrator() {
+    private ClarinTokenAdministrator() {
     }
 
     public static void main(String args[]) throws Exception {
-        log.info("Personal Access Token manager started ....");
+        log.info("Clarin Token administrator started ....");
 
         Options options = new Options();
         options.addOption("c", "create", false, "create token for ePerson specified by ID or email");
         options.addOption("d", "delete", false,
-                "delete token for given ePerson (or delete all tokens when -u and -e options are missing)");
+                "delete specified token, or delete all tokens for given ePerson, " +
+                        "or delete all tokens when -t, -u, and -e options are missing)");
         options.addOption("u", "ePerson_ID", true, "ePerson UUID");
         options.addOption("e", "email", true, "ePerson email");
         options.addOption("x", "expiration", true,
-                "token expiration time in days or hours, (e.g. 3d or 48h), for -c option only");
+                "token expiration time in days or hours, (e.g. 3d or 48h), for -c option only [required for create]");
+        options.addOption("t", "token", true,
+                "token string [optional for delete]");
         options.addOption("h", "help", false, "help");
 
         CommandLineParser parser = new DefaultParser();
@@ -81,8 +84,13 @@ public class PersonalAccessTokenAdministrator {
                 email = line.getOptionValue("e");
             }
 
-            PersonalAccessTokenService personalAccessTokenService =
-                    ClarinServiceFactory.getInstance().getPersonalAccessTokenService();
+            String token = null;
+            if (line.hasOption("t")) {
+                token = line.getOptionValue("t");
+            }
+
+            ClarinTokenService clarinTokenService =
+                    ClarinServiceFactory.getInstance().getClarinTokenService();
             EPersonService ePersonService = EPersonServiceFactory.getInstance().getEPersonService();
 
             try (Context context = new Context()) {
@@ -94,9 +102,9 @@ public class PersonalAccessTokenAdministrator {
                             throw new IllegalArgumentException("Invalid ePerson UUID or email");
                         }
                         Date expirationDate = getExpirationDate(line.getOptionValue("x").toLowerCase());
-                        createToken(context, personalAccessTokenService, ePerson, expirationDate);
+                        createToken(context, clarinTokenService, ePerson, expirationDate);
                     } else {
-                        deleteToken(context, personalAccessTokenService, ePerson);
+                        deleteToken(context, clarinTokenService, token, ePerson);
                     }
                 } finally {
                     context.restoreAuthSystemState();
@@ -109,36 +117,40 @@ public class PersonalAccessTokenAdministrator {
             printHelpAndExit(options);
         }
 
-        log.info("MATOMO pdf reports generation finished.");
+        log.info("Clarin Token administrator finished.");
     }
 
     private static void createToken(Context context,
-                                    PersonalAccessTokenService personalAccessTokenService,
+                                    ClarinTokenService clarinTokenService,
                                     EPerson ePerson,
                                     Date expirationDate) throws SQLException, AuthorizeException {
-        String token = personalAccessTokenService.createToken(context, ePerson.getID(), expirationDate);
-        log.debug("Personal Access Token created: {}", getMaskedToken(token));
-        System.out.printf("Personal Access Token created: %s\n", token);
+        String token = clarinTokenService.createToken(context, ePerson.getID(), expirationDate);
+        log.debug("Clarin Token created: {}", getMaskedToken(token));
+        System.out.printf("Clarin Token created: %s\n", token);
         System.out.printf("For user: %s, with ID: %s\n", ePerson.getEmail(), ePerson.getID());
     }
 
     private static void deleteToken(Context context,
-                                    PersonalAccessTokenService personalAccessTokenService,
+                                    ClarinTokenService clarinTokenService,
+                                    String token,
                                     EPerson ePerson) throws SQLException, AuthorizeException {
-        if (ePerson != null) {
-            personalAccessTokenService.delete(context, ePerson.getID());
-            System.out.println("Personal Access Token removed.");
+        if (token != null) {
+            clarinTokenService.delete(context, token);
+            System.out.println("Clarin Token removed.");
+        } else if (ePerson != null) {
+            clarinTokenService.delete(context, ePerson.getID());
+            System.out.println("Clarin Tokens removed.");
             System.out.printf("For user: %s, with ID: %s\n", ePerson.getEmail(), ePerson.getID());
         } else {
-            personalAccessTokenService.deleteAll(context);
-            System.out.println("All Personal Access Tokens removed");
+            clarinTokenService.deleteAll(context);
+            System.out.println("All Clarin Tokens removed");
         }
     }
 
     private static void printHelpAndExit(Options options) {
         // print the help message
         HelpFormatter myHelp = new HelpFormatter();
-        myHelp.printHelp("personal-access-token\n", options);
+        myHelp.printHelp("clarin-token\n", options);
         System.exit(0);
     }
 

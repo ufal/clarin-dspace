@@ -353,10 +353,10 @@
         </step>
     </command>
     <command>
-        <name>personal-access-token</name>
-        <description>Personal Access Token Administrator</description>
+        <name>clarin-token</name>
+        <description>Clarin Token Administrator</description>
         <step>
-            <class>org.dspace.administer.PersonalAccessTokenAdministrator</class>
+            <class>org.dspace.administer.ClarinTokenAdministrator</class>
         </step>
     </command>
 </commands>

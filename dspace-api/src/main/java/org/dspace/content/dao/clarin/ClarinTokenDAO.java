@@ -10,24 +10,22 @@ package org.dspace.content.dao.clarin;
 import java.sql.SQLException;
 import java.util.UUID;
 
-import org.dspace.content.clarin.PersonalAccessToken;
+import org.dspace.content.clarin.ClarinToken;
 import org.dspace.core.Context;
 import org.dspace.core.GenericDAO;
 
 /**
- * Database Access Object interface class for the PersonalAccessToken object.
- * The implementation of this class is responsible for all database calls for the PersonalAccessToken object
+ * Database Access Object interface class for the ClarinToken object.
+ * The implementation of this class is responsible for all database calls for the ClarinToken object
  * and is autowired by spring This class should only be accessed from a single service and should never be exposed
  * outside the API
  *
  * @author Milan Kuchtiak
  */
-public interface PersonalAccessTokenDAO extends GenericDAO<PersonalAccessToken> {
-
-    PersonalAccessToken createOrUpdate(Context context, PersonalAccessToken pat) throws SQLException;
+public interface ClarinTokenDAO extends GenericDAO<ClarinToken> {
 
     void deleteAll(Context context) throws SQLException;
 
-    PersonalAccessToken findByEPersonUUID(Context context, UUID epersonUUID) throws SQLException;
+    void deleteTokensForEPersonID(Context context, UUID epersonUUID) throws SQLException;
 
 }

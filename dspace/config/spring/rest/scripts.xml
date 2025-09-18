@@ -84,9 +84,9 @@
         <property name="dspaceRunnableClass" value="org.dspace.scripts.filepreview.FilePreview"/>
     </bean>
 
-    <bean id="personal-access-token" class="org.dspace.administer.PersonalAccessTokenConfiguration" primary="true">
-        <property name="description" value="Create personal access token"/>
-        <property name="dspaceRunnableClass" value="org.dspace.administer.PersonalAccessTokenCreator"/>
+    <bean id="clarin-token" class="org.dspace.administer.ClarinTokenConfiguration" primary="true">
+        <property name="description" value="Create or delete clarin token. Created token is sent to e-mail address."/>
+        <property name="dspaceRunnableClass" value="org.dspace.administer.ClarinTokenCreator"/>
     </bean>
 
 </beans>

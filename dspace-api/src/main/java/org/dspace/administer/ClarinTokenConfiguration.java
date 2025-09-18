@@ -14,9 +14,9 @@ import org.dspace.core.Context;
 import org.dspace.scripts.DSpaceCommandLineParameter;
 import org.dspace.scripts.configuration.ScriptConfiguration;
 
-public class PersonalAccessTokenConfiguration extends ScriptConfiguration<PersonalAccessTokenCreator> {
+public class ClarinTokenConfiguration extends ScriptConfiguration<ClarinTokenCreator> {
 
-    private Class<PersonalAccessTokenCreator> dspaceRunnableClass;
+    private Class<ClarinTokenCreator> dspaceRunnableClass;
 
     /**
      * Generic getter for the dspaceRunnableClass
@@ -24,7 +24,7 @@ public class PersonalAccessTokenConfiguration extends ScriptConfiguration<Person
      * @return the dspaceRunnableClass value of this ScriptConfiguration
      */
     @Override
-    public Class<PersonalAccessTokenCreator> getDspaceRunnableClass() {
+    public Class<ClarinTokenCreator> getDspaceRunnableClass() {
         return dspaceRunnableClass;
     }
 
@@ -34,7 +34,7 @@ public class PersonalAccessTokenConfiguration extends ScriptConfiguration<Person
      * @param dspaceRunnableClass The dspaceRunnableClass to be set on this IndexDiscoveryScriptConfiguration
      */
     @Override
-    public void setDspaceRunnableClass(Class<PersonalAccessTokenCreator> dspaceRunnableClass) {
+    public void setDspaceRunnableClass(Class<ClarinTokenCreator> dspaceRunnableClass) {
         this.dspaceRunnableClass = dspaceRunnableClass;
     }
 
@@ -65,10 +65,14 @@ public class PersonalAccessTokenConfiguration extends ScriptConfiguration<Person
 
             options.addOption("h", "help", false, "help");
 
-            options.addOption("x", "expiration", true, "token expiration in days or hours, (e.g. 3d or 48h)");
-            options.getOption("x").setRequired(true);
+            options.addOption("c", "crete", false, "create new token");
+            options.addOption("d", "delete", false, "delete/deactivate token");
 
-            options.addOption("e", "email", true, "e-mail to send access token");
+            options.addOption("x", "expiration", true,
+                    "token expiration in days or hours, e.g. 3d or 48h [required for token create]");
+            options.addOption("e", "email", true,
+                    "e-mail to send newly created access token [optional for token create]");
+            options.addOption("t", "token", true, "token to delete/deactivate [required for token delete]");
 
             super.options = options;
         }

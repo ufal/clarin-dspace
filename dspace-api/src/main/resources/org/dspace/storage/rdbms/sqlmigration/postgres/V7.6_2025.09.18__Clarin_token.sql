@@ -7,15 +7,14 @@
 --
 
 -----------------------------------------------------------------------------------
--- Create table for personal access token entity
+-- Create table for clarin token entity
 -----------------------------------------------------------------------------------
-CREATE SEQUENCE personal_access_token_id_seq;
+CREATE SEQUENCE clarin_token_id_seq;
 
-CREATE TABLE personal_access_token
+CREATE TABLE clarin_token
 (
     id INTEGER PRIMARY KEY,
-    eperson_id UUID NOT NULL UNIQUE,
-    mac_secret VARCHAR(50) NOT NULL,
-    aes_key VARCHAR(50) NOT NULL,
-    CONSTRAINT personal_access_token_eperson_id_fkey FOREIGN KEY (eperson_id) REFERENCES eperson (uuid) ON DELETE CASCADE
+    eperson_id UUID NOT NULL,
+    sign_key VARCHAR(50) NOT NULL,
+    CONSTRAINT clarin_token_eperson_id_fkey FOREIGN KEY (eperson_id) REFERENCES eperson (uuid) ON DELETE CASCADE
 );
