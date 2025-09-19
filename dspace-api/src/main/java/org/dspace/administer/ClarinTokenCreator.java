@@ -63,18 +63,21 @@ public class ClarinTokenCreator extends DSpaceRunnable<ClarinTokenConfiguration>
     @Override
     public void setup() throws ParseException {
         log.debug("Setting up {}", ClarinTokenCreator.class.getName());
-        if (commandLine.hasOption("h")) {
+        if (commandLine.hasOption("h") || (!commandLine.hasOption("c") && !commandLine.hasOption("d"))) {
             help = true;
             return;
         }
 
-        if ((!commandLine.hasOption("c") && !commandLine.hasOption("d")) ||
-                (commandLine.hasOption("c") && commandLine.hasOption("d"))) {
-            throw new ParseException("Either create or delete option must be specified");
+        if (commandLine.hasOption("c") && commandLine.hasOption("d")) {
+            throw new ParseException("Select either create or delete option, not both");
         }
 
         if (commandLine.hasOption("c") && !commandLine.hasOption("x")) {
             throw new ParseException("No token expiration time specified");
+        }
+
+        if (commandLine.hasOption("d") && !commandLine.hasOption("t")) {
+            throw new ParseException("No token specified");
         }
 
         if (commandLine.hasOption("c")) {
@@ -83,7 +86,7 @@ public class ClarinTokenCreator extends DSpaceRunnable<ClarinTokenConfiguration>
                 email = commandLine.getOptionValue("e");
             }
         } else if (commandLine.hasOption("d")) {
-            token = commandLine.getOptionValue("d");
+            token = commandLine.getOptionValue("t");
         }
 
         clarinTokenService = ClarinServiceFactory.getInstance().getClarinTokenService();
@@ -112,10 +115,10 @@ public class ClarinTokenCreator extends DSpaceRunnable<ClarinTokenConfiguration>
         }
         context.setCurrentUser(ePerson);
         try {
-            if (token != null) {
-                performDelete(context, token);
-            } else {
+            if (expirationDate != null) {
                 performCreate(context, ePerson);
+            } else {
+                performDelete(context, token);
             }
         } finally {
             context.complete();
