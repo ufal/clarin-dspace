@@ -8,11 +8,11 @@
 package org.dspace.content.dao.clarin;
 
 import java.sql.SQLException;
-import java.util.UUID;
 
 import org.dspace.content.clarin.ClarinToken;
 import org.dspace.core.Context;
 import org.dspace.core.GenericDAO;
+import org.dspace.eperson.EPerson;
 
 /**
  * Database Access Object interface class for the ClarinToken object.
@@ -26,6 +26,6 @@ public interface ClarinTokenDAO extends GenericDAO<ClarinToken> {
 
     void deleteAll(Context context) throws SQLException;
 
-    void deleteTokensForEPersonID(Context context, UUID epersonUUID) throws SQLException;
+    void deleteTokensForEPerson(Context context, EPerson ePerson) throws SQLException;
 
 }

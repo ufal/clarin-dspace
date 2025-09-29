@@ -8,13 +8,13 @@
 package org.dspace.content.dao.impl.clarin;
 
 import java.sql.SQLException;
-import java.util.UUID;
 import javax.persistence.Query;
 
 import org.dspace.content.clarin.ClarinToken;
 import org.dspace.content.dao.clarin.ClarinTokenDAO;
 import org.dspace.core.AbstractHibernateDAO;
 import org.dspace.core.Context;
+import org.dspace.eperson.EPerson;
 
 /**
  * Hibernate implementation of the Database Access Object interface class for the ClarinToken object.
@@ -27,10 +27,10 @@ public class ClarinTokenDAOImpl extends AbstractHibernateDAO<ClarinToken>
         implements ClarinTokenDAO {
 
     @Override
-    public void deleteTokensForEPersonID(Context context, UUID ePersonID) throws SQLException {
+    public void deleteTokensForEPerson(Context context, EPerson ePerson) throws SQLException {
         Query query = createQuery(context, "DELETE FROM ClarinToken " +
-                "WHERE ePersonID = :ePersonID");
-        query.setParameter("ePersonID", ePersonID);
+                "WHERE ePerson = :ePerson");
+        query.setParameter("ePerson", ePerson);
         query.executeUpdate();
         context.commit();
     }

@@ -8,17 +8,20 @@
 package org.dspace.content.clarin;
 
 import java.util.Objects;
-import java.util.UUID;
 import javax.persistence.Column;
 import javax.persistence.Entity;
+import javax.persistence.FetchType;
 import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 import javax.persistence.Id;
+import javax.persistence.JoinColumn;
+import javax.persistence.ManyToOne;
 import javax.persistence.SequenceGenerator;
 import javax.persistence.Table;
 
 import com.nimbusds.jose.JOSEObjectType;
 import org.dspace.core.ReloadableEntity;
+import org.dspace.eperson.EPerson;
 
 /**
  * Entity representing Clarin Tokens.
@@ -31,10 +34,14 @@ public class ClarinToken implements ReloadableEntity<Integer> {
 
     public static final String E_PERSON_ID = "eid";
     public static final String TOKEN_ISSUER = "clarin-dspace";
+    public static final String AUTHENTICATION_METHOD = "clarin-token";
     public static final JOSEObjectType TOKEN_TYPE = new JOSEObjectType("CLARIN-JWE-TOKEN");
     public static final int MASKED_TOKEN_SIZE = 15;
     public static final int UNMASKED_TOKEN_SIZE = 3;
+    // this config property is required to be set
     public static final String PROPERTY_ENCRYPTION_SECRET = "clarin.token.encryption.secret";
+    // this config property is optional, and set to 90 days by default
+    public static final String PROPERTY_MAX_EXPIRATION_TIME_IN_DAYS = "clarin.token.max.expiration.time.in.days";
 
     @Id
     @Column(name = "id")
@@ -43,8 +50,9 @@ public class ClarinToken implements ReloadableEntity<Integer> {
             allocationSize = 1)
     private Integer id;
 
-    @Column(name = "eperson_id")
-    private UUID ePersonID;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "eperson_id")
+    private EPerson ePerson;
 
     @Column(name = "sign_key")
     private String signKey;
@@ -61,12 +69,12 @@ public class ClarinToken implements ReloadableEntity<Integer> {
         this.id = id;
     }
 
-    public UUID getEPersonID() {
-        return ePersonID;
+    public EPerson getEPerson() {
+        return ePerson;
     }
 
-    public void setEPersonID(UUID ePersonID) {
-        this.ePersonID = ePersonID;
+    public void setEPerson(EPerson ePersonID) {
+        this.ePerson = ePersonID;
     }
 
     /**
@@ -89,20 +97,20 @@ public class ClarinToken implements ReloadableEntity<Integer> {
         }
         ClarinToken that = (ClarinToken) o;
         return Objects.equals(id, that.id) &&
-                Objects.equals(ePersonID, that.ePersonID) &&
+                Objects.equals(ePerson.getID(), that.ePerson.getID()) &&
                 Objects.equals(signKey, that.signKey);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(id, ePersonID, signKey);
+        return Objects.hash(id, ePerson.getID(), signKey);
     }
 
     @Override
     public String toString() {
         return "ClarinToken{" +
                 "id: " + id +
-                ", ePersonId: " + ePersonID +
+                ", ePerson: " + ePerson.getEmail() +
                 ", signKey: " + signKey +
                 '}';
     }

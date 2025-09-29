@@ -134,7 +134,7 @@ public class ClarinTokenAdministrator {
                                     ClarinTokenService clarinTokenService,
                                     EPerson ePerson,
                                     Date expirationDate) throws SQLException, AuthorizeException {
-        String token = clarinTokenService.createToken(context, ePerson.getID(), expirationDate);
+        String token = clarinTokenService.createToken(context, ePerson, expirationDate);
         log.debug("Clarin Token created: {}", getMaskedToken(token));
         System.out.printf("Clarin Token created: %s\n", token);
         System.out.printf("For user: %s, with ID: %s\n", ePerson.getEmail(), ePerson.getID());
@@ -148,7 +148,7 @@ public class ClarinTokenAdministrator {
             clarinTokenService.delete(context, token);
             System.out.println("Clarin Token removed.");
         } else if (ePerson != null) {
-            clarinTokenService.delete(context, ePerson.getID());
+            clarinTokenService.delete(context, ePerson);
             System.out.println("Clarin Tokens removed.");
             System.out.printf("For user: %s, with ID: %s\n", ePerson.getEmail(), ePerson.getID());
         } else {

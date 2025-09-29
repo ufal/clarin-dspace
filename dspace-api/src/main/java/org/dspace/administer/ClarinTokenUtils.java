@@ -7,6 +7,8 @@
  */
 package org.dspace.administer;
 
+import static org.dspace.content.clarin.ClarinToken.E_PERSON_ID;
+
 import java.text.ParseException;
 import java.util.Date;
 import javax.crypto.SecretKey;
@@ -43,13 +45,13 @@ public final class ClarinTokenUtils {
         return new SecretKeySpec(decodedKey, 0, decodedKey.length, "AES");
     }
 
-    public static boolean isClarinTokenValid(SignedJWT signedJWT, ClarinToken clarinToken)
+    public static boolean isSignedJWTValid(SignedJWT signedJWT, ClarinToken clarinToken)
             throws ParseException, JOSEException {
         JWSVerifier verifier = new MACVerifier(clarinToken.getSignKey());
         if (signedJWT.verify(verifier)) {
             JWTClaimsSet jwtClaimsSet = signedJWT.getJWTClaimsSet();
             if (ClarinToken.TOKEN_ISSUER.equals(jwtClaimsSet.getIssuer()) &&
-                    clarinToken.getEPersonID().toString().equals(jwtClaimsSet.getClaim(ClarinToken.E_PERSON_ID))) {
+                    clarinToken.getEPerson().getID().toString().equals(jwtClaimsSet.getClaim(E_PERSON_ID))) {
                 Date expirationTime = jwtClaimsSet.getExpirationTime();
                 return expirationTime != null
                         // Ensure expiration timestamp is after the current time, with zero acceptable clock skew

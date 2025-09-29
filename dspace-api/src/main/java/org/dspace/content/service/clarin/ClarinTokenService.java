@@ -10,7 +10,6 @@ package org.dspace.content.service.clarin;
 import java.sql.SQLException;
 import java.text.ParseException;
 import java.util.Date;
-import java.util.UUID;
 
 import com.nimbusds.jose.JOSEException;
 import org.dspace.authorize.AuthorizeException;
@@ -28,7 +27,9 @@ import org.dspace.eperson.EPerson;
 public interface ClarinTokenService {
 
     /**
-     * Find the ClarinToken object by id
+     * Find the ClarinToken object by id.
+     * Any user can get ClarinToken object for given ID, to allow JWT authentication service
+     * to get the userID + sign key for given token, at the moment when nobody is signed to DSpace yet.
      *
      * @param context DSpace context object
      * @param id ID of the searching larinToken object
@@ -42,23 +43,23 @@ public interface ClarinTokenService {
      * used to verify token.
      *
      * @param context DSpace context object
-     * @param ePersonID ePerson ID
+     * @param ePerson EPerson
      * @param expirationTime expiration time when token becomes expired
      * @return token string
      * @throws SQLException if database error
      * @throws AuthorizeException when user is not allowed to create token
      */
-    String createToken(Context context, UUID ePersonID, Date expirationTime) throws SQLException, AuthorizeException;
+    String createToken(Context context, EPerson ePerson, Date expirationTime) throws SQLException, AuthorizeException;
 
     /**
      *  Delete/Invalidate all clarin tokens for ePerson, with given ID.
      *
      * @param context DSpace context object
-     * @param ePersonID ePerson ID
+     * @param ePerson EPerson
      * @throws SQLException if database error
-     * @throws AuthorizeException when user is not admin user
+     * @throws AuthorizeException when user is not allowed to delete token
      */
-    void delete(Context context, UUID ePersonID) throws SQLException, AuthorizeException;
+    void delete(Context context, EPerson ePerson) throws SQLException, AuthorizeException;
 
     /**
      *  Delete/Invalidate token.
@@ -66,7 +67,7 @@ public interface ClarinTokenService {
      * @param context DSpace context object
      * @param token token string
      * @throws SQLException if database error
-     * @throws AuthorizeException when user is not admin user
+     * @throws AuthorizeException when user is not allowed to delete token
      */
     void delete(Context context, String token) throws SQLException, AuthorizeException;
 
@@ -80,7 +81,7 @@ public interface ClarinTokenService {
     void deleteAll(Context context) throws SQLException, AuthorizeException;
 
     /**
-     * Get EPerson object from clarin token
+     * Get EPerson object from clarin token.
      *
      * @param context DSpace context object
      * @param token clarin token string

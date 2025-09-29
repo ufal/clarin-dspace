@@ -69,7 +69,7 @@ public class ClarinTokenServiceImpl implements ClarinTokenService {
     }
 
     @Override
-    public String createToken(Context context, UUID ePersonID, Date expirationTime)
+    public String createToken(Context context, EPerson ePerson, Date expirationTime)
             throws SQLException, AuthorizeException {
         boolean ignoreAuth = context.ignoreAuthorization();
 
@@ -79,11 +79,15 @@ public class ClarinTokenServiceImpl implements ClarinTokenService {
             throw new RuntimeException("Missing clarin.token.encryption.secret configuration key");
         }
 
+        if (ePerson == null) {
+            throw new BadRequestException("EPerson must be defined.");
+        }
+
         if (!ignoreAuth && context.getCurrentUser() == null) {
             throw new AuthorizeException("You must be authenticated user");
         }
 
-        if (!ignoreAuth && !authorizeService.isAdmin(context) && !context.getCurrentUser().getID().equals(ePersonID)) {
+        if (!ignoreAuth && !authorizeService.isAdmin(context) && !context.getCurrentUser().equals(ePerson)) {
             throw new AuthorizeException("You must be admin user to create clarin token for this User ID");
         }
 
@@ -95,7 +99,7 @@ public class ClarinTokenServiceImpl implements ClarinTokenService {
 
         JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
                 .issuer(ClarinToken.TOKEN_ISSUER)
-                .claim(ClarinToken.E_PERSON_ID, ePersonID.toString())
+                .claim(ClarinToken.E_PERSON_ID, ePerson.getID().toString())
                 .expirationTime(expirationTime)
                 .build();
 
@@ -115,10 +119,10 @@ public class ClarinTokenServiceImpl implements ClarinTokenService {
             SecretKey aesKey = ClarinTokenUtils.getSecretKeyFromBase64EncodedString(encryptionSecret);
 
             ClarinToken pat = new ClarinToken();
-            pat.setEPersonID(ePersonID);
+            pat.setEPerson(ePerson);
             pat.setSignKey(macSecret);
 
-            pat = this.createToken(context, pat);
+            pat = clarinTokenDAO.create(context, pat);
 
             JWEHeader header = new JWEHeader.Builder(JWEAlgorithm.DIR, EncryptionMethod.A256GCM)
                     .keyID(String.valueOf(pat.getID()))
@@ -149,7 +153,7 @@ public class ClarinTokenServiceImpl implements ClarinTokenService {
 
                     if (!ignoreAuth &&
                             !authorizeService.isAdmin(context) &&
-                            !context.getCurrentUser().getID().equals(clarinToken.getEPersonID())) {
+                            !context.getCurrentUser().equals(clarinToken.getEPerson())) {
                         throw new AuthorizeException("You must be admin user to delete this token");
                     }
 
@@ -164,15 +168,15 @@ public class ClarinTokenServiceImpl implements ClarinTokenService {
     }
 
     @Override
-    public void delete(Context context, UUID uuid) throws SQLException, AuthorizeException {
+    public void delete(Context context, EPerson ePerson) throws SQLException, AuthorizeException {
         boolean ignoreAuth = context.ignoreAuthorization();
         if (!ignoreAuth && context.getCurrentUser() == null) {
             throw new AuthorizeException("You must be authenticated user");
         }
-        if (!ignoreAuth && !authorizeService.isAdmin(context) && !context.getCurrentUser().getID().equals(uuid)) {
+        if (!ignoreAuth && !authorizeService.isAdmin(context) && !context.getCurrentUser().equals(ePerson)) {
             throw new AuthorizeException("You must be admin user to delete token for this User ID");
         }
-        clarinTokenDAO.deleteTokensForEPersonID(context, uuid);
+        clarinTokenDAO.deleteTokensForEPerson(context, ePerson);
     }
 
     @Override
@@ -188,15 +192,15 @@ public class ClarinTokenServiceImpl implements ClarinTokenService {
     public EPerson getEPersonFromClarinToken(Context context, String token)
             throws SQLException, ParseException, JOSEException {
         JWEObject jweObj = JWEObject.parse(token);
-        String eId = jweObj.getHeader().getKeyID();
-        if (eId != null) {
-            ClarinToken clarinToken = find(context, Integer.valueOf(eId));
+        String tokenId = jweObj.getHeader().getKeyID();
+        if (tokenId != null) {
+            ClarinToken clarinToken = find(context, Integer.valueOf(tokenId));
             if (clarinToken != null) {
                 jweObj.decrypt(new DirectDecrypter(
                         ClarinTokenUtils.getSecretKeyFromBase64EncodedString(
                                 configurationService.getProperty(ClarinToken.PROPERTY_ENCRYPTION_SECRET))));
                 SignedJWT signedJWT = jweObj.getPayload().toSignedJWT();
-                if (ClarinTokenUtils.isClarinTokenValid(signedJWT, clarinToken)) {
+                if (ClarinTokenUtils.isSignedJWTValid(signedJWT, clarinToken)) {
                     UUID ePersonID = UUID.fromString(
                             signedJWT.getJWTClaimsSet().getClaim(ClarinToken.E_PERSON_ID).toString());
                     return ePersonDAO.findByID(
@@ -206,15 +210,4 @@ public class ClarinTokenServiceImpl implements ClarinTokenService {
         }
         return null;
     }
-
-    private ClarinToken createToken(Context context, ClarinToken pat) throws SQLException {
-        EPerson ePerson = ePersonDAO.findByID(context, EPerson.class, pat.getEPersonID());
-
-        if (ePerson == null) {
-            throw new BadRequestException("EPerson with this ID doesn't exist");
-        }
-
-        return clarinTokenDAO.create(context, pat);
-    }
-
 }

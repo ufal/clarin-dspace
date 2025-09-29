@@ -18,6 +18,7 @@ import java.util.UUID;
 import javax.mail.MessagingException;
 
 import org.apache.commons.cli.ParseException;
+import org.dspace.content.clarin.ClarinToken;
 import org.dspace.content.factory.ClarinServiceFactory;
 import org.dspace.content.service.clarin.ClarinTokenService;
 import org.dspace.core.Context;
@@ -28,14 +29,18 @@ import org.dspace.eperson.factory.EPersonServiceFactory;
 import org.dspace.eperson.service.EPersonService;
 import org.dspace.scripts.DSpaceRunnable;
 import org.dspace.scripts.configuration.ScriptConfiguration;
+import org.dspace.services.ConfigurationService;
+import org.dspace.services.factory.DSpaceServicesFactory;
 import org.dspace.utils.DSpace;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class ClarinTokenCreator extends DSpaceRunnable<ClarinTokenConfiguration> {
 
+    private final static int HOURS_TO_MILLIS = 60 * 60 * 1000;
+    private final static int DAYS_TO_MILLIS = 24 * HOURS_TO_MILLIS;
+
     private static final Logger log = LoggerFactory.getLogger(ClarinTokenCreator.class);
-    private static final int MAX_EXPIRATION_TIME_IN_DAYS = 90;
     private boolean help = false;
     private String email;
     private Date expirationDate;
@@ -127,7 +132,7 @@ public class ClarinTokenCreator extends DSpaceRunnable<ClarinTokenConfiguration>
     }
 
     protected void performCreate(Context context, EPerson ePerson) throws Exception {
-        String token = clarinTokenService.createToken(context, ePerson.getID(), expirationDate);
+        String token = clarinTokenService.createToken(context, ePerson, expirationDate);
 
         log.debug("Clarin Token created: {}", getMaskedToken(token));
 
@@ -168,17 +173,24 @@ public class ClarinTokenCreator extends DSpaceRunnable<ClarinTokenConfiguration>
         boolean inDays = expiration.endsWith("d");
         boolean inHours = !inDays;
 
-        if ((inDays && expirationTime > MAX_EXPIRATION_TIME_IN_DAYS) ||
-                (inHours && expirationTime > MAX_EXPIRATION_TIME_IN_DAYS * 24)) {
-            throw new ParseException("The maximum expiration time is " + MAX_EXPIRATION_TIME_IN_DAYS + " days");
+        long maxExpirationTimeInDays = getMaxExpirationTimeInDays();
+        if ((inDays && expirationTime > maxExpirationTimeInDays) ||
+                (inHours && expirationTime > maxExpirationTimeInDays * 24)) {
+            throw new ParseException("The maximum expiration time is " + maxExpirationTimeInDays + " days");
         }
 
         long currentDate = new Date().getTime();
+
         if (inDays) {
-            return new Date(currentDate + 24 * 60 * 60 * 1000 * expirationTime);
+            return new Date(currentDate + DAYS_TO_MILLIS * expirationTime);
         } else {
-            return new Date(currentDate +  60 * 60 * 1000 * expirationTime);
+            return new Date(currentDate + HOURS_TO_MILLIS * expirationTime);
         }
+    }
+
+    static long getMaxExpirationTimeInDays() {
+        ConfigurationService configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
+        return configurationService.getLongProperty(ClarinToken.PROPERTY_MAX_EXPIRATION_TIME_IN_DAYS, 90);
     }
 
     static String getMaskedToken(String token) {

@@ -25,6 +25,7 @@ import org.dspace.app.rest.security.RestAuthenticationService;
 import org.dspace.app.rest.utils.ContextUtil;
 import org.dspace.authenticate.AuthenticationMethod;
 import org.dspace.authenticate.service.AuthenticationService;
+import org.dspace.content.clarin.ClarinToken;
 import org.dspace.content.service.clarin.ClarinTokenService;
 import org.dspace.core.Context;
 import org.dspace.eperson.EPerson;
@@ -134,6 +135,7 @@ public class JWTTokenRestAuthenticationServiceImpl implements RestAuthentication
                     ePerson = clarinTokenService.getEPersonFromClarinToken(context, token);
                     if (ePerson != null) {
                         context.setCurrentUser(ePerson);
+                        context.setAuthenticationMethod(ClarinToken.AUTHENTICATION_METHOD);
                     }
                 } else {
                     ePerson = loginJWTTokenHandler.parseEPersonFromToken(token, request, context);
