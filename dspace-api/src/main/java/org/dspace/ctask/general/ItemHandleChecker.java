@@ -13,6 +13,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import javax.ws.rs.client.Client;
 import javax.ws.rs.client.ClientBuilder;
 import javax.ws.rs.client.WebTarget;
@@ -31,31 +32,39 @@ import org.glassfish.jersey.client.ClientProperties;
  */
 public class ItemHandleChecker extends BasicLinkChecker {
 
+    private static final int CONNECTION_TIMEOUT_SEC = 2;
+    private static final int READ_TIMEOUT_SEC = 3;
+
     private List<String> ignoredUrls;
 
     private Map<String, HandleResponse> checkedResults;
     private Client client;
+    private String handlePrefix;
 
     @Override
     public void init(Curator curator, String taskId) throws IOException {
         super.init(curator, taskId);
-        client = ClientBuilder.newClient().property(ClientProperties.FOLLOW_REDIRECTS, Boolean.TRUE);
-        String ignores = configurationService.getProperty("curate.checklist.ignore");
-        if (ignores != null && ignores.isEmpty()) {
-            ignoredUrls = Arrays.asList(ignores.split(","));
-        } else {
-            ignoredUrls = List.of();
-        }
+        client = ClientBuilder.newBuilder()
+                .connectTimeout(CONNECTION_TIMEOUT_SEC, TimeUnit.SECONDS)
+                .readTimeout(READ_TIMEOUT_SEC, TimeUnit.SECONDS)
+                .property(ClientProperties.FOLLOW_REDIRECTS, Boolean.TRUE)
+                .build();
+        String[] ignores = configurationService.getArrayProperty("curate.checklist.ignore");
+        ignoredUrls = ignores == null ? List.of() : Arrays.asList(ignores);
+
+        handlePrefix = configurationService.getProperty("handle.canonical.prefix", "http://hdl.handle.net/");
+
         checkedResults = new HashMap<>();
     }
 
     @Override
     protected List<String> getURLs(Item item) {
-        List<MetadataValue> handles = itemService.getMetadata(item, "dc", "identifier", "uri", Item.ANY);
-        List<String> theURLs = new ArrayList<String>();
-        for (MetadataValue url : handles) {
-            if ((url.getValue().startsWith("http://")) || (url.getValue().startsWith("https://"))) {
-                theURLs.add(url.getValue());
+        List<MetadataValue> ids = itemService.getMetadata(item, "dc", "identifier", "uri", Item.ANY);
+        List<String> theURLs = new ArrayList<>();
+        for (MetadataValue id : ids) {
+            String url = id.getValue();
+            if (url != null && url.startsWith(handlePrefix) && !isIgnoredURL(url)) {
+                theURLs.add(url);
             }
         }
         return theURLs;
@@ -65,9 +74,10 @@ public class ItemHandleChecker extends BasicLinkChecker {
     protected boolean checkURL(String url, StringBuilder results) {
 
         HandleResponse handleResponse = getHandleResponse(url, results);
-        checkedResults.put(url, handleResponse);
+        appendResults(url,handleResponse, results);
+        checkedResults.putIfAbsent(url, handleResponse);
 
-        return handleResponse.getFamily() == Response.Status.Family.SUCCESSFUL;
+        return (handleResponse.getFamily() == Response.Status.Family.SUCCESSFUL);
     }
 
     /**
@@ -85,23 +95,27 @@ public class ItemHandleChecker extends BasicLinkChecker {
 
         HandleResponse checkedResult = checkedResults.get(url);
         if (checkedResult != null) {
-            showResults(url, checkedResult, results);
             return checkedResult;
         }
 
-        try (Response response = target.request().head()) {
+        try (Response response = target.request().get()) {
             HandleResponse handleResponse = HandleResponse.fromResponse(response);
-            showResults(url, handleResponse, results);
             if (response.getStatusInfo().getFamily() == Response.Status.Family.REDIRECTION) {
+                // append results also for REDIRECTED URL
+                appendResults(url, handleResponse, results);
                 String location = response.getHeaderString(HttpHeaders.LOCATION);
                 return getHandleResponse(location, results);
             } else {
                 return handleResponse;
             }
+        } catch (Exception ex) {
+            HandleResponse handleResponse =
+                    new HandleResponse(500, Response.Status.Family.SERVER_ERROR, ex.getMessage());
+            return handleResponse;
         }
     }
 
-    private static void showResults(String url, HandleResponse handleResponse, StringBuilder results) {
+    private static void appendResults(String url, HandleResponse handleResponse, StringBuilder results) {
         switch (handleResponse.getFamily()) {
             case SUCCESSFUL:
                 results.append(" - ").append(url).append(" = ").append(handleResponse.getStatus())
@@ -111,19 +125,29 @@ public class ItemHandleChecker extends BasicLinkChecker {
                 results.append(" - ").append(url).append(" = ").append(handleResponse.getStatus())
                         .append(" - REDIRECTED\n");
                 break;
-            default:
+            default: {
                 results.append(" - ").append(url).append(" = ").append(handleResponse.getStatus())
                         .append(" - FAILED\n");
+                if (handleResponse.getErrorMessage() != null) {
+                    results.append(" - Error: ").append(handleResponse.getErrorMessage()).append("\n");
+                }
+            }
         }
     }
 
     private static final class HandleResponse {
         private final int status;
         private final Response.Status.Family family;
+        private final String errorMessage;
 
         private HandleResponse(int status, Response.Status.Family family) {
+            this(status, family, null);
+        }
+
+        private HandleResponse(int status, Response.Status.Family family, String errorMessage) {
             this.status = status;
             this.family = family;
+            this.errorMessage = errorMessage;
         }
 
         public int getStatus() {
@@ -132,6 +156,10 @@ public class ItemHandleChecker extends BasicLinkChecker {
 
         public Response.Status.Family getFamily() {
             return family;
+        }
+
+        public String getErrorMessage() {
+            return errorMessage;
         }
 
         public static HandleResponse fromResponse(Response response) {
@@ -143,6 +171,7 @@ public class ItemHandleChecker extends BasicLinkChecker {
             return "HandleResponse{" +
                     "status=" + status +
                     ", family=" + family +
+                    ", errorMessage='" + errorMessage + "'" +
                     '}';
         }
     }
