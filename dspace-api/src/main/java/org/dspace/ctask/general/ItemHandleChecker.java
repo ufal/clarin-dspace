@@ -26,7 +26,7 @@ import org.dspace.curate.Curator;
 import org.glassfish.jersey.client.ClientProperties;
 
 /**
- * A link handle checker that builds upon the BasicLinkChecker to check the Handle URLs.
+ * A handle checker that builds upon the BasicLinkChecker to check the Handle URLs.
  *
  * @author Milan Kuchtiak
  */
@@ -50,7 +50,7 @@ public class ItemHandleChecker extends BasicLinkChecker {
                 .property(ClientProperties.FOLLOW_REDIRECTS, Boolean.TRUE)
                 .build();
         String[] ignores = configurationService.getArrayProperty("curate.checklist.ignore");
-        ignoredUrls = ignores == null ? List.of() : Arrays.asList(ignores);
+        ignoredUrls = (ignores == null) ? List.of() : Arrays.asList(ignores);
 
         handlePrefix = configurationService.getProperty("handle.canonical.prefix", "http://hdl.handle.net/");
 
@@ -72,19 +72,18 @@ public class ItemHandleChecker extends BasicLinkChecker {
 
     @Override
     protected boolean checkURL(String url, StringBuilder results) {
-
         HandleResponse handleResponse = getHandleResponse(url, results);
-        appendResults(url,handleResponse, results);
+        appendResults(url, handleResponse, results);
         checkedResults.putIfAbsent(url, handleResponse);
 
         return (handleResponse.getFamily() == Response.Status.Family.SUCCESSFUL);
     }
 
     /**
-     * Checks if given URL should be ignored
+     * Checks if given URL should be ignored.
      *
      * @param url URL to be checked
-     * @return True if url should be ignored
+     * @return true if url should be ignored
      */
     protected boolean isIgnoredURL(String url) {
         return ignoredUrls.stream().anyMatch(url::contains);
