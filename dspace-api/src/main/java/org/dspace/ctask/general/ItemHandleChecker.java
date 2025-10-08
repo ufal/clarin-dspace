@@ -9,7 +9,6 @@ package org.dspace.ctask.general;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -50,7 +49,7 @@ public class ItemHandleChecker extends BasicLinkChecker {
                 .property(ClientProperties.FOLLOW_REDIRECTS, Boolean.TRUE)
                 .build();
         String[] ignores = configurationService.getArrayProperty("curate.checklist.ignore");
-        ignoredUrls = (ignores == null) ? List.of() : Arrays.asList(ignores);
+        ignoredUrls = (ignores == null) ? List.of() : List.of(ignores);
 
         handlePrefix = configurationService.getProperty("handle.canonical.prefix", "http://hdl.handle.net/");
 
@@ -97,7 +96,7 @@ public class ItemHandleChecker extends BasicLinkChecker {
             return checkedResult;
         }
 
-        try (Response response = target.request().get()) {
+        try (Response response = target.request().head()) {
             HandleResponse handleResponse = HandleResponse.fromResponse(response);
             if (response.getStatusInfo().getFamily() == Response.Status.Family.REDIRECTION) {
                 // append results also for REDIRECTED URL
@@ -108,9 +107,7 @@ public class ItemHandleChecker extends BasicLinkChecker {
                 return handleResponse;
             }
         } catch (Exception ex) {
-            HandleResponse handleResponse =
-                    new HandleResponse(500, Response.Status.Family.SERVER_ERROR, ex.getMessage());
-            return handleResponse;
+            return new HandleResponse(500, Response.Status.Family.SERVER_ERROR, ex.getMessage());
         }
     }
 
