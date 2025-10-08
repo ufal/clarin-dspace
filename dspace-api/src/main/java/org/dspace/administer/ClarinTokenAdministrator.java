@@ -68,9 +68,9 @@ public class ClarinTokenAdministrator {
             }
             boolean isCreate = line.hasOption('c');
             boolean isDelete = line.hasOption('d');
-            boolean generateEncryptionGey = line.hasOption('g');
+            boolean generateEncryptionKey = line.hasOption('g');
 
-            if (isCreate && isDelete || isCreate && generateEncryptionGey || isDelete && generateEncryptionGey) {
+            if (isCreate && isDelete || isCreate && generateEncryptionKey || isDelete && generateEncryptionKey) {
                 throw new ParseException("Create, delete and generate options are mutually exclusive");
             }
 
