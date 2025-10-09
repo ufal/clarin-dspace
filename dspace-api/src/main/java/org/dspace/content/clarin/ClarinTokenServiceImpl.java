@@ -12,7 +12,6 @@ import java.sql.SQLException;
 import java.text.ParseException;
 import java.util.Base64;
 import java.util.Date;
-import java.util.UUID;
 import javax.crypto.SecretKey;
 import javax.ws.rs.BadRequestException;
 
@@ -37,7 +36,6 @@ import org.dspace.content.dao.clarin.ClarinTokenDAO;
 import org.dspace.content.service.clarin.ClarinTokenService;
 import org.dspace.core.Context;
 import org.dspace.eperson.EPerson;
-import org.dspace.eperson.dao.EPersonDAO;
 import org.dspace.services.ConfigurationService;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -53,9 +51,6 @@ public class ClarinTokenServiceImpl implements ClarinTokenService {
 
     @Autowired
     ClarinTokenDAO clarinTokenDAO;
-
-    @Autowired
-    EPersonDAO ePersonDAO;
 
     @Autowired
     AuthorizeService authorizeService;
@@ -201,10 +196,7 @@ public class ClarinTokenServiceImpl implements ClarinTokenService {
                                 configurationService.getProperty(ClarinToken.PROPERTY_ENCRYPTION_SECRET))));
                 SignedJWT signedJWT = jweObj.getPayload().toSignedJWT();
                 if (ClarinTokenUtils.isSignedJWTValid(signedJWT, clarinToken)) {
-                    UUID ePersonID = UUID.fromString(
-                            signedJWT.getJWTClaimsSet().getClaim(ClarinToken.E_PERSON_ID).toString());
-                    return ePersonDAO.findByID(
-                            context, EPerson.class, ePersonID);
+                    return clarinToken.getEPerson();
                 }
             }
         }

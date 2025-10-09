@@ -8,6 +8,7 @@
 package org.dspace.content.clarin;
 
 import java.util.Objects;
+import java.util.UUID;
 import javax.persistence.Column;
 import javax.persistence.Entity;
 import javax.persistence.FetchType;
@@ -73,8 +74,8 @@ public class ClarinToken implements ReloadableEntity<Integer> {
         return ePerson;
     }
 
-    public void setEPerson(EPerson ePersonID) {
-        this.ePerson = ePersonID;
+    public void setEPerson(EPerson ePerson) {
+        this.ePerson = ePerson;
     }
 
     /**
@@ -97,20 +98,21 @@ public class ClarinToken implements ReloadableEntity<Integer> {
         }
         ClarinToken that = (ClarinToken) o;
         return Objects.equals(id, that.id) &&
-                Objects.equals(ePerson.getID(), that.ePerson.getID()) &&
+                Objects.equals(ePerson, that.ePerson) &&
                 Objects.equals(signKey, that.signKey);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(id, ePerson.getID(), signKey);
+        UUID ePersonId = (ePerson != null) ? ePerson.getID() : null;
+        return Objects.hash(id, ePersonId, signKey);
     }
 
     @Override
     public String toString() {
         return "ClarinToken{" +
                 "id: " + id +
-                ", ePerson: " + ePerson.getEmail() +
+                ", ePerson: " + (ePerson != null ? ePerson.getEmail() : "null") +
                 ", signKey: " + signKey +
                 '}';
     }
