@@ -8,6 +8,7 @@
 package org.dspace.ctask.general;
 
 import java.io.IOException;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -16,7 +17,6 @@ import java.util.concurrent.TimeUnit;
 import javax.ws.rs.client.Client;
 import javax.ws.rs.client.ClientBuilder;
 import javax.ws.rs.client.WebTarget;
-import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.Response;
 
 import org.dspace.content.Item;
@@ -46,7 +46,8 @@ public class ItemHandleChecker extends BasicLinkChecker {
         client = ClientBuilder.newBuilder()
                 .connectTimeout(CONNECTION_TIMEOUT_SEC, TimeUnit.SECONDS)
                 .readTimeout(READ_TIMEOUT_SEC, TimeUnit.SECONDS)
-                .property(ClientProperties.FOLLOW_REDIRECTS, Boolean.TRUE)
+                // we want all the locations on the way
+                .property(ClientProperties.FOLLOW_REDIRECTS, false)
                 .build();
         String[] ignores = configurationService.getArrayProperty("curate.checklist.ignore");
         ignoredUrls = (ignores == null) ? List.of() : List.of(ignores);
@@ -72,8 +73,6 @@ public class ItemHandleChecker extends BasicLinkChecker {
     @Override
     protected boolean checkURL(String url, StringBuilder results) {
         HandleResponse handleResponse = getHandleResponse(url, results);
-        appendResults(url, handleResponse, results);
-        checkedResults.putIfAbsent(url, handleResponse);
 
         return (handleResponse.getFamily() == Response.Status.Family.SUCCESSFUL);
     }
@@ -98,16 +97,26 @@ public class ItemHandleChecker extends BasicLinkChecker {
 
         try (Response response = target.request().head()) {
             HandleResponse handleResponse = HandleResponse.fromResponse(response);
+            appendResults(url, handleResponse, results);
+            checkedResults.putIfAbsent(url, handleResponse);
             if (response.getStatusInfo().getFamily() == Response.Status.Family.REDIRECTION) {
-                // append results also for REDIRECTED URL
-                appendResults(url, handleResponse, results);
-                String location = response.getHeaderString(HttpHeaders.LOCATION);
+                String location;
+                URI locationUri = response.getLocation();
+                if (!locationUri.isAbsolute()) {
+                    // Resolve relative URI against the original URL
+                    location = target.getUri().resolve(locationUri).toString();
+                } else {
+                    location = locationUri.toString();
+                }
                 return getHandleResponse(location, results);
             } else {
                 return handleResponse;
             }
         } catch (Exception ex) {
-            return new HandleResponse(500, Response.Status.Family.SERVER_ERROR, ex.getMessage());
+            HandleResponse err = new HandleResponse(500, Response.Status.Family.SERVER_ERROR, ex.getMessage());
+            appendResults(url, err, results);
+            checkedResults.putIfAbsent(url, err);
+            return err;
         }
     }
 
