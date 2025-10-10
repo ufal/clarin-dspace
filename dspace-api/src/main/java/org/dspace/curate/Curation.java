@@ -336,7 +336,7 @@ public class Curation extends DSpaceRunnable<CurationScriptConfiguration> {
         }
 
         if (this.commandLine.hasOption('i')) {
-            this.id = this.commandLine.getOptionValue('i').toLowerCase();
+            this.id = this.commandLine.getOptionValue('i');
             if (!this.id.equalsIgnoreCase("all")) {
                 HandleService handleService = HandleServiceFactory.getInstance().getHandleService();
                 DSpaceObject dso;
