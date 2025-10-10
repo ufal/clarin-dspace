@@ -8,6 +8,7 @@
 package org.dspace.curate;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.both;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
@@ -72,6 +73,9 @@ public class ItemHandleCheckerIT extends AbstractIntegrationTestWithDatabase {
     Item item3;
     Item item4;
 
+    private Curator curator;
+    private CuratorReportTest.ListReporter reporter;
+
     @Before
     @Override
     public void setUp() throws Exception {
@@ -101,6 +105,12 @@ public class ItemHandleCheckerIT extends AbstractIntegrationTestWithDatabase {
                     .build();
 
             context.restoreAuthSystemState();
+
+            curator = new Curator();
+            curator.addTask(TASK_NAME);
+            reporter = new CuratorReportTest.ListReporter();
+            curator.setReporter(reporter);
+            context.setCurrentUser(admin);
         } catch (AuthorizeException ex) {
             fail("Authorization Error in init: " + ex.getMessage());
         } catch (SQLException ex) {
@@ -109,22 +119,16 @@ public class ItemHandleCheckerIT extends AbstractIntegrationTestWithDatabase {
     }
 
     @Test
-    public void testPerform() throws IOException {
-        Curator curator = new Curator();
-        curator.addTask(TASK_NAME);
-        CuratorReportTest.ListReporter reporter = new CuratorReportTest.ListReporter();
-        curator.setReporter(reporter);
-
-        context.setCurrentUser(admin);
-
-        // curation task for item1 - should fail with 404
+    public void testItemHandleNotFound() throws IOException {
         curator.curate(context, HANDLE_ITEM1);
         assertEquals("Curation should be failed", Curator.CURATE_FAIL, curator.getStatus(TASK_NAME));
         assertEquals(failResultForItem(item1), curator.getResult(TASK_NAME));
         assertTrue(reporter.getReport().contains(failResultForItem(item1)));
         reporter.getReport().clear();
+    }
 
-        // curation task for real item - should success
+    @Test
+    public void testItemHandleRedirected() throws IOException {
         replaceHandleUrl(item2, HANDLE_URL_REAL);
         curator.curate(context, HANDLE_ITEM2);
         assertEquals("Curation should succeed", Curator.CURATE_SUCCESS, curator.getStatus(TASK_NAME));
@@ -133,13 +137,17 @@ public class ItemHandleCheckerIT extends AbstractIntegrationTestWithDatabase {
         assertTrue(report.contains(redirectedResultForItem(item2)));
         assertTrue(report.endsWith("200 - OK\n"));
         reporter.getReport().clear();
+    }
 
-        // curation task for no existing handle
+    @Test
+    public void testNonExistingHandle() throws IOException {
         curator.curate(context, HANDLE_NON_EXISTING);
         assertEquals("Curation should fail", Curator.CURATE_FAIL, curator.getStatus(TASK_NAME));
         assertTrue(reporter.getReport().isEmpty());
+    }
 
-        // curation task for invalid handle URL
+    @Test
+    public void testInvalidHandleUrl() throws IOException {
         replaceHandleUrl(item3, HANDLE_INVALID);
         curator.curate(context, HANDLE_ITEM3);
         assertEquals("Curation should fail", Curator.CURATE_FAIL, curator.getStatus(TASK_NAME));
@@ -147,21 +155,31 @@ public class ItemHandleCheckerIT extends AbstractIntegrationTestWithDatabase {
         assertTrue(singleReport.contains(HANDLE_INVALID + " = 500 - FAILED\n"));
         assertTrue(singleReport.contains("Error: java.net.URISyntaxException: Illegal character"));
         reporter.getReport().clear();
+    }
 
-        // curation task for handle URL that is in ignored list
+    @Test
+    public void testHandleUrlIgnored() throws IOException {
         replaceHandleUrl(item4, HANDLE_URL_IGNORED);
         curator.curate(context, HANDLE_ITEM4);
         assertEquals("Curation should skip", Curator.CURATE_SKIP, curator.getStatus(TASK_NAME));
         assertEquals("Item: " + HANDLE_ITEM4 + "\n", reporter.getReport().get(0));
         reporter.getReport().clear();
+    }
 
-        // run curateTask for collection
+    @Test
+    public void testCurateCollection() throws IOException {
+        replaceHandleUrl(item2, HANDLE_URL_REAL);
+        replaceHandleUrl(item3, HANDLE_INVALID);
+        replaceHandleUrl(item4, HANDLE_URL_IGNORED);
         curator.curate(context, HANDLE_COLLECTION);
+        assertEquals(Curator.CURATE_SUCCESS, curator.getStatus(TASK_NAME));
         assertEquals(5, reporter.getReport().size());
         assertThat(reporter.getReport(), containsInAnyOrder(
                 is(""), // this one is for collection itself
                 is(failResultForItem(item1)), // item1
-                is(successResultForItem(item2)), // item2
+                both(
+                     containsString("Item: " + item2.getHandle())).and(containsString(" = 200 - OK\n")
+                ), // item2
                 containsString(HANDLE_INVALID + " = 500 - FAILED"), // item 3
                 is("Item: " + HANDLE_ITEM4 + "\n") // item 4 (ignored)
         ));
