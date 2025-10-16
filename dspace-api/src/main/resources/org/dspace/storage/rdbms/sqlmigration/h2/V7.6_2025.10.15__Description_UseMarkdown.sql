@@ -7,7 +7,7 @@
 --
 
 -----------------------------------------------------------------------------------
--- INSERT new local.description.usemarkdown metadata property (if not exists already)
+-- create new local.description.usemarkdown metadata property (if not exist)
 -----------------------------------------------------------------------------------
 INSERT INTO metadatafieldregistry (metadata_field_id, metadata_schema_id, element, qualifier, scope_note)
 SELECT nextval('metadatafieldregistry_seq'), msr.metadata_schema_id, 'description', 'usemarkdown',
