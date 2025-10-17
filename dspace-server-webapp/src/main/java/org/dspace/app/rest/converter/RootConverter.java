@@ -12,6 +12,7 @@ import static org.dspace.app.util.Util.getSourceVersion;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
+import javax.servlet.http.HttpServletRequest;
 
 import org.apache.commons.lang3.StringUtils;
 import org.dspace.app.rest.model.RootRest;
@@ -31,12 +32,19 @@ public class RootConverter {
     @Autowired
     private ConfigurationService configurationService;
 
-    public RootRest convert() {
+    public RootRest convert(HttpServletRequest request) {
         RootRest rootRest = new RootRest();
         rootRest.setDspaceName(configurationService.getProperty("dspace.name"));
         rootRest.setDspaceUI(configurationService.getProperty("dspace.ui.url"));
-        rootRest.setDspaceServer(configurationService.getProperty("dspace.server.url"));
-        rootRest.setDspaceVersion("CLARIN-DSpace " + getSourceVersion());
+        String requestUrl = request.getRequestURL().toString();
+        String dspaceUrl = configurationService.getProperty("dspace.server.url");
+        String dspaceSSRUrl = configurationService.getProperty("dspace.server.ssr.url", dspaceUrl);
+        if (!dspaceUrl.equals(dspaceSSRUrl) && requestUrl.startsWith(dspaceSSRUrl)) {
+            rootRest.setDspaceServer(dspaceSSRUrl);
+        } else {
+            rootRest.setDspaceServer(dspaceUrl);
+        }
+        rootRest.setDspaceVersion("DSpace " + getSourceVersion());
         rootRest.setBuildVersion(getBuildVersion());
         return rootRest;
     }

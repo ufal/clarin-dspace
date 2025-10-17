@@ -52,6 +52,7 @@ import org.dspace.content.clarin.ClarinLicense;
 import org.dspace.content.clarin.ClarinLicenseLabel;
 import org.dspace.content.clarin.ClarinLicenseResourceMapping;
 import org.dspace.content.clarin.ClarinUserRegistration;
+import org.dspace.content.service.ItemService;
 import org.dspace.content.service.clarin.ClarinLicenseLabelService;
 import org.dspace.content.service.clarin.ClarinLicenseResourceMappingService;
 import org.dspace.content.service.clarin.ClarinLicenseService;
@@ -76,6 +77,8 @@ public class AuthorizationRestControllerIT extends AbstractControllerIntegration
     ClarinLicenseLabelService clarinLicenseLabelService;
     @Autowired
     ClarinLicenseResourceMappingService clarinLicenseResourceMappingService;
+    @Autowired
+    ItemService itemService;
 
     Item item;
     WorkspaceItem witem;
@@ -363,12 +366,7 @@ public class AuthorizationRestControllerIT extends AbstractControllerIntegration
                         .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
                 .andExpect(status().isOk());
 
-        // 4. Check if the Clarin License name was added to the Item's metadata `dc.rights`
-        getClient(tokenAdmin).perform(get("/api/submission/workspaceitems/" + witem.getID()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$._embedded.item.metadata['dc.rights'][0].value", is(CLARIN_LICENSE_NAME)));
-
-        // 5. Check if the Clarin License was attached to the Bitstream
+        // 4. Check if the Clarin License was attached to the Bitstream
         getClient(tokenAdmin).perform(get("/api/core/clarinlicenses/" + clarinLicense.getID()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.bitstreams", is(1)));

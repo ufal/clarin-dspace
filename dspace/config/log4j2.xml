@@ -97,20 +97,12 @@
 
     <Loggers>
 
-
         <!-- Most parts of DSpace -->
         <Logger name='org.dspace'
                 level='${loglevel.dspace}'
                 additivity='false'>
             <AppenderRef ref='A1'/>
             <AppenderRef ref="A4" level="WARN"/>
-        </Logger>
-
-        <!-- The checksum checker -->
-        <Logger name='org.dspace.checker'
-                level='INFO'
-                additivity='false'>
-            <AppenderRef ref='A2'/>
         </Logger>
 
         <!-- The file downloads -->

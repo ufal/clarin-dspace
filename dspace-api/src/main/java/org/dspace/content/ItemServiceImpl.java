@@ -18,6 +18,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -67,6 +68,7 @@ import org.dspace.event.Event;
 import org.dspace.harvest.HarvestedItem;
 import org.dspace.harvest.service.HarvestedItemService;
 import org.dspace.identifier.DOI;
+import org.dspace.identifier.DOIIdentifierProvider;
 import org.dspace.identifier.IdentifierException;
 import org.dspace.identifier.service.DOIService;
 import org.dspace.identifier.service.IdentifierService;
@@ -80,6 +82,9 @@ import org.dspace.orcid.service.OrcidSynchronizationService;
 import org.dspace.orcid.service.OrcidTokenService;
 import org.dspace.profile.service.ResearcherProfileService;
 import org.dspace.services.ConfigurationService;
+import org.dspace.versioning.Version;
+import org.dspace.versioning.VersionHistory;
+import org.dspace.versioning.service.VersionHistoryService;
 import org.dspace.versioning.service.VersioningService;
 import org.dspace.workflow.WorkflowItemService;
 import org.dspace.workflow.factory.WorkflowServiceFactory;
@@ -171,6 +176,9 @@ public class ItemServiceImpl extends DSpaceObjectServiceImpl<Item> implements It
 
     @Autowired(required = true)
     protected SubscribeService subscribeService;
+
+    @Autowired
+    private VersionHistoryService versionHistoryService;
 
     @Autowired(required = true)
     ClarinMatomoBitstreamTracker matomoBitstreamTracker;
@@ -283,6 +291,55 @@ public class ItemServiceImpl extends DSpaceObjectServiceImpl<Item> implements It
         } else {
             return collection.getTemplateItem();
         }
+    }
+
+    @Override
+    public void populateWithTemplateItemMetadata(Context context, Collection collection, boolean template, Item item)
+        throws SQLException {
+
+        Item templateItem = collection.getTemplateItem();
+
+        Optional<MetadataValue> colEntityType = getDSpaceEntityType(collection);
+        Optional<MetadataValue> templateItemEntityType = getDSpaceEntityType(templateItem);
+
+        if (template && colEntityType.isPresent() && templateItemEntityType.isPresent() &&
+            !StringUtils.equals(colEntityType.get().getValue(), templateItemEntityType.get().getValue())) {
+            throw new IllegalStateException("The template item has entity type : (" +
+                templateItemEntityType.get().getValue() + ") different than collection entity type : " +
+                colEntityType.get().getValue());
+        }
+
+        if (template && colEntityType.isPresent() && templateItemEntityType.isEmpty()) {
+            MetadataValue original = colEntityType.get();
+            MetadataField metadataField = original.getMetadataField();
+            MetadataSchema metadataSchema = metadataField.getMetadataSchema();
+            // NOTE: dspace.entity.type = <blank> does not make sense
+            //       the collection entity type is by default blank when a collection is first created
+            if (StringUtils.isNotBlank(original.getValue())) {
+                addMetadata(context, item, metadataSchema.getName(), metadataField.getElement(),
+                    metadataField.getQualifier(), original.getLanguage(), original.getValue());
+            }
+        }
+
+        if (template && (templateItem != null)) {
+            List<MetadataValue> md = getMetadata(templateItem, Item.ANY, Item.ANY, Item.ANY, Item.ANY);
+
+            for (MetadataValue aMd : md) {
+                MetadataField metadataField = aMd.getMetadataField();
+                MetadataSchema metadataSchema = metadataField.getMetadataSchema();
+                addMetadata(context, item, metadataSchema.getName(), metadataField.getElement(),
+                    metadataField.getQualifier(), aMd.getLanguage(), aMd.getValue());
+            }
+        }
+    }
+
+    private Optional<MetadataValue> getDSpaceEntityType(DSpaceObject dSpaceObject) {
+        return Objects.nonNull(dSpaceObject) ? dSpaceObject.getMetadata()
+            .stream()
+            .filter(x -> x.getMetadataField().toString('.')
+                .equalsIgnoreCase("dspace.entity.type"))
+            .findFirst()
+            : Optional.empty();
     }
 
     @Override
@@ -807,6 +864,7 @@ public class ItemServiceImpl extends DSpaceObjectServiceImpl<Item> implements It
         DOI doi = doiService.findDOIByDSpaceObject(context, item);
         if (doi != null) {
             doi.setDSpaceObject(null);
+            doi.setStatus(DOIIdentifierProvider.TO_BE_DELETED);
         }
 
         // remove version attached to the item
@@ -1581,13 +1639,13 @@ prevent the generation of resource policy entry values with null dspace_object a
 
     @Override
     public int countItems(Context context, Collection collection) throws SQLException {
-        return itemDAO.countItems(context, collection, true, false);
+        return itemDAO.countItems(context, collection, true, false, true);
     }
 
     @Override
     public int countAllItems(Context context, Collection collection) throws SQLException {
-        return itemDAO.countItems(context, collection, true, false) + itemDAO.countItems(context, collection,
-                                                                                         false, true);
+        return itemDAO.countItems(context, collection, true, false, true) + itemDAO.countItems(context, collection,
+                                                                                         false, true, true);
     }
 
     @Override
@@ -1596,7 +1654,7 @@ prevent the generation of resource policy entry values with null dspace_object a
         List<Collection> collections = communityService.getAllCollections(context, community);
 
         // Now, lets count unique items across that list of collections
-        return itemDAO.countItems(context, collections, true, false);
+        return itemDAO.countItems(context, collections, true, false, true);
     }
 
     @Override
@@ -1605,8 +1663,8 @@ prevent the generation of resource policy entry values with null dspace_object a
         List<Collection> collections = communityService.getAllCollections(context, community);
 
         // Now, lets count unique items across that list of collections
-        return itemDAO.countItems(context, collections, true, false) + itemDAO.countItems(context, collections,
-                                                                                          false, true);
+        return itemDAO.countItems(context, collections, true, false, true) + itemDAO.countItems(context, collections,
+                                                                                          false, false, true);
     }
 
     @Override
@@ -1619,10 +1677,15 @@ prevent the generation of resource policy entry values with null dspace_object a
 
     @Override
     public Item findByIdOrLegacyId(Context context, String id) throws SQLException {
-        if (StringUtils.isNumeric(id)) {
-            return findByLegacyId(context, Integer.parseInt(id));
-        } else {
-            return find(context, UUID.fromString(id));
+        try {
+            if (StringUtils.isNumeric(id)) {
+                return findByLegacyId(context, Integer.parseInt(id));
+            } else {
+                return find(context, UUID.fromString(id));
+            }
+        } catch (IllegalArgumentException e) {
+            // Not a valid legacy ID or valid UUID
+            return null;
         }
     }
 
@@ -1645,19 +1708,19 @@ prevent the generation of resource policy entry values with null dspace_object a
     @Override
     public int countNotArchivedItems(Context context) throws SQLException {
         // return count of items not in archive and also not withdrawn
-        return itemDAO.countItems(context, false, false);
+        return itemDAO.countItems(context, false, false, true);
     }
 
     @Override
     public int countArchivedItems(Context context) throws SQLException {
         // return count of items in archive and also not withdrawn
-        return itemDAO.countItems(context, true, false);
+        return itemDAO.countItems(context, true, false, true);
     }
 
     @Override
     public int countWithdrawnItems(Context context) throws SQLException {
         // return count of items that are not in archive and withdrawn
-        return itemDAO.countItems(context, false, true);
+        return itemDAO.countItems(context, false, true, true );
     }
 
     @Override
@@ -1743,7 +1806,7 @@ prevent the generation of resource policy entry values with null dspace_object a
                 //Retrieve the applicable relationship
                 Relationship rs = relationshipService.find(context,
                         ((RelationshipMetadataValue) rr).getRelationshipId());
-                if (rs.getLeftItem() == dso) {
+                if (rs.getLeftItem().equals(dso)) {
                     rs.setLeftPlace(place);
                 } else {
                     rs.setRightPlace(place);
@@ -1873,6 +1936,42 @@ prevent the generation of resource policy entry values with null dspace_object a
         for (OrcidQueue orcidQueueRecord : orcidQueueRecords) {
             orcidQueueService.delete(context, orcidQueueRecord);
         }
+    }
+
+    @Override
+    public boolean isLatestVersion(Context context, Item item) throws SQLException {
+
+        VersionHistory history = versionHistoryService.findByItem(context, item);
+        if (history == null) {
+            // not all items have a version history
+            // if an item does not have a version history, it is by definition the latest
+            // version
+            return true;
+        }
+
+        // start with the very latest version of the given item (may still be in
+        // workspace)
+        Version latestVersion = versionHistoryService.getLatestVersion(context, history);
+
+        // find the latest version of the given item that is archived
+        while (latestVersion != null && !latestVersion.getItem().isArchived()) {
+            latestVersion = versionHistoryService.getPrevious(context, history, latestVersion);
+        }
+
+        // could not find an archived version of the given item
+        if (latestVersion == null) {
+            // this scenario should never happen, but let's err on the side of showing too
+            // many items vs. to little
+            // (see discovery.xml, a lot of discovery configs filter out all items that are
+            // not the latest version)
+            return true;
+        }
+
+        // sanity check
+        assert latestVersion.getItem().isArchived();
+
+        return item.equals(latestVersion.getItem());
+
     }
 
 }

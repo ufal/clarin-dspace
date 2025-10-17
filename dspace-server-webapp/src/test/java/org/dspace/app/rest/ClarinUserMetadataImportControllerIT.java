@@ -11,6 +11,7 @@ import static org.dspace.app.rest.repository.ClarinLicenseRestRepository.OPERATI
 import static org.dspace.content.clarin.ClarinLicense.Confirmation;
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -28,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.dspace.app.rest.model.ClarinUserMetadataRest;
 import org.dspace.app.rest.model.patch.Operation;
@@ -44,11 +46,14 @@ import org.dspace.builder.WorkspaceItemBuilder;
 import org.dspace.content.Bitstream;
 import org.dspace.content.Collection;
 import org.dspace.content.Community;
+import org.dspace.content.Item;
+import org.dspace.content.MetadataValue;
 import org.dspace.content.WorkspaceItem;
 import org.dspace.content.clarin.ClarinLicense;
 import org.dspace.content.clarin.ClarinLicenseLabel;
 import org.dspace.content.clarin.ClarinUserMetadata;
 import org.dspace.content.clarin.ClarinUserRegistration;
+import org.dspace.content.service.ItemService;
 import org.dspace.content.service.clarin.ClarinLicenseLabelService;
 import org.dspace.content.service.clarin.ClarinLicenseService;
 import org.dspace.content.service.clarin.ClarinUserMetadataService;
@@ -70,6 +75,8 @@ public class ClarinUserMetadataImportControllerIT extends AbstractEntityIntegrat
     ClarinLicenseLabelService clarinLicenseLabelService;
     @Autowired
     ClarinUserMetadataService clarinUserMetadataService;
+    @Autowired
+    ItemService itemService;
 
     WorkspaceItem witem;
     ClarinLicense clarinLicense;
@@ -110,9 +117,10 @@ public class ClarinUserMetadataImportControllerIT extends AbstractEntityIntegrat
                 .andExpect(status().isOk());
 
         // 4. Check if the Clarin License name was added to the Item's metadata `dc.rights`
-        getClient(tokenAdmin).perform(get("/api/submission/workspaceitems/" + witem.getID()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$._embedded.item.metadata['dc.rights'][0].value", is(clarinLicenseName)));
+        witem = context.reloadEntity(witem);
+        List<MetadataValue> mv =  itemService.getMetadata(witem.getItem(), "dc", "rights", null, Item.ANY);
+        assertTrue(CollectionUtils.isNotEmpty(mv));
+        assertEquals(clarinLicenseName, mv.get(0).getValue());
 
         // 5. Check if the Clarin License was attached to the Bitstream
         getClient(tokenAdmin).perform(get("/api/core/clarinlicenses/" + clarinLicense.getID()))

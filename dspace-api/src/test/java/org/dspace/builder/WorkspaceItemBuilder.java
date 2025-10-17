@@ -65,7 +65,7 @@ public class WorkspaceItemBuilder extends AbstractBuilder<WorkspaceItem, Workspa
             if (uuid == null) {
                 workspaceItem = workspaceItemService.create(context, col, false);
             } else {
-                workspaceItem = workspaceItemService.create(context, col, uuid, false);
+                workspaceItem = workspaceItemService.create(context, col, uuid, false, false);
             }
             item = workspaceItem.getItem();
         } catch (Exception e) {

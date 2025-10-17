@@ -280,6 +280,36 @@ public final class Utils {
     }
 
     /**
+     * Mask email addresses for privacy compliance in logging.
+     * Keeps the first character and domain for debugging while protecting PII.
+     * 
+     * @param email the email address to mask
+     * @return masked email address (e.g., "j***@example.com")
+     */
+    public static String maskEmail(String email) {
+        if (email == null || email.trim().isEmpty()) {
+            return "invalid-email";
+        }
+        int atIndex = email.indexOf('@');
+        if (atIndex <= 0 || atIndex == email.length() - 1) {
+            // Invalid email format, mask completely
+            return "***@***.***";
+        }
+        String localPart = email.substring(0, atIndex);
+        String domain = email.substring(atIndex + 1);
+        // Mask local part: keep first character + asterisks
+        String maskedLocal;
+        if (localPart.length() == 1) {
+            maskedLocal = "*";
+        } else if (localPart.length() <= 3) {
+            maskedLocal = localPart.charAt(0) + "*".repeat(localPart.length() - 1);
+        } else {
+            maskedLocal = localPart.charAt(0) + "***";
+        }
+        return maskedLocal + "@" + domain;
+    }
+
+    /**
      * Utility method to parse durations defined as {@code \d+[smhdwy]} (seconds,
      * minutes, hours, days, weeks, years)
      *
