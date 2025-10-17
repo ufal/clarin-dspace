@@ -28,7 +28,7 @@
         <property name="description" value="Script for migrating submission forms to DSpace 7"/>
         <property name="dspaceRunnableClass" value="org.dspace.submit.migration.SubmissionFormsMigration"/>
     </bean>
-    
+
     <bean id="metadata-deletion" class="org.dspace.app.bulkedit.MetadataDeletionScriptConfiguration" primary="true">
         <property name="description" value="Delete all the values of the specified metadata field"/>
         <property name="dspaceRunnableClass" value="org.dspace.app.bulkedit.MetadataDeletion"/>
@@ -82,6 +82,11 @@
     <bean id="file-preview" class="org.dspace.scripts.filepreview.FilePreviewConfiguration" primary="true">
         <property name="description" value="Generate the file preview"/>
         <property name="dspaceRunnableClass" value="org.dspace.scripts.filepreview.FilePreview"/>
+    </bean>
+
+    <bean id="clarin-token" class="org.dspace.administer.ClarinTokenConfiguration" primary="true">
+        <property name="description" value="Create or delete clarin token. Created token is sent to e-mail address."/>
+        <property name="dspaceRunnableClass" value="org.dspace.administer.ClarinTokenCreator"/>
     </bean>
 
 </beans>

@@ -27,6 +27,8 @@ import org.dspace.content.service.CollectionService;
 import org.dspace.content.service.CommunityService;
 import org.dspace.content.service.InstallItemService;
 import org.dspace.content.service.WorkspaceItemService;
+import org.dspace.services.ConfigurationService;
+import org.dspace.services.factory.DSpaceServicesFactory;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -129,23 +131,30 @@ public class PIDConfigurationTest extends AbstractUnitTest {
 
     @Test
     public void testGeneratingItemURL() {
-        String repositoryUrl = "http://localhost:4000/";
-        String expectedUrl = repositoryUrl + "handle/" + publicItem.getHandle();
+        ConfigurationService configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
 
-        String url = DSpaceApi.generateItemURLWithHandle(repositoryUrl, publicItem);
+        //test with trailing slash
+        configurationService
+                .setProperty("dspace.ui.url", "http://localhost:4000/");
+        String expectedUrl = "http://localhost:4000/handle/" + publicItem.getHandle();
+        String pid = publicItem.getHandle();
+
+        String url = DSpaceApi.generateItemURLWithHandle(pid, publicItem);
         assertEquals(expectedUrl, url);
 
         // Test with no trailing slash
-        repositoryUrl = "http://localhost:4000";
+        configurationService
+                .setProperty("dspace.ui.url", "http://localhost:4000");
 
-        url = DSpaceApi.generateItemURLWithHandle(repositoryUrl, publicItem);
+        url = DSpaceApi.generateItemURLWithHandle(pid, publicItem);
         assertEquals(expectedUrl, url);
 
         // Test with namespace
-        repositoryUrl = "http://localhost:4000/namespace";
-        expectedUrl = repositoryUrl + "/handle/" + publicItem.getHandle();
+        configurationService
+                .setProperty("dspace.ui.url", "http://localhost:4000/namespace");
+        expectedUrl =  "http://localhost:4000/namespace/handle/" + publicItem.getHandle();
 
-        url = DSpaceApi.generateItemURLWithHandle(repositoryUrl, publicItem);
+        url = DSpaceApi.generateItemURLWithHandle(pid, publicItem);
         assertEquals(expectedUrl, url);
     }
 }

@@ -349,7 +349,7 @@ public class Curation extends DSpaceRunnable<CurationScriptConfiguration> {
         }
 
         if (this.commandLine.hasOption('i')) {
-            this.id = this.commandLine.getOptionValue('i').toLowerCase();
+            this.id = this.commandLine.getOptionValue('i');
             DSpaceObject dso;
             if (!this.id.equalsIgnoreCase("all")) {
                 // First, try to parse the id as a UUID. If that fails, treat it as a handle.

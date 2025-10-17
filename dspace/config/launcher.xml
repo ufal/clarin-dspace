@@ -345,4 +345,18 @@
             <class>org.dspace.iiif.canvasdimension.CanvasDimensionCLI</class>
         </step>
     </command>
+    <command>
+        <name>matomo-report-generator</name>
+        <description>Generate Matomo Statistics for Items</description>
+        <step>
+            <class>org.dspace.matomo.MatomoPDFExporter</class>
+        </step>
+    </command>
+    <command>
+        <name>clarin-token</name>
+        <description>Clarin Token Administrator</description>
+        <step>
+            <class>org.dspace.administer.ClarinTokenAdministrator</class>
+        </step>
+    </command>
 </commands>

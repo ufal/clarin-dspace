@@ -96,8 +96,7 @@ public class DSpaceApi {
             return;
         }
 
-        String url = configurationService.getProperty("dspace.ui.url");
-        url = generateItemURLWithHandle(url, dso);
+        String url = generateItemURLWithHandle(pid, dso);
 
         /*
          * request modification of the PID to point to the correct URL, which
@@ -118,15 +117,16 @@ public class DSpaceApi {
      * Generate a URL with the handle for the given DSpaceObject.
      * The URL consist of the base URL and the handle of the DSpace object.
      * E.g. `http://localhost:4000/handle/<ITEMS_HANDLE>`
-     * @param url base URL of the DSpace instance
+     * @param pid the pid we are using (obtained e.g. from EPIC)
      * @param dSpaceObject the DSpace object for which the URL is generated
      * @return the generated URL
      */
-    public static String generateItemURLWithHandle(String url, DSpaceObject dSpaceObject) {
+    public static String generateItemURLWithHandle(String pid, DSpaceObject dSpaceObject) {
+        String url = configurationService.getProperty("dspace.ui.url");
         if (dSpaceObject == null) {
             log.error("DSpaceObject is null, cannot generate URL");
             return url;
         }
-        return url + (url.endsWith("/") ? "" : "/") + "handle/" + dSpaceObject.getHandle();
+        return url + (url.endsWith("/") ? "" : "/") + "handle/" + pid;
     }
 }

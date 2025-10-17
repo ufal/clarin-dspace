@@ -63,6 +63,7 @@ import org.dspace.discovery.IndexingService;
 import org.dspace.discovery.SearchService;
 import org.dspace.discovery.SolrSearchCore;
 import org.dspace.discovery.indexobject.IndexableItem;
+import org.dspace.services.ConfigurationService;
 import org.dspace.versioning.Version;
 import org.dspace.xmlworkflow.storedcomponents.XmlWorkflowItem;
 import org.hamcrest.Matcher;
@@ -102,6 +103,9 @@ public class DiscoveryVersioningIT extends AbstractControllerIntegrationTest {
 
     @Autowired
     private RelationshipService relationshipService;
+
+    @Autowired
+    private ConfigurationService configurationService;
 
     protected Community community;
     private String formattedDate;
@@ -1131,6 +1135,7 @@ public class DiscoveryVersioningIT extends AbstractControllerIntegrationTest {
         // NOTE: VersioningConsumer updates the latest version status of relationships
         //       this implies the relation.* fields change so the relevant items should be re-indexed
 
+        configurationService.setProperty("versioning.unarchive.previous.version", true);
         context.turnOffAuthorisationSystem();
         String publication1date = "publication 1 (" + formattedDate + ")";
         EntityType publicationEntityType = EntityTypeBuilder.createEntityTypeBuilder(context, "Publication")
@@ -1718,6 +1723,7 @@ public class DiscoveryVersioningIT extends AbstractControllerIntegrationTest {
         // NOTE: VersioningConsumer updates the latest version status of relationships
         //       this implies the relation.* fields change so the relevant items should be re-indexed
 
+        configurationService.setProperty("versioning.unarchive.previous.version", true);
         context.turnOffAuthorisationSystem();
         String publication1date = "publication 1 (" + formattedDate + ")";
         EntityType publicationEntityType = EntityTypeBuilder.createEntityTypeBuilder(context, "Publication")
@@ -2309,6 +2315,7 @@ public class DiscoveryVersioningIT extends AbstractControllerIntegrationTest {
 
     @Test
     public void test_rebuildIndexAllVersionsShouldStillBePresentInSolrCore() throws Exception {
+        configurationService.setProperty("versioning.unarchive.previous.version", true);
         context.turnOffAuthorisationSystem();
 
         EntityType publicationEntityType = EntityTypeBuilder.createEntityTypeBuilder(context, "Publication")

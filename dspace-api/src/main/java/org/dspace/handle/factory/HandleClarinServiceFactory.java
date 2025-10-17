@@ -7,6 +7,7 @@
  */
 package org.dspace.handle.factory;
 
+import org.dspace.handle.service.EpicHandleService;
 import org.dspace.handle.service.HandleClarinService;
 import org.dspace.services.factory.DSpaceServicesFactory;
 
@@ -19,6 +20,8 @@ import org.dspace.services.factory.DSpaceServicesFactory;
 public abstract class HandleClarinServiceFactory {
 
     public abstract HandleClarinService getHandleClarinService();
+
+    public abstract EpicHandleService getEpicHandleService();
 
     public static HandleClarinServiceFactory getInstance() {
         return DSpaceServicesFactory.getInstance().getServiceManager()

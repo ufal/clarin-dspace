@@ -1,0 +1,26 @@
+## E-mail clarin token
+##
+## Parameters: {0} clarin token
+##             {1} User Name
+##             {2} Valid until
+##
+## See org.dspace.core.Email for information on the format of this file.
+##
+#set($subject = "Clarin Token for ${params[1]}")
+#set($phone = ${config.get('mail.message.helpdesk.telephone')})
+
+Dear ${params[1]},
+
+This is your Clarin-DSpace application token:
+
+${params[0]}
+
+valid until "${params[2]}".
+_____________________________________
+${config.get('dspace.shortname')},
+WWW: ${config.get('dspace.ui.url')}
+Email: ${config.get('lr.help.mail')}
+#if( $phone )
+Tel.: ${phone}
+#end
+

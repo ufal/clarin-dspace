@@ -12,9 +12,11 @@ import org.dspace.content.service.clarin.ClarinLicenseLabelService;
 import org.dspace.content.service.clarin.ClarinLicenseResourceMappingService;
 import org.dspace.content.service.clarin.ClarinLicenseResourceUserAllowanceService;
 import org.dspace.content.service.clarin.ClarinLicenseService;
+import org.dspace.content.service.clarin.ClarinTokenService;
 import org.dspace.content.service.clarin.ClarinUserMetadataService;
 import org.dspace.content.service.clarin.ClarinUserRegistrationService;
 import org.dspace.content.service.clarin.ClarinVerificationTokenService;
+import org.dspace.content.service.clarin.MatomoReportSubscriptionService;
 import org.dspace.handle.service.HandleClarinService;
 import org.matomo.java.tracking.MatomoTracker;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,6 +58,12 @@ public class ClarinServiceFactoryImpl extends ClarinServiceFactory {
 
     @Autowired(required = true)
     private MatomoTracker matomoTracker;
+
+    @Autowired(required = true)
+    private MatomoReportSubscriptionService matomoReportSubscriptionService;
+
+    @Autowired(required = true)
+    private ClarinTokenService clarinTokenService;
 
     @Override
     public ClarinLicenseService getClarinLicenseService() {
@@ -105,5 +113,15 @@ public class ClarinServiceFactoryImpl extends ClarinServiceFactory {
     @Override
     public ClarinItemService getClarinItemService() {
         return clarinItemService;
+    }
+
+    @Override
+    public MatomoReportSubscriptionService getMatomoReportService() {
+        return matomoReportSubscriptionService;
+    }
+
+    @Override
+    public ClarinTokenService getClarinTokenService() {
+        return clarinTokenService;
     }
 }

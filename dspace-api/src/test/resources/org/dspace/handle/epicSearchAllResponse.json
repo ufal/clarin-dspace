@@ -1,0 +1,125 @@
+{
+  "/handles/11148/TEST-0000-0011-2E03-7": [
+    {
+      "idx": 1,
+      "type": "URL",
+      "parsed_data": "http://www.test.cz/news",
+      "data": "aHR0cDovL3d3dy50ZXN0LmN6L25ld3Mx",
+      "timestamp": "2025-06-11T15:11:11Z",
+      "ttl_type": 0,
+      "ttl": 86400,
+      "refs": [],
+      "privs": "rwr-"
+    },
+    {
+      "idx": 100,
+      "type": "HS_ADMIN",
+      "parsed_data": {
+        "adminId": "0.NA/11148",
+        "adminIdIndex": 2050,
+        "perms": {
+          "add_handle": true,
+          "delete_handle": true,
+          "add_derived_prefix": false,
+          "delete_derived_prefix": false,
+          "modify_value": true,
+          "remove_value": true,
+          "add_value": true,
+          "modify_admin": true,
+          "remove_admin": true,
+          "add_admin": true,
+          "read_value": true,
+          "list_handles": false
+        }
+      },
+      "data": "B/MAAAAKMC5OQS8xMTE0OAAACAI=",
+      "timestamp": "2025-06-10T08:24:08Z",
+      "ttl_type": 0,
+      "ttl": 86400,
+      "refs": [],
+      "privs": "rwr-"
+    }
+  ],
+  "/handles/11148/TEST-0000-0011-2E07-3": [
+    {
+      "idx": 1,
+      "type": "URL",
+      "parsed_data": "http://www.test.cz/",
+      "data": "aHR0cDovL3d3dy50ZXN0LmN6Lw==",
+      "timestamp": "2025-06-11T14:17:10Z",
+      "ttl_type": 0,
+      "ttl": 86400,
+      "refs": [],
+      "privs": "rwr-"
+    },
+    {
+      "idx": 100,
+      "type": "HS_ADMIN",
+      "parsed_data": {
+        "adminId": "0.NA/11148",
+        "adminIdIndex": 2050,
+        "perms": {
+          "add_handle": true,
+          "delete_handle": true,
+          "add_derived_prefix": false,
+          "delete_derived_prefix": false,
+          "modify_value": true,
+          "remove_value": true,
+          "add_value": true,
+          "modify_admin": true,
+          "remove_admin": true,
+          "add_admin": true,
+          "read_value": true,
+          "list_handles": false
+        }
+      },
+      "data": "B/MAAAAKMC5OQS8xMTE0OAAACAI=",
+      "timestamp": "2025-06-11T14:17:10Z",
+      "ttl_type": 0,
+      "ttl": 86400,
+      "refs": [],
+      "privs": "rwr-"
+    }
+  ],
+  "/handles/11148/TEST-0000-0011-2E05-5": [
+    {
+      "idx": 1,
+      "type": "URL",
+      "parsed_data": "http://www.test.cz/sport",
+      "data": "aHR0cDovL3d3dy50ZXN0NS5jeg==",
+      "timestamp": "2025-06-19T09:36:32Z",
+      "ttl_type": 0,
+      "ttl": 86400,
+      "refs": [],
+      "privs": "rwr-"
+    },
+    {
+      "idx": 100,
+      "type": "HS_ADMIN",
+      "parsed_data": {
+        "adminId": "0.NA/11148",
+        "adminIdIndex": 2050,
+        "perms": {
+          "add_handle": true,
+          "delete_handle": true,
+          "add_derived_prefix": false,
+          "delete_derived_prefix": false,
+          "modify_value": true,
+          "remove_value": true,
+          "add_value": true,
+          "modify_admin": true,
+          "remove_admin": true,
+          "add_admin": true,
+          "read_value": true,
+          "list_handles": false
+        }
+      },
+      "data": "B/MAAAAKMC5OQS8xMTE0OAAACAI=",
+      "timestamp": "2025-06-19T09:36:32Z",
+      "ttl_type": 0,
+      "ttl": 86400,
+      "refs": [],
+      "privs": "rwr-"
+    }
+  ]
+}

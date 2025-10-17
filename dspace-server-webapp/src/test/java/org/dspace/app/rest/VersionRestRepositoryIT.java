@@ -426,6 +426,8 @@ public class VersionRestRepositoryIT extends AbstractControllerIntegrationTest {
 
     @Test
     public void createFirstVersionItemForbiddenTest() throws Exception {
+        configurationService.setProperty("versioning.submitterCanCreateNewVersion", false);
+
         String epersonToken = getAuthToken(eperson.getEmail(), password);
         getClient(epersonToken).perform(post("/api/versioning/versions")
                                .param("summary", "test summary!")
@@ -1548,6 +1550,7 @@ public class VersionRestRepositoryIT extends AbstractControllerIntegrationTest {
 
     @Test
     public void checkDeleteOfMultipleVersionWithAuthorizationTest() throws Exception {
+        configurationService.setProperty("versioning.unarchive.previous.version", true);
         context.turnOffAuthorisationSystem();
 
         AuthorizationFeature canDeleteVersionFeature = authorizationFeatureService.find(CanDeleteVersionFeature.NAME);
@@ -1755,4 +1758,65 @@ public class VersionRestRepositoryIT extends AbstractControllerIntegrationTest {
         return newItem;
     }
 
+    @Test
+    public void createNewVersionDoesNotUnarchivePreviousVersionTest() throws Exception {
+
+        context.turnOffAuthorisationSystem();
+        parentCommunity = CommunityBuilder.createCommunity(context)
+                                          .withName("Parent Community")
+                                          .build();
+        // Use a collection where admin can deposit to complete the archive quickly
+        Collection col = CollectionBuilder.createCollection(context, parentCommunity)
+                                          .withName("Collection test")
+                                          .withSubmitterGroup(admin)
+                                          .build();
+
+        // Create first version (archived)
+        Item firstVersionItem = ItemBuilder.createItem(context, col)
+                                           .withTitle("Public test item")
+                                           .withIssueDate("2021-04-27")
+                                           .withAuthor("Doe, John")
+                                           .withSubject("ExtraEntry")
+                                           .grantLicense()
+                                           .build();
+
+        // Create new version (initially not archived)
+        Version v2 = VersionBuilder.createVersion(context, firstVersionItem, "test summary").build();
+        Item newVersionItem = v2.getItem();
+        context.restoreAuthSystemState();
+
+        String adminToken = getAuthToken(admin.getEmail(), password);
+
+        // Sanity: first version is archived
+        getClient(adminToken).perform(get("/api/core/items/" + firstVersionItem.getID()))
+                             .andExpect(status().isOk())
+                             .andExpect(jsonPath("$.inArchive", Matchers.is(true)));
+
+        // Sanity: new version is not archived yet
+        getClient(adminToken).perform(get("/api/core/items/" + newVersionItem.getID()))
+                             .andExpect(status().isOk())
+                             .andExpect(jsonPath("$.inArchive", Matchers.is(false)));
+
+        // Move new version out of workspace into archive
+        AtomicReference<Integer> wsiIdRef = new AtomicReference<Integer>();
+        getClient(adminToken).perform(get("/api/submission/workspaceitems/search/item")
+                             .param("uuid", String.valueOf(newVersionItem.getID())))
+                             .andExpect(status().isOk())
+                             .andDo(result -> wsiIdRef.set(read(result.getResponse().getContentAsString(), "$.id")));
+
+        getClient(adminToken).perform(post(BASE_REST_SERVER_URL + "/api/workflow/workflowitems")
+                             .content("/api/submission/workspaceitems/" + wsiIdRef.get())
+                             .contentType(textUriContentType))
+                             .andExpect(status().isCreated());
+
+        // After archiving new version: it should be archived
+        getClient(adminToken).perform(get("/api/core/items/" + newVersionItem.getID()))
+                             .andExpect(status().isOk())
+                             .andExpect(jsonPath("$.inArchive", Matchers.is(true)));
+
+        // And the previous version MUST remain archived (NOT unarchived)
+        getClient(adminToken).perform(get("/api/core/items/" + firstVersionItem.getID()))
+                             .andExpect(status().isOk())
+                             .andExpect(jsonPath("$.inArchive", Matchers.is(true)));
+    }
 }
