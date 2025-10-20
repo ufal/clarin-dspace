@@ -239,8 +239,19 @@
                     <repeatable>false</repeatable>
                     <label>Description</label>
                     <input-type>textarea</input-type>
-                    <hint>Enter a description of the submitted data.</hint>
+                    <hint>Enter a description of the submitted data. Also, the Markdown format can be used to format text in the description (see: https://www.markdownguide.org/).</hint>
                     <required>Please give us a description</required>
+                </field>
+            </row>
+            <row>
+                <field>
+                    <dc-schema>local</dc-schema>
+                    <dc-element>description</dc-element>
+                    <dc-qualifier>usemarkdown</dc-qualifier>
+                    <repeatable>true</repeatable>
+                    <label>Use Markdown format</label>
+                    <input-type value-pairs-name="use_markdown">list</input-type>
+                    <hint/>
                 </field>
             </row>
             <row>
@@ -3208,6 +3219,13 @@
             <pair>
                 <displayed-value>teachingMaterials</displayed-value>
                 <stored-value>teachingMaterials</stored-value>
+            </pair>
+        </value-pairs>
+
+        <value-pairs value-pairs-name="use_markdown" dc-term="">
+            <pair>
+                <displayed-value>Yes</displayed-value>
+                <stored-value>yes</stored-value>
             </pair>
         </value-pairs>
 
