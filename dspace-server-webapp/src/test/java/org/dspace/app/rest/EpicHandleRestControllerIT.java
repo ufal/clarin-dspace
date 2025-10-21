@@ -116,11 +116,13 @@ public class EpicHandleRestControllerIT extends AbstractControllerIntegrationTes
                     .andExpect(jsonPath("$.content", containsInAnyOrder(
                             allOf(
                                     hasJsonPath("$.id", is("11148/TEST-0000-0011-2E03-7")),
-                                    hasJsonPath("$.url", is("http://www.test.cz/news"))
+                                    hasJsonPath("$.url", is("http://www.test.cz/news")),
+                                    hasJsonPath("$.links[0].href", endsWith("/epichandles/11148/TEST-0000-0011-2E03-7"))
                             ),
                             allOf(
                                     hasJsonPath("$.id", is("11148/TEST-0000-0011-2E07-3")),
-                                    hasJsonPath("$.url", is("http://www.test.cz/"))
+                                    hasJsonPath("$.url", is("http://www.test.cz/")),
+                                    hasJsonPath("$.links[0].href", endsWith("/epichandles/11148/TEST-0000-0011-2E07-3"))
                             )
                     )));
 
