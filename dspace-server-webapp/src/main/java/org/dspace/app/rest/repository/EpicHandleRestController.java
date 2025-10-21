@@ -232,10 +232,10 @@ public class EpicHandleRestController extends DSpaceRestRepository<EpicHandleRes
 
     private Page<EpicHandleResource> getPage(List<Handle> handles, int page, int size, int totalElements) {
         Projection proj = utils.obtainProjection();
-        List<EpicHandleResource> restObjects = handles.stream()
+        List<EpicHandleResource> epicHandleResources = handles.stream()
                 .map(h -> (EpicHandleResource) converter.toResource(toRest(h, proj)))
                 .collect(Collectors.toList());
-        return new PageImpl<>(restObjects, PageRequest.of(page, size), totalElements);
+        return new PageImpl<>(epicHandleResources, PageRequest.of(page, size), totalElements);
     }
 
     private static RuntimeException toDSpaceException(WebApplicationException ex) {
