@@ -33,16 +33,13 @@ import org.dspace.core.Context;
 import org.dspace.discovery.IndexEventConsumer;
 import org.dspace.event.Consumer;
 import org.dspace.event.Event;
-<<<<<<< HEAD
 import org.dspace.orcid.OrcidHistory;
 import org.dspace.orcid.OrcidQueue;
 import org.dspace.orcid.factory.OrcidServiceFactory;
 import org.dspace.orcid.service.OrcidHistoryService;
 import org.dspace.orcid.service.OrcidQueueService;
-=======
 import org.dspace.services.ConfigurationService;
 import org.dspace.services.factory.DSpaceServicesFactory;
->>>>>>> clarin-v7
 import org.dspace.versioning.factory.VersionServiceFactory;
 import org.dspace.versioning.service.VersionHistoryService;
 import org.dspace.versioning.utils.RelationshipVersioningUtils;
