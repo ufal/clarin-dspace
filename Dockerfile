@@ -8,14 +8,14 @@
 ARG JDK_VERSION=11
 
 # Step 1 - Run Maven Build
-FROM ufal/dspace-dependencies:dspace-7_x as build
+FROM ufal/dspace-dependencies:dspace-7_x AS build
 ARG TARGET_DIR=dspace-installer
 WORKDIR /app
 # The dspace-installer directory will be written to /install
 RUN mkdir /install \
     && chown -Rv dspace: /install \
     && chown -Rv dspace: /app
-USER dspace
+USER 10001
 # Copy the DSpace source code (from local machine) into the workdir (excluding .dockerignore contents)
 ADD --chown=dspace . /app/
 # Build DSpace (note: this build doesn't include the optional, deprecated "dspace-rest" webapp)
@@ -25,7 +25,7 @@ RUN mvn --no-transfer-progress package && \
   mvn clean
 
 # Step 2 - Run Ant Deploy
-FROM openjdk:${JDK_VERSION}-slim as ant_build
+FROM openjdk:${JDK_VERSION}-slim AS ant_build
 ARG TARGET_DIR=dspace-installer
 # COPY the /install directory from 'build' container to /dspace-src in this container
 COPY --from=build /install /dspace-src
@@ -48,16 +48,19 @@ RUN ant init_installation update_configs update_code update_webapps
 # Step 3 - Run tomcat
 # Create a new tomcat image that does not retain the the build directory contents
 FROM tomcat:9-jdk${JDK_VERSION}
+# Create a custom dspace user with same gid/uid as last stage
+RUN groupadd -g 10002 dspace && \
+    useradd  -u 10001 -g dspace dspace
 # NOTE: DSPACE_INSTALL must align with the "dspace.dir" default configuration.
 ENV DSPACE_INSTALL=/dspace
 # Copy the /dspace directory from 'ant_build' container to /dspace in this container
-COPY --from=ant_build /dspace $DSPACE_INSTALL
+COPY --from=ant_build --chown=10001:10002 /dspace $DSPACE_INSTALL
 # Expose Tomcat port and AJP port
 EXPOSE 8080 8009 8000
 # Give java extra memory (2GB)
 ENV JAVA_OPTS=-Xmx2000m
-COPY scripts/restart_debug/* /usr/local/tomcat/bin
-COPY scripts/index-scripts/* /dspace/bin
+COPY --chown=10001:10002 scripts/restart_debug/* /usr/local/tomcat/bin
+COPY --chown=10001:10002 scripts/index-scripts/* /dspace/bin
 # Link the DSpace 'server' webapp into Tomcat's webapps directory.
 # This ensures that when we start Tomcat, it runs from /server path (e.g. http://localhost:8080/server/)
 RUN ln -s $DSPACE_INSTALL/webapps/server   /usr/local/tomcat/webapps/server
@@ -66,6 +69,8 @@ RUN ln -s $DSPACE_INSTALL/webapps/server   /usr/local/tomcat/webapps/server
 # Please note that server webapp should only run on one path at a time.
 #RUN mv /usr/local/tomcat/webapps/ROOT /usr/local/tomcat/webapps/ROOT.bk && \
 #    ln -s $DSPACE_INSTALL/webapps/server   /usr/local/tomcat/webapps/ROOT
+# Run as dspace user
+USER 10001
 
 WORKDIR /usr/local/tomcat/bin
 RUN chmod u+x redebug.sh undebug.sh custom_run.sh

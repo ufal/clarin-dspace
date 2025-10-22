@@ -8,14 +8,14 @@
 ARG JDK_VERSION=11
 
 # Step 1 - Run Maven Build
-FROM ufal/dspace-dependencies:dspace-7_x as build
+FROM ufal/dspace-dependencies:dspace-7_x AS build
 ARG TARGET_DIR=dspace-installer
 WORKDIR /app
 # The dspace-installer directory will be written to /install
 RUN mkdir /install \
     && chown -Rv dspace: /install \
     && chown -Rv dspace: /app
-USER dspace
+USER 10001
 # Copy the DSpace source code (from local machine) into the workdir (excluding .dockerignore contents)
 ADD --chown=dspace . /app/
 # Build DSpace.  Copy the dspace-installer directory to /install.  Clean up the build to keep the docker image small
@@ -48,7 +48,10 @@ RUN ant init_installation update_configs update_code
 FROM openjdk:${JDK_VERSION}
 # NOTE: DSPACE_INSTALL must align with the "dspace.dir" default configuration.
 ENV DSPACE_INSTALL=/dspace
+RUN groupadd -g 10002 dspace && \
+    useradd  -u 10001 -g dspace dspace
 # Copy the /dspace directory from 'ant_build' container to /dspace in this container
-COPY --from=ant_build /dspace $DSPACE_INSTALL
+COPY --from=ant_build --chown=10001:10002 /dspace $DSPACE_INSTALL
 # Give java extra memory (1GB)
 ENV JAVA_OPTS=-Xmx1000m
+USER 10001
