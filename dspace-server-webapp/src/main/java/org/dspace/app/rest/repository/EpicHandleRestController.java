@@ -150,7 +150,7 @@ public class EpicHandleRestController extends DSpaceRestRepository<EpicHandleRes
 
     @PreAuthorize("hasAuthority('ADMIN')")
     @RequestMapping(method = RequestMethod.GET, path = "{prefix}")
-    public Page<EpicHandleRest> search(@PathVariable String prefix, HttpServletRequest request) throws IOException {
+    public Page<EpicHandleResource> search(@PathVariable String prefix, HttpServletRequest request) throws IOException {
         if (prefix == null || prefix.isEmpty()) {
             throw new DSpaceBadRequestException("Epic handle prefix cannot be empty string");
         }
@@ -230,12 +230,12 @@ public class EpicHandleRestController extends DSpaceRestRepository<EpicHandleRes
         return converter.toRest(handle, projection);
     }
 
-    private Page<EpicHandleRest> getPage(List<Handle> handles, int page, int size, int totalElements) {
+    private Page<EpicHandleResource> getPage(List<Handle> handles, int page, int size, int totalElements) {
         Projection proj = utils.obtainProjection();
-        List<EpicHandleRest> restObjects = handles.stream()
-                .map(h -> toRest(h, proj))
+        List<EpicHandleResource> epicHandleResources = handles.stream()
+                .map(h -> (EpicHandleResource) converter.toResource(toRest(h, proj)))
                 .collect(Collectors.toList());
-        return new PageImpl<>(restObjects, PageRequest.of(page, size), totalElements);
+        return new PageImpl<>(epicHandleResources, PageRequest.of(page, size), totalElements);
     }
 
     private static RuntimeException toDSpaceException(WebApplicationException ex) {
