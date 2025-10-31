@@ -337,10 +337,10 @@ public class PreviewContentServiceImpl implements PreviewContentService {
     }
 
     /**
-     * Processes tar.gzip file, extracting its entries and adding their paths to the provided list.
+     * Processes tar.gz file, extracting its entries and adding their paths to the provided list.
      * @param filePaths the list to populate with the extracted file paths
-     * @param file the tar.gzip file data
-     * @throws IOException if an I/O error occurs while reading the TAR GZIP file
+     * @param file the tar.gz file data
+     * @throws IOException if an I/O error occurs while reading the tar.gz file
      */
     private void processTarGzipFile(List<String> filePaths, File file) throws IOException {
         try (TarArchiveInputStream tarInput = getTarGzipInputStream(file)) {
@@ -353,7 +353,7 @@ public class PreviewContentServiceImpl implements PreviewContentService {
      * @param filePaths the list to populate with the extracted file paths
      * @param file the gzip file data
      * @param bitstream Bitstream object
-     * @throws IOException if an I/O error occurs while reading the TAR file
+     * @throws IOException if an I/O error occurs while reading the gzip file
      */
     private void processGzipFile(List<String> filePaths, File file, Bitstream bitstream) throws IOException {
         String fileName = bitstream.getName();
@@ -374,7 +374,7 @@ public class PreviewContentServiceImpl implements PreviewContentService {
      * @param filePaths the list to populate with the extracted file paths
      * @param file the xz file data
      * @param bitstream Bitstream object
-     * @throws IOException if an I/O error occurs while reading the TAR file
+     * @throws IOException if an I/O error occurs while reading the xz file
      */
     private void processXzFile(List<String> filePaths, File file, Bitstream bitstream) throws IOException {
         String fileName = bitstream.getName();
@@ -396,7 +396,7 @@ public class PreviewContentServiceImpl implements PreviewContentService {
      * Processes 7z file, extracting its entries and adding their paths to the provided list.
      * @param filePaths the list to populate with the extracted file paths
      * @param file the 7z file data
-     * @throws IOException if an I/O error occurs while reading the TAR file
+     * @throws IOException if an I/O error occurs while reading the 7z file
      */
     private void process7zFile(List<String> filePaths, File file) throws IOException {
         try (SevenZFile sevenZFile = new SevenZFile(file)) {
