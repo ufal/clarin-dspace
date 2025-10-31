@@ -31,6 +31,7 @@ import org.dspace.content.Community;
 import org.dspace.content.Item;
 import org.dspace.content.PreviewContent;
 import org.dspace.content.service.PreviewContentService;
+import org.dspace.util.FileInfo;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -41,11 +42,24 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
 
     @Autowired
     PreviewContentService previewContentService;
+
     PreviewContent previewContent0;
     PreviewContent previewContent1;
     PreviewContent previewContent2;
+    PreviewContent previewContent31;
+    PreviewContent previewContent32;
+    PreviewContent previewContent3;
+
     Bitstream bitstream1;
     Bitstream bitstream2;
+    Bitstream sevenZFile;
+    Bitstream tarGzFile;
+    Bitstream tgzFile;
+    Bitstream gzFile;
+    Bitstream tarXzFile;
+    Bitstream xzFile;
+    Bitstream tarGzFileWithWrongExtension;
+    Bitstream tarXzFileWithIncorrectMimeType;
 
     @Before
     public void setup() throws SQLException, AuthorizeException, IOException {
@@ -65,16 +79,16 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
                 .withName("Bundle Test")
                 .build();
         String bitstreamContent = "ThisIsSomeDummyText";
-        bitstream1 = null;
+
         try (InputStream is = IOUtils.toInputStream(bitstreamContent, CharEncoding.UTF_8)) {
-        bitstream1 = BitstreamBuilder.
-                createBitstream(context, bundle1, is)
-                .withName("Bitstream1 Test")
-                .withDescription("description")
-                .withMimeType("text/plain")
-                .build();
+            bitstream1 = BitstreamBuilder.
+                    createBitstream(context, bundle1, is)
+                    .withName("Bitstream1 Test")
+                    .withDescription("description")
+                    .withMimeType("text/plain")
+                    .build();
         }
-        bitstream2 = null;
+
         try (InputStream is = IOUtils.toInputStream(bitstreamContent, CharEncoding.UTF_8)) {
             bitstream2 = BitstreamBuilder.
                     createBitstream(context, bundle1, is)
@@ -83,15 +97,100 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
                     .withMimeType("text/plain")
                     .build();
         }
+
+        try (InputStream is = getClass().getResourceAsStream("assetstore/logos.7z")) {
+            sevenZFile = BitstreamBuilder.
+                    createBitstream(context, bundle1, is)
+                    .withName("7Z Archive")
+                    .withDescription("7z compressed file")
+                    .withMimeType("application/x-7z-compressed")
+                    .build();
+        }
+
+        try (InputStream is = getClass().getResourceAsStream("assetstore/logos.tar.gz")) {
+            tarGzFile = BitstreamBuilder.
+                    createBitstream(context, bundle1, is)
+                    .withName("logos.tar.gz")
+                    .withDescription("tar.gz compressed file")
+                    .withMimeType("application/gzip")
+                    .build();
+        }
+
+        try (InputStream is = getClass().getResourceAsStream("assetstore/logos.tgz")) {
+            tgzFile = BitstreamBuilder.
+                    createBitstream(context, bundle1, is)
+                    .withName("TgzFile")
+                    .withDescription("tgz compressed file")
+                    .withMimeType("application/x-gtar")
+                    .build();
+        }
+
+        try (InputStream is = getClass().getResourceAsStream("assetstore/logo.png.gz")) {
+            gzFile = BitstreamBuilder.
+                    createBitstream(context, bundle1, is)
+                    .withName("logo.png")
+                    .withDescription("gzip compressed file")
+                    .withMimeType("application/gzip")
+                    .build();
+        }
+
+        try (InputStream is = getClass().getResourceAsStream("assetstore/logos.tar.xz")) {
+            tarXzFile = BitstreamBuilder.
+                    createBitstream(context, bundle1, is)
+                    .withName("logos.tar.xz")
+                    .withDescription("tar.xz compressed file")
+                    .withMimeType("application/x-xz")
+                    .build();
+        }
+
+        try (InputStream is = getClass().getResourceAsStream("assetstore/logos.xz")) {
+            xzFile = BitstreamBuilder.
+                    createBitstream(context, bundle1, is)
+                    .withName("logos.xz")
+                    .withDescription("tar.xz compressed file")
+                    .withMimeType("application/x-xz")
+                    .build();
+        }
+
+        try (InputStream is = getClass().getResourceAsStream("assetstore/logos.tar.gz")) {
+            tarGzFileWithWrongExtension = BitstreamBuilder.
+                    createBitstream(context, bundle1, is)
+                    .withName("TAR GZ File")
+                    .withDescription("tar.gz compressed file with wrong extension")
+                    .withMimeType("application/gzip")
+                    .build();
+        }
+
+        try (InputStream is = getClass().getResourceAsStream("assetstore/logos.tar.xz")) {
+            tarXzFileWithIncorrectMimeType = BitstreamBuilder.
+                    createBitstream(context, bundle1, is)
+                    .withName("logos.xz")
+                    .withDescription("tar.gz compressed file with wrong extension")
+                    .withMimeType("application/gzip")
+                    .build();
+        }
+
         // create content previews
         previewContent0 =  PreviewContentBuilder.createPreviewContent(context, bitstream1, "test1.txt",
                 null, false, "100", null).build();
-        Map<String, PreviewContent> previewContentMap = new HashMap<>();
-        previewContentMap.put(previewContent0.getName(), previewContent0);
+        Map<String, PreviewContent> previewContentMap1 = new HashMap<>();
+        previewContentMap1.put(previewContent0.getName(), previewContent0);
         previewContent1 = PreviewContentBuilder.createPreviewContent(context, bitstream1, "", null,
-                true, "0", previewContentMap).build();
+                true, "0", previewContentMap1).build();
         previewContent2 = PreviewContentBuilder.createPreviewContent(context, bitstream2, "test2.txt", null,
-                false, "200", previewContentMap).build();
+                false, "200", previewContentMap1).build();
+
+        previewContent31 = PreviewContentBuilder.createPreviewContent(context, sevenZFile, "SUN.png", null,
+                false, "3451", null).build();
+
+        previewContent32 = PreviewContentBuilder.createPreviewContent(context, sevenZFile, "oracle.png", null,
+                false, "2116", null).build();
+
+        Map<String, PreviewContent> previewContentMap2 = new HashMap<>();
+        previewContentMap2.put(previewContent31.getName(), previewContent31);
+        previewContentMap2.put(previewContent32.getName(), previewContent32);
+        previewContent3 = PreviewContentBuilder.createPreviewContent(context, sevenZFile, "", null,
+                true, "0", previewContentMap2).build();
     }
 
     @After
@@ -103,16 +202,32 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
         PreviewContentBuilder.deletePreviewContent(previewContent1.getID());
         BitstreamBuilder.deleteBitstream(bitstream2.getID());
         PreviewContentBuilder.deletePreviewContent(previewContent2.getID());
+
+        BitstreamBuilder.deleteBitstream(sevenZFile.getID());
+        PreviewContentBuilder.deletePreviewContent(previewContent31.getID());
+        PreviewContentBuilder.deletePreviewContent(previewContent32.getID());
+        PreviewContentBuilder.deletePreviewContent(previewContent3.getID());
+
+        BitstreamBuilder.deleteBitstream(tarGzFile.getID());
+        BitstreamBuilder.deleteBitstream(tgzFile.getID());
+        BitstreamBuilder.deleteBitstream(gzFile.getID());
+        BitstreamBuilder.deleteBitstream(tarXzFile.getID());
+        BitstreamBuilder.deleteBitstream(xzFile.getID());
+        BitstreamBuilder.deleteBitstream(tarGzFileWithWrongExtension.getID());
+        BitstreamBuilder.deleteBitstream(tarXzFileWithIncorrectMimeType.getID());
         super.destroy();
     }
 
     @Test
     public void testFindAll() throws Exception {
         List<PreviewContent> previewContentList = previewContentService.findAll(context);
-        Assert.assertEquals(previewContentList.size(), 3);
+        Assert.assertEquals(6, previewContentList.size());
         Assert.assertEquals(previewContent0.getID(), previewContentList.get(0).getID());
         Assert.assertEquals(previewContent1.getID(), previewContentList.get(1).getID());
         Assert.assertEquals(previewContent2.getID(), previewContentList.get(2).getID());
+        Assert.assertEquals(previewContent31.getID(), previewContentList.get(3).getID());
+        Assert.assertEquals(previewContent32.getID(), previewContentList.get(4).getID());
+        Assert.assertEquals(previewContent3.getID(), previewContentList.get(5).getID());
     }
 
     @Test
@@ -129,4 +244,78 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
         Assert.assertEquals(previewContentList.size(), 1);
         Assert.assertEquals(previewContent1.getID(), previewContentList.get(0).getID());
     }
+
+    @Test
+    public void testFind7zContent() throws Exception {
+        List<PreviewContent> previewContentList = previewContentService.findByBitstream(context, sevenZFile.getID());
+        Assert.assertEquals(3, previewContentList.size());
+        Assert.assertEquals(previewContent31.getName(), previewContentList.get(0).getName());
+        Assert.assertEquals(previewContent31.getSize(), previewContentList.get(0).getSize());
+        Assert.assertEquals(previewContent32.getName(), previewContentList.get(1).getName());
+        Assert.assertEquals(previewContent32.getSize(), previewContentList.get(1).getSize());
+        Assert.assertEquals(2, previewContent3.getSubPreviewContents().size());
+        Assert.assertEquals(previewContent31.getID(),
+                previewContent3.getSubPreviewContents().get("SUN.png").getID());
+        Assert.assertEquals(previewContent32.getID(),
+                previewContent3.getSubPreviewContents().get("oracle.png").getID());
+
+        assertFileInfos(sevenZFile);
+    }
+
+    @Test
+    public void testTarGzContent() throws Exception {
+        assertFileInfos(tarGzFile);
+    }
+
+    @Test
+    public void testTgzContent() throws Exception {
+        assertFileInfos(tgzFile);
+    }
+
+    @Test
+    public void testGzContent() throws Exception {
+        assertFileInfo(gzFile, "logo.png", 2);
+    }
+
+    @Test
+    public void testTarXzContent() throws Exception {
+        assertFileInfos(tarXzFile);
+    }
+
+    @Test
+    public void testXzContent() throws Exception {
+        assertFileInfo(xzFile, "logos", 11);
+    }
+
+    @Test
+    public void testGzContentForFileWithWrongExtension() throws Exception {
+        assertFileInfo(tarGzFileWithWrongExtension, "TAR GZ File", 11);
+    }
+
+    @Test
+    public void testGzContentForFileWithInvalidMimetype() throws Exception {
+        List<FileInfo> fileInfos = previewContentService.getFilePreviewContent(context, tarXzFileWithIncorrectMimeType);
+        Assert.assertTrue(fileInfos.isEmpty());
+    }
+
+    private void assertFileInfos(Bitstream bitstream) throws Exception {
+        List<FileInfo> fileInfos = previewContentService.getFilePreviewContent(context, bitstream);
+        Assert.assertEquals(1, fileInfos.size());
+        Assert.assertTrue(fileInfos.get(0).isDirectory);
+        Assert.assertEquals(2, fileInfos.get(0).sub.size());
+        Assert.assertNotNull(fileInfos.get(0).sub.get("oracle.png"));
+        Assert.assertEquals("2 kB", fileInfos.get(0).sub.get("oracle.png").size);
+        Assert.assertNotNull(fileInfos.get(0).sub.get("SUN.png"));
+        Assert.assertEquals("3 kB", fileInfos.get(0).sub.get("SUN.png").size);
+    }
+
+    private void assertFileInfo(Bitstream bitstream, String fileName, int size) throws Exception {
+        List<FileInfo> fileInfos = previewContentService.getFilePreviewContent(context, bitstream);
+        Assert.assertEquals(1, fileInfos.size());
+        Assert.assertTrue(fileInfos.get(0).isDirectory);
+        Assert.assertEquals(1, fileInfos.get(0).sub.size());
+        Assert.assertNotNull(fileInfos.get(0).sub.get(fileName));
+        Assert.assertEquals(size + " kB", fileInfos.get(0).sub.get(fileName).size);
+    }
+
 }

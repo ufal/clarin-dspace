@@ -37,36 +37,38 @@ public class FileTreeViewGenerator {
         Element rootElement = document.getDocumentElement();
         NodeList nl = rootElement.getChildNodes();
         FileInfo root = new FileInfo("root");
-        Node n = nl.item(0);
-        do {
-            String fileInfo = n.getFirstChild().getTextContent();
-            String f[] = fileInfo.split("\\|");
-            String fileName = "";
-            String path = f[0];
-            long size = Long.parseLong(f[1]);
-            if (!path.endsWith("/")) {
-                fileName = path.substring(path.lastIndexOf('/') + 1);
-                if (path.lastIndexOf('/') != -1) {
-                    path = path.substring(0, path.lastIndexOf('/'));
-                } else {
-                    path = "";
+        if (nl.getLength() > 0) {
+            Node n = nl.item(0);
+            do {
+                String fileInfo = n.getFirstChild().getTextContent();
+                String f[] = fileInfo.split("\\|");
+                String fileName = "";
+                String path = f[0];
+                long size = Long.parseLong(f[1]);
+                if (!path.endsWith("/")) {
+                    fileName = path.substring(path.lastIndexOf('/') + 1);
+                    if (path.lastIndexOf('/') != -1) {
+                        path = path.substring(0, path.lastIndexOf('/'));
+                    } else {
+                        path = "";
+                    }
                 }
-            }
-            FileInfo current = root;
-            for (String p : path.split("/")) {
-                if (current.sub.containsKey(p)) {
-                    current = current.sub.get(p);
-                } else {
-                    FileInfo temp = new FileInfo(p);
-                    current.sub.put(p, temp);
-                    current = temp;
+                FileInfo current = root;
+                for (String p : path.split("/")) {
+                    if (current.sub.containsKey(p)) {
+                        current = current.sub.get(p);
+                    } else {
+                        FileInfo temp = new FileInfo(p);
+                        current.sub.put(p, temp);
+                        current = temp;
+                    }
                 }
-            }
-            if (!fileName.isEmpty()) {
-                FileInfo temp = new FileInfo(fileName, humanReadableFileSize(size));
-                current.sub.put(fileName, temp);
-            }
-        } while ((n = n.getNextSibling()) != null);
+                if (!fileName.isEmpty()) {
+                    FileInfo temp = new FileInfo(fileName, humanReadableFileSize(size));
+                    current.sub.put(fileName, temp);
+                }
+            } while ((n = n.getNextSibling()) != null);
+        }
         return new ArrayList<>(root.sub.values());
     }
     public static String humanReadableFileSize(long bytes) {
