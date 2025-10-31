@@ -22,6 +22,7 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 import org.apache.logging.log4j.Logger;
 import org.dspace.AbstractUnitTest;
@@ -542,5 +543,20 @@ public class BitstreamFormatTest extends AbstractUnitTest {
         assertThat("setExtensions 6", bf.getExtensions(), notNullValue());
         assertTrue("setExtensions 7", bf.getExtensions().size() == 0);
         bf.setExtensions(backupExtensions);
+    }
+
+    @Test
+    public void test7zFormat() throws SQLException {
+        List<BitstreamFormat> formats = bitstreamFormatService.findAll(context);
+        Optional<BitstreamFormat> sevenZFormatOpt = formats.stream()
+                .filter(format -> format.getShortDescription().equals("7z"))
+                .findFirst();
+        assertTrue(sevenZFormatOpt.isPresent());
+        BitstreamFormat sevenZFormat = sevenZFormatOpt.get();
+        assertThat(sevenZFormat.getExtensions().size(), equalTo(1));
+        assertThat(sevenZFormat.getExtensions().get(0), equalTo("7z"));
+        assertThat(sevenZFormat.getMIMEType(), equalTo("application/x-7z-compressed"));
+        assertThat(sevenZFormat.getDescription(), equalTo("7-Zip Archive"));
+        assertFalse(sevenZFormat.isInternal());
     }
 }
