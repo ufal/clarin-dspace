@@ -44,7 +44,9 @@ public class FileTreeViewGenerator {
                 String f[] = fileInfo.split("\\|");
                 String fileName = "";
                 String path = f[0];
-                long size = Long.parseLong(f[1]);
+
+                long size = getSize(f);
+
                 if (!path.endsWith("/")) {
                     fileName = path.substring(path.lastIndexOf('/') + 1);
                     if (path.lastIndexOf('/') != -1) {
@@ -71,6 +73,7 @@ public class FileTreeViewGenerator {
         }
         return new ArrayList<>(root.sub.values());
     }
+
     public static String humanReadableFileSize(long bytes) {
         int thresh = 1024;
         if (Math.abs(bytes) < thresh) {
@@ -83,5 +86,17 @@ public class FileTreeViewGenerator {
             ++u;
         } while (Math.abs(bytes) >= thresh && u < units.length - 1);
         return bytes + " " + units[u];
+    }
+
+    private static long getSize(String[] f) {
+        if (f.length > 1) {
+            try {
+                return Long.parseLong(f[1]);
+            } catch (NumberFormatException e) {
+                // Malformed size, default to 0
+                return 0L;
+            }
+        }
+        return 0L;
     }
 }

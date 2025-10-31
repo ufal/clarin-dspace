@@ -214,13 +214,11 @@ public class PreviewContentServiceImpl implements PreviewContentService {
     }
 
     @Override
-    public List<FileInfo> processFileToFilePreview(Context context, Bitstream bitstream,
-                                                          File file)
-            throws Exception {
+    public List<FileInfo> processFileToFilePreview(Context context, Bitstream bitstream, File file) throws Exception {
         List<FileInfo> fileInfos = new ArrayList<>();
         String bitstreamMimeType = bitstream.getFormat(context).getMIMEType();
         if (bitstreamMimeType.equals("text/plain")) {
-            if (!validateBitstreamNameWithType(bitstream, "zip,tar,gz,tar.gz,tar.bz2")) {
+            if (!validateBitstreamNameWithType(bitstream, "zip,tar,gz,tar.gz,xz,tar.xz,7z")) {
                 throw new IOException("The file has an incorrect type according to the MIME type stored in the " +
                         "database. This could cause the ZIP file to be previewed as a text file, potentially leading" +
                         " to a database error.");
@@ -341,7 +339,6 @@ public class PreviewContentServiceImpl implements PreviewContentService {
      * @param filePaths the list to populate with the extracted file paths
      * @param file the tar.gz file data
      * @param bitstream Bitstream object
-     * @throws IOException if an I/O error occurs while reading the tar.gz file
      */
     private void processTarGzipFile(List<String> filePaths, File file, Bitstream bitstream) {
         try (TarArchiveInputStream tarInput = getTarGzipInputStream(file)) {
@@ -356,7 +353,6 @@ public class PreviewContentServiceImpl implements PreviewContentService {
      * @param filePaths the list to populate with the extracted file paths
      * @param file the gzip file data
      * @param bitstream Bitstream object
-     * @throws IOException if an I/O error occurs while reading the gzip file
      */
     private void processGzipFile(List<String> filePaths, File file, Bitstream bitstream) {
         String fileName = bitstream.getName();
@@ -379,7 +375,6 @@ public class PreviewContentServiceImpl implements PreviewContentService {
      * @param filePaths the list to populate with the extracted file paths
      * @param file the xz file data
      * @param bitstream Bitstream object
-     * @throws IOException if an I/O error occurs while reading the xz file
      */
     private void processXzFile(List<String> filePaths, File file, Bitstream bitstream) {
         String fileName = bitstream.getName();
@@ -405,9 +400,9 @@ public class PreviewContentServiceImpl implements PreviewContentService {
      * Processes 7z file, extracting its entries and adding their paths to the provided list.
      * @param filePaths the list to populate with the extracted file paths
      * @param file the 7z file data
-     * @throws IOException if an I/O error occurs while reading the 7z file
+     * @param bitstream Bitstream object
      */
-    private void process7zFile(List<String> filePaths, File file, Bitstream bitstream) throws IOException {
+    private void process7zFile(List<String> filePaths, File file, Bitstream bitstream) {
         try (SevenZFile sevenZFile = new SevenZFile(file)) {
             SevenZArchiveEntry entry;
             while ((entry = sevenZFile.getNextEntry()) != null) {
@@ -430,11 +425,13 @@ public class PreviewContentServiceImpl implements PreviewContentService {
      * Processes a TAR file, extracting its entries and adding their paths to the provided list.
      * @param filePaths the list to populate with the extracted file paths
      * @param file the TAR file data
-     * @throws IOException if an I/O error occurs while reading the TAR file
+     * @param bitstream Bitstream object
      */
-    private void processTarFile(List<String> filePaths, File file) throws IOException {
+    private void processTarFile(List<String> filePaths, File file, Bitstream bitstream) {
         try (TarArchiveInputStream tarInput = getTarInputStream(file)) {
             processTarFile(filePaths, tarInput);
+        } catch (IOException ex) {
+            log.warn("Error while processing file {}", bitstream.getName(), ex);
         }
     }
 
@@ -443,9 +440,9 @@ public class PreviewContentServiceImpl implements PreviewContentService {
      *
      * @param filePaths the list to populate with entry names
      * @param file      the ZIP file to read
-     * @throws IOException if the file is invalid or cannot be read
+     * @param bitstream Bitstream object
      */
-    private void processZipFile(List<String> filePaths, File file) throws IOException {
+    private void processZipFile(List<String> filePaths, File file, Bitstream bitstream) {
         try (ZipFile zipFile = new ZipFile(file)) {
             Enumeration<? extends ZipEntry> entries = zipFile.entries();
             while (entries.hasMoreElements()) {
@@ -458,6 +455,8 @@ public class PreviewContentServiceImpl implements PreviewContentService {
                     addFilePath(filePaths, entry.getName(), entry.getSize());
                 }
             }
+        } catch (IOException ex) {
+            log.warn("Error while processing file {}", bitstream.getName(), ex);
         }
     }
 
@@ -511,7 +510,7 @@ public class PreviewContentServiceImpl implements PreviewContentService {
      * @param bitstream the bitstream object
      * @return an XML string representing the extracted file paths
      */
-    private String extractFile(File file, String fileType, Bitstream bitstream) throws Exception {
+    private String extractFile(File file, String fileType, Bitstream bitstream) {
         List<String> filePaths = new ArrayList<>(ESTIMATED_FILE_COUNT);
         // Process the file based on its type
         switch (fileType) {
@@ -528,13 +527,13 @@ public class PreviewContentServiceImpl implements PreviewContentService {
                 process7zFile(filePaths, file, bitstream);
                 break;
             case ARCHIVE_TYPE_TAR:
-                processTarFile(filePaths, file);
+                processTarFile(filePaths, file, bitstream);
                 break;
             case ARCHIVE_TYPE_ZIP:
-                processZipFile(filePaths, file);
+                processZipFile(filePaths, file, bitstream);
                 break;
             default:
-            // no default really required here
+            // No default case required here
         }
         return buildXmlResponse(filePaths);
     }

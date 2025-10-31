@@ -147,7 +147,7 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
             xzFile = BitstreamBuilder.
                     createBitstream(context, bundle1, is)
                     .withName("logos.xz")
-                    .withDescription("tar.xz compressed file")
+                    .withDescription("xz compressed file")
                     .withMimeType("application/x-xz")
                     .build();
         }
