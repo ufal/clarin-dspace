@@ -164,8 +164,8 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
         try (InputStream is = getClass().getResourceAsStream("assetstore/logos.tar.xz")) {
             tarXzFileWithIncorrectMimeType = BitstreamBuilder.
                     createBitstream(context, bundle1, is)
-                    .withName("logos.xz")
-                    .withDescription("tar.gz compressed file with wrong extension")
+                    .withName("logos.tar.xz")
+                    .withDescription("tar.xz compressed file with incorrect mime type")
                     .withMimeType("application/gzip")
                     .build();
         }
