@@ -13,6 +13,8 @@ import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.apache.commons.codec.CharEncoding;
 import org.apache.commons.io.IOUtils;
@@ -48,6 +50,7 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
     PreviewContent previewContent2;
     PreviewContent previewContent31;
     PreviewContent previewContent32;
+    PreviewContent previewContent321;
     PreviewContent previewContent3;
 
     Bitstream bitstream1;
@@ -125,10 +128,10 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
                     .build();
         }
 
-        try (InputStream is = getClass().getResourceAsStream("assetstore/logo.png.gz")) {
+        try (InputStream is = getClass().getResourceAsStream("assetstore/dspace-logo.png.gz")) {
             gzFile = BitstreamBuilder.
                     createBitstream(context, bundle1, is)
-                    .withName("logo.png")
+                    .withName("dspace-logo.png")
                     .withDescription("gzip compressed file")
                     .withMimeType("application/gzip")
                     .build();
@@ -180,11 +183,17 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
         previewContent2 = PreviewContentBuilder.createPreviewContent(context, bitstream2, "test2.txt", null,
                 false, "200", previewContentMap1).build();
 
-        previewContent31 = PreviewContentBuilder.createPreviewContent(context, sevenZFile, "SUN.png", null,
-                false, "3451", null).build();
+        previewContent31 = PreviewContentBuilder.createPreviewContent(context, sevenZFile, "dspace-logo.png", null,
+                false, "8609", null).build();
 
-        previewContent32 = PreviewContentBuilder.createPreviewContent(context, sevenZFile, "oracle.png", null,
-                false, "2116", null).build();
+        previewContent321 = PreviewContentBuilder.createPreviewContent(context, sevenZFile, "clarin-logo.png", null,
+                false, "10009", null).build();
+
+        Map<String, PreviewContent> previewContentMap32 = new HashMap<>();
+        previewContentMap32.put(previewContent321.getName(), previewContent321);
+
+        previewContent32 = PreviewContentBuilder.createPreviewContent(context, sevenZFile, "clarin", null,
+                true, "0", previewContentMap32).build();
 
         Map<String, PreviewContent> previewContentMap2 = new HashMap<>();
         previewContentMap2.put(previewContent31.getName(), previewContent31);
@@ -205,6 +214,7 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
 
         BitstreamBuilder.deleteBitstream(sevenZFile.getID());
         PreviewContentBuilder.deletePreviewContent(previewContent31.getID());
+        PreviewContentBuilder.deletePreviewContent(previewContent321.getID());
         PreviewContentBuilder.deletePreviewContent(previewContent32.getID());
         PreviewContentBuilder.deletePreviewContent(previewContent3.getID());
 
@@ -221,13 +231,20 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
     @Test
     public void testFindAll() throws Exception {
         List<PreviewContent> previewContentList = previewContentService.findAll(context);
-        Assert.assertEquals(6, previewContentList.size());
-        Assert.assertEquals(previewContent0.getID(), previewContentList.get(0).getID());
-        Assert.assertEquals(previewContent1.getID(), previewContentList.get(1).getID());
-        Assert.assertEquals(previewContent2.getID(), previewContentList.get(2).getID());
-        Assert.assertEquals(previewContent31.getID(), previewContentList.get(3).getID());
-        Assert.assertEquals(previewContent32.getID(), previewContentList.get(4).getID());
-        Assert.assertEquals(previewContent3.getID(), previewContentList.get(5).getID());
+        Assert.assertEquals(7, previewContentList.size());
+
+        Set<Integer> ids1 = previewContentList.stream().map(PreviewContent::getID).collect(Collectors.toSet());
+        Set<Integer> ids2 = Set.of(
+                previewContent0.getID(),
+                previewContent1.getID(),
+                previewContent2.getID(),
+                previewContent31.getID(),
+                previewContent321.getID(),
+                previewContent32.getID(),
+                previewContent3.getID()
+        );
+
+        Assert.assertEquals(ids1, ids2);
     }
 
     @Test
@@ -248,16 +265,23 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
     @Test
     public void testFind7zContent() throws Exception {
         List<PreviewContent> previewContentList = previewContentService.findByBitstream(context, sevenZFile.getID());
-        Assert.assertEquals(3, previewContentList.size());
-        Assert.assertEquals(previewContent31.getName(), previewContentList.get(0).getName());
-        Assert.assertEquals(previewContent31.getSize(), previewContentList.get(0).getSize());
-        Assert.assertEquals(previewContent32.getName(), previewContentList.get(1).getName());
-        Assert.assertEquals(previewContent32.getSize(), previewContentList.get(1).getSize());
+        Assert.assertEquals(4, previewContentList.size());
+
+        // the structure of the previewContent should be the following:
+        // ''                       // root dir (previewContent3)
+        //   - dspace-logo.png      // file (previewContent31)
+        //   - clarin               // directory (previewContent32)
+        //     - dspace-logo.png    // file (previewContent321)
+
         Assert.assertEquals(2, previewContent3.getSubPreviewContents().size());
         Assert.assertEquals(previewContent31.getID(),
-                previewContent3.getSubPreviewContents().get("SUN.png").getID());
+                previewContent3.getSubPreviewContents().get("dspace-logo.png").getID());
         Assert.assertEquals(previewContent32.getID(),
-                previewContent3.getSubPreviewContents().get("oracle.png").getID());
+                previewContent3.getSubPreviewContents().get("clarin").getID());
+
+        Assert.assertEquals(1, previewContent32.getSubPreviewContents().size());
+        Assert.assertEquals(previewContent321.getID(),
+                previewContent32.getSubPreviewContents().get("clarin-logo.png").getID());
 
         assertFileInfos(sevenZFile);
     }
@@ -274,7 +298,7 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
 
     @Test
     public void testGzContent() throws Exception {
-        assertFileInfo(gzFile, "logo.png", 2);
+        assertFileInfo(gzFile, "dspace-logo.png", 8);
     }
 
     @Test
@@ -284,12 +308,12 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
 
     @Test
     public void testXzContent() throws Exception {
-        assertFileInfo(xzFile, "logos", 11);
+        assertFileInfo(xzFile, "logos", 24);
     }
 
     @Test
     public void testGzContentForFileWithWrongExtension() throws Exception {
-        assertFileInfo(tarGzFileWithWrongExtension, "TAR GZ File", 11);
+        assertFileInfo(tarGzFileWithWrongExtension, "TAR GZ File", 24);
     }
 
     @Test
@@ -300,13 +324,19 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
 
     private void assertFileInfos(Bitstream bitstream) throws Exception {
         List<FileInfo> fileInfos = previewContentService.getFilePreviewContent(context, bitstream);
-        Assert.assertEquals(1, fileInfos.size());
+        Assert.assertEquals(2, fileInfos.size());
         Assert.assertTrue(fileInfos.get(0).isDirectory);
-        Assert.assertEquals(2, fileInfos.get(0).sub.size());
-        Assert.assertNotNull(fileInfos.get(0).sub.get("oracle.png"));
-        Assert.assertEquals("2 kB", fileInfos.get(0).sub.get("oracle.png").size);
-        Assert.assertNotNull(fileInfos.get(0).sub.get("SUN.png"));
-        Assert.assertEquals("3 kB", fileInfos.get(0).sub.get("SUN.png").size);
+        Assert.assertEquals("clarin", fileInfos.get(0).name);
+        Assert.assertTrue(fileInfos.get(1).isDirectory);
+        Assert.assertEquals("", fileInfos.get(1).name);
+
+        Assert.assertEquals(1, fileInfos.get(0).sub.size());
+        Assert.assertNotNull(fileInfos.get(0).sub.get("clarin-logo.png"));
+        Assert.assertEquals("9 kB", fileInfos.get(0).sub.get("clarin-logo.png").size);
+
+        Assert.assertEquals(1, fileInfos.get(1).sub.size());
+        Assert.assertNotNull(fileInfos.get(1).sub.get("dspace-logo.png"));
+        Assert.assertEquals("8 kB", fileInfos.get(1).sub.get("dspace-logo.png").size);
     }
 
     private void assertFileInfo(Bitstream bitstream, String fileName, int size) throws Exception {
