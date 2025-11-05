@@ -27,7 +27,6 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
-import java.util.TimeZone;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.ws.rs.core.MediaType;
@@ -1699,11 +1698,12 @@ public class ResourcePolicyRestRepositoryIT extends AbstractControllerIntegratio
 
         Item item = ItemBuilder.createItem(context, collection).build();
 
-        Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+        Calendar calendar = Calendar.getInstance();
 
         calendar.set(Calendar.YEAR, 2010);
         calendar.set(Calendar.MONTH, 5);
         calendar.set(Calendar.DATE, 15);
+        calendar.set(Calendar.HOUR, 10);
 
         Date date = calendar.getTime();
 
