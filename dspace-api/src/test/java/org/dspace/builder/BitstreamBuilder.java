@@ -190,6 +190,12 @@ public class BitstreamBuilder extends AbstractDSpaceObjectBuilder<Bitstream> {
         return this;
     }
 
+    public BitstreamBuilder withCustomMimeType(String mimeType) throws AuthorizeException, SQLException {
+        bitstream.setFormat(context, bitstreamFormatService.create(context));
+        bitstream.getFormat(context).setMIMEType(mimeType);
+        return this;
+    }
+
     public BitstreamBuilder withFormat(String format) throws SQLException {
 
         bitstreamService.addMetadata(context, bitstream, "dc", "format", null, null, format);

@@ -234,6 +234,7 @@ public class PreviewContentServiceImpl implements PreviewContentService {
                     "application/zip", ARCHIVE_TYPE_ZIP,
                     "application/x-tar", ARCHIVE_TYPE_TAR,
                     "application/gzip", ARCHIVE_TYPE_GZ,
+                    "application/x-gzip", ARCHIVE_TYPE_GZ,
                     "application/x-gtar", ARCHIVE_TYPE_TGZ,
                     "application/x-xz", ARCHIVE_TYPE_XZ,
                     "application/x-7z-compressed", ARCHIVE_TYPE_7Z

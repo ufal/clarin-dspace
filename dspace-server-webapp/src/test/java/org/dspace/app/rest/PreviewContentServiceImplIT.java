@@ -57,6 +57,7 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
     Bitstream bitstream2;
     Bitstream sevenZFile;
     Bitstream tarGzFile;
+    Bitstream tarXGzipFile;
     Bitstream tgzFile;
     Bitstream gzFile;
     Bitstream tarXzFile;
@@ -116,6 +117,15 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
                     .withName("logos.tar.gz")
                     .withDescription("tar.gz compressed file")
                     .withMimeType("application/gzip")
+                    .build();
+        }
+
+        try (InputStream is = getClass().getResourceAsStream("assetstore/logos.tar.gz")) {
+            tarXGzipFile = BitstreamBuilder.
+                    createBitstream(context, bundle1, is)
+                    .withName("logos.tar.gz")
+                    .withDescription("tar.gz compressed file")
+                    .withCustomMimeType("application/x-gzip")
                     .build();
         }
 
@@ -219,6 +229,7 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
         PreviewContentBuilder.deletePreviewContent(previewContent3.getID());
 
         BitstreamBuilder.deleteBitstream(tarGzFile.getID());
+        BitstreamBuilder.deleteBitstream(tarXGzipFile.getID());
         BitstreamBuilder.deleteBitstream(tgzFile.getID());
         BitstreamBuilder.deleteBitstream(gzFile.getID());
         BitstreamBuilder.deleteBitstream(tarXzFile.getID());
@@ -289,6 +300,11 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
     @Test
     public void testTarGzContent() throws Exception {
         assertFileInfos(tarGzFile);
+    }
+
+    @Test
+    public void testTarXGzipContent() throws Exception {
+        assertFileInfos(tarXGzipFile);
     }
 
     @Test
