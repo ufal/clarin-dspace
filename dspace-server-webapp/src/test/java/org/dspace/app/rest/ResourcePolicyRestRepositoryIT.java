@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
+import java.util.TimeZone;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.ws.rs.core.MediaType;
@@ -1703,7 +1704,6 @@ public class ResourcePolicyRestRepositoryIT extends AbstractControllerIntegratio
         calendar.set(Calendar.YEAR, 2010);
         calendar.set(Calendar.MONTH, 5);
         calendar.set(Calendar.DATE, 15);
-        calendar.set(Calendar.HOUR, 10);
 
         Date date = calendar.getTime();
 
@@ -1718,6 +1718,11 @@ public class ResourcePolicyRestRepositoryIT extends AbstractControllerIntegratio
 
         Calendar calendar2 = Calendar.getInstance();
         SimpleDateFormat formatDate = new SimpleDateFormat("yyyy-MM-dd");
+
+        // java.util.Date() value is always stored as UTC Date (into SQL Date field)
+        // so the java.util.Date value formatted with this formatter and
+        // this (java.util.Date) value stored in the database will always match
+        formatDate.setTimeZone(TimeZone.getTimeZone("UTC"));
 
         calendar2.set(Calendar.YEAR, 2021);
         calendar2.set(Calendar.MONTH, 2);
