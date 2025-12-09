@@ -345,7 +345,7 @@ public class ItemImportServiceImpl implements ItemImportService, InitializingBea
 
      /**
       * Add relationships from a 'relationships' manifest file.
-      * 
+      *
       * @param c Context
       * @param sourceDir The parent import source directory
       * @throws Exception
@@ -449,7 +449,7 @@ public class ItemImportServiceImpl implements ItemImportService, InitializingBea
 
     /**
      * Get the item's entity type from meta.
-     * 
+     *
      * @param item
      * @return
      */
@@ -459,7 +459,7 @@ public class ItemImportServiceImpl implements ItemImportService, InitializingBea
 
     /**
      * Read the relationship manifest file.
-     * 
+     *
      * Each line in the file contains a relationship type id and an item
      * identifier in the following format:
      *
@@ -545,7 +545,7 @@ public class ItemImportServiceImpl implements ItemImportService, InitializingBea
       * The import item map will be checked first to see if the identifier refers to an item folder
       * that was just imported. Next it will try to find the item by handle or UUID, or by a unique
       * meta value.
-      * 
+      *
       * @param c Context
       * @param itemIdentifier The identifier string found in the import manifest (handle, uuid, or import subfolder)
       * @return Item if found, or null.
@@ -603,7 +603,7 @@ public class ItemImportServiceImpl implements ItemImportService, InitializingBea
 
     /**
      * Lookup an item by a (unique) meta value.
-     * 
+     *
      * @param c current DSpace session.
      * @param metaKey name of the metadata field to match.
      * @param metaValue value to be matched.
@@ -783,8 +783,16 @@ public class ItemImportServiceImpl implements ItemImportService, InitializingBea
         WorkspaceItem wi = null;
         WorkflowItem wfi = null;
 
+        String myhandle = null;
+
         if (!isTest) {
-            wi = workspaceItemService.create(c, mycollections.iterator().next(), template);
+            if (!useWorkflow) {
+                // only process handle file if not using workflow system
+                myhandle = processHandleFile(path + File.separatorChar + itemname, "handle");
+            }
+
+            boolean registerNewHandle = (myhandle == null);
+            wi = workspaceItemService.create(c, mycollections.iterator().next(), null, template, registerNewHandle);
             myitem = wi.getItem();
         }
 
@@ -813,10 +821,6 @@ public class ItemImportServiceImpl implements ItemImportService, InitializingBea
                 mapOutputString = itemname + " " + myitem.getID();
             }
         } else {
-            // only process handle file if not using workflow system
-            String myhandle = processHandleFile(c, myitem, path
-                + File.separatorChar + itemname, "handle");
-
             // put item in system
             if (!isTest) {
                 try {
@@ -1111,13 +1115,11 @@ public class ItemImportServiceImpl implements ItemImportService, InitializingBea
     /**
      * Read in the handle file contents or return null if empty or doesn't exist
      *
-     * @param c        DSpace context
-     * @param i        DSpace item
      * @param path     path to handle file
      * @param filename name of file
      * @return handle file contents or null if doesn't exist
      */
-    protected String processHandleFile(Context c, Item i, String path, String filename) {
+    protected String processHandleFile(String path, String filename) {
         File file = new File(path + File.separatorChar + filename);
         String result = null;
 

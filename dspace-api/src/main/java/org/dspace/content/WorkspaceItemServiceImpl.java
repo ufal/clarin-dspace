@@ -102,8 +102,8 @@ public class WorkspaceItemServiceImpl implements WorkspaceItemService {
     }
 
     @Override
-    public WorkspaceItem create(Context context, Collection collection, UUID uuid, boolean template)
-        throws AuthorizeException, SQLException {
+    public WorkspaceItem create(Context context, Collection collection, UUID uuid, boolean template,
+                                boolean registerIdentifiers) throws AuthorizeException, SQLException {
         // Check the user has permission to ADD to the collection
         authorizeService.authorizeAction(context, collection, Constants.ADD);
 
@@ -182,7 +182,7 @@ public class WorkspaceItemServiceImpl implements WorkspaceItemService {
 
         // If configured, register identifiers (eg handle, DOI) now. This is typically used with the Show Identifiers
         // submission step which previews minted handles and DOIs during the submission process. Default: false
-        if (DSpaceServicesFactory.getInstance().getConfigurationService()
+        if (registerIdentifiers && DSpaceServicesFactory.getInstance().getConfigurationService()
                 .getBooleanProperty("identifiers.submission.register", false)) {
             try {
                 // Get map of filters to use for identifier types, while the item is in progress
