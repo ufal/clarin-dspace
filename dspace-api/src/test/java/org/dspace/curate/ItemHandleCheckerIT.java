@@ -54,7 +54,7 @@ public class ItemHandleCheckerIT extends AbstractIntegrationTestWithDatabase {
     private static final String HANDLE_ITEM3 = HANDLE_COLLECTION + "-3";
     private static final String HANDLE_ITEM4 = HANDLE_COLLECTION + "-4";
     private static final String HANDLE_NON_EXISTING = HANDLE_COLLECTION + "-999";
-    private static final String HANDLE_URL_REAL = "http://hdl.handle.net/11234/6-CTS";
+    private static final String HANDLE_URL_REAL = "http://hdl.handle.net/20.1000/5555";
     private static final String HANDLE_INVALID = HANDLE_URL_REAL + "/..??^^/";
     private static final String HANDLE_IGNORED_1 = "11234/998";
     private static final String HANDLE_IGNORED_2 = "11234/999";
