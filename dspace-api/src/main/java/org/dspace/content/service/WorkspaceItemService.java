@@ -58,7 +58,7 @@ public interface WorkspaceItemService extends InProgressSubmissionService<Worksp
 
     /**
      * Create a new workspace item, with a new ID. An Item is also created. The
-     * submitter is the current user in the context. Register also identifiers for this new workspace item.
+     * submitter is the current user in the context.
      *
      * @param context    DSpace context object
      * @param collection Collection being submitted to
@@ -69,10 +69,8 @@ public interface WorkspaceItemService extends InProgressSubmissionService<Worksp
      * @throws SQLException       if database error
      * @throws AuthorizeException if authorization error
      */
-    default WorkspaceItem create(Context context, Collection collection, UUID uuid, boolean template)
-            throws AuthorizeException, SQLException {
-        return create(context, collection, uuid, template, true);
-    }
+    public WorkspaceItem create(Context context, Collection collection, UUID uuid, boolean template)
+            throws AuthorizeException, SQLException;
 
     /**
      * Create a new workspace item, with a new ID. An Item is also created. The

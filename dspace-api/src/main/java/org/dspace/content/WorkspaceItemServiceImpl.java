@@ -102,6 +102,12 @@ public class WorkspaceItemServiceImpl implements WorkspaceItemService {
     }
 
     @Override
+    public WorkspaceItem create(Context context, Collection collection, UUID uuid, boolean template)
+            throws AuthorizeException, SQLException {
+        return create(context, collection, uuid, template, true);
+    }
+
+    @Override
     public WorkspaceItem create(Context context, Collection collection, UUID uuid, boolean template,
                                 boolean registerIdentifiers) throws AuthorizeException, SQLException {
         // Check the user has permission to ADD to the collection
