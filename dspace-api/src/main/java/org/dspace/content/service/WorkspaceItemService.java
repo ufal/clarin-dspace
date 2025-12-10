@@ -56,6 +56,19 @@ public interface WorkspaceItemService extends InProgressSubmissionService<Worksp
     public WorkspaceItem create(Context context, Collection collection, boolean template)
         throws AuthorizeException, SQLException;
 
+    /**
+     * Create a new workspace item, with a new ID. An Item is also created. The
+     * submitter is the current user in the context. Register also identifiers for this new workspace item.
+     *
+     * @param context    DSpace context object
+     * @param collection Collection being submitted to
+     * @param uuid       the preferred uuid of the new item (used if restoring an item and retaining old uuid)
+     * @param template   if <code>true</code>, the workspace item starts as a copy
+     *                   of the collection's template item
+     * @return the newly created workspace item
+     * @throws SQLException       if database error
+     * @throws AuthorizeException if authorization error
+     */
     default WorkspaceItem create(Context context, Collection collection, UUID uuid, boolean template)
             throws AuthorizeException, SQLException {
         return create(context, collection, uuid, template, true);
@@ -70,7 +83,7 @@ public interface WorkspaceItemService extends InProgressSubmissionService<Worksp
      * @param uuid       the preferred uuid of the new item (used if restoring an item and retaining old uuid)
      * @param template   if <code>true</code>, the workspace item starts as a copy
      *                   of the collection's template item
-     * @param registerIdentifiers register the identifiers for created workspace item
+     * @param registerIdentifiers if true - register identifiers for created workspace item
      * @return the newly created workspace item
      * @throws SQLException       if database error
      * @throws AuthorizeException if authorization error

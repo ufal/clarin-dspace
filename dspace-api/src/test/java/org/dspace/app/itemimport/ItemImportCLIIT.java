@@ -121,7 +121,7 @@ public class ItemImportCLIIT extends AbstractIntegrationTestWithDatabase {
     public void importItemBySafWithExistingHandle() throws Exception {
         // create simple SAF
         Path safDir = Files.createDirectory(Path.of(tempDir.toString() + "/test"));
-        Path itemDir = Files.createDirectory(Path.of(safDir + "/item_000"));
+        Path itemDir = Files.createDirectory(Path.of(safDir.toString() + "/item_000"));
         Files.copy(getClass().getResourceAsStream("dublin_core.xml"),
                 Path.of(itemDir + "/dublin_core.xml"));
         Files.copy(getClass().getResourceAsStream("handle"),
@@ -132,7 +132,6 @@ public class ItemImportCLIIT extends AbstractIntegrationTestWithDatabase {
         perfomImportScript(args);
 
         Item item = findItemByTitle(publicationTitle);
-        assertEquals(1, item.getHandles().size());
         assertEquals("123456789/3900021-03", item.getHandle());
         checkMetadata();
         identifierService.delete(context, item, item.getHandle());
@@ -574,6 +573,7 @@ public class ItemImportCLIIT extends AbstractIntegrationTestWithDatabase {
      */
     private void checkMetadata() throws Exception {
         Item item = findItemByTitle(publicationTitle);
+        assertEquals(1, item.getHandles().size());
         assertEquals(item.getName(), publicationTitle);
         assertEquals(itemService.getMetadata(item, "dc.date.issued"), "1990");
         assertEquals(itemService.getMetadata(item, "dc.title.alternative"), "J'aime les Printemps");
