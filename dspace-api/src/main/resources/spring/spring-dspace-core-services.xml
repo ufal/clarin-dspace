@@ -16,6 +16,12 @@
     <bean id="org.dspace.services.ConfigurationService"
           class="org.dspace.servicemanager.config.DSpaceConfigurationService" scope="singleton"/>
 
+    <!-- provider for exposing default Handle services implementaion. -->
+    <!--bean id="org.dspace.identifier.HandleIdentifierProvider" class="org.dspace.identifier.HandleIdentifierProvider"
+          scope="singleton">
+        <property name="configurationService" ref="org.dspace.services.ConfigurationService"/>
+    </bean-->
+
     <bean name="org.dspace.core.DBConnection" class="org.dspace.core.HibernateDBConnection" lazy-init="true" scope="prototype"/>
 
     <!-- Register all our Flyway callback classes (which run before/after database migrations) -->
