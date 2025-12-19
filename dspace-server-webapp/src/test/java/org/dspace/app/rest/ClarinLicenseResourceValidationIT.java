@@ -49,7 +49,7 @@ public class ClarinLicenseResourceValidationIT extends AbstractControllerIntegra
     @Test
     public void createWorkspaceWithFiles_TitleAndClarinLicenseMissing() throws Exception {
         context.turnOffAuthorisationSystem();
-        
+
         parentCommunity = CommunityBuilder.createCommunity(context)
                 .withName("Parent Community")
                 .build();
