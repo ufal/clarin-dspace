@@ -28,13 +28,15 @@ import org.dspace.content.WorkspaceItem;
 import org.dspace.content.service.CollectionService;
 import org.dspace.content.service.ItemService;
 import org.dspace.services.ConfigurationService;
+import org.junit.Before;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.mock.web.MockMultipartFile;
 
 /**
- * Test suite for testing ClarinLicenseResourceValidation
- * @author Milan Kuchtiak)
+ * Test suite for testing ClarinLicenseResourceValidation.
+ *
+ * @author Milan Kuchtiak
  *
  */
 public class ClarinLicenseResourceValidationIT extends AbstractControllerIntegrationTest {
@@ -45,6 +47,15 @@ public class ClarinLicenseResourceValidationIT extends AbstractControllerIntegra
     private ItemService itemService;
     @Autowired
     private ConfigurationService configurationService;
+
+    @Before
+    @Override
+    public void setUp() throws Exception {
+        super.setUp();
+
+        // make file upload mandatory in submissions
+        configurationService.setProperty("webui.submit.upload.required", true);
+    }
 
     @Test
     public void createWorkspaceWithFiles_TitleAndClarinLicenseMissing() throws Exception {
@@ -77,8 +88,7 @@ public class ClarinLicenseResourceValidationIT extends AbstractControllerIntegra
                 .andExpect(jsonPath("$.sections.upload.files[0].metadata['dc.title'][0].value",
                         is("simple-article.pdf")))
                 .andExpect(jsonPath("$.sections.upload.files[0].metadata['dc.source'][0].value",
-                        is("/local/path/simple-article.pdf")))
-        ;
+                        is("/local/path/simple-article.pdf")));
 
         // Verify errors for missing title and clarin license
         getClient(authToken).perform(get("/api/submission/workspaceitems/" + wItem.getID()))
@@ -144,7 +154,7 @@ public class ClarinLicenseResourceValidationIT extends AbstractControllerIntegra
                 .build();
 
         context.restoreAuthSystemState();
-        // Verify there is no errors (with upload required to be set to false).
+        // Verify there are no errors (with upload required to be set to false).
         // Since there are no files, the license is not required.
         getClient(authToken).perform(get("/api/submission/workspaceitems/" + witem.getID()))
                 .andExpect(status().isOk())
