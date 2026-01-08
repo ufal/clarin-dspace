@@ -150,6 +150,9 @@ public class WorkspaceItemRestRepositoryIT extends AbstractControllerIntegration
         adminGroup = EPersonServiceFactory.getInstance().getGroupService().findByName(context, Group.ADMIN);
 
         context.restoreAuthSystemState();
+
+        // make file upload mandatory in submissions
+        configurationService.setProperty("webui.submit.upload.required", true);
     }
 
     @Test

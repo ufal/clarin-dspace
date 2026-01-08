@@ -45,13 +45,15 @@ public class ClarinLicenseResourceValidation extends AbstractValidation {
         List<MetadataValue> licenseLabel = itemService.getMetadataByMetadataString(item, "dc.rights.label");
 
         List<ErrorRest> errors = new ArrayList<>();
-        if (CollectionUtils.isEmpty(licenseDefinition) || CollectionUtils.isEmpty(licenseName) ||
-            CollectionUtils.isEmpty(licenseLabel)) {
-            addError(errors, ERROR_VALIDATION_CLARIN_LICENSE_GRANTED,
-                    "/" + WorkspaceItemRestRepository.OPERATION_PATH_SECTIONS + "/"
-                            + config.getId());
+        // check that if there are local files, the license fields are filled
+        if (hasFiles(item)) {
+            if (CollectionUtils.isEmpty(licenseDefinition) || CollectionUtils.isEmpty(licenseName) ||
+                    CollectionUtils.isEmpty(licenseLabel)) {
+                addError(errors, ERROR_VALIDATION_CLARIN_LICENSE_GRANTED,
+                        "/" + WorkspaceItemRestRepository.OPERATION_PATH_SECTIONS + "/"
+                                + config.getId());
+            }
         }
-
 
         return errors;
     }
@@ -62,5 +64,14 @@ public class ClarinLicenseResourceValidation extends AbstractValidation {
 
     public void setItemService(ItemService itemService) {
         this.itemService = itemService;
+    }
+
+    private boolean hasFiles(Item item) {
+        List<MetadataValue> hasFiles = itemService.getMetadataByMetadataString(item, "local.has.files");
+        if (CollectionUtils.isEmpty(hasFiles)) {
+            return false;
+        } else {
+            return "yes".equalsIgnoreCase(hasFiles.get(0).getValue());
+        }
     }
 }
