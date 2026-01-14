@@ -13,6 +13,8 @@ import java.util.UUID;
 
 import org.apache.commons.cli.ParseException;
 import org.dspace.authorize.AuthorizeException;
+import org.dspace.authorize.factory.AuthorizeServiceFactory;
+import org.dspace.authorize.service.AuthorizeService;
 import org.dspace.content.DSpaceObject;
 import org.dspace.content.Item;
 import org.dspace.content.factory.ContentServiceFactory;
@@ -53,12 +55,14 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
     boolean unlink = false;
     String previousItemID;
     String itemID;
+    private String ePersonEmail;
     private VersioningService versioningService;
     private VersionHistoryService versionHistoryService;
     private ItemService itemService;
     private EPersonService ePersonService;
     private IdentifierService identifierService;
     private HandleService handleService;
+    private AuthorizeService authorizeService;
 
     /**
      * This method will return the Configuration that the implementing DSpaceRunnable uses
@@ -73,7 +77,7 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
 
     /**
      * This method has to be included in every script and handles the setup of the script by parsing the CommandLine
-     * and setting the variables
+     * and setting the variables.
      *
      * @throws ParseException If something goes wrong
      */
@@ -99,12 +103,17 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
             return;
         }
 
+        if (commandLine.hasOption("e")) {
+            ePersonEmail = commandLine.getOptionValue("e");
+        }
+
         versioningService = VersionServiceFactory.getInstance().getVersionService();
         versionHistoryService = VersionServiceFactory.getInstance().getVersionHistoryService();
         itemService = ContentServiceFactory.getInstance().getItemService();
         ePersonService = EPersonServiceFactory.getInstance().getEPersonService();
         identifierService = IdentifierServiceFactory.getInstance().getIdentifierService();
         handleService = HandleServiceFactory.getInstance().getHandleService();
+        authorizeService = AuthorizeServiceFactory.getInstance().getAuthorizeService();
     }
 
     /**
@@ -124,9 +133,14 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
         Context context = new Context();
         EPerson ePerson = getEperson(context);
         if (ePerson == null) {
-            throw new RuntimeException("Only authenticated user can run the script");
+            throw new RuntimeException("Only authenticated user can run the script.");
         }
         context.setCurrentUser(ePerson);
+
+        if (ePersonEmail != null && !authorizeService.isAdmin(context)) {
+            handler.logError("Only admin user can run the script.");
+            return;
+        }
 
         itemID = commandLine.getOptionValue("i");
         Item item = findItem(context, itemID);
@@ -157,7 +171,6 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
      * @throws AuthorizeException
      */
     private void linkItems(Context context, Item previousItem, Item item) throws SQLException, AuthorizeException {
-
         if (previousItem.getID().equals(item.getID())) {
             handler.logError("Cannot create versioning relationship between the same item.");
             return;
@@ -180,7 +193,7 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
 
         Version secondVersion = versioningService.getVersion(context, item);
         if (secondVersion != null) {
-            handler.logError(String.format("The item '%s' cannot be part of existing versioning history.", itemID));
+            handler.logError(String.format("The item '%s' is already part of other versioning history.", itemID));
             return;
         }
 
@@ -220,7 +233,6 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
     }
 
     private void unlinkLastItem(Context context, Item item) throws SQLException, AuthorizeException {
-
         Version version = versioningService.getVersion(context, item);
         if (version == null) {
             handler.logError(String.format("The item '%s', to be unlinked, is not part of any versioning history.",
@@ -233,7 +245,7 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
             return;
         }
 
-        handler.logInfo(String.format("Going to unlink item '%s' from the versioning history",
+        handler.logInfo(String.format("Going to unlink item '%s' from the versioning history.",
                 itemID));
 
         // remove the dc.relation.replaces metadata (if ever exists)
@@ -244,7 +256,7 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
 
         // remove the version relationship
         versioningService.deleteVersion(context, version);
-        handler.logInfo(String.format("Item '%s' unlinked successfully", itemID));
+        handler.logInfo(String.format("Item '%s' unlinked successfully.", itemID));
 
         if (previousVersion != null) {
             // remove the dc.relation.isreplacedby metadata (if ever exists)
@@ -255,16 +267,20 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
                 // and the full versioning history as well
                 versioningService.deleteVersion(context, previousVersion);
                 versionHistoryService.delete(context, versionHistory);
+
+                // guess identifier type for previous item (only for logging)
+                String previousItemID = isUUID(itemID) ?
+                        previousVersion.getItem().getID().toString() : previousVersion.getItem().getHandle();
+
                 handler.logInfo(String.format("The previous item '%s' was the first version of the '%s' item, " +
                         "so the full versioning history associated with the items was removed as well.",
-                        previousVersion.getItem().getHandle(), itemID));
+                        previousItemID, itemID));
             }
         } else {
             versionHistoryService.delete(context, versionHistory);
             handler.logInfo(String.format("The item '%s' had no previous version in the versioning history, " +
                     "so the full versioning history associated with the item was removed as well.", itemID));
         }
-
     }
 
     private Item findItem(Context context, String itemId) throws SQLException {
@@ -285,8 +301,12 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
     }
 
     private EPerson getEperson(Context context) throws SQLException {
-        UUID ePersonIdentifier = getEpersonIdentifier();
-        return ePersonIdentifier == null ? null : ePersonService.find(context, ePersonIdentifier);
+        if (ePersonEmail != null) {
+            return ePersonService.findByEmail(context, ePersonEmail);
+        } else {
+            UUID ePersonIdentifier = getEpersonIdentifier();
+            return ePersonIdentifier == null ? null : ePersonService.find(context, ePersonIdentifier);
+        }
     }
 
     private boolean isLatestVersion(Context context, Version version) throws SQLException {
@@ -296,6 +316,15 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
     private boolean isFirstVersion(Context context, VersionHistory versionHistory, Version version)
             throws SQLException {
         return versionHistoryService.isFirstVersion (context, version.getVersionHistory(), version);
+    }
+
+    private boolean isUUID(String itemID) {
+        try {
+            UUID.fromString(itemID);
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
     }
 
 }

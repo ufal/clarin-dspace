@@ -63,6 +63,10 @@ public class ItemVersionLinkerConfiguration extends ScriptConfiguration<ItemVers
             options.addOption("i", "item", true,
                     "item handle, or UUID, of the (right) item intended to be linked/unlinked with/from the " +
                             "previous item (required for both link and unlink options)");
+            options.getOption("i").setRequired(true);
+
+            options.addOption("e", "eperson", true, "ePerson email");
+            options.getOption("e").setRequired(false);
 
             super.options = options;
         }
