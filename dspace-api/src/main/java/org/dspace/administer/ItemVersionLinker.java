@@ -44,17 +44,15 @@ import org.slf4j.LoggerFactory;
  * This script allows to link two items into the versioning relationship,
  * where the second item becomes the next version of the first item.
  *
- *  * @author Milan Kuchtiak
- *
+ * @author Milan Kuchtiak
  */
 public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfiguration> {
 
     private static final Logger log = LoggerFactory.getLogger(ItemVersionLinker.class);
     private boolean help = false;
-    boolean link = false;
-    boolean unlink = false;
-    String previousItemID;
-    String itemID;
+    private boolean link = false;
+    private String previousItemID;
+    private String itemID;
     private String ePersonEmail;
     private VersioningService versioningService;
     private VersionHistoryService versionHistoryService;
@@ -86,7 +84,7 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
         log.debug("Setting up {}", ItemVersionLinker.class.getName());
 
         link = commandLine.hasOption("l");
-        unlink = commandLine.hasOption("u");
+        boolean unlink = commandLine.hasOption("u");
 
         if (commandLine.hasOption("h") || (link && unlink) || (!link && !unlink)) {
             help = true;
@@ -206,7 +204,7 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
 
         int newVersionNumber;
         if (previousVersion != null) {
-            // create new version of item in existingversioning history
+            // create new version of item in existing versioning history
             VersionHistory history = previousVersion.getVersionHistory();
             int firstVersionNumber = previousVersion.getVersionNumber();
             newVersionNumber = firstVersionNumber + 1;
@@ -315,7 +313,7 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
 
     private boolean isFirstVersion(Context context, VersionHistory versionHistory, Version version)
             throws SQLException {
-        return versionHistoryService.isFirstVersion (context, version.getVersionHistory(), version);
+        return versionHistoryService.isFirstVersion(context, versionHistory, version);
     }
 
     private boolean isUUID(String itemID) {

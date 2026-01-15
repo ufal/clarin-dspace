@@ -32,7 +32,7 @@ public class ItemVersionLinkerConfiguration extends ScriptConfiguration<ItemVers
     /**
      * Generic setter for the dspaceRunnableClass
      *
-     * @param dspaceRunnableClass The dspaceRunnableClass to be set on this IndexDiscoveryScriptConfiguration
+     * @param dspaceRunnableClass The dspaceRunnableClass to be set for this ScriptConfiguration
      */
     @Override
     public void setDspaceRunnableClass(Class<ItemVersionLinker> dspaceRunnableClass) {
@@ -54,7 +54,7 @@ public class ItemVersionLinkerConfiguration extends ScriptConfiguration<ItemVers
 
             options.addOption("l", "link", false, "link the item with the previous item");
 
-            options.addOption("u", "unlink", false, "unlink the item from the previous item in version history.");
+            options.addOption("u", "unlink", false, "unlink the item from the previous item in version history");
 
             options.addOption("p", "previous", true,
                     "item handle, or UUID, of the previous (left) item intended to be linked with the item " +
