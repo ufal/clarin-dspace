@@ -90,7 +90,7 @@
     </bean>
 
     <bean id="item-version-linker" class="org.dspace.administer.ItemVersionLinkerConfiguration" primary="true">
-        <property name="description" value="Link two items into versioning relationship."/>
+        <property name="description" value="Link items into versioning relationship."/>
         <property name="dspaceRunnableClass" value="org.dspace.administer.ItemVersionLinker"/>
     </bean>
 
