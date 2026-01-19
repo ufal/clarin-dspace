@@ -126,7 +126,7 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
                 .andExpect(jsonPath("$._embedded.metadatabitstreams[*].name")
                         .value(Matchers.containsInAnyOrder(Matchers.containsString("Bitstream"))))
                 .andExpect(jsonPath("$._embedded.metadatabitstreams[*].description")
-                        .value(Matchers.containsInAnyOrder(Matchers.containsString(bts.getFormatDescription(context)))))
+                        .value(Matchers.containsInAnyOrder(Matchers.containsString(bts.getDescription()))))
                 .andExpect(jsonPath("$._embedded.metadatabitstreams[*].format")
                         .value(Matchers.containsInAnyOrder(Matchers.containsString(
                                 bts.getFormat(context).getMIMEType()))))
@@ -160,7 +160,7 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
                 .andExpect(jsonPath("$._embedded.metadatabitstreams[*].name")
                         .value(Matchers.containsInAnyOrder(Matchers.containsString("Bitstream"))))
                 .andExpect(jsonPath("$._embedded.metadatabitstreams[*].description")
-                        .value(Matchers.containsInAnyOrder(Matchers.containsString(bts.getFormatDescription(context)))))
+                        .value(Matchers.containsInAnyOrder(Matchers.containsString(bts.getDescription()))))
                 .andExpect(jsonPath("$._embedded.metadatabitstreams[*].format")
                         .value(Matchers.containsInAnyOrder(Matchers.containsString(
                                 bts.getFormat(context).getMIMEType()))))
@@ -213,7 +213,7 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
                         .value(Matchers.containsInAnyOrder(Matchers.containsString("Bitstream"))))
                 .andExpect(jsonPath("$._embedded.metadatabitstreams[*].description")
                         .value(Matchers.containsInAnyOrder(
-                                Matchers.containsString(bitstream.getFormatDescription(context)))))
+                                Matchers.containsString(bitstream.getDescription()))))
                 .andExpect(jsonPath("$._embedded.metadatabitstreams[*].format")
                         .value(Matchers.containsInAnyOrder(Matchers.containsString(
                                 bitstream.getFormat(context).getMIMEType()))))

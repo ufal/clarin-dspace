@@ -142,7 +142,7 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
                 }
                 MetadataBitstreamWrapper bts = new MetadataBitstreamWrapper(bitstream, fileInfos,
                         bitstream.getFormat(context).getMIMEType(),
-                        bitstream.getFormatDescription(context), url, canPreview);
+                        bitstream.getDescription(), url, canPreview);
                 rs.add(metadataBitstreamWrapperConverter.convert(bts, utils.obtainProjection()));
             }
         }
