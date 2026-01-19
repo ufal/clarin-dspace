@@ -11,6 +11,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import java.util.Date;
 import java.util.List;
 import java.util.UUID;
 
@@ -27,6 +28,10 @@ import org.dspace.content.MetadataValue;
 import org.dspace.content.factory.ContentServiceFactory;
 import org.dspace.content.service.ItemService;
 import org.dspace.eperson.EPerson;
+import org.dspace.versioning.VersionHistory;
+import org.dspace.versioning.factory.VersionServiceFactory;
+import org.dspace.versioning.service.VersionHistoryService;
+import org.dspace.versioning.service.VersioningService;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -38,6 +43,8 @@ public class ItemVersionLinkerIT extends AbstractIntegrationTestWithDatabase {
     private Item item3;
 
     private ItemService itemService;
+    private VersioningService versioningService;
+    private VersionHistoryService versionHistoryService;
 
     @Before
     @Override
@@ -52,74 +59,79 @@ public class ItemVersionLinkerIT extends AbstractIntegrationTestWithDatabase {
         item2 = ItemBuilder.createItem(context, collection).withTitle("Item 2").build();
         item3 = ItemBuilder.createItem(context, collection).withTitle("Item 3").build();
         itemService = ContentServiceFactory.getInstance().getItemService();
+        versioningService = VersionServiceFactory.getInstance().getVersionService();
+        versionHistoryService = VersionServiceFactory.getInstance().getVersionHistoryService();
+        testDSpaceRunnableHandler = createTestHandler();
     }
 
     @Test()
     public void testLink() throws Exception {
-        testDSpaceRunnableHandler = createTestHandler();
+        // link item1 with item2 should pass
         runScript(getLinkOptions(item1, item2, admin));
         assertLinkMessages(item1, item2, 2);
+        testDSpaceRunnableHandler.getInfoMessages().clear();
 
         // linking item1 with item3 should fail since item1 is not the last version anymore
-        testDSpaceRunnableHandler = createTestHandler();
         runScript(getLinkOptions(item1, item3, admin));
         assertEquals(1, testDSpaceRunnableHandler.getErrorMessages().size());
         assertEquals(String.format("Previous item '%s' is already part of existing versioning history, " +
                 "and its version is not the latest version in that history.", item1.getID()), getErrorMessage());
+        testDSpaceRunnableHandler.getErrorMessages().clear();
 
         // linking item3 with item2 should fail since item2 is already part of other versioning history
-        testDSpaceRunnableHandler = createTestHandler();
         runScript(getLinkOptions(item3, item2, admin));
         assertEquals(1, testDSpaceRunnableHandler.getErrorMessages().size());
         assertEquals(getLinkErrorMessagePartOfOtherVersionHistory(item2), getErrorMessage());
+        testDSpaceRunnableHandler.getErrorMessages().clear();
 
         // linking item3 with item1 should fail (same as above)
-        testDSpaceRunnableHandler = createTestHandler();
         runScript(getLinkOptions(item3, item1, admin));
         assertEquals(1, testDSpaceRunnableHandler.getErrorMessages().size());
         assertEquals(getLinkErrorMessagePartOfOtherVersionHistory(item1), getErrorMessage());
+        testDSpaceRunnableHandler.getErrorMessages().clear();
 
         // linking item2 with item1 should fail also (cyclic linking)
-        testDSpaceRunnableHandler = createTestHandler();
         runScript(getLinkOptions(item2, item1, admin));
         assertEquals(1, testDSpaceRunnableHandler.getErrorMessages().size());
         assertEquals(getLinkErrorMessagePartOfOtherVersionHistory(item1), getErrorMessage());
+    }
 
-        testDSpaceRunnableHandler = createTestHandler();
+    @Test()
+    public void testLink3Items() throws Exception {
+        // create version history with item1 and item2
+        VersionHistory versionHistory = versionHistoryService.create(context);
+        createNewVersion(versionHistory, item1, 1);
+        createNewVersion(versionHistory, item2, 2);
+
+        // link item2 with item3 should pass
         runScript(getLinkOptions(item2, item3, admin));
         assertLinkMessages(item2, item3, 3);
     }
 
     @Test()
-    public void testLinkErrors() throws Exception {
-        // non-admin user trying to link items
-        testDSpaceRunnableHandler = createTestHandler();
+    public void testLinkErrorNotAdmin() throws Exception {
         runScript(getLinkOptions(item1, item2, eperson));
         assertEquals(1, testDSpaceRunnableHandler.getErrorMessages().size());
         assertEquals("Only admin user can run the script.", getErrorMessage());
+    }
 
-        // trying to link an item to itself
-        testDSpaceRunnableHandler = createTestHandler();
+    @Test()
+    public void testLinkErrorItemToItself() throws Exception {
         runScript(getLinkOptions(item1, item1, admin));
         assertEquals(1, testDSpaceRunnableHandler.getErrorMessages().size());
         assertEquals("Cannot create versioning relationship between the same item.", getErrorMessage());
+    }
 
-        // invalid previous item uuid
-        testDSpaceRunnableHandler = createTestHandler();
-        runScript(new String[] { "item-version-linker", "-l", "-p", "invalid-uuid",
-                "-i", item2.getID().toString(), "-e", admin.getEmail() });
+    @Test()
+    public void testLinkErrorInvalidUuid() throws Exception {
+        runScript(new String[]{"item-version-linker", "-l", "-p", item1.getHandle(),
+                "-i", "invalid-uuid", "-e", admin.getEmail()});
         assertNotNull(testDSpaceRunnableHandler.getException());
         assertEquals("Unable to resolve 'invalid-uuid' identifier.", getExceptionMessage());
+    }
 
-        // invalid item uuid
-        testDSpaceRunnableHandler = createTestHandler();
-        runScript(new String[] { "item-version-linker", "-l", "-p", item1.getHandle(),
-                "-i", "invalid-uuid", "-e", admin.getEmail() });
-        assertNotNull(testDSpaceRunnableHandler.getException());
-        assertEquals("Unable to resolve 'invalid-uuid' identifier.", getExceptionMessage());
-
-        // item not found
-        testDSpaceRunnableHandler = createTestHandler();
+    @Test()
+    public void testLinkErrorItemNotFound() throws Exception {
         UUID randomUUID = UUID.randomUUID();
         runScript(new String[] { "item-version-linker", "-l", "-p", item1.getHandle(),
                 "-i", randomUUID.toString(), "-e", admin.getEmail() });
@@ -129,45 +141,43 @@ public class ItemVersionLinkerIT extends AbstractIntegrationTestWithDatabase {
 
     @Test()
     public void testUnlink() throws Exception {
-        testDSpaceRunnableHandler = createTestHandler();
-        // linking item1 -> item2 -> item3
-        runScript(getLinkOptions(item1, item2, admin));
-        runScript(getLinkOptions(item2, item3, admin));
+        // create version history with item1, item2 and item3
+        VersionHistory versionHistory = versionHistoryService.create(context);
+        createNewVersion(versionHistory, item1, 1);
+        createNewVersion(versionHistory, item2, 2);
+        createNewVersion(versionHistory, item3, 3);
 
-        testDSpaceRunnableHandler = createTestHandler();
         runScript(getUnlinkOptions(item2, admin));
-        assertEquals("Can unlink only the item whose version is the latest version in the versioning history.",
-                getErrorMessage());
+        assertEquals(getUnlinkErrorMessageNotLastItem(), getErrorMessage());
+        testDSpaceRunnableHandler.getErrorMessages().clear();
 
         // unlinking item3
-        testDSpaceRunnableHandler = createTestHandler();
         runScript(getUnlinkOptions(item3, admin));
         assertUnlinkMessages(item2, item3);
+        testDSpaceRunnableHandler.getInfoMessages().clear();
 
         // unlinking  item3 again should fail as item3 is not linked anymore
-        testDSpaceRunnableHandler = createTestHandler();
         runScript(getUnlinkOptions(item3, admin));
         assertEquals(getUnlinkErrorMessageNotPartOfVersionHistory(item3), getErrorMessage());
+        testDSpaceRunnableHandler.getErrorMessages().clear();
 
         // unlinking item1 should fail as item1 is not the latest version
-        testDSpaceRunnableHandler = createTestHandler();
         runScript(getUnlinkOptions(item1, admin));
-        assertEquals(("Can unlink only the item whose version is the latest version in the versioning history."),
-                getErrorMessage());
+        assertEquals(getUnlinkErrorMessageNotLastItem(), getErrorMessage());
+        testDSpaceRunnableHandler.getErrorMessages().clear();
 
         // unlinking item2 (will unlink both item1 and item2 since item1 was the first version)
-        testDSpaceRunnableHandler = createTestHandler();
         runScript(getUnlinkOptions(item2, admin));
         assertUnlinkMessagesLastItems(item1, item2);
+        testDSpaceRunnableHandler.getInfoMessages().clear();
 
         // unlinking item2 again should fail
-        testDSpaceRunnableHandler = createTestHandler();
         runScript(getUnlinkOptions(item2, admin));
         assertEquals(getUnlinkErrorMessageNotPartOfVersionHistory(item2), getErrorMessage());
+        testDSpaceRunnableHandler.getErrorMessages().clear();
 
         // unlinking item1 should also fail since both items item1 and item2 were unlinked
         // because item1 was the first item in the versioning history
-        testDSpaceRunnableHandler = createTestHandler();
         runScript(getUnlinkOptions(item1, admin));
         assertEquals(getUnlinkErrorMessageNotPartOfVersionHistory(item1), getErrorMessage());
     }
@@ -232,6 +242,10 @@ public class ItemVersionLinkerIT extends AbstractIntegrationTestWithDatabase {
         return String.format("The item '%s', to be unlinked, is not part of any versioning history.", item.getID());
     }
 
+    private static String getUnlinkErrorMessageNotLastItem() {
+        return "Can unlink only the item whose version is the latest version in the versioning history.";
+    }
+
     private static String[] getLinkOptions(Item item1, Item item2, EPerson eperson) {
         return new String[] { "item-version-linker",
                 "-l", "-p", item1.getID().toString(), "-i", item2.getID().toString(), "-e", eperson.getEmail() };
@@ -255,6 +269,11 @@ public class ItemVersionLinkerIT extends AbstractIntegrationTestWithDatabase {
 
     private String getExceptionMessage() {
         return testDSpaceRunnableHandler.getException().getMessage();
+    }
+
+    private void createNewVersion(VersionHistory versionHistory, Item item, int versionNumber) {
+        versioningService.createNewVersion(context, versionHistory, item,
+                "version " + versionNumber, new Date(), versionNumber);
     }
 
 }

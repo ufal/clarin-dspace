@@ -128,34 +128,36 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
             return;
         }
 
-        Context context = new Context();
-        EPerson ePerson = getEperson(context);
-        if (ePerson == null) {
-            throw new RuntimeException("Only authenticated user can run the script.");
-        }
-        context.setCurrentUser(ePerson);
-
-        if (ePersonEmail != null && !authorizeService.isAdmin(context)) {
-            handler.logError("Only admin user can run the script.");
-            return;
-        }
-
-        itemID = commandLine.getOptionValue("i");
-        Item item = findItem(context, itemID);
-
-        if (item == null) {
-            throw new IllegalArgumentException(String.format("Item '%s' not found.", itemID));
-        }
-
-        if (link) {
-            previousItemID = commandLine.getOptionValue("p");
-            Item previousItem = findItem(context, previousItemID);
-            if (previousItem == null) {
-                throw new IllegalArgumentException(String.format("Previous item '%s' not found.", previousItemID));
+        try (Context context = new Context()) {
+            EPerson ePerson = getEperson(context);
+            if (ePerson == null) {
+                throw new RuntimeException("Only authenticated user can run the script.");
             }
-            linkItems(context, previousItem, item);
-        } else {
-            unlinkLastItem(context, item);
+            context.setCurrentUser(ePerson);
+
+            if (ePersonEmail != null && !authorizeService.isAdmin(context)) {
+                handler.logError("Only admin user can run the script.");
+                return;
+            }
+
+            itemID = commandLine.getOptionValue("i");
+            Item item = findItem(context, itemID);
+
+            if (item == null) {
+                throw new IllegalArgumentException(String.format("Item '%s' not found.", itemID));
+            }
+
+            if (link) {
+                previousItemID = commandLine.getOptionValue("p");
+                Item previousItem = findItem(context, previousItemID);
+                if (previousItem == null) {
+                    throw new IllegalArgumentException(String.format("Previous item '%s' not found.", previousItemID));
+                }
+                linkItems(context, previousItem, item);
+            } else {
+                unlinkLastItem(context, item);
+            }
+            context.complete();
         }
     }
 
