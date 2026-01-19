@@ -52,16 +52,16 @@ public class ItemVersionLinkerConfiguration extends ScriptConfiguration<ItemVers
 
             options.addOption("h", "help", false, "help");
 
-            options.addOption("l", "link", false, "link the item with the previous item");
+            options.addOption("l", "link", false, "link item with the previous item");
 
-            options.addOption("u", "unlink", false, "unlink the item from the previous item in version history");
+            options.addOption("u", "unlink", false, "unlink item from the previous item in version history");
 
             options.addOption("p", "previous", true,
-                    "item handle, or UUID, of the previous (left) item intended to be linked with the item " +
-                            "(only required for link option)");
+                    "item handle, or UUID, of the previous(left) item that is intended to be linked with the (right)" +
+                            " item (only required for link option)");
 
             options.addOption("i", "item", true,
-                    "item handle, or UUID, of the (right) item intended to be linked/unlinked with/from the " +
+                    "item handle, or UUID, of the (right) item that is intended to be linked/unlinked with/from the " +
                             "previous item (required for both link and unlink options)");
             options.getOption("i").setRequired(true);
 
