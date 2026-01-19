@@ -11,6 +11,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import java.sql.SQLException;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
@@ -28,6 +29,9 @@ import org.dspace.content.MetadataValue;
 import org.dspace.content.factory.ContentServiceFactory;
 import org.dspace.content.service.ItemService;
 import org.dspace.eperson.EPerson;
+import org.dspace.handle.factory.HandleServiceFactory;
+import org.dspace.handle.service.HandleService;
+import org.dspace.versioning.Version;
 import org.dspace.versioning.VersionHistory;
 import org.dspace.versioning.factory.VersionServiceFactory;
 import org.dspace.versioning.service.VersionHistoryService;
@@ -45,6 +49,7 @@ public class ItemVersionLinkerIT extends AbstractIntegrationTestWithDatabase {
     private ItemService itemService;
     private VersioningService versioningService;
     private VersionHistoryService versionHistoryService;
+    private HandleService handleService;
 
     @Before
     @Override
@@ -61,6 +66,7 @@ public class ItemVersionLinkerIT extends AbstractIntegrationTestWithDatabase {
         itemService = ContentServiceFactory.getInstance().getItemService();
         versioningService = VersionServiceFactory.getInstance().getVersionService();
         versionHistoryService = VersionServiceFactory.getInstance().getVersionHistoryService();
+        handleService = HandleServiceFactory.getInstance().getHandleService();
         testDSpaceRunnableHandler = createTestHandler();
     }
 
@@ -147,10 +153,6 @@ public class ItemVersionLinkerIT extends AbstractIntegrationTestWithDatabase {
         createNewVersion(versionHistory, item2, 2);
         createNewVersion(versionHistory, item3, 3);
 
-        runScript(getUnlinkOptions(item2, admin));
-        assertEquals(getUnlinkErrorMessageNotLastItem(), getErrorMessage());
-        testDSpaceRunnableHandler.getErrorMessages().clear();
-
         // unlinking item3
         runScript(getUnlinkOptions(item3, admin));
         assertUnlinkMessages(item2, item3);
@@ -165,6 +167,14 @@ public class ItemVersionLinkerIT extends AbstractIntegrationTestWithDatabase {
         runScript(getUnlinkOptions(item1, admin));
         assertEquals(getUnlinkErrorMessageNotLastItem(), getErrorMessage());
         testDSpaceRunnableHandler.getErrorMessages().clear();
+    }
+
+    @Test()
+    public void testUnlinkLastItems() throws Exception {
+        // create version history with item1, item2 and item3
+        VersionHistory versionHistory = versionHistoryService.create(context);
+        createNewVersion(versionHistory, item1, 1);
+        createNewVersion(versionHistory, item2, 2);
 
         // unlinking item2 (will unlink both item1 and item2 since item1 was the first version)
         runScript(getUnlinkOptions(item2, admin));
@@ -271,9 +281,22 @@ public class ItemVersionLinkerIT extends AbstractIntegrationTestWithDatabase {
         return testDSpaceRunnableHandler.getException().getMessage();
     }
 
-    private void createNewVersion(VersionHistory versionHistory, Item item, int versionNumber) {
-        versioningService.createNewVersion(context, versionHistory, item,
+    private void createNewVersion(VersionHistory versionHistory, Item item, int versionNumber) throws SQLException {
+        Version version = versioningService.createNewVersion(context, versionHistory, item,
                 "version " + versionNumber, new Date(), versionNumber);
+        if (!versionHistoryService.isFirstVersion(context, versionHistory, version)) {
+            Version previous = versionHistoryService.getPrevious(context, versionHistory, version);
+            Item previousItem = previous.getItem();
+
+            String previousItemHandleRef = handleService.getCanonicalForm(previousItem.getHandle());
+            String secondItemHandleRef = handleService.getCanonicalForm(item.getHandle());
+
+            itemService.addMetadata(context, previousItem, "dc", "relation", "isreplacedby", null,
+                    secondItemHandleRef);
+
+            itemService.addMetadata(context, item, "dc", "relation", "replaces", null,
+                    previousItemHandleRef);
+        }
     }
 
 }
