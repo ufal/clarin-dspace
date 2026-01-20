@@ -249,7 +249,7 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
                 itemID));
 
         // remove the dc.relation.replaces metadata (if ever exists)
-        itemService.clearMetadata(context, item, "dc", "relation", "replaces", null);
+        itemService.clearMetadata(context, item, "dc", "relation", "replaces", Item.ANY);
 
         VersionHistory versionHistory = version.getVersionHistory();
         Version previousVersion = versionHistoryService.getPrevious(context, version.getVersionHistory(), version);
@@ -260,7 +260,7 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
 
         if (previousVersion != null) {
             // remove the dc.relation.isreplacedby metadata (if ever exists)
-            itemService.clearMetadata(context, previousVersion.getItem(), "dc", "relation", "isreplacedby", null);
+            itemService.clearMetadata(context, previousVersion.getItem(), "dc", "relation", "isreplacedby", Item.ANY);
 
             if (isFirstVersion(context, versionHistory, previousVersion)) {
                 // if the previous version is the first version, we need to remove the version
