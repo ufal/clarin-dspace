@@ -22,6 +22,8 @@ import org.dspace.builder.ItemBuilder;
 import org.dspace.builder.VersionBuilder;
 import org.dspace.content.Collection;
 import org.dspace.content.Item;
+import org.dspace.content.factory.ContentServiceFactory;
+import org.dspace.content.service.ItemService;
 import org.dspace.kernel.ServiceManager;
 import org.dspace.services.factory.DSpaceServicesFactory;
 import org.junit.After;
@@ -122,6 +124,27 @@ public class VersionedHandleIdentifierProviderIT extends AbstractIntegrationTest
         assertEquals(firstHandle, itemV3.getHandle());
         assertEquals(2, itemV3.getHandles().size());
         containsHandle(itemV3, firstHandle + ".3");
+    }
+
+    @Test
+    public void testReplacesMetadata() throws Exception {
+        registerProvider(VersionedHandleIdentifierProviderWithCanonicalHandles.class);
+        itemV1 = ItemBuilder.createItem(context, collection)
+                .withTitle("First version")
+                .build();
+
+        ItemService itemService = ContentServiceFactory.getInstance().getItemService();
+        // set "dc.relation.replaces" metadata on itemV1
+        itemService.addMetadata(context, itemV1, "dc", "relation", "replaces", null, "some_value");
+
+        String itemV1HandleRef = itemService.getMetadataFirstValue(itemV1, "dc", "identifier", "uri", Item.ANY);
+
+        itemV2 = VersionBuilder.createVersion(context, itemV1, "Second version").build().getItem();
+
+        // Check that itemV2 has the correct "dc.relation.replaces" metadata pointing to itemV1
+        assertEquals(1, itemService.getMetadata(itemV2, "dc", "relation", "replaces", Item.ANY).size());
+        assertEquals(itemV1HandleRef,
+                itemService.getMetadata(itemV2, "dc", "relation", "replaces", Item.ANY).get(0).getValue());
     }
 
     private void containsHandle(Item item, String handle) {
