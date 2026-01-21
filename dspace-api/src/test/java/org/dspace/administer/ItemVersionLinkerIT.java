@@ -41,7 +41,10 @@ import org.junit.Test;
 
 public class ItemVersionLinkerIT extends AbstractIntegrationTestWithDatabase {
 
+    private static final String ORCID = "0000-1111-2222-3333";
+
     private TestDSpaceRunnableHandler testDSpaceRunnableHandler;
+    private Collection collection;
     private Item item1;
     private Item item2;
     private Item item3;
@@ -57,7 +60,7 @@ public class ItemVersionLinkerIT extends AbstractIntegrationTestWithDatabase {
         super.setUp();
         context.setCurrentUser(admin);
         Community community = CommunityBuilder.createCommunity(context).build();
-        Collection collection = CollectionBuilder.createCollection(context, community)
+        collection = CollectionBuilder.createCollection(context, community)
                 .withSubmitterGroup(eperson)
                 .build();
         item1 = ItemBuilder.createItem(context, collection).withTitle("Item 1").build();
@@ -129,6 +132,23 @@ public class ItemVersionLinkerIT extends AbstractIntegrationTestWithDatabase {
     }
 
     @Test()
+    public void testLinkItemNoHandle() throws Exception {
+        Item item4 = ItemBuilder.createItem(context, collection).withTitle("Item 4").build();
+        itemService.clearMetadata(context, item4, "dc", "identifier", "uri", Item.ANY);
+
+        // linking item1 with item4 should fail since item4 has no handle
+        runScript(getLinkOptions(item1, item4, admin));
+        assertEquals(1, testDSpaceRunnableHandler.getErrorMessages().size());
+        assertEquals(getNoHandleMessage(item4.getID()), getErrorMessage());
+        testDSpaceRunnableHandler.getErrorMessages().clear();
+
+        // linking item4 with item1 should also fail since item4 has no handle
+        runScript(getLinkOptions(item4, item1, admin));
+        assertEquals(1, testDSpaceRunnableHandler.getErrorMessages().size());
+        assertEquals(getNoHandleMessage(item4.getID()), getErrorMessage());
+    }
+
+    @Test()
     public void testLinkErrorInvalidUuid() throws Exception {
         runScript(new String[]{"item-version-linker", "-l", "-p", item1.getHandle(),
                 "-i", "invalid-uuid", "-e", admin.getEmail()});
@@ -155,7 +175,7 @@ public class ItemVersionLinkerIT extends AbstractIntegrationTestWithDatabase {
 
         // unlinking item3
         runScript(getUnlinkOptions(item3, admin));
-        assertUnlinkMessages(item2, item3);
+        assertUnlinkMessages(item2, item3, item3.getID());
         testDSpaceRunnableHandler.getInfoMessages().clear();
 
         // unlinking  item3 again should fail as item3 is not linked anymore
@@ -178,7 +198,7 @@ public class ItemVersionLinkerIT extends AbstractIntegrationTestWithDatabase {
 
         // unlinking item2 (will unlink both item1 and item2 since item1 was the first version)
         runScript(getUnlinkOptions(item2, admin));
-        assertUnlinkMessagesLastItems(item1, item2);
+        assertUnlinkMessagesLastItems(item1, item2, item1.getID(), item2.getID());
         testDSpaceRunnableHandler.getInfoMessages().clear();
 
         // unlinking item2 again should fail
@@ -190,6 +210,33 @@ public class ItemVersionLinkerIT extends AbstractIntegrationTestWithDatabase {
         // because item1 was the first item in the versioning history
         runScript(getUnlinkOptions(item1, admin));
         assertEquals(getUnlinkErrorMessageNotPartOfVersionHistory(item1), getErrorMessage());
+    }
+
+    @Test()
+    public void testUnlinkLastItemsWithHandles() throws Exception {
+        // create version history with item1, item2 and item3
+        VersionHistory versionHistory = versionHistoryService.create(context);
+        createNewVersion(versionHistory, item1, 1);
+        createNewVersion(versionHistory, item2, 2);
+
+        // unlinking item2 (will unlink both item1 and item2 since item1 was the first version)
+        runScript(new String[] { "item-version-linker", "-u", "-i", item2.getHandle(), "-e", admin.getEmail() });
+        assertUnlinkMessagesLastItems(item1, item2, item1.getHandle(), item2.getHandle());
+    }
+
+    @Test()
+    public void testUnlinkItemNoHandle() throws Exception {
+        VersionHistory versionHistory = versionHistoryService.create(context);
+        createNewVersion(versionHistory, item1, 1);
+        createNewVersion(versionHistory, item2, 2);
+
+        itemService.clearMetadata(context, item2, "dc", "identifier", "uri", Item.ANY);
+
+        // unlinking item2 should fail since item2 has no handle
+        runScript(getUnlinkOptions(item2, admin));
+        assertEquals(1, testDSpaceRunnableHandler.getErrorMessages().size());
+        assertEquals(getNoHandleMessage(item2.getID()), getErrorMessage());
+        testDSpaceRunnableHandler.getErrorMessages().clear();
     }
 
     private void assertLinkMessages(Item item1, Item item2, int version) {
@@ -212,13 +259,13 @@ public class ItemVersionLinkerIT extends AbstractIntegrationTestWithDatabase {
         assertTrue(replaces.get(0).getValue().endsWith(item1.getHandle()));
     }
 
-    private void assertUnlinkMessages(Item item1, Item item2) {
+    private void assertUnlinkMessages(Item item1, Item item2, Object item2ID) {
         assertEquals(0, testDSpaceRunnableHandler.getErrorMessages().size());
         List<String> infoMessages = testDSpaceRunnableHandler.getInfoMessages();
         assertTrue(infoMessages.size() >= 2);
 
-        assertEquals(getUnlinkStartMessage(item2), infoMessages.get(0));
-        assertEquals(getUnlinkSuccessMessage(item2), infoMessages.get(1));
+        assertEquals(getUnlinkStartMessage(item2ID), infoMessages.get(0));
+        assertEquals(getUnlinkSuccessMessage(item2ID), infoMessages.get(1));
 
         // check dc.relation metadata removed
         List<MetadataValue> isReplacedBy = itemService.getMetadata(item1, "dc", "relation", "isreplacedby", null);
@@ -228,20 +275,24 @@ public class ItemVersionLinkerIT extends AbstractIntegrationTestWithDatabase {
         assertEquals(0, replaces.size());
     }
 
-    private void assertUnlinkMessagesLastItems(Item item1, Item item2) {
-        assertUnlinkMessages(item1, item2);
+    private void assertUnlinkMessagesLastItems(Item item1, Item item2, Object item1ID, Object item2ID) {
+        assertUnlinkMessages(item1, item2, item2ID);
         assertEquals(String.format("The previous item '%s' was the first version of the '%s' item, " +
                                 "so the full versioning history associated with the items was removed as well.",
-                        item1.getID(), item2.getID()),
+                        item1ID, item2ID),
                 testDSpaceRunnableHandler.getInfoMessages().get(2));
     }
 
-    private static String getUnlinkStartMessage(Item item) {
-        return String.format("Going to unlink item '%s' from the versioning history.", item.getID());
+    private static String getUnlinkStartMessage(Object itemID) {
+        return String.format("Going to unlink item '%s' from the versioning history.", itemID);
     }
 
-    private static String getUnlinkSuccessMessage(Item item) {
-        return String.format("Item '%s' unlinked successfully.", item.getID());
+    private static String getUnlinkSuccessMessage(Object itemID) {
+        return String.format("Item '%s' unlinked successfully.", itemID);
+    }
+
+    private static String getNoHandleMessage(Object itemID) {
+        return String.format("Item '%s' has no handle assigned.", itemID);
     }
 
     private static String getLinkErrorMessagePartOfOtherVersionHistory(Item item) {

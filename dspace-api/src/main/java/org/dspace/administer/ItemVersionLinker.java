@@ -62,7 +62,6 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
     private ItemService itemService;
     private EPersonService ePersonService;
     private IdentifierService identifierService;
-    private HandleService handleService;
     private AuthorizeService authorizeService;
 
     /**
@@ -113,7 +112,6 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
         itemService = ContentServiceFactory.getInstance().getItemService();
         ePersonService = EPersonServiceFactory.getInstance().getEPersonService();
         identifierService = IdentifierServiceFactory.getInstance().getIdentifierService();
-        handleService = HandleServiceFactory.getInstance().getHandleService();
         authorizeService = AuthorizeServiceFactory.getInstance().getAuthorizeService();
     }
 
@@ -201,22 +199,21 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
         }
 
         String previousItemName = previousItem.getName();
-        String previousItemHandle = previousItem.getHandle();
-        if (previousItemHandle == null) {
-            handler.logError(String.format("The previous item '%s' has no handle assigned.", previousItemID));
+
+        String previousItemHandleRef = getHandleRef(previousItem);
+        if (previousItemHandleRef == null) {
+            handler.logError(getNoHandleMessage(previousItemID));
             return;
         }
-        String itemHandle = item.getHandle();
-        if (itemHandle == null) {
-            handler.logError(String.format("The item '%s' has no handle assigned.", itemID));
+
+        String itemHandleRef = getHandleRef(item);
+        if (itemHandleRef == null) {
+            handler.logError(getNoHandleMessage(itemID));
             return;
         }
 
         handler.logInfo(String.format("Creating versioning relationship between '%s' and '%s' items.",
                 previousItemID, itemID));
-
-        String previousItemHandleRef = handleService.getCanonicalForm(previousItemHandle);
-        String secondItemHandleRef = handleService.getCanonicalForm(itemHandle);
 
         int newVersionNumber;
         if (previousVersion != null) {
@@ -236,7 +233,7 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
             newVersionNumber = 2;
         }
 
-        itemService.addMetadata(context, previousItem, "dc", "relation", "isreplacedby", null, secondItemHandleRef);
+        itemService.addMetadata(context, previousItem, "dc", "relation", "isreplacedby", null, itemHandleRef);
 
         // remove "dc.relation.replaces" metadata, if any exists
         itemService.clearMetadata(context, item, "dc", "relation", "replaces", Item.ANY);
@@ -259,13 +256,11 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
             return;
         }
 
-        String itemHandle = item.getHandle();
-        if (itemHandle == null) {
-            handler.logError(String.format("The item '%s' to be unlinked has no handle assigned.", itemID));
+        String itemHandleRef = getHandleRef(item);
+        if (itemHandleRef == null) {
+            handler.logError(getNoHandleMessage(itemID));
             return;
         }
-
-        String itemHandleRef = handleService.getCanonicalForm(itemHandle);
 
         handler.logInfo(String.format("Going to unlink item '%s' from the versioning history.",
                 itemID));
@@ -299,7 +294,7 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
 
                 // guess identifier type for previous item (only for logging)
                 String previousItemID = isUUID(itemID) ?
-                        previousVersion.getItem().getID().toString() : previousVersion.getItem().getHandle();
+                        previousVersion.getItem().getID().toString() : getHandle(previousVersion.getItem());
 
                 handler.logInfo(String.format("The previous item '%s' was the first version of the '%s' item, " +
                         "so the full versioning history associated with the items was removed as well.",
@@ -354,6 +349,28 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
         } catch (IllegalArgumentException e) {
             return false;
         }
+    }
+
+    private String getHandleRef(Item item) {
+        return itemService.getMetadata(item, "dc", "identifier", "uri", null)
+                .stream()
+                .findFirst()
+                .map(MetadataValue::getValue)
+                .orElse(null);
+    }
+
+    private String getHandle(Item item) {
+        String handleRef = getHandleRef(item);
+        if (handleRef == null) {
+            return null;
+        } else {
+            HandleService handleService = HandleServiceFactory.getInstance().getHandleService();
+            return handleRef.substring(handleService.getCanonicalPrefix().length());
+        }
+    }
+
+    private static String getNoHandleMessage(String itemID) {
+        return String.format("Item '%s' has no handle assigned.", itemID);
     }
 
 }
