@@ -9,7 +9,9 @@ package org.dspace.administer;
 
 import java.sql.SQLException;
 import java.util.Date;
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.apache.commons.cli.ParseException;
 import org.dspace.authorize.AuthorizeException;
@@ -17,6 +19,7 @@ import org.dspace.authorize.factory.AuthorizeServiceFactory;
 import org.dspace.authorize.service.AuthorizeService;
 import org.dspace.content.DSpaceObject;
 import org.dspace.content.Item;
+import org.dspace.content.MetadataValue;
 import org.dspace.content.factory.ContentServiceFactory;
 import org.dspace.content.service.ItemService;
 import org.dspace.core.Context;
@@ -197,12 +200,23 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
             return;
         }
 
+        String previousItemName = previousItem.getName();
+        String previousItemHandle = previousItem.getHandle();
+        if (previousItemHandle == null) {
+            handler.logError(String.format("The previous item '%s' has no handle assigned.", previousItemID));
+            return;
+        }
+        String itemHandle = item.getHandle();
+        if (itemHandle == null) {
+            handler.logError(String.format("The item '%s' has no handle assigned.", itemID));
+            return;
+        }
+
         handler.logInfo(String.format("Creating versioning relationship between '%s' and '%s' items.",
                 previousItemID, itemID));
 
-        String previousItemName = previousItem.getName();
-        String previousItemHandleRef = handleService.getCanonicalForm(previousItem.getHandle());
-        String secondItemHandleRef = handleService.getCanonicalForm(item.getHandle());
+        String previousItemHandleRef = handleService.getCanonicalForm(previousItemHandle);
+        String secondItemHandleRef = handleService.getCanonicalForm(itemHandle);
 
         int newVersionNumber;
         if (previousVersion != null) {
@@ -222,11 +236,11 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
             newVersionNumber = 2;
         }
 
-        itemService.addMetadata(context, previousItem, "dc", "relation", "isreplacedby", null,
-                secondItemHandleRef);
+        itemService.addMetadata(context, previousItem, "dc", "relation", "isreplacedby", null, secondItemHandleRef);
 
-        itemService.addMetadata(context, item, "dc", "relation", "replaces", null,
-                previousItemHandleRef);
+        // remove "dc.relation.replaces" metadata, if any exists
+        itemService.clearMetadata(context, item, "dc", "relation", "replaces", Item.ANY);
+        itemService.addMetadata(context, item, "dc", "relation", "replaces", null, previousItemHandleRef);
 
         handler.logInfo(String.format("Item '%s' has become a new version (version %d) of item '%s'.",
                 itemID, newVersionNumber, previousItemID));
@@ -245,22 +259,37 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
             return;
         }
 
+        String itemHandle = item.getHandle();
+        if (itemHandle == null) {
+            handler.logError(String.format("The item '%s' to be unlinked has no handle assigned.", itemID));
+            return;
+        }
+
+        String itemHandleRef = handleService.getCanonicalForm(itemHandle);
+
         handler.logInfo(String.format("Going to unlink item '%s' from the versioning history.",
                 itemID));
 
-        // remove the dc.relation.replaces metadata (if ever exists)
+        // remove "dc.relation.replaces" metadata, if any exists
         itemService.clearMetadata(context, item, "dc", "relation", "replaces", Item.ANY);
 
         VersionHistory versionHistory = version.getVersionHistory();
         Version previousVersion = versionHistoryService.getPrevious(context, version.getVersionHistory(), version);
 
-        // remove the version relationship
+        // remove the version
         versioningService.deleteVersion(context, version);
         handler.logInfo(String.format("Item '%s' unlinked successfully.", itemID));
 
         if (previousVersion != null) {
-            // remove the dc.relation.isreplacedby metadata (if ever exists)
-            itemService.clearMetadata(context, previousVersion.getItem(), "dc", "relation", "isreplacedby", Item.ANY);
+            // from the previous item, remove the "dc.relation.isreplacedby" metadata, related to item being unlinked
+            List<MetadataValue> metadataValuesToRemove =
+                    itemService.getMetadata(previousVersion.getItem(), "dc", "relation", "isreplacedby", Item.ANY)
+                            .stream().filter(metadataValue -> itemHandleRef.equals(metadataValue.getValue()))
+                            .collect(Collectors.toList());
+
+            if (!metadataValuesToRemove.isEmpty()) {
+                itemService.removeMetadataValues(context, previousVersion.getItem(), metadataValuesToRemove);
+            }
 
             if (isFirstVersion(context, versionHistory, previousVersion)) {
                 // if the previous version is the first version, we need to remove the version
