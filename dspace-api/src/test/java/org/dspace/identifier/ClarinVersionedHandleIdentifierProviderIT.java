@@ -8,6 +8,7 @@
 package org.dspace.identifier;
 
 import static org.hamcrest.CoreMatchers.equalTo;
+import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.CoreMatchers.startsWith;
 import static org.hamcrest.MatcherAssert.assertThat;
 
@@ -91,8 +92,11 @@ public class ClarinVersionedHandleIdentifierProviderIT extends AbstractIntegrati
 
         Item itemV2 = VersionBuilder.createVersion(context, itemV1, "Second version").build().getItem();
 
-        // check that "dc.date.available", metadata were not copied to itemV2
+        // check that "dc.date.available", metadata is not copied to itemV2
         assertThat(itemService.getMetadata(itemV2, "dc", "date", "available", Item.ANY).size(), equalTo(0));
+
+        // check that "dc.identifier.uri", metadata is not copied to itemV2
+        assertThat(itemService.getMetadata(itemV2, "dc", "identifier", "uri", Item.ANY).size(), equalTo(0));
 
         // check that "dc.relation.replaces" points to itemV1
         List<MetadataValue> metadataValues = itemService.getMetadata(itemV2, "dc", "relation", "replaces", Item.ANY);
@@ -118,6 +122,11 @@ public class ClarinVersionedHandleIdentifierProviderIT extends AbstractIntegrati
         metadataValues = itemService.getMetadata(installedItem, "dc", "date", "available", Item.ANY);
         assertThat(metadataValues.size(), equalTo(1));
         assertThat(metadataValues.get(0).getValue(), startsWith(date));
+
+        // check "dc.identifier.uri" metadata has new value different from itemV1
+        metadataValues = itemService.getMetadata(installedItem, "dc", "identifier", "uri", Item.ANY);
+        assertThat(metadataValues.size(), equalTo(1));
+        assertThat(metadataValues.get(0).getValue(), not(itemV1HandleRef));
     }
 
     private void registerProvider(Class type) {
