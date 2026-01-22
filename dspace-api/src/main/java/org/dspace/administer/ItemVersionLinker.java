@@ -10,6 +10,7 @@ package org.dspace.administer;
 import java.sql.SQLException;
 import java.util.Date;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -360,12 +361,15 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
     }
 
     private String getHandle(Item item) {
-        String handleRef = getHandleRef(item);
-        if (handleRef == null) {
-            return null;
+        // extract handle from handle reference
+        // handleRef cannot be null here as this method is called only after checking for null
+        String handleRef = Objects.requireNonNull(getHandleRef(item));
+        HandleService handleService = HandleServiceFactory.getInstance().getHandleService();
+        String handlePrefix = handleService.getCanonicalPrefix();
+        if (handleRef.startsWith(handlePrefix)) {
+            return handleRef.substring(handlePrefix.length());
         } else {
-            HandleService handleService = HandleServiceFactory.getInstance().getHandleService();
-            return handleRef.substring(handleService.getCanonicalPrefix().length());
+            return "<unknown handle>";
         }
     }
 
