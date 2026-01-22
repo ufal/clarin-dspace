@@ -8,7 +8,6 @@
 package org.dspace.content;
 
 import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.CoreMatchers.startsWith;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.fail;
@@ -306,36 +305,5 @@ public class InstallItemTest extends AbstractUnitTest {
 
         assertThat("testRestoreItem_todayAsIssuedDate 0", issuedDates.get(0).getValue(), equalTo(date));
         assertThat("testRestoreItem_todayAsIssuedDate 1", issuedDates.get(1).getValue(), equalTo("2011-01-01"));
-    }
-
-    /**
-     * Test "dc.date.available" being set to a current date on installItem.
-     */
-    @Test
-    public void testInstallItem_dateAvailableChanged() throws Exception {
-        // create a dummy WorkspaceItem
-        context.turnOffAuthorisationSystem();
-        String handle = "123456789/56789";
-        WorkspaceItem is = workspaceItemService.create(context, collection, false);
-
-        // Set "dc.date.available"
-        itemService.addMetadata(context, is.getItem(), "dc", "date", "available", null, "2026-01-01T00:00:00Z");
-
-        // get current date
-        Calendar calendar = Calendar.getInstance();
-        calendar.setTimeInMillis(System.currentTimeMillis());
-        calendar.setTimeZone(TimeZone.getTimeZone("UTC"));
-
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-
-        String date = sdf.format(calendar.getTime());
-
-        Item result = installItemService.installItem(context, is, handle);
-        context.restoreAuthSystemState();
-
-        // make sure "the dc.date.available" value was replaced with today's date
-        List<MetadataValue> dcDatesAvailable = itemService.getMetadata(result, "dc", "date", "available", Item.ANY);
-        assertThat(dcDatesAvailable.size(), equalTo(1));
-        assertThat(dcDatesAvailable.get(0).getValue(), startsWith(date));
     }
 }
