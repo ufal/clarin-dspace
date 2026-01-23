@@ -47,7 +47,7 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
     public static final int CURATE_WARNING = -1000;
 
     /** Expected types. */
-    private static Set<String> dcTypeValuesSet;
+    private Set<String> dcTypeValuesSet;
 
     private static final String[] rightsMdStrings = {"dc.rights.uri", "dc.rights.label", "dc.rights"};
 
@@ -196,10 +196,15 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
 
         // check array is not null or length > 0
         for (MetadataValue dcsEntry : dcsType) {
-            String typeVal = dcsEntry.getValue().trim();
+            String value = dcsEntry.getValue();
+            if (value == null) {
+                throw new CurateException("dc.type has null value", Curator.CURATE_FAIL);
+            }
+
+            String typeVal = value.trim();
 
             // check if original and trimmed versions match
-            if (!typeVal.equals(dcsEntry.getValue())) {
+            if (!typeVal.equals(value)) {
                 throw new CurateException("leading or trailing spaces", Curator.CURATE_FAIL);
             }
 
@@ -227,6 +232,9 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
         if (dcsLanguageIso != null) {
             for (MetadataValue langCodeDC : dcsLanguageIso) {
                 String langCode = langCodeDC.getValue();
+                if (langCode == null) {
+                    throw new CurateException("dc.language.iso has null value", Curator.CURATE_FAIL);
+                }
                 if (IsoLangCodes.getLangForCode(langCode) == null) {
                     throw new CurateException(
                         String.format("Invalid language code - %s", langCode),
@@ -242,6 +250,9 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
 
     private void validateTitle(Item item, StringBuilder results) throws CurateException {
         String title = itemService.getMetadataFirstValue(item, "dc", "title", null, Item.ANY);
+        if (title == null) {
+            throw new CurateException("Item has no dc.title metadata", Curator.CURATE_FAIL);
+        }
         if (itemTitles.containsKey(title)) {
             String msg = String.format("Title [%s] duplicate in [%s]", title, itemTitles.get(title));
             throw new CurateException(msg, Curator.CURATE_FAIL);
