@@ -1,0 +1,469 @@
+/**
+ * The contents of this file are subject to the license and copyright
+ * detailed in the LICENSE and NOTICE files at the root of the source
+ * tree and available online at
+ *
+ * http://www.dspace.org/license/
+ */
+/* Created for LINDAT/CLARIN */
+package org.dspace.ctask.general;
+
+import java.io.IOException;
+import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.regex.Pattern;
+
+import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.dspace.app.util.DCInput;
+import org.dspace.app.util.DCInputsReader;
+import org.dspace.app.util.DCInputsReaderException;
+import org.dspace.content.Community;
+import org.dspace.content.DSpaceObject;
+import org.dspace.content.Item;
+import org.dspace.content.MetadataValue;
+import org.dspace.core.Context;
+import org.dspace.curate.AbstractCurationTask;
+import org.dspace.curate.Curator;
+import org.dspace.discovery.IsoLangCodes;
+import org.dspace.handle.factory.HandleServiceFactory;
+import org.dspace.handle.service.HandleService;
+
+/**
+ * Check basic properties of item metadata for quality assurance.
+ * Ported from DSpace v5 CLARIN implementation.
+ *
+ * @author LINDAT/CLARIN
+ */
+public class ItemMetadataQAChecker extends AbstractCurationTask {
+
+    public static final int CURATE_WARNING = -1000;
+
+    /** Expected types. */
+    private static final String[] DCTYPE_VALUES = new String[]{
+        "corpus", "lexicalConceptualResource", "languageDescription", "toolService"
+    };
+    private static final Set<String> DCTYPE_VALUES_SET = new HashSet<>(Arrays.asList(DCTYPE_VALUES));
+
+    private static final String[] rightsMdStrings = {"dc.rights.uri", "dc.rights.label", "dc.rights"};
+
+    private Map<String, String> itemTitles;
+    private String handlePrefix;
+    private Map<String, Integer> complexInputs;
+
+    private static final Logger log = LogManager.getLogger(ItemMetadataQAChecker.class);
+
+    @Override
+    public void init(Curator curator, String taskId) throws IOException {
+        super.init(curator, taskId);
+        itemTitles = new HashMap<>();
+        handlePrefix = configurationService.getProperty("handle.canonical.prefix");
+
+        // Override expected types from configuration if available
+        String[] configuredTypes = configurationService.getArrayProperty(
+            "lr.curation.metadata.expected.types");
+        if (configuredTypes != null && configuredTypes.length > 0) {
+            DCTYPE_VALUES_SET.clear();
+            DCTYPE_VALUES_SET.addAll(Arrays.asList(configuredTypes));
+        }
+
+        complexInputs = new HashMap<>();
+        loadComplexInputs();
+    }
+
+    private void loadComplexInputs() {
+        try {
+            DCInputsReader reader = new DCInputsReader();
+            int numPages = reader.getNumberInputPages(null);
+            for (int i = 0; i < numPages; i++) {
+                for (DCInput input : reader.getInputs(null).getPageRows(i, false, true)) {
+                    if ("complex".equals(input.getInputType())) {
+                        String name = StringUtils.isBlank(input.getQualifier())
+                            ? String.format("%s.%s", input.getSchema(), input.getElement())
+                            : String.format("%s.%s.%s", input.getSchema(), input.getElement(),
+                                input.getQualifier());
+                        complexInputs.put(name, input.getComplexDefinition().getInputNames().size());
+                    }
+                }
+            }
+        } catch (DCInputsReaderException e) {
+            log.error("Problems fetching input-forms.xml", e);
+        }
+    }
+
+    private String getHandle(Item item) {
+        if (null != item.getHandle()) {
+            return handlePrefix + item.getHandle();
+        } else {
+            return "item id: " + item.getID();
+        }
+    }
+
+    @Override
+    public int perform(DSpaceObject dso) throws IOException {
+        int status = Curator.CURATE_UNSET;
+        StringBuilder results = new StringBuilder();
+        String errStr = "Unknown error";
+
+        // do on Items only
+        if (dso instanceof Item) {
+            Item item = (Item) dso;
+            if (item.getHandle() != null) {
+                List<MetadataValue> metadataValues = itemService.getMetadata(
+                    item, Item.ANY, Item.ANY, Item.ANY, Item.ANY);
+
+                // no metadata?
+                if (metadataValues == null || metadataValues.isEmpty()) {
+                    errStr = "Does not have any metadata";
+                    status = Curator.CURATE_FAIL;
+                } else {
+                    // perform the validation
+                    try {
+                        validateDcType(item, results);
+                        validateTitle(item, results);
+                        validateDcLanguageIso(item, results);
+                        validateRelation(item, results);
+                        validateEmptyMetadata(item, metadataValues, results);
+                        validateDuplicateMetadata(item, results);
+                        validateStrangeMetadata(item, results);
+                        validateBrandingConsistency(item, results);
+                        validateRightsLabels(item, results);
+                        itemWithFilesHasLicense(item);
+                        validateHighlyRecommendedMetadata(item, results);
+                        validateComplexInputs(item, results);
+
+                        status = Curator.CURATE_SUCCESS;
+                    } catch (CurateException exc) {
+                        errStr = exc.getMessage();
+                        status = exc.errCode;
+                    }
+                }
+            } else {
+                // no handle!
+                errStr = "Does not have a handle";
+                status = Curator.CURATE_FAIL;
+            }
+
+            // format the error if any
+            switch (status) {
+                case Curator.CURATE_SUCCESS:
+                    break;
+                case CURATE_WARNING:
+                    results.append(String.format("Warning: %s %s", errStr, addMagicString(getHandle(item))));
+                    break;
+                default:
+                    results.append(String.format("ERROR! %s %s", errStr, addMagicString(getHandle(item))));
+                    break;
+            }
+        }
+
+        report(results.toString());
+        setResult(results.toString());
+        return status;
+    }
+
+    /**
+     * Add magic string for identification in reports.
+     * @param handle the handle to mark
+     * @return marked string
+     */
+    private static String addMagicString(String handle) {
+        return "[[" + handle + "]]";
+    }
+
+    //
+    // dc type checker
+    //
+
+    private void validateDcType(Item item, StringBuilder results) throws CurateException {
+        List<MetadataValue> dcsType = itemService.getMetadataByMetadataString(item, "dc.type");
+        // no metadata?
+        if (dcsType == null || dcsType.isEmpty()) {
+            throw new CurateException("Does not have dc.type metadata", Curator.CURATE_FAIL);
+        }
+
+        // check array is not null or length > 0
+        for (MetadataValue dcsEntry : dcsType) {
+            String typeVal = dcsEntry.getValue().trim();
+
+            // check if original and trimmed versions match
+            if (!typeVal.equals(dcsEntry.getValue())) {
+                throw new CurateException("leading or trailing spaces", Curator.CURATE_FAIL);
+            }
+
+            // check if the dc.type field is empty
+            if (Pattern.matches("^\\s*$", typeVal)) {
+                throw new CurateException("empty value", Curator.CURATE_FAIL);
+            }
+
+            // check if the value is valid
+            if (!DCTYPE_VALUES_SET.contains(typeVal)) {
+                throw new CurateException("invalid type" + "(" + typeVal + ")", Curator.CURATE_FAIL);
+            }
+        }
+    }
+
+    /**
+     * Checks the language code (dc.language.iso) against the possible language codes.
+     *
+     * @param item    the item
+     * @param results the results
+     * @throws CurateException if validation fails
+     */
+    private void validateDcLanguageIso(Item item, StringBuilder results) throws CurateException {
+        List<MetadataValue> dcsLanguageIso = itemService.getMetadataByMetadataString(item, "dc.language.iso");
+        if (dcsLanguageIso != null) {
+            for (MetadataValue langCodeDC : dcsLanguageIso) {
+                String langCode = langCodeDC.getValue();
+                if (IsoLangCodes.getLangForCode(langCode) == null) {
+                    throw new CurateException(
+                        String.format("Invalid language code - %s", langCode),
+                        Curator.CURATE_FAIL);
+                }
+            }
+        }
+    }
+
+    //
+    // title checker
+    //
+
+    private void validateTitle(Item item, StringBuilder results) throws CurateException {
+        String title = itemService.getMetadataFirstValue(item, "dc", "title", null, Item.ANY);
+        if (itemTitles.containsKey(title)) {
+            String msg = String.format("Title [%s] duplicate in [%s]", title, itemTitles.get(title));
+            throw new CurateException(msg, Curator.CURATE_FAIL);
+        }
+        itemTitles.put(title, getHandle(item));
+    }
+
+    //
+    // relation checker
+    //
+
+    private void validateRelation(Item item, StringBuilder results) throws CurateException {
+        Context context = null;
+        HandleService handleService = HandleServiceFactory.getInstance().getHandleService();
+        String handlePrefixLocal = configurationService.getProperty("handle.canonical.prefix");
+        try {
+            for (String[] twoWayRelation : new String[][]{
+                new String[]{
+                    "dc.relation.isreplacedby",
+                    "dc.relation.replaces"
+                },
+            }) {
+                String lhsRelation = twoWayRelation[0];
+                String rhsRelation = twoWayRelation[1];
+
+                List<MetadataValue> dcsReplaced = itemService.getMetadataByMetadataString(item, lhsRelation);
+                if (dcsReplaced.isEmpty()) {
+                    return;
+                }
+
+                int status = Curator.CURATE_FAIL;
+                context = new Context();
+                for (MetadataValue dc : dcsReplaced) {
+                    String handle = dc.getValue().replaceAll(handlePrefixLocal, "");
+                    DSpaceObject dsoMentioned = handleService.resolveToObject(context, handle);
+                    if (dsoMentioned instanceof Item) {
+                        Item itemMentioned = (Item) dsoMentioned;
+                        List<MetadataValue> dcsMentioned =
+                            itemService.getMetadataByMetadataString(itemMentioned, rhsRelation);
+                        for (MetadataValue dcMentioned : dcsMentioned) {
+                            String handleMentioned = dcMentioned.getValue().replaceAll(handlePrefixLocal, "");
+                            // compare the handles
+                            if (handleMentioned.equals(item.getHandle())) {
+                                status = Curator.CURATE_SUCCESS;
+                                results.append(String.format("Item [%s] meets relation requirements", getHandle(item)));
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // indicate fail
+                if (status != Curator.CURATE_SUCCESS) {
+                    throw new CurateException(
+                        String.format("contains %s but the referenced object " +
+                            "does not contain %s or does not point to the item itself!\n",
+                            lhsRelation, rhsRelation),
+                        status);
+                }
+            }
+
+            if (context != null) {
+                context.complete();
+            }
+
+        } catch (SQLException e) {
+            if (context != null) {
+                context.abort();
+            }
+            throw new CurateException(e.getMessage(), Curator.CURATE_FAIL);
+        }
+    }
+
+    private void validateEmptyMetadata(Item item, List<MetadataValue> metadataValues, StringBuilder results)
+        throws CurateException {
+        for (MetadataValue dc : metadataValues) {
+            if (null == dc.getValue()) {
+                throw new CurateException(
+                    String.format("value [%s.%s.%s] is null", dc.getMetadataField().getMetadataSchema().getName(),
+                        dc.getMetadataField().getElement(), dc.getMetadataField().getQualifier()),
+                    Curator.CURATE_FAIL);
+            }
+            if (0 == dc.getValue().trim().length()) {
+                throw new CurateException(
+                    String.format("value [%s.%s.%s] is empty", dc.getMetadataField().getMetadataSchema().getName(),
+                        dc.getMetadataField().getElement(), dc.getMetadataField().getQualifier()),
+                    Curator.CURATE_FAIL);
+            }
+        }
+    }
+
+    private void validateDuplicateMetadata(Item item, StringBuilder results) throws CurateException {
+        for (String noDuplicate : new String[]{
+            "local.branding",
+            "dc.type",
+            "dc.date.accessioned",
+            "dc.rights.label",
+            "dc.date.available",
+            "dc.source.uri",
+            "metashare.ResourceInfo#DistributionInfo#LicenseInfo.license"
+        }) {
+            List<MetadataValue> vals = itemService.getMetadataByMetadataString(item, noDuplicate);
+            if (null != vals && vals.size() > 1) {
+                throw new CurateException(
+                    String.format("value [%s] is present multiple times", noDuplicate),
+                    Curator.CURATE_FAIL);
+            }
+        }
+    }
+
+    private void validateBrandingConsistency(Item item, StringBuilder results) throws CurateException {
+        try {
+            List<Community> communities = item.getCommunities();
+            if (communities != null && !communities.isEmpty()) {
+                String cName = communities.get(0).getName();
+                List<MetadataValue> brandings = itemService.getMetadata(item, "local", "branding", null, Item.ANY);
+                if (1 != brandings.size()) {
+                    throw new CurateException(
+                        String.format("local.branding present [%d] count", brandings.size()),
+                        Curator.CURATE_FAIL);
+                }
+                if (!cName.equals(brandings.get(0).getValue())) {
+                    throw new CurateException(
+                        String.format("local.branding [%s] does not match community [%s]",
+                            brandings.get(0).getValue(), cName),
+                        Curator.CURATE_FAIL);
+                }
+            }
+        } catch (SQLException e) {
+            throw new CurateException(
+                String.format("has invalid community [%s]", e.getMessage()),
+                Curator.CURATE_FAIL);
+
+        }
+    }
+
+    private void validateRightsLabels(Item item, StringBuilder results) throws CurateException {
+        List<MetadataValue> dcvs = itemService.getMetadata(item, "dc", "rights", "label", Item.ANY);
+        try {
+            if (null != item.getHandle() && !itemService.hasUploadedFiles(item, "ORIGINAL")
+                && dcvs != null && !dcvs.isEmpty()) {
+                StringBuilder labels = new StringBuilder();
+                for (MetadataValue label : dcvs) {
+                    labels.append(label.getValue()).append(" ");
+                }
+                throw new CurateException(
+                    String.format("has labels [%s] but no files", labels.toString()),
+                    Curator.CURATE_FAIL);
+            }
+        } catch (SQLException e) {
+            throw new CurateException(
+                String.format("has internal problems [%s]", e.getMessage()),
+                Curator.CURATE_FAIL);
+        }
+    }
+
+    private void validateHighlyRecommendedMetadata(Item item, StringBuilder results) throws CurateException {
+        for (String md : new String[]{
+            "dc.subject",
+        }) {
+            List<MetadataValue> vals = itemService.getMetadataByMetadataString(item, md);
+            if (null == vals || vals.isEmpty()) {
+                throw new CurateException(
+                    String.format("does not contain any [%s] values", md),
+                    CURATE_WARNING);
+            }
+        }
+    }
+
+    private void validateStrangeMetadata(Item item, StringBuilder results) throws CurateException {
+        for (String md : new String[]{
+            "dc.description.uri",
+        }) {
+            List<MetadataValue> vals = itemService.getMetadataByMetadataString(item, md);
+            if (null != vals && !vals.isEmpty()) {
+                throw new CurateException(
+                    String.format("contains suspicious [%s] metadata", md),
+                    Curator.CURATE_FAIL);
+            }
+        }
+    }
+
+    private void validateComplexInputs(Item item, StringBuilder results) throws CurateException {
+        for (Map.Entry<String, Integer> entry : complexInputs.entrySet()) {
+            for (MetadataValue dval : itemService.getMetadataByMetadataString(item, entry.getKey())) {
+                String val = dval.getValue();
+                if (val.split(DCInput.ComplexDefinition.SEPARATOR, -1).length != entry.getValue()) {
+                    throw new CurateException(
+                        String.format(
+                            "%s is a component with %s values but is not stored as such. [%s]",
+                            entry.getKey(), entry.getValue(), val),
+                        Curator.CURATE_FAIL);
+                }
+            }
+        }
+    }
+
+    private void itemWithFilesHasLicense(Item item) throws CurateException {
+        try {
+            boolean fail = false;
+            StringBuilder sb = new StringBuilder();
+            if (itemService.hasUploadedFiles(item, "ORIGINAL")) {
+                for (String mdString : rightsMdStrings) {
+                    final List<MetadataValue> vals = itemService.getMetadataByMetadataString(item, mdString);
+                    if (vals == null || vals.isEmpty()) {
+                        fail = true;
+                        sb.append(mdString).append(", ");
+                    }
+                }
+            }
+            if (fail) {
+                throw new CurateException("There are bitstreams but incomplete rights metadata. Missing: "
+                    + sb.toString(), Curator.CURATE_FAIL);
+            }
+        } catch (SQLException throwables) {
+            throw new CurateException(throwables.getMessage(), Curator.CURATE_ERROR);
+        }
+    }
+
+    /**
+     * Curate exception.
+     */
+    static class CurateException extends Exception {
+        int errCode;
+
+        public CurateException(String message, int errCode) {
+            super(message);
+            this.errCode = errCode;
+        }
+    }
+}
