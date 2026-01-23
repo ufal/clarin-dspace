@@ -47,10 +47,7 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
     public static final int CURATE_WARNING = -1000;
 
     /** Expected types. */
-    private static final String[] DCTYPE_VALUES = new String[]{
-        "corpus", "lexicalConceptualResource", "languageDescription", "toolService"
-    };
-    private static final Set<String> DCTYPE_VALUES_SET = new HashSet<>(Arrays.asList(DCTYPE_VALUES));
+    private static Set<String> dcTypeValuesSet;
 
     private static final String[] rightsMdStrings = {"dc.rights.uri", "dc.rights.label", "dc.rights"};
 
@@ -66,12 +63,15 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
         itemTitles = new HashMap<>();
         handlePrefix = configurationService.getProperty("handle.canonical.prefix");
 
-        // Override expected types from configuration if available
+        // Initialize expected types from configuration
         String[] configuredTypes = configurationService.getArrayProperty(
             "lr.curation.metadata.expected.types");
         if (configuredTypes != null && configuredTypes.length > 0) {
-            DCTYPE_VALUES_SET.clear();
-            DCTYPE_VALUES_SET.addAll(Arrays.asList(configuredTypes));
+            dcTypeValuesSet = new HashSet<>(Arrays.asList(configuredTypes));
+        } else {
+            // Use defaults if not configured
+            dcTypeValuesSet = new HashSet<>(Arrays.asList(
+                "corpus", "lexicalConceptualResource", "languageDescription", "toolService"));
         }
 
         complexInputs = new HashMap<>();
@@ -209,8 +209,8 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
             }
 
             // check if the value is valid
-            if (!DCTYPE_VALUES_SET.contains(typeVal)) {
-                throw new CurateException("invalid type" + "(" + typeVal + ")", Curator.CURATE_FAIL);
+            if (!dcTypeValuesSet.contains(typeVal)) {
+                throw new CurateException("invalid type (" + typeVal + ")", Curator.CURATE_FAIL);
             }
         }
     }
@@ -318,13 +318,13 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
     private void validateEmptyMetadata(Item item, List<MetadataValue> metadataValues, StringBuilder results)
         throws CurateException {
         for (MetadataValue dc : metadataValues) {
-            if (null == dc.getValue()) {
+            if (dc.getValue() == null) {
                 throw new CurateException(
                     String.format("value [%s.%s.%s] is null", dc.getMetadataField().getMetadataSchema().getName(),
                         dc.getMetadataField().getElement(), dc.getMetadataField().getQualifier()),
                     Curator.CURATE_FAIL);
             }
-            if (0 == dc.getValue().trim().length()) {
+            if (dc.getValue().trim().length() == 0) {
                 throw new CurateException(
                     String.format("value [%s.%s.%s] is empty", dc.getMetadataField().getMetadataSchema().getName(),
                         dc.getMetadataField().getElement(), dc.getMetadataField().getQualifier()),
