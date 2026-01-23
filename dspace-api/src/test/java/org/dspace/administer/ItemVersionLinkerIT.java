@@ -9,6 +9,7 @@ package org.dspace.administer;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.SQLException;
@@ -86,6 +87,7 @@ public class ItemVersionLinkerIT extends AbstractIntegrationTestWithDatabase {
         testDSpaceRunnableHandler.getErrorMessages().clear();
 
         // linking item3 with item2 should fail since item2 is already part of other versioning history
+        // (created before between item1 and item2)
         runScript(getLinkOptions(item3, item2, admin));
         assertEquals(1, testDSpaceRunnableHandler.getErrorMessages().size());
         assertEquals(getLinkErrorMessagePartOfOtherVersionHistory(item2), getErrorMessage());
@@ -113,6 +115,9 @@ public class ItemVersionLinkerIT extends AbstractIntegrationTestWithDatabase {
         // link item2 with item3 should pass
         runScript(getLinkOptions(item2, item3, admin));
         assertLinkMessages(item2, item3, 3);
+
+        Version v3 = versioningService.getVersion(context, item3);
+        assertEquals(v3.getVersionHistory(), versionHistory);
     }
 
     @Test()
@@ -189,7 +194,7 @@ public class ItemVersionLinkerIT extends AbstractIntegrationTestWithDatabase {
 
     @Test()
     public void testUnlinkLastItems() throws Exception {
-        // create version history with item1, item2 and item3
+        // create version history with item1 and item2
         VersionHistory versionHistory = versionHistoryService.create(context);
         createNewVersion(versionHistory, item1, 1);
         createNewVersion(versionHistory, item2, 2);
@@ -208,11 +213,14 @@ public class ItemVersionLinkerIT extends AbstractIntegrationTestWithDatabase {
         // because item1 was the first item in the versioning history
         runScript(getUnlinkOptions(item1, admin));
         assertEquals(getUnlinkErrorMessageNotPartOfVersionHistory(item1), getErrorMessage());
+
+        // check if version history was removed
+        assertNull(versionHistoryService.find(context, versionHistory.getID()));
     }
 
     @Test()
     public void testUnlinkLastItemsWithHandles() throws Exception {
-        // create version history with item1, item2 and item3
+        // create version history with item1 and item2
         VersionHistory versionHistory = versionHistoryService.create(context);
         createNewVersion(versionHistory, item1, 1);
         createNewVersion(versionHistory, item2, 2);
@@ -220,6 +228,9 @@ public class ItemVersionLinkerIT extends AbstractIntegrationTestWithDatabase {
         // unlinking item2 (will unlink both item1 and item2 since item1 was the first version)
         runScript(new String[] { "item-version-linker", "-u", "-i", item2.getHandle(), "-e", admin.getEmail() });
         assertUnlinkMessagesLastItems(item1, item2, item1.getHandle(), item2.getHandle());
+
+        // check if version history was removed
+        assertNull(versionHistoryService.find(context, versionHistory.getID()));
     }
 
     @Test()
@@ -237,7 +248,7 @@ public class ItemVersionLinkerIT extends AbstractIntegrationTestWithDatabase {
         testDSpaceRunnableHandler.getErrorMessages().clear();
     }
 
-    private void assertLinkMessages(Item item1, Item item2, int version) {
+    private void assertLinkMessages(Item item1, Item item2, int version) throws SQLException {
         assertEquals(0, testDSpaceRunnableHandler.getErrorMessages().size());
         List<String> infoMessages = testDSpaceRunnableHandler.getInfoMessages();
         assertEquals(2, infoMessages.size());
@@ -246,6 +257,11 @@ public class ItemVersionLinkerIT extends AbstractIntegrationTestWithDatabase {
                 item1.getID(), item2.getID()), infoMessages.get(0));
         assertEquals(String.format("Item '%s' has become a new version (version %d) of item '%s'.",
                 item2.getID(), version, item1.getID()), infoMessages.get(1));
+
+        Version v1 = versioningService.getVersion(context, item1);
+        Version v2 = versioningService.getVersion(context, item2);
+        assertEquals(v1.getVersionHistory(), v2.getVersionHistory());
+        assertTrue(v1.getVersionNumber() < v2.getVersionNumber());
 
         // check dc.relation metadata added
         List<MetadataValue> isReplacedBy = itemService.getMetadata(item1, "dc", "relation", "isreplacedby", null);

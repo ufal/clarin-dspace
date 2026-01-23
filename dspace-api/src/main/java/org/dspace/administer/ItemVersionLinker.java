@@ -220,9 +220,8 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
         if (previousVersion != null) {
             // create new version of item in existing versioning history
             VersionHistory history = previousVersion.getVersionHistory();
-            int firstVersionNumber = previousVersion.getVersionNumber();
-            newVersionNumber = firstVersionNumber + 1;
-            Version version = versioningService.createNewVersion(context, history, item,
+            newVersionNumber = previousVersion.getVersionNumber() + 1;
+            versioningService.createNewVersion(context, history, item,
                     "Linked as the next version of " + previousItemName, new Date(), newVersionNumber);
         } else {
             // create new versioning history for the items
