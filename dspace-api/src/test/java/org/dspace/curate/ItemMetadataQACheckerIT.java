@@ -12,10 +12,8 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
-import java.sql.SQLException;
 
 import org.dspace.AbstractIntegrationTestWithDatabase;
-import org.dspace.authorize.AuthorizeException;
 import org.dspace.builder.CollectionBuilder;
 import org.dspace.builder.CommunityBuilder;
 import org.dspace.builder.ItemBuilder;
@@ -94,8 +92,8 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
                 .build();
 
             context.restoreAuthSystemState();
-        } catch (AuthorizeException | SQLException ex) {
-            fail("Authorization or SQL Error in init: " + ex.getMessage());
+        } catch (Exception ex) {
+            fail("Error in init: " + ex.getMessage());
         }
     }
 

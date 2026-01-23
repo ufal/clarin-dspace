@@ -22,6 +22,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.dspace.app.util.DCInput;
+import org.dspace.app.util.DCInputSet;
 import org.dspace.app.util.DCInputsReader;
 import org.dspace.app.util.DCInputsReaderException;
 import org.dspace.content.Community;
@@ -80,15 +81,20 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
     private void loadComplexInputs() {
         try {
             DCInputsReader reader = new DCInputsReader();
-            int numPages = reader.getNumberInputPages(null);
-            for (int i = 0; i < numPages; i++) {
-                for (DCInput input : reader.getInputs(null).getPageRows(i, false, true)) {
-                    if ("complex".equals(input.getInputType())) {
-                        String name = StringUtils.isBlank(input.getQualifier())
-                            ? String.format("%s.%s", input.getSchema(), input.getElement())
-                            : String.format("%s.%s.%s", input.getSchema(), input.getElement(),
-                                input.getQualifier());
-                        complexInputs.put(name, input.getComplexDefinition().getInputNames().size());
+            // Get all input sets using the default collection
+            List<DCInputSet> inputSets = reader.getInputsByCollectionHandle(DCInputsReader.DEFAULT_COLLECTION);
+
+            for (DCInputSet inputSet : inputSets) {
+                DCInput[][] fields = inputSet.getFields();
+                for (DCInput[] row : fields) {
+                    for (DCInput input : row) {
+                        if ("complex".equals(input.getInputType())) {
+                            String name = StringUtils.isBlank(input.getQualifier())
+                                ? String.format("%s.%s", input.getSchema(), input.getElement())
+                                : String.format("%s.%s.%s", input.getSchema(), input.getElement(),
+                                    input.getQualifier());
+                            complexInputs.put(name, input.getComplexDefinition().getInputs().size());
+                        }
                     }
                 }
             }
@@ -348,7 +354,8 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
 
     private void validateBrandingConsistency(Item item, StringBuilder results) throws CurateException {
         try {
-            List<Community> communities = item.getCommunities();
+            Context context = Curator.curationContext();
+            List<Community> communities = itemService.getCommunities(context, item);
             if (communities != null && !communities.isEmpty()) {
                 String cName = communities.get(0).getName();
                 List<MetadataValue> brandings = itemService.getMetadata(item, "local", "branding", null, Item.ANY);
@@ -422,7 +429,7 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
         for (Map.Entry<String, Integer> entry : complexInputs.entrySet()) {
             for (MetadataValue dval : itemService.getMetadataByMetadataString(item, entry.getKey())) {
                 String val = dval.getValue();
-                if (val.split(DCInput.ComplexDefinition.SEPARATOR, -1).length != entry.getValue()) {
+                if (val.split(DCInput.ComplexDefinitions.getSeparator(), -1).length != entry.getValue()) {
                     throw new CurateException(
                         String.format(
                             "%s is a component with %s values but is not stored as such. [%s]",
