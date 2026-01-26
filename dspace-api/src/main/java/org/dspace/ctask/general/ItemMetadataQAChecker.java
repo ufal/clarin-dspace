@@ -289,7 +289,6 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
     //
 
     private void validateRelation(Item item, StringBuilder results) throws CurateException {
-        Context context = null;
         HandleService handleService = HandleServiceFactory.getInstance().getHandleService();
         String handlePrefixLocal = configurationService.getProperty("handle.canonical.prefix");
         try {
@@ -308,10 +307,9 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
                 }
 
                 int status = Curator.CURATE_FAIL;
-                context = new Context();
                 for (MetadataValue dc : dcsReplaced) {
                     String handle = dc.getValue().replaceAll(handlePrefixLocal, "");
-                    DSpaceObject dsoMentioned = handleService.resolveToObject(context, handle);
+                    DSpaceObject dsoMentioned = dereference(Curator.curationContext(), handle);
                     if (dsoMentioned instanceof Item) {
                         Item itemMentioned = (Item) dsoMentioned;
                         List<MetadataValue> dcsMentioned =
@@ -338,14 +336,7 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
                 }
             }
 
-            if (context != null) {
-                context.complete();
-            }
-
-        } catch (SQLException e) {
-            if (context != null) {
-                context.abort();
-            }
+        } catch (SQLException | IOException e) {
             throw new CurateException(e.getMessage(), Curator.CURATE_FAIL);
         }
     }
@@ -389,10 +380,9 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
 
     private void validateBrandingConsistency(Item item, StringBuilder results) throws CurateException {
         try {
-            Context context = Curator.curationContext();
             Collection owningCollection = item.getOwningCollection();
             if (owningCollection != null) {
-                List<Community> communities = communityService.getAllParents(context, owningCollection);
+                List<Community> communities = owningCollection.getCommunities();
                 if (communities != null && !communities.isEmpty()) {
                     String cName = communities.get(0).getName();
                     List<MetadataValue> brandings = itemService.getMetadata(item, "local", "branding", null, Item.ANY);
@@ -423,20 +413,14 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
             // Only check if item has files when we have an active session
             // Skip this check if we can't access bundles (lazy loading issue)
             if (null != item.getHandle() && dcvs != null && !dcvs.isEmpty()) {
-                try {
-                    if (!itemService.hasUploadedFiles(item, "ORIGINAL")) {
-                        StringBuilder labels = new StringBuilder();
-                        for (MetadataValue label : dcvs) {
-                            labels.append(label.getValue()).append(" ");
-                        }
-                        throw new CurateException(
-                            String.format("has labels [%s] but no files", labels.toString()),
-                            Curator.CURATE_FAIL);
+                if (!itemService.hasUploadedFiles(item, "ORIGINAL")) {
+                    StringBuilder labels = new StringBuilder();
+                    for (MetadataValue label : dcvs) {
+                        labels.append(label.getValue()).append(" ");
                     }
-                } catch (org.hibernate.LazyInitializationException e) {
-                    // Item is detached from session, skip file check
-                    // This can happen when processing large batches
-                    log.debug("Skipping file check for item {} due to detached session", item.getHandle());
+                    throw new CurateException(
+                        String.format("has labels [%s] but no files", labels.toString()),
+                        Curator.CURATE_FAIL);
                 }
             }
         } catch (SQLException e) {
