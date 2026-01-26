@@ -79,7 +79,7 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
         List<MetadataBitstreamWrapperRest> rs = new ArrayList<>();
         DSpaceObject dso;
 
-        boolean previewGenerated = false;
+        boolean previewContentCreated = false;
 
         try {
             dso = handleService.resolveToObject(context, handle);
@@ -128,7 +128,7 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
                                     for (FileInfo fi : fileInfos) {
                                         previewContentService.createPreviewContent(context, bitstream, fi);
                                     }
-                                    previewGenerated = true;
+                                    previewContentCreated = true;
                                 }
                             }
                         } else {
@@ -150,7 +150,7 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
         }
 
         // commit changes if any preview content was generated
-        if (previewGenerated) {
+        if (previewContentCreated) {
             context.commit();
         }
 
