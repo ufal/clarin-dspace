@@ -55,7 +55,6 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
 
     private Item publicItem;
     private Bitstream bts;
-    private Bitstream tgzFile;
     private String url;
     @Autowired
     ClarinLicenseResourceMappingService licenseService;
