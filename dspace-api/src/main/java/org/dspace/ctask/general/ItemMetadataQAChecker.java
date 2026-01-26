@@ -25,6 +25,7 @@ import org.dspace.app.util.DCInput;
 import org.dspace.app.util.DCInputSet;
 import org.dspace.app.util.DCInputsReader;
 import org.dspace.app.util.DCInputsReaderException;
+import org.dspace.content.Collection;
 import org.dspace.content.Community;
 import org.dspace.content.DSpaceObject;
 import org.dspace.content.Item;
@@ -389,20 +390,23 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
     private void validateBrandingConsistency(Item item, StringBuilder results) throws CurateException {
         try {
             Context context = Curator.curationContext();
-            List<Community> communities = itemService.getCommunities(context, item);
-            if (communities != null && !communities.isEmpty()) {
-                String cName = communities.get(0).getName();
-                List<MetadataValue> brandings = itemService.getMetadata(item, "local", "branding", null, Item.ANY);
-                if (1 != brandings.size()) {
-                    throw new CurateException(
-                        String.format("local.branding present [%d] count", brandings.size()),
-                        Curator.CURATE_FAIL);
-                }
-                if (!cName.equals(brandings.get(0).getValue())) {
-                    throw new CurateException(
-                        String.format("local.branding [%s] does not match community [%s]",
-                            brandings.get(0).getValue(), cName),
-                        Curator.CURATE_FAIL);
+            Collection owningCollection = item.getOwningCollection();
+            if (owningCollection != null) {
+                List<Community> communities = communityService.getAllParents(context, owningCollection);
+                if (communities != null && !communities.isEmpty()) {
+                    String cName = communities.get(0).getName();
+                    List<MetadataValue> brandings = itemService.getMetadata(item, "local", "branding", null, Item.ANY);
+                    if (1 != brandings.size()) {
+                        throw new CurateException(
+                            String.format("local.branding present [%d] count", brandings.size()),
+                            Curator.CURATE_FAIL);
+                    }
+                    if (!cName.equals(brandings.get(0).getValue())) {
+                        throw new CurateException(
+                            String.format("local.branding [%s] does not match community [%s]",
+                                brandings.get(0).getValue(), cName),
+                            Curator.CURATE_FAIL);
+                    }
                 }
             }
         } catch (SQLException e) {
