@@ -145,7 +145,7 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
                 .andExpect(jsonPath("$._embedded.metadatabitstreams[*].href")
                         .value(Matchers.containsInAnyOrder(Matchers.containsString(url))));
 
-        assertTrue("Expects preview content exists.", previewContentService.hasPreview(context, bts));
+        assertTrue("Expects preview content created and stored.", previewContentService.hasPreview(context, bts));
     }
 
     @Test
