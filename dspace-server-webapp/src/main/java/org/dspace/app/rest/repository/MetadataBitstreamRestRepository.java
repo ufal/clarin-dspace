@@ -127,6 +127,7 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
                                     for (FileInfo fi : fileInfos) {
                                         previewContentService.createPreviewContent(context, bitstream, fi);
                                     }
+                                    context.commit();
                                 }
                             }
                         } else {
