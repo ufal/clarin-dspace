@@ -81,8 +81,8 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
     private void loadComplexInputs() {
         try {
             DCInputsReader reader = new DCInputsReader();
-            // Get all input sets using the default collection
-            List<DCInputSet> inputSets = reader.getInputsByCollectionHandle(DCInputsReader.DEFAULT_COLLECTION);
+            // Get all input sets to check complex inputs across all forms
+            List<DCInputSet> inputSets = reader.getAllInputs(Integer.MAX_VALUE, 0);
 
             for (DCInputSet inputSet : inputSets) {
                 DCInput[][] fields = inputSet.getFields();
@@ -221,7 +221,8 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
     }
 
     /**
-     * Checks the language code (dc.language.iso) against the possible language codes.
+     * Checks the language code (dc.language.iso) against the possible language codes
+     * and validates that local.language.name matches the human-readable language names.
      *
      * @param item    the item
      * @param results the results
@@ -229,7 +230,8 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
      */
     private void validateDcLanguageIso(Item item, StringBuilder results) throws CurateException {
         List<MetadataValue> dcsLanguageIso = itemService.getMetadataByMetadataString(item, "dc.language.iso");
-        if (dcsLanguageIso != null) {
+        if (dcsLanguageIso != null && !dcsLanguageIso.isEmpty()) {
+            // Validate dc.language.iso codes
             for (MetadataValue langCodeDC : dcsLanguageIso) {
                 String langCode = langCodeDC.getValue();
                 if (langCode == null) {
@@ -238,6 +240,27 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
                 if (IsoLangCodes.getLangForCode(langCode) == null) {
                     throw new CurateException(
                         String.format("Invalid language code - %s", langCode),
+                        Curator.CURATE_FAIL);
+                }
+            }
+
+            // Validate local.language.name matches dc.language.iso
+            List<MetadataValue> languageNames = itemService.getMetadataByMetadataString(item, "local.language.name");
+            if (languageNames == null || languageNames.size() != dcsLanguageIso.size()) {
+                throw new CurateException(
+                    String.format("local.language.name count [%d] does not match dc.language.iso count [%d]",
+                        languageNames == null ? 0 : languageNames.size(), dcsLanguageIso.size()),
+                    Curator.CURATE_FAIL);
+            }
+
+            // Validate that each language name corresponds to its ISO code
+            for (int i = 0; i < dcsLanguageIso.size(); i++) {
+                String expectedLangName = IsoLangCodes.getLangForCode(dcsLanguageIso.get(i).getValue());
+                String actualLangName = languageNames.get(i).getValue();
+                if (!expectedLangName.equals(actualLangName)) {
+                    throw new CurateException(
+                        String.format("local.language.name [%s] does not match expected name [%s] for ISO code [%s]",
+                            actualLangName, expectedLangName, dcsLanguageIso.get(i).getValue()),
                         Curator.CURATE_FAIL);
                 }
             }

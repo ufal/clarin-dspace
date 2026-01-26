@@ -46,6 +46,7 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
     Item itemWithoutDcType;
     Item itemWithInvalidDcType;
     Item itemWithInvalidLanguage;
+    Item itemWithIncorrectLanguageName;
 
     @Before
     @Override
@@ -69,6 +70,7 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
                 .withTitle("Valid Test Item")
                 .withMetadata("dc", "type", null, "corpus")
                 .withMetadata("dc", "language", "iso", "eng")
+                .withMetadata("local", "language", "name", "English")
                 .withMetadata("dc", "subject", null, "test subject")
                 .withMetadata("local", "branding", null, "Test Community")
                 .build();
@@ -90,6 +92,20 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
                 .withMetadata("dc", "type", null, "corpus")
                 .withMetadata("dc", "language", "iso", "xyz")
                 .build();
+
+            // Create an item with incorrect local.language.name - deliberately set wrong name
+            // Note: We need to create it without triggering automatic language name addition
+            itemWithIncorrectLanguageName = ItemBuilder.createItem(context, collection)
+                .withTitle("Item With Incorrect Language Name")
+                .withMetadata("dc", "type", null, "corpus")
+                .withMetadata("dc", "subject", null, "test subject")
+                .withMetadata("local", "branding", null, "Test Community")
+                .build();
+            // Manually add dc.language.iso and wrong local.language.name after creation
+            itemService.addMetadata(context, itemWithIncorrectLanguageName, "dc", "language", "iso", null, "eng");
+            itemService.addMetadata(context, itemWithIncorrectLanguageName, "local", "language", "name", null,
+                "WrongLanguageName");
+            itemService.update(context, itemWithIncorrectLanguageName);
 
             context.restoreAuthSystemState();
         } catch (Exception ex) {
@@ -149,6 +165,22 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
         assertEquals("Curation should fail for item with invalid language code", Curator.CURATE_FAIL, status);
         String result = curator.getResult(TASK_NAME);
         assertTrue("Result should mention invalid language code", result.contains("Invalid language code"));
+    }
+
+    @Test
+    public void testItemWithIncorrectLanguageName() throws IOException {
+        Curator curator = new Curator();
+        curator.addTask(TASK_NAME);
+        context.setCurrentUser(admin);
+
+        // Run curator task for item with incorrect local.language.name - should fail
+        curator.curate(context, itemWithIncorrectLanguageName.getHandle());
+        int status = curator.getStatus(TASK_NAME);
+        String result = curator.getResult(TASK_NAME);
+        System.out.println("Test result: " + result);
+        assertEquals("Curation should fail for item with incorrect local.language.name", Curator.CURATE_FAIL, status);
+        assertTrue("Result should mention local.language.name mismatch, but was: " + result,
+            result.contains("local.language.name") && result.contains("does not match"));
     }
 
     @After
