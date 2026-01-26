@@ -33,8 +33,6 @@ import org.dspace.content.MetadataValue;
 import org.dspace.curate.AbstractCurationTask;
 import org.dspace.curate.Curator;
 import org.dspace.discovery.IsoLangCodes;
-import org.dspace.handle.factory.HandleServiceFactory;
-import org.dspace.handle.service.HandleService;
 
 /**
  * Check basic properties of item metadata for quality assurance.
@@ -288,7 +286,6 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
     //
 
     private void validateRelation(Item item, StringBuilder results) throws CurateException {
-        HandleService handleService = HandleServiceFactory.getInstance().getHandleService();
         String handlePrefixLocal = configurationService.getProperty("handle.canonical.prefix");
         try {
             for (String[] twoWayRelation : new String[][]{

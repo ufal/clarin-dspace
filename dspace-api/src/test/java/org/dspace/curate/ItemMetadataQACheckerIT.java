@@ -47,6 +47,8 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
     Item itemWithInvalidDcType;
     Item itemWithInvalidLanguage;
     Item itemWithIncorrectLanguageName;
+    Item itemWithTwoAvailableDates;
+    Item itemWithTwoAvailableDatesAndLang;
 
     @Before
     @Override
@@ -107,10 +109,55 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
                 "WrongLanguageName");
             itemService.update(context, itemWithIncorrectLanguageName);
 
+            itemWithTwoAvailableDates = ItemBuilder.createItem(context, collection)
+                .withTitle("Item With Two Available Dates")
+                .withMetadata("dc", "type", null, "corpus")
+                .withMetadata("dc", "date", "available", "2020-01-01")
+                .withMetadata("dc", "date", "available", "2021-01-01")
+                .build();
+
+            itemWithTwoAvailableDatesAndLang = ItemBuilder.createItem(context, collection)
+                    .withTitle("Item With Two Available Dates")
+                    .withMetadata("dc", "type", null, "corpus")
+                    .withMetadata("dc", "date", "available", "2020-01-01")
+                    .build();
+
+            itemService.addMetadata(context, itemWithTwoAvailableDatesAndLang,"dc", "date",
+                    "available", "en_US", "2021-01-01");
+
             context.restoreAuthSystemState();
         } catch (Exception ex) {
             fail("Error in init: " + ex.getMessage());
         }
+    }
+
+    @Test
+    public void testItemWithTwoAvailableDates() throws IOException {
+        Curator curator = new Curator();
+        curator.addTask(TASK_NAME);
+        context.setCurrentUser(admin);
+
+        // Run curator task for item with two dc.date.available - should fail
+        curator.curate(context, itemWithTwoAvailableDates.getHandle());
+        int status = curator.getStatus(TASK_NAME);
+        assertEquals("Curation should fail for item with two dc.date.available", Curator.CURATE_FAIL, status);
+        String result = curator.getResult(TASK_NAME);
+        assertTrue("Result should mention multiple dc.date.available", result.contains("dc.date.available"));
+    }
+
+    @Test
+    public void testItemWithTwoAvailableDatesAndLang() throws IOException {
+        Curator curator = new Curator();
+        curator.addTask(TASK_NAME);
+        context.setCurrentUser(admin);
+
+        // Run curator task for item with two dc.date.available with language - should fail
+        curator.curate(context, itemWithTwoAvailableDatesAndLang.getHandle());
+        int status = curator.getStatus(TASK_NAME);
+        assertEquals("Curation should fail for item with two dc.date.available with language",
+                Curator.CURATE_FAIL, status);
+        String result = curator.getResult(TASK_NAME);
+        assertTrue("Result should mention multiple dc.date.available", result.contains("dc.date.available"));
     }
 
     @Test
