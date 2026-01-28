@@ -89,6 +89,9 @@ public class ClarinVersionedHandleIdentifierProviderIT extends AbstractIntegrati
         // replace "dc.date.available" metadata on itemV1 to some old value
         itemService.clearMetadata(context, itemV1, "dc", "date", "available", Item.ANY);
         itemService.addMetadata(context, itemV1, "dc", "date", "available", null, "2020-01-01");
+        // simulate itemV1 having a DOI identifier assigned
+        itemService.addMetadata(context, itemV1, "dc", "identifier", "doi", null,
+                "https://handle.stage.datacite.org/10.5072/dspace-1");
 
         Item itemV2 = VersionBuilder.createVersion(context, itemV1, "Second version").build().getItem();
 
@@ -97,6 +100,9 @@ public class ClarinVersionedHandleIdentifierProviderIT extends AbstractIntegrati
 
         // check that "dc.identifier.uri", metadata is not copied to itemV2
         assertThat(itemService.getMetadata(itemV2, "dc", "identifier", "uri", Item.ANY).size(), equalTo(0));
+
+        // check that "dc.identifier.doi", metadata is not copied to itemV2
+        assertThat(itemService.getMetadata(itemV2, "dc", "identifier", "doi", Item.ANY).size(), equalTo(0));
 
         // check that "dc.relation.replaces" points to itemV1
         List<MetadataValue> metadataValues = itemService.getMetadata(itemV2, "dc", "relation", "replaces", Item.ANY);
