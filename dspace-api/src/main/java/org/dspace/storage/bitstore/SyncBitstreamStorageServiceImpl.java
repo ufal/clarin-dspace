@@ -186,7 +186,7 @@ public class SyncBitstreamStorageServiceImpl extends BitstreamStorageServiceImpl
     }
 
     @Override
-    public InputStream retrieve(Context context, Bitstream bitstream) throws IOException {
+    public InputStream retrieve(Context context, Bitstream bitstream) throws SQLException, IOException {
         int storeNumber = this.whichStoreNumber(bitstream);
         return this.getStore(storeNumber).get(bitstream);
     }

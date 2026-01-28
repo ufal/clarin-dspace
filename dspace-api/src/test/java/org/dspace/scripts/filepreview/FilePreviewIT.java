@@ -132,13 +132,15 @@ public class FilePreviewIT extends AbstractIntegrationTestWithDatabase {
     @Test
     public void testPreviewWithSyncStorage() throws Exception {
         configurationService.setProperty("sync.storage.service.enabled", true);
-        InputStream tgzFile = getClass().getResourceAsStream("logos.tgz");
 
         context.turnOffAuthorisationSystem();
 
-        WorkspaceItem wItem2 = WorkspaceItemBuilder.createWorkspaceItem(context, collection)
-                .withBitstream("logos.tgz", "/local/path/logos.tgz", tgzFile, SYNC_STORE_NUMBER)
-                .build();
+        WorkspaceItem wItem2;
+        try (InputStream tgzFile = getClass().getResourceAsStream("logos.tgz")) {
+            wItem2 = WorkspaceItemBuilder.createWorkspaceItem(context, collection)
+                    .withBitstream("logos.tgz", "/local/path/logos.tgz", tgzFile, SYNC_STORE_NUMBER)
+                    .build();
+        }
 
         context.restoreAuthSystemState();
 
