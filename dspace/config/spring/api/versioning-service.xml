@@ -23,6 +23,7 @@
                        <value>dc.date.accessioned</value>
                        <value>dc.date.available</value>
                        <value>dc.description.provenance</value>
+                       <value>dc.identifier.doi</value>
                        <value>dc.identifier.uri</value>
                        <value>dc.relation.replaces</value>
                    </set>
