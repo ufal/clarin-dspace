@@ -66,8 +66,7 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
     @SearchRestMethod(name = "byHandle")
     public Page<MetadataBitstreamWrapperRest> findByHandle(@Parameter(value = "handle", required = true) String handle,
                                                            @Parameter(value = "fileGrpType") String fileGrpType,
-                                                           Pageable pageable)
-            throws Exception {
+                                                           Pageable pageable) throws Exception {
         if (StringUtils.isBlank(handle)) {
             throw new DSpaceBadRequestException("handle cannot be null!");
         }
@@ -79,6 +78,8 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
         String contextPath = request.getContextPath();
         List<MetadataBitstreamWrapperRest> rs = new ArrayList<>();
         DSpaceObject dso;
+
+        boolean previewContentCreated = false;
 
         try {
             dso = handleService.resolveToObject(context, handle);
@@ -127,6 +128,7 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
                                     for (FileInfo fi : fileInfos) {
                                         previewContentService.createPreviewContent(context, bitstream, fi);
                                     }
+                                    previewContentCreated = true;
                                 }
                             }
                         } else {
@@ -145,6 +147,11 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
                         bitstream.getDescription(), url, canPreview);
                 rs.add(metadataBitstreamWrapperConverter.convert(bts, utils.obtainProjection()));
             }
+        }
+
+        // commit changes if any preview content was generated
+        if (previewContentCreated) {
+            context.commit();
         }
 
         return new PageImpl<>(rs, pageable, rs.size());
