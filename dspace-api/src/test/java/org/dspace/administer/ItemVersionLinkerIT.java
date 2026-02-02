@@ -86,8 +86,9 @@ public class ItemVersionLinkerIT extends AbstractIntegrationTestWithDatabase {
                 "and its version is not the latest version in that history.", item1.getID()), getErrorMessage());
         testDSpaceRunnableHandler.getErrorMessages().clear();
 
-        // linking item3 with item2 should fail since item2 is already part of other versioning history
-        // (created before between item1 and item2)
+        // there is a limitation that an item that is going to be connected with previous item
+        // cannot be part of any versioning history (we don't support one item being part of two versioning histories)
+        // in this case, item2 is already in version history with item1
         runScript(getLinkOptions(item3, item2, admin));
         assertEquals(1, testDSpaceRunnableHandler.getErrorMessages().size());
         assertEquals(getLinkErrorMessagePartOfOtherVersionHistory(item2), getErrorMessage());
@@ -245,6 +246,33 @@ public class ItemVersionLinkerIT extends AbstractIntegrationTestWithDatabase {
         runScript(getUnlinkOptions(item2, admin));
         assertEquals(1, testDSpaceRunnableHandler.getErrorMessages().size());
         assertEquals(getNoHandleMessage(item2.getID()), getErrorMessage());
+        testDSpaceRunnableHandler.getErrorMessages().clear();
+    }
+
+    @Test()
+    public void testUnlinkSingleItemInHistory() throws Exception {
+        // create version history with one item only
+        VersionHistory versionHistory = versionHistoryService.create(context);
+        createNewVersion(versionHistory, item1, 1);
+
+        // unlinking item1 should remove also the version history since item1 is the only item in that history
+        runScript(getUnlinkOptions(item1, admin));
+        assertEquals(0, testDSpaceRunnableHandler.getErrorMessages().size());
+        List<String> infoMessages = testDSpaceRunnableHandler.getInfoMessages();
+        assertEquals(3, infoMessages.size());
+        assertEquals(getUnlinkStartMessage(item1.getID()), infoMessages.get(0));
+        assertEquals(getUnlinkSuccessMessage(item1.getID()), infoMessages.get(1));
+        assertEquals(String.format("The item '%s' had no previous version in the versioning history, " +
+                "so the full versioning history associated with the item was removed as well.", item1.getID()),
+                infoMessages.get(2));
+        testDSpaceRunnableHandler.getInfoMessages().clear();
+
+        // check if version history was removed
+        assertNull(versionHistoryService.find(context, versionHistory.getID()));
+
+        // unlinking item1 again should fail
+        runScript(getUnlinkOptions(item1, admin));
+        assertEquals(getUnlinkErrorMessageNotPartOfVersionHistory(item1), getErrorMessage());
         testDSpaceRunnableHandler.getErrorMessages().clear();
     }
 

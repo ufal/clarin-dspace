@@ -180,6 +180,7 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
 
         if (itemService.isInProgressSubmission(context, previousItem) ||
                 itemService.isInProgressSubmission(context, item)) {
+            // this script is intended to work only with archived items
             handler.logError("Both items must be archived to create versioning relationship.");
             return;
         }
@@ -195,6 +196,7 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
 
         Version secondVersion = versioningService.getVersion(context, item);
         if (secondVersion != null) {
+            // we don't allow to link item that is already part of some other versioning history
             handler.logError(String.format("The item '%s' is already part of other versioning history.", itemID));
             return;
         }
@@ -301,6 +303,7 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
                         previousItemID, itemID));
             }
         } else {
+            // there is no previous version, so we need to remove the full versioning history as well
             versionHistoryService.delete(context, versionHistory);
             handler.logInfo(String.format("The item '%s' had no previous version in the versioning history, " +
                     "so the full versioning history associated with the item was removed as well.", itemID));
