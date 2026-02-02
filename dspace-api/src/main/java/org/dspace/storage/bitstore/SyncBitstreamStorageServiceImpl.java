@@ -7,6 +7,7 @@
  */
 package org.dspace.storage.bitstore;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.sql.SQLException;
@@ -185,10 +186,15 @@ public class SyncBitstreamStorageServiceImpl extends BitstreamStorageServiceImpl
     }
 
     @Override
-    public InputStream retrieve(Context context, Bitstream bitstream)
-            throws SQLException, IOException {
+    public InputStream retrieve(Context context, Bitstream bitstream) throws SQLException, IOException {
         int storeNumber = this.whichStoreNumber(bitstream);
         return this.getStore(storeNumber).get(bitstream);
+    }
+
+    @Override
+    public File retrieveFile(Context context, Bitstream bitstream) throws IOException {
+        int storeNumber = whichStoreNumber(bitstream);
+        return this.getStore(storeNumber).getFile(bitstream);
     }
 
     @Override

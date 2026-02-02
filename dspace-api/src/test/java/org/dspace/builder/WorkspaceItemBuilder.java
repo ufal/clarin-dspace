@@ -250,6 +250,29 @@ public class WorkspaceItemBuilder extends AbstractBuilder<WorkspaceItem, Workspa
     }
 
     /**
+     * Add bitstream with specific store number.
+     *
+     * @param name          bitstream name
+     * @param source        bitstream test source location
+     * @param is            input stream of the bitstream
+     * @param storeNumber   store number
+     *
+     * @return this WorkspaceItemBuilder
+     */
+    public WorkspaceItemBuilder withBitstream(String name, String source, InputStream is, int storeNumber) {
+        try {
+            Item item = workspaceItem.getItem();
+            Bitstream b = itemService.createSingleBitstream(context, is, item);
+            b.setStoreNumber(storeNumber);
+            b.setName(context, name);
+            b.setSource(context, source);
+        } catch (Exception e) {
+            handleException(e);
+        }
+        return this;
+    }
+
+    /**
      * Create workspaceItem with any metadata
      * @param schema metadataSchema name e.g. `dc`
      * @param element metadataField name e.g. `contributor`
