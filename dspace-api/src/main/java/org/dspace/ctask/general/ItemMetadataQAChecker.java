@@ -33,6 +33,9 @@ import org.dspace.content.MetadataValue;
 import org.dspace.curate.AbstractCurationTask;
 import org.dspace.curate.Curator;
 import org.dspace.discovery.IsoLangCodes;
+import org.dspace.versioning.VersionHistory;
+import org.dspace.versioning.factory.VersionServiceFactory;
+import org.dspace.versioning.service.VersionHistoryService;
 
 /**
  * Check basic properties of item metadata for quality assurance.
@@ -43,6 +46,7 @@ import org.dspace.discovery.IsoLangCodes;
 public class ItemMetadataQAChecker extends AbstractCurationTask {
 
     public static final int CURATE_WARNING = -1000;
+    private static final Logger log = LogManager.getLogger(ItemMetadataQAChecker.class);
 
     /** Expected types. */
     private Set<String> dcTypeValuesSet;
@@ -53,7 +57,7 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
     private String handlePrefix;
     private Map<String, Integer> complexInputs;
 
-    private static final Logger log = LogManager.getLogger(ItemMetadataQAChecker.class);
+    private VersionHistoryService versionHistoryService;
 
     @Override
     public void init(Curator curator, String taskId) throws IOException {
@@ -74,6 +78,8 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
 
         complexInputs = new HashMap<>();
         loadComplexInputs();
+
+        versionHistoryService = VersionServiceFactory.getInstance().getVersionHistoryService();
     }
 
     private void loadComplexInputs() {
@@ -132,7 +138,7 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
                         validateDcType(item, results);
                         validateTitle(item, results);
                         validateDcLanguageIso(item, results);
-                        validateRelation(item, results);
+                        validateRelations(item, results);
                         validateEmptyMetadata(item, metadataValues, results);
                         validateDuplicateMetadata(item, results);
                         validateStrangeMetadata(item, results);
@@ -282,59 +288,116 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
     }
 
     //
-    // relation checker
+    // relation checker (based on assumption items are not part of multiple version histories)
     //
 
-    private void validateRelation(Item item, StringBuilder results) throws CurateException {
+    private void validateRelations(Item item, StringBuilder results) throws CurateException {
         String handlePrefixLocal = configurationService.getProperty("handle.canonical.prefix");
         try {
-            for (String[] twoWayRelation : new String[][]{
-                new String[]{
-                    "dc.relation.isreplacedby",
-                    "dc.relation.replaces"
-                },
-            }) {
-                String lhsRelation = twoWayRelation[0];
-                String rhsRelation = twoWayRelation[1];
+            String lhsRelation = "dc.relation.isreplacedby";
+            String rhsRelation = "dc.relation.replaces";
 
-                List<MetadataValue> dcsReplaced = itemService.getMetadataByMetadataString(item, lhsRelation);
-                if (dcsReplaced.isEmpty()) {
-                    return;
-                }
+            List<MetadataValue> dcsReplacedBy = itemService.getMetadataByMetadataString(item, lhsRelation);
+            List<MetadataValue> dcsReplaces = itemService.getMetadataByMetadataString(item, rhsRelation);
 
-                int status = Curator.CURATE_FAIL;
-                for (MetadataValue dc : dcsReplaced) {
-                    String handle = dc.getValue().replaceAll(handlePrefixLocal, "");
-                    DSpaceObject dsoMentioned = dereference(Curator.curationContext(), handle);
-                    if (dsoMentioned instanceof Item) {
-                        Item itemMentioned = (Item) dsoMentioned;
-                        List<MetadataValue> dcsMentioned =
-                            itemService.getMetadataByMetadataString(itemMentioned, rhsRelation);
-                        for (MetadataValue dcMentioned : dcsMentioned) {
-                            String handleMentioned = dcMentioned.getValue().replaceAll(handlePrefixLocal, "");
-                            // compare the handles
-                            if (handleMentioned.equals(item.getHandle())) {
-                                status = Curator.CURATE_SUCCESS;
-                                results.append(String.format("Item [%s] meets relation requirements", getHandle(item)));
-                                break;
-                            }
-                        }
-                    }
-                }
+            if (dcsReplacedBy.isEmpty() && dcsReplaces.isEmpty()) {
+                // item contains no relation metadata, nothing to check
+                return;
+            }
 
-                // indicate fail
-                if (status != Curator.CURATE_SUCCESS) {
-                    throw new CurateException(
-                        String.format("contains %s but the referenced object " +
-                            "does not contain %s or does not point to the item itself!\n",
-                            lhsRelation, rhsRelation),
-                        status);
+            // check if objects referenced by "dc.relation.isreplacedby" exist and point back to this item
+            // with "dc.relation.replaces" metadata
+            if (!dcsReplacedBy.isEmpty()) {
+                boolean lhsRelationOK =
+                        checkRelations(item, dcsReplacedBy, lhsRelation, rhsRelation, handlePrefixLocal);
+                if (!lhsRelationOK) {
+                    throw relationMetadataException(lhsRelation, rhsRelation);
                 }
             }
+            // check if objects referenced by "dc.relation.replaces" exist, and point forward to this item
+            // with "dc.relation.isreplacedby" metadata
+            if (!dcsReplaces.isEmpty()) {
+                boolean rhsRelationOK =
+                        checkRelations(item, dcsReplaces, rhsRelation, lhsRelation, handlePrefixLocal);
+                if (!rhsRelationOK) {
+                    throw relationMetadataException(rhsRelation, lhsRelation);
+                }
+            }
+
+            // everything is OK
+            results.append(String.format("Item [%s] meets relation requirements. ", getHandle(item)));
 
         } catch (SQLException | IOException e) {
             throw new CurateException(e.getMessage(), Curator.CURATE_FAIL);
         }
+    }
+
+    private boolean checkRelations(Item item,
+                                   List<MetadataValue> leftRelationValues,
+                                   String leftRelation,
+                                   String rightRelation,
+                                   String handlePrefixLocal) throws SQLException, IOException, CurateException {
+        for (MetadataValue lhsValue : leftRelationValues) {
+            boolean found = false;
+            String lhsHandle = lhsValue.getValue().replaceAll(handlePrefixLocal, "");
+            DSpaceObject relatedObject = dereference(Curator.curationContext(), lhsHandle);
+            if (relatedObject instanceof Item) {
+                Item relatedItem = (Item) relatedObject;
+                List<MetadataValue> rhsValues =
+                        itemService.getMetadataByMetadataString(relatedItem, rightRelation);
+                for (MetadataValue dcReplaces : rhsValues) {
+                    String rhsHandle = dcReplaces.getValue().replaceAll(handlePrefixLocal, "");
+                    // compare the handles
+                    if (rhsHandle.equals(item.getHandle()) &&
+                            checkItemsAreInSameVersionHistory(item, relatedItem, leftRelation)) {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            if (!found) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean checkItemsAreInSameVersionHistory(Item item1, Item item2, String relation)
+            throws SQLException, CurateException {
+        VersionHistory item1History = versionHistoryService.findByItem(Curator.curationContext(), item1);
+        if (item1History == null) {
+            throw new CurateException(
+                    String.format("contains '%s' but it's not part of any version history!\n",
+                            relation),
+                    Curator.CURATE_FAIL
+            );
+        }
+        VersionHistory item2History = versionHistoryService.findByItem(Curator.curationContext(), item2);
+        if (item2History == null) {
+            throw new CurateException(
+                    String.format("contains '%s' but the referenced item is not part of any version history!\n",
+                            relation),
+                    Curator.CURATE_FAIL
+            );
+        }
+
+        if (!item1History.equals(item2History)) {
+            throw new CurateException(
+                    String.format("contains '%s' but the referenced item is not in the same version history!\n",
+                            relation),
+                    Curator.CURATE_FAIL
+            );
+        }
+        return true;
+    }
+
+    private static CurateException relationMetadataException(String leftRel, String rightRel) {
+        return new CurateException(
+                String.format("contains '%s' but the referenced object doesn't exist or " +
+                                "doesn't contain '%s' or doesn't point to this item!\n",
+                        leftRel, rightRel),
+                Curator.CURATE_FAIL
+        );
     }
 
     private void validateEmptyMetadata(Item item, List<MetadataValue> metadataValues, StringBuilder results)
