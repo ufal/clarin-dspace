@@ -146,9 +146,6 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
                     .withMetadata("local", "branding", null, "Test Community")
                     .build();
 
-            String ref1 = itemService.getMetadata(itemVersion1,
-                    "dc", "identifier", "uri", null).get(0).getValue();
-
             itemVersion2 = ItemBuilder.createItem(context, collection)
                     .withTitle("Item Version 2")
                     .withMetadata("dc", "type", null, "corpus")
@@ -156,32 +153,12 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
                     .withMetadata("local", "branding", null, "Test Community")
                     .build();
 
-            String ref2 = itemService.getMetadata(itemVersion2,
-                    "dc", "identifier", "uri", null).get(0).getValue();
-
-            itemService.addMetadata(context, itemVersion1,"dc", "relation",
-                    "isreplacedby", null, ref2);
-
-            itemService.addMetadata(context, itemVersion2,"dc", "relation",
-                    "replaces", null, ref1);
-
-            VersionHistory versionHistory = versionHistoryService.create(context);
-
-            versioningService.createNewVersion(context, versionHistory, itemVersion1,
-                    "Version 1", new Date(), 1);
-            versioningService.createNewVersion(context, versionHistory, itemVersion2,
-                    "Version 2", new Date(), 2);
-
             itemVersion3 = ItemBuilder.createItem(context, collection)
                     .withTitle("Item Version 3")
                     .withMetadata("dc", "type", null, "corpus")
                     .withMetadata("dc", "subject", null, "test subject")
-                    .withMetadata("dc", "relation", "replaces", ref2)
                     .withMetadata("local", "branding", null, "Test Community")
                     .build();
-
-            versioningService.createNewVersion(context, versionHistory, itemVersion3,
-                    "Version 3", new Date(), 3);
 
             itemVersion4 = ItemBuilder.createItem(context, collection)
                     .withTitle("Item Version 4")
@@ -189,6 +166,18 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
                     .withMetadata("dc", "subject", null, "test subject")
                     .withMetadata("local", "branding", null, "Test Community")
                     .build();
+
+            String ref1 = itemService.getMetadata(itemVersion1, "dc", "identifier", "uri", null).get(0).getValue();
+            String ref2 = itemService.getMetadata(itemVersion2, "dc", "identifier", "uri", null).get(0).getValue();
+
+            itemService.addMetadata(context, itemVersion1, "dc", "relation", "isreplacedby", null, ref2);
+            itemService.addMetadata(context, itemVersion2, "dc", "relation", "replaces", null, ref1);
+            itemService.addMetadata(context, itemVersion3, "dc", "relation", "replaces", null, ref2);
+
+            VersionHistory versionHistory = versionHistoryService.create(context);
+            versioningService.createNewVersion(context, versionHistory, itemVersion1, "Version 1", new Date(), 1);
+            versioningService.createNewVersion(context, versionHistory, itemVersion2, "Version 2", new Date(), 2);
+            versioningService.createNewVersion(context, versionHistory, itemVersion3, "Version 3", new Date(), 3);
 
             context.restoreAuthSystemState();
         } catch (Exception ex) {
@@ -297,140 +286,107 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
 
     @Test
     public void testItemVersion1() throws IOException {
-        testItemWithCorrectRelationship(itemVersion1);
+        testItemWithCorrectRelationship(itemVersion1, "meets relation requirements");
     }
 
     @Test
     public void testItemVersion2() throws IOException {
-        testItemWithCorrectRelationship(itemVersion2);
+        testItemWithCorrectRelationship(itemVersion2, "meets relation requirements");
     }
 
     @Test
-    public void testItemWithIncorrectMetadata() throws IOException {
+    public void testItemWithBadRelationship1() throws IOException, SQLException {
+        // itemVersion2 has 'dc.relation.isreplacedby that points to itemVersion4
+        // but itemVersion4 doesn't contain 'dc.relation.replaces' metadata
+        String ref4 = itemService.getMetadata(itemVersion4, "dc", "identifier", "uri", null).get(0).getValue();
+
+        itemService.addMetadata(context, itemVersion2, "dc", "relation", "isreplacedby", null, ref4);
+
+        testItemWithRelationError(
+                itemVersion2,
+                "contains '%s' but the referenced object doesn't exist or doesn't contain '%s'",
+                "dc.relation.isreplacedby",
+                "dc.relation.replaces");
+    }
+
+    @Test
+    public void testItemWithBadRelationship2() throws IOException {
         // itemVersion3 has 'dc.relation.replaces' that points back to itemVersion2
         // but itemVersion2 doesn't have 'dc.relation.isreplacedby' that points forward to itemVersion3
-        testItemWithIncorrectRelationship(itemVersion3,
-                "dc.relation.replaces", "dc.relation.isreplacedby");
-    }
-
-    @Test
-    public void testItemWithMissingVersionHistory() throws SQLException, IOException {
-        String ref2 = itemService.getMetadata(itemVersion2,
-                "dc", "identifier", "uri", null).get(0).getValue();
-
-        String ref4 = itemService.getMetadata(itemVersion4,
-                "dc", "identifier", "uri", null).get(0).getValue();
-
-        itemService.addMetadata(context, itemVersion2,"dc", "relation",
-                "isreplacedby", null, ref4);
-
-        itemService.addMetadata(context, itemVersion4,"dc", "relation",
-                "replaces", null, ref2);
-
-        testItemWithMissingVersionHistory(itemVersion4, "dc.relation.replaces");
-    }
-
-    @Test
-    public void testItemWithMissingVersionHistoryForReferencedItem() throws SQLException, IOException {
-        String ref2 = itemService.getMetadata(itemVersion2,
-                "dc", "identifier", "uri", null).get(0).getValue();
-
-        String ref4 = itemService.getMetadata(itemVersion4,
-                "dc", "identifier", "uri", null).get(0).getValue();
-
-        itemService.addMetadata(context, itemVersion2, "dc", "relation",
-                "isreplacedby", null, ref4);
-
-        itemService.addMetadata(context, itemVersion4, "dc", "relation",
-                "replaces", null, ref2);
-
-        testItemWithMissingVersionHistoryForReferencedItem(itemVersion2,
+        testItemWithRelationError(
+                itemVersion3,
+                "contains '%s' but the referenced object doesn't exist or doesn't contain '%s'",
+                "dc.relation.replaces",
                 "dc.relation.isreplacedby");
     }
 
     @Test
-    public void testItemWithAnotherVersionHistory() throws SQLException, IOException, AuthorizeException {
-        String ref2 = itemService.getMetadata(itemVersion2,
-                "dc", "identifier", "uri", null).get(0).getValue();
+    public void testItemWithMissingVersionHistory() throws SQLException, IOException {
+        String ref2 = itemService.getMetadata(itemVersion2, "dc", "identifier", "uri", null).get(0).getValue();
+        String ref4 = itemService.getMetadata(itemVersion4, "dc", "identifier", "uri", null).get(0).getValue();
 
-        String ref4 = itemService.getMetadata(itemVersion4,
-                "dc", "identifier", "uri", null).get(0).getValue();
+        itemService.addMetadata(context, itemVersion2, "dc", "relation", "isreplacedby", null, ref4);
+        itemService.addMetadata(context, itemVersion4, "dc", "relation", "replaces", null, ref2);
 
-        itemService.addMetadata(context, itemVersion2,"dc", "relation",
-                "isreplacedby", null, ref4);
+        testItemWithRelationError(itemVersion4,
+                "contains '%s' but it's not part of any version history", "dc.relation.replaces");
+    }
 
-        itemService.addMetadata(context, itemVersion4,"dc", "relation",
-                "replaces", null, ref2);
+    @Test
+    public void testItemWithMissingVersionHistoryForReferencedItem() throws SQLException, IOException {
+        String ref2 = itemService.getMetadata(itemVersion2, "dc", "identifier", "uri", null).get(0).getValue();
+        String ref4 = itemService.getMetadata(itemVersion4, "dc", "identifier", "uri", null).get(0).getValue();
+
+        itemService.addMetadata(context, itemVersion2, "dc", "relation", "isreplacedby", null, ref4);
+        itemService.addMetadata(context, itemVersion4, "dc", "relation", "replaces", null, ref2);
+
+        testItemWithRelationError(itemVersion2,
+                "contains '%s' but the referenced item is not part of any version history", "dc.relation.isreplacedby");
+    }
+
+    @Test
+    public void testItemWithNotMatchingVersionHistory() throws SQLException, IOException, AuthorizeException {
+        String ref2 = itemService.getMetadata(itemVersion2, "dc", "identifier", "uri", null).get(0).getValue();
+        String ref4 = itemService.getMetadata(itemVersion4, "dc", "identifier", "uri", null).get(0).getValue();
+
+        itemService.addMetadata(context, itemVersion2,"dc", "relation", "isreplacedby", null, ref4);
+        itemService.addMetadata(context, itemVersion4,"dc", "relation", "replaces", null, ref2);
 
         VersionHistory versionHistory = versionHistoryService.create(context);
         versioningService.createNewVersion(context, versionHistory, itemVersion4,
                 "Another Version History - Version 1", new Date(), 1);
 
-        testItemWithAnotherVersionHistory(itemVersion4, "dc.relation.replaces");
+        testItemWithRelationError(itemVersion4,
+                "contains '%s' but the referenced item is not in the same version history", "dc.relation.replaces");
     }
 
-    private void testItemWithCorrectRelationship(Item item) throws IOException {
+    @Test
+    public void testItemWithNoRelationMetadata() throws SQLException, IOException {
+        testItemWithCorrectRelationship(itemVersion4, null);
+    }
+
+    private void testItemWithCorrectRelationship(Item item, String successMessage) throws IOException {
         Curator curator = runCuratorForItem(item);
 
         int status = curator.getStatus(TASK_NAME);
         String result = curator.getResult(TASK_NAME);
-        System.out.println("Test result: " + result);
         assertEquals("Curation should succeed for valid item with relation", Curator.CURATE_SUCCESS, status);
-        assertTrue("Result must contain success message, but was " + result,
-                result.contains("meets relation requirements") && result.contains(item.getHandle())
-        );
+        if (successMessage == null) {
+            assertTrue("Result must be empty, but was " + result, result.isEmpty());
+        } else {
+            assertTrue("Result must contain success message, but was " + result,
+                    result.contains("meets relation requirements") && result.contains(item.getHandle()));
+        }
     }
 
-    private void testItemWithIncorrectRelationship(Item item, String relation1, String relation2) throws IOException {
+    private void testItemWithRelationError(Item item, String errorMessage, Object... args) throws IOException {
         Curator curator = runCuratorForItem(item);
 
         int status = curator.getStatus(TASK_NAME);
         String result = curator.getResult(TASK_NAME);
-        System.out.println("Test result: " + result);
         assertEquals("Curation should fail for incorrect relationship", Curator.CURATE_FAIL, status);
         assertTrue("Result must contain fail message " + result,
-                result.contains(String.format("contains '%s'", relation1)) &&
-                        result.contains(String.format("doesn't contain '%s'", relation2))
-        );
-    }
-
-    private void testItemWithMissingVersionHistory(Item item, String relation) throws IOException {
-        Curator curator = runCuratorForItem(item);
-
-        int status = curator.getStatus(TASK_NAME);
-        String result = curator.getResult(TASK_NAME);
-        System.out.println("Test result: " + result);
-        assertEquals("Curation should fail for incorrect relationship", Curator.CURATE_FAIL, status);
-        assertTrue("Result must contain fail message " + result,
-                result.contains(String.format("contains '%s' but it's not part of any version history", relation))
-        );
-    }
-
-    private void testItemWithAnotherVersionHistory(Item item, String relation) throws IOException {
-        Curator curator = runCuratorForItem(item);
-
-        int status = curator.getStatus(TASK_NAME);
-        String result = curator.getResult(TASK_NAME);
-        System.out.println("Test result: " + result);
-        assertEquals("Curation should fail for incorrect relationship", Curator.CURATE_FAIL, status);
-        assertTrue("Result must contain fail message " + result,
-                result.contains(
-                        String.format("contains '%s' but the referenced item is not in the same version history",
-                                relation))
-        );
-    }
-
-    private void testItemWithMissingVersionHistoryForReferencedItem(Item item, String relation) throws IOException {
-        Curator curator = runCuratorForItem(item);
-
-        int status = curator.getStatus(TASK_NAME);
-        String result = curator.getResult(TASK_NAME);
-        System.out.println("Test result: " + result);
-        assertEquals("Curation should fail for incorrect relationship", Curator.CURATE_FAIL, status);
-        assertTrue("Result must contain fail message " + result,
-                result.contains(
-                        String.format("contains '%s' but the referenced item is not part of any version history",
-                                relation))
+                result.contains(String.format(errorMessage, args))
         );
     }
 
