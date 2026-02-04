@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -297,8 +298,8 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
             String mdIsReplacedBy = "dc.relation.isreplacedby";
             String mdReplaces = "dc.relation.replaces";
 
-            List<MetadataValue> dcsIsReplacedBy = itemService.getMetadataByMetadataString(item, mdIsReplacedBy);
-            List<MetadataValue> dcsReplaces = itemService.getMetadataByMetadataString(item, mdReplaces);
+            List<MetadataValue> dcsIsReplacedBy = getNonBlankMetadata(item, mdIsReplacedBy);
+            List<MetadataValue> dcsReplaces = getNonBlankMetadata(item, mdReplaces);
 
             if (dcsIsReplacedBy.isEmpty() && dcsReplaces.isEmpty()) {
                 // item contains no relation metadata, nothing to check
@@ -331,6 +332,13 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
         }
     }
 
+    private List<MetadataValue> getNonBlankMetadata(Item item, String metadataString) {
+        return itemService.getMetadataByMetadataString(item, metadataString)
+                .stream()
+                .filter(metadataValue -> !StringUtils.isBlank(metadataValue.getValue()))
+                .collect(Collectors.toList());
+    }
+
     private boolean checkRelations(Item item,
                                    List<MetadataValue> lhsReferences,
                                    String lhsRelation,
@@ -338,16 +346,16 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
                                    String handlePrefixLocal) throws SQLException, IOException, CurateException {
         for (MetadataValue lhsReference : lhsReferences) {
             boolean found = false;
-            String referencedItemHandle = lhsReference.getValue().replaceAll(handlePrefixLocal, "");
+            String referencedItemHandle =  getHandle(lhsReference, handlePrefixLocal);
             DSpaceObject referencedObject = dereference(Curator.curationContext(), referencedItemHandle);
             if (referencedObject instanceof Item) {
                 Item referencedItem = (Item) referencedObject;
                 List<MetadataValue> rhsReferences =
                         itemService.getMetadataByMetadataString(referencedItem, rhsRelation);
                 for (MetadataValue rhsReference : rhsReferences) {
-                    String backReferencedItemHandle = rhsReference.getValue().replaceAll(handlePrefixLocal, "");
+                    String backReferencedItemHandle = getHandle(rhsReference, handlePrefixLocal);
                     // compare the handles and, if they match, verify whether items are in the same version history
-                    if (backReferencedItemHandle.equals(item.getHandle()) &&
+                    if (backReferencedItemHandle != null && backReferencedItemHandle.equals(item.getHandle()) &&
                             checkVersionHistory(item, referencedItem, lhsRelation)) {
                         found = true;
                         break;
@@ -361,18 +369,26 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
         return true;
     }
 
+    private String getHandle(MetadataValue relationReference, String handlePrefixLocal) {
+        String handle = relationReference.getValue();
+        if (StringUtils.isNotBlank(handlePrefixLocal) && handle != null && handle.startsWith(handlePrefixLocal)) {
+            handle = handle.substring(handlePrefixLocal.length());
+        }
+        return handle;
+    }
+
     private boolean checkVersionHistory(Item item1, Item item2, String relation) throws SQLException, CurateException {
         VersionHistory item1History = versionHistoryService.findByItem(Curator.curationContext(), item1);
         if (item1History == null) {
             throw new CurateException(
-                    String.format("contains '%s' but it's not part of any version history!\n", relation),
+                    String.format("contains '%s' but it's not part of any version history", relation),
                     Curator.CURATE_FAIL
             );
         }
         VersionHistory item2History = versionHistoryService.findByItem(Curator.curationContext(), item2);
         if (item2History == null) {
             throw new CurateException(
-                    String.format("contains '%s' but the referenced item is not part of any version history!\n",
+                    String.format("contains '%s' but the referenced item is not part of any version history",
                             relation),
                     Curator.CURATE_FAIL
             );
@@ -380,7 +396,7 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
 
         if (!item1History.equals(item2History)) {
             throw new CurateException(
-                    String.format("contains '%s' but the referenced item is not in the same version history!\n",
+                    String.format("contains '%s' but the referenced item is not in the same version history",
                             relation),
                     Curator.CURATE_FAIL
             );
@@ -391,7 +407,7 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
     private static CurateException relationMetadataException(String leftRel, String rightRel) {
         return new CurateException(
                 String.format("contains '%s' but the referenced object doesn't exist or " +
-                                "doesn't contain '%s' or doesn't point to this item!\n",
+                                "doesn't contain '%s' or doesn't point to this item",
                         leftRel, rightRel),
                 Curator.CURATE_FAIL
         );

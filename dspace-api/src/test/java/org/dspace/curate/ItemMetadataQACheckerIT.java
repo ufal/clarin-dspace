@@ -167,12 +167,15 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
                     .withMetadata("local", "branding", null, "Test Community")
                     .build();
 
-            String ref1 = itemService.getMetadata(itemVersion1, "dc", "identifier", "uri", null).get(0).getValue();
-            String ref2 = itemService.getMetadata(itemVersion2, "dc", "identifier", "uri", null).get(0).getValue();
+            String ref1 = itemService.getMetadataFirstValue(itemVersion1, "dc", "identifier", "uri", Item.ANY);
+            String ref2 = itemService.getMetadataFirstValue(itemVersion2, "dc", "identifier", "uri", Item.ANY);
 
             itemService.addMetadata(context, itemVersion1, "dc", "relation", "isreplacedby", null, ref2);
             itemService.addMetadata(context, itemVersion2, "dc", "relation", "replaces", null, ref1);
             itemService.addMetadata(context, itemVersion3, "dc", "relation", "replaces", null, ref2);
+            itemService.update(context, itemVersion1);
+            itemService.update(context, itemVersion2);
+            itemService.update(context, itemVersion3);
 
             VersionHistory versionHistory = versionHistoryService.create(context);
             versioningService.createNewVersion(context, versionHistory, itemVersion1, "Version 1", new Date(), 1);
@@ -295,12 +298,15 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
     }
 
     @Test
-    public void testItemWithBadRelationship1() throws IOException, SQLException {
+    public void testItemWithBadRelationship1() throws IOException, SQLException, AuthorizeException {
         // itemVersion2 has 'dc.relation.isreplacedby that points to itemVersion4
         // but itemVersion4 doesn't contain 'dc.relation.replaces' metadata
-        String ref4 = itemService.getMetadata(itemVersion4, "dc", "identifier", "uri", null).get(0).getValue();
+        String ref4 = itemService.getMetadataFirstValue(itemVersion4, "dc", "identifier", "uri", Item.ANY);
 
+        context.turnOffAuthorisationSystem();
         itemService.addMetadata(context, itemVersion2, "dc", "relation", "isreplacedby", null, ref4);
+        itemService.update(context, itemVersion2);
+        context.restoreAuthSystemState();
 
         testItemWithRelationError(
                 itemVersion2,
@@ -321,24 +327,33 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
     }
 
     @Test
-    public void testItemWithMissingVersionHistory() throws SQLException, IOException {
-        String ref2 = itemService.getMetadata(itemVersion2, "dc", "identifier", "uri", null).get(0).getValue();
-        String ref4 = itemService.getMetadata(itemVersion4, "dc", "identifier", "uri", null).get(0).getValue();
+    public void testItemWithMissingVersionHistory() throws SQLException, IOException, AuthorizeException {
+        String ref2 = itemService.getMetadataFirstValue(itemVersion2, "dc", "identifier", "uri", Item.ANY);
+        String ref4 = itemService.getMetadataFirstValue(itemVersion4, "dc", "identifier", "uri", Item.ANY);
 
+        context.turnOffAuthorisationSystem();
         itemService.addMetadata(context, itemVersion2, "dc", "relation", "isreplacedby", null, ref4);
         itemService.addMetadata(context, itemVersion4, "dc", "relation", "replaces", null, ref2);
+        itemService.update(context, itemVersion2);
+        itemService.update(context, itemVersion4);
+        context.restoreAuthSystemState();
 
         testItemWithRelationError(itemVersion4,
                 "contains '%s' but it's not part of any version history", "dc.relation.replaces");
     }
 
     @Test
-    public void testItemWithMissingVersionHistoryForReferencedItem() throws SQLException, IOException {
-        String ref2 = itemService.getMetadata(itemVersion2, "dc", "identifier", "uri", null).get(0).getValue();
-        String ref4 = itemService.getMetadata(itemVersion4, "dc", "identifier", "uri", null).get(0).getValue();
+    public void testItemWithMissingVersionHistoryForReferencedItem()
+            throws SQLException, IOException, AuthorizeException {
+        String ref2 = itemService.getMetadataFirstValue(itemVersion2, "dc", "identifier", "uri", Item.ANY);
+        String ref4 = itemService.getMetadataFirstValue(itemVersion4, "dc", "identifier", "uri", Item.ANY);
 
+        context.turnOffAuthorisationSystem();
         itemService.addMetadata(context, itemVersion2, "dc", "relation", "isreplacedby", null, ref4);
         itemService.addMetadata(context, itemVersion4, "dc", "relation", "replaces", null, ref2);
+        itemService.update(context, itemVersion2);
+        itemService.update(context, itemVersion4);
+        context.restoreAuthSystemState();
 
         testItemWithRelationError(itemVersion2,
                 "contains '%s' but the referenced item is not part of any version history", "dc.relation.isreplacedby");
@@ -346,11 +361,15 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
 
     @Test
     public void testItemWithNotMatchingVersionHistory() throws SQLException, IOException, AuthorizeException {
-        String ref2 = itemService.getMetadata(itemVersion2, "dc", "identifier", "uri", null).get(0).getValue();
-        String ref4 = itemService.getMetadata(itemVersion4, "dc", "identifier", "uri", null).get(0).getValue();
+        String ref2 = itemService.getMetadataFirstValue(itemVersion2, "dc", "identifier", "uri", Item.ANY);
+        String ref4 = itemService.getMetadataFirstValue(itemVersion4, "dc", "identifier", "uri", Item.ANY);
 
+        context.turnOffAuthorisationSystem();
         itemService.addMetadata(context, itemVersion2,"dc", "relation", "isreplacedby", null, ref4);
         itemService.addMetadata(context, itemVersion4,"dc", "relation", "replaces", null, ref2);
+        itemService.update(context, itemVersion2);
+        itemService.update(context, itemVersion4);
+        context.restoreAuthSystemState();
 
         VersionHistory versionHistory = versionHistoryService.create(context);
         versioningService.createNewVersion(context, versionHistory, itemVersion4,
@@ -375,7 +394,7 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
             assertTrue("Result must be empty, but was " + result, result.isEmpty());
         } else {
             assertTrue("Result must contain success message, but was " + result,
-                    result.contains("meets relation requirements") && result.contains(item.getHandle()));
+                    result.contains(successMessage) && result.contains(item.getHandle()));
         }
     }
 
