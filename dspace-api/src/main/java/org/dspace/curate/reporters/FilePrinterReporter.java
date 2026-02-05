@@ -57,7 +57,7 @@ public class FilePrinterReporter implements Reporter {
     }
 
     @Override
-    public void close() throws Exception {
+    public void close() {
         // flush and close the writer to ensure all data is written to the file
         writer.flush();
         writer.close();
