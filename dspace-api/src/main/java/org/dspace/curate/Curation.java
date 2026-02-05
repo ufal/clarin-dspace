@@ -167,16 +167,19 @@ public class Curation extends DSpaceRunnable<CurationScriptConfiguration> {
      * @throws SQLException If DSpace contextx can't complete
      */
     private void endScript(long timeRun) throws SQLException {
-        context.complete();
-        if (verbose) {
-            long elapsed = System.currentTimeMillis() - timeRun;
-            this.handler.logInfo("Ending curation. Elapsed time: " + elapsed);
-        }
-        if (outputReporter != null) {
-            try {
-                outputReporter.close();
-            } catch (Exception e) {
-                throw new RuntimeException(e);
+        try {
+            context.complete();
+            if (verbose) {
+                long elapsed = System.currentTimeMillis() - timeRun;
+                this.handler.logInfo("Ending curation. Elapsed time: " + elapsed);
+            }
+        } finally {
+            if (outputReporter != null) {
+                try {
+                    outputReporter.close();
+                } catch (Exception e) {
+                    handler.handleException("Something went wrong trying to close the reporter", e);
+                }
             }
         }
     }

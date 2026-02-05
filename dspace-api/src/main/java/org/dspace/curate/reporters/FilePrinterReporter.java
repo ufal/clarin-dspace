@@ -9,7 +9,9 @@ package org.dspace.curate.reporters;
 
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
 
 import org.apache.commons.lang3.StringUtils;
 import org.dspace.curate.Reporter;
@@ -24,45 +26,40 @@ public class FilePrinterReporter implements Reporter {
 
     public FilePrinterReporter(String fileName) throws FileNotFoundException {
         File file = new File(fileName);
-        writer = new PrintWriter(file);
+        try {
+            writer = new PrintWriter(file, StandardCharsets.UTF_8);
+        } catch (FileNotFoundException e) {
+            throw e;
+        } catch (IOException e) {
+            throw new RuntimeException("Error initializing FilePrinterReporter for file: " + fileName, e);
+        }
     }
 
     @Override
     public Appendable append(CharSequence csq) {
-        try {
-            if (csq == null || StringUtils.isBlank(csq.toString()) || csq.toString().endsWith(System.lineSeparator())) {
-                writer.print(csq);
-            } else {
-                writer.println(csq);
-            }
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+        writer.print(csq);
+        if (!StringUtils.isBlank(csq) && !csq.toString().endsWith(System.lineSeparator())) {
+            writer.println();
         }
         return this;
     }
 
     @Override
     public Appendable append(CharSequence csq, int start, int end) {
-        try {
-            writer.append(csq, start, end);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        writer.append(csq, start, end);
         return this;
     }
 
     @Override
     public Appendable append(char c) {
-        try {
-            writer.append(c);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        writer.append(c);
         return this;
     }
 
     @Override
     public void close() throws Exception {
+        // flush and close the writer to ensure all data is written to the file
+        writer.flush();
         writer.close();
     }
 }

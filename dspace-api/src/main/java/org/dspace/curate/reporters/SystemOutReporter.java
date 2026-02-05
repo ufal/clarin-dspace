@@ -7,15 +7,19 @@
  */
 package org.dspace.curate.reporters;
 
-import java.io.IOException;
 import java.io.PrintWriter;
 
 import org.apache.commons.lang3.StringUtils;
 import org.dspace.curate.Reporter;
 
+/**
+ * Reporter that writes to console (System.out).
+ *
+ * @author Milan Kuchtiak
+ */
 public class SystemOutReporter implements Reporter {
 
-    PrintWriter writer;
+    private final PrintWriter writer;
 
     public SystemOutReporter() {
         // we use PrintWriter to avoid auto-flush after every println,
@@ -23,35 +27,29 @@ public class SystemOutReporter implements Reporter {
         writer = new PrintWriter(System.out, false);
     }
 
-    /**
-     * Reporter that writes to console (System.out).
-     *
-     * @author Milan Kuchtiak
-     */
     @Override
-    public Appendable append(CharSequence csq) throws IOException {
-        if (csq == null || StringUtils.isBlank(csq.toString()) || csq.toString().endsWith(System.lineSeparator())) {
-            writer.print(csq);
-        } else {
-            writer.println(csq);
+    public Appendable append(CharSequence csq) {
+        writer.print(csq);
+        if (!StringUtils.isBlank(csq) && !csq.toString().endsWith(System.lineSeparator())) {
+            writer.println();
         }
         return this;
     }
 
     @Override
-    public Appendable append(CharSequence csq, int start, int end) throws IOException {
+    public Appendable append(CharSequence csq, int start, int end) {
         writer.append(csq, start, end);
         return this;
     }
 
     @Override
-    public Appendable append(char c) throws IOException {
+    public Appendable append(char c) {
         writer.append(c);
         return this;
     }
 
     @Override
-    public void close() throws Exception {
+    public void close() {
         writer.flush();
     }
 }
