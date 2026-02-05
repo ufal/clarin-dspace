@@ -14,7 +14,7 @@ import static org.mockito.Mockito.when;
 import java.io.File;
 import java.nio.file.Files;
 
-import org.dspace.AbstractUnitTest;
+import org.dspace.AbstractDSpaceTest;
 import org.dspace.content.Item;
 import org.dspace.core.factory.CoreServiceFactory;
 import org.dspace.ctask.general.NoOpCurationTask;
@@ -22,10 +22,7 @@ import org.dspace.curate.reporters.DoNothingReporter;
 import org.dspace.curate.reporters.FilePrinterReporter;
 import org.dspace.curate.reporters.SystemOutReporter;
 import org.dspace.services.ConfigurationService;
-import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 /**
@@ -33,7 +30,7 @@ import org.junit.Test;
  *
  * @author Milan Kuchtiak
  */
-public class CuratorReporterTest extends AbstractUnitTest {
+public class CuratorReporterTest extends AbstractDSpaceTest {
     private static final String TASK_NAME = "noop";
     private static final String TEST_HANDLE = "testHandle";
     private static final String NO_OP = "No operation performed on " + TEST_HANDLE;
@@ -41,7 +38,7 @@ public class CuratorReporterTest extends AbstractUnitTest {
     private Curator curator;
 
     @Before
-    public void setUp() throws Exception {
+    public void setup() {
         CoreServiceFactory.getInstance().getPluginService().clearNamedPluginClasses();
 
         // Configure the noop task to be run.
@@ -51,18 +48,6 @@ public class CuratorReporterTest extends AbstractUnitTest {
 
         // Get and configure a Curator.
         curator = new Curator();
-    }
-
-    @BeforeClass
-    public static void setUpClass() {
-    }
-
-    @AfterClass
-    public static void tearDownClass() {
-    }
-
-    @After
-    public void tearDown() {
     }
 
     @Test
@@ -103,7 +88,7 @@ public class CuratorReporterTest extends AbstractUnitTest {
         Item item = mock(Item.class);
         when(item.getType()).thenReturn(2);
         when(item.getHandle()).thenReturn(TEST_HANDLE);
-        curator.curate(context, item);
+        curator.curate(item);
 
         assertEquals(Curator.CURATE_SUCCESS, curator.getStatus(TASK_NAME));
         assertEquals(NO_OP, curator.getResult(TASK_NAME));
