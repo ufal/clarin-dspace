@@ -12,6 +12,7 @@ import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -84,16 +85,16 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
                 .build();
 
         // create empty THUMBNAIL bundle
-        bundleService.create(context, publicItem, "THUMBNAIL");
+        bundleService.create(context, publicItem, "ORIGINAL");
 
-        String bitstreamContent = "ThisIsSomeDummyText";
-        InputStream is = IOUtils.toInputStream(bitstreamContent, CharEncoding.UTF_8);
-        bts = BitstreamBuilder.
-                createBitstream(context, publicItem, is)
-                .withName("Bitstream")
-                .withDescription("Description")
-                .withMimeType("application/x-gzip")
-                .build();
+        try (InputStream is = getClass().getResourceAsStream("assetstore/logos.tgz")) {
+            bts = BitstreamBuilder.
+                    createBitstream(context, publicItem, is)
+                    .withName("Bitstream")
+                    .withDescription("Description")
+                    .withMimeType("application/x-gtar")
+                    .build();
+        }
 
         // Allow composing of file preview in the config
         configurationService.setProperty("create.file-preview.on-item-page-load", true);
@@ -116,6 +117,8 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
         // There is no restriction, so the user could preview the file
         boolean canPreview = true;
 
+        assertFalse("Expects preview content not created yet.", previewContentService.hasPreview(context, bts));
+
         getClient().perform(get(METADATABITSTREAM_SEARCH_BY_HANDLE_ENDPOINT)
                         .param("handle", publicItem.getHandle())
                         .param("fileGrpType", FILE_GRP_TYPE))
@@ -126,7 +129,7 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
                 .andExpect(jsonPath("$._embedded.metadatabitstreams[*].name")
                         .value(Matchers.containsInAnyOrder(Matchers.containsString("Bitstream"))))
                 .andExpect(jsonPath("$._embedded.metadatabitstreams[*].description")
-                        .value(Matchers.containsInAnyOrder(Matchers.containsString(bts.getFormatDescription(context)))))
+                        .value(Matchers.containsInAnyOrder(Matchers.containsString(bts.getDescription()))))
                 .andExpect(jsonPath("$._embedded.metadatabitstreams[*].format")
                         .value(Matchers.containsInAnyOrder(Matchers.containsString(
                                 bts.getFormat(context).getMIMEType()))))
@@ -135,13 +138,13 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
                         .value(hasItem(is((int) bts.getSizeBytes()))))
                 .andExpect(jsonPath("$._embedded.metadatabitstreams[*].canPreview")
                         .value(Matchers.containsInAnyOrder(Matchers.is(canPreview))))
-                .andExpect(jsonPath("$._embedded.metadatabitstreams[*].fileInfo").exists())
+                .andExpect(jsonPath("$._embedded.metadatabitstreams[0].fileInfo").value(Matchers.hasSize(2)))
                 .andExpect(jsonPath("$._embedded.metadatabitstreams[*].checksum")
                         .value(Matchers.containsInAnyOrder(Matchers.containsString(bts.getChecksum()))))
                 .andExpect(jsonPath("$._embedded.metadatabitstreams[*].href")
                         .value(Matchers.containsInAnyOrder(Matchers.containsString(url))));
 
-
+        assertTrue("Expects preview content created and stored.", previewContentService.hasPreview(context, bts));
     }
 
     @Test
@@ -160,7 +163,7 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
                 .andExpect(jsonPath("$._embedded.metadatabitstreams[*].name")
                         .value(Matchers.containsInAnyOrder(Matchers.containsString("Bitstream"))))
                 .andExpect(jsonPath("$._embedded.metadatabitstreams[*].description")
-                        .value(Matchers.containsInAnyOrder(Matchers.containsString(bts.getFormatDescription(context)))))
+                        .value(Matchers.containsInAnyOrder(Matchers.containsString(bts.getDescription()))))
                 .andExpect(jsonPath("$._embedded.metadatabitstreams[*].format")
                         .value(Matchers.containsInAnyOrder(Matchers.containsString(
                                 bts.getFormat(context).getMIMEType()))))
@@ -213,7 +216,7 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
                         .value(Matchers.containsInAnyOrder(Matchers.containsString("Bitstream"))))
                 .andExpect(jsonPath("$._embedded.metadatabitstreams[*].description")
                         .value(Matchers.containsInAnyOrder(
-                                Matchers.containsString(bitstream.getFormatDescription(context)))))
+                                Matchers.containsString(bitstream.getDescription()))))
                 .andExpect(jsonPath("$._embedded.metadatabitstreams[*].format")
                         .value(Matchers.containsInAnyOrder(Matchers.containsString(
                                 bitstream.getFormat(context).getMIMEType()))))

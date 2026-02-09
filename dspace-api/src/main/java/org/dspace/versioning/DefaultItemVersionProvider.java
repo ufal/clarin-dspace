@@ -202,7 +202,7 @@ public class DefaultItemVersionProvider extends AbstractVersionProvider implemen
      */
     private void manageRelationMetadata(Context c, Item itemNew, Item previousItem) throws SQLException {
         // Remove copied `dc.relation.replaces` metadata for the new item.
-        itemService.clearMetadata(c, itemNew, "dc", "relation", "replaces", null);
+        itemService.clearMetadata(c, itemNew, "dc", "relation", "replaces", Item.ANY);
 
         // Add metadata `dc.relation.replaces` to the new item.
         // The metadata value is: `dc.identifier.uri` from the previous item.

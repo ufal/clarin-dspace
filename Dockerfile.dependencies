@@ -6,7 +6,7 @@
 # To build with JDK17, use "--build-arg JDK_VERSION=17"
 ARG JDK_VERSION=11
 
-# Step 1 - Download all Dependencies
+# Step 1 - Run Maven Build
 FROM docker.io/maven:3-eclipse-temurin-${JDK_VERSION} AS build
 ARG TARGET_DIR=dspace-installer
 WORKDIR /app

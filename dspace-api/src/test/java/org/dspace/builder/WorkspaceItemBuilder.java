@@ -41,13 +41,18 @@ public class WorkspaceItemBuilder extends AbstractBuilder<WorkspaceItem, Workspa
     }
 
     public static WorkspaceItemBuilder createWorkspaceItem(final Context context, final Collection col) {
-        WorkspaceItemBuilder builder = new WorkspaceItemBuilder(context);
-        return builder.create(context, col, null);
+        return createWorkspaceItem(context, col, null);
     }
 
     public static WorkspaceItemBuilder createWorkspaceItem(final Context context, final Collection col, UUID uuid) {
         WorkspaceItemBuilder builder = new WorkspaceItemBuilder(context);
-        return builder.create(context, col, uuid);
+        return builder.create(context, col, uuid).withClarinLicense();
+    }
+
+    public static WorkspaceItemBuilder createWorkspaceItemWithNoClarinLicense(final Context context,
+                                                                              final Collection col) {
+        WorkspaceItemBuilder builder = new WorkspaceItemBuilder(context);
+        return builder.create(context, col, null);
     }
 
     /**
@@ -226,10 +231,39 @@ public class WorkspaceItemBuilder extends AbstractBuilder<WorkspaceItem, Workspa
         return this;
     }
 
+    public WorkspaceItemBuilder withClarinLicense() {
+        addMetadataValue(MetadataSchemaEnum.DC.getName(), "rights", null, "GNU General Public Licence, version 3");
+        addMetadataValue(MetadataSchemaEnum.DC.getName(), "rights", "uri", "http://opensource.org/licenses/GPL-3.0");
+        return addMetadataValue(MetadataSchemaEnum.DC.getName(), "rights", "label", "PUB");
+    }
+
     public WorkspaceItemBuilder withFulltext(String name, String source, InputStream is) {
         try {
             Item item = workspaceItem.getItem();
             Bitstream b = itemService.createSingleBitstream(context, is, item);
+            b.setName(context, name);
+            b.setSource(context, source);
+        } catch (Exception e) {
+            handleException(e);
+        }
+        return this;
+    }
+
+    /**
+     * Add bitstream with specific store number.
+     *
+     * @param name          bitstream name
+     * @param source        bitstream test source location
+     * @param is            input stream of the bitstream
+     * @param storeNumber   store number
+     *
+     * @return this WorkspaceItemBuilder
+     */
+    public WorkspaceItemBuilder withBitstream(String name, String source, InputStream is, int storeNumber) {
+        try {
+            Item item = workspaceItem.getItem();
+            Bitstream b = itemService.createSingleBitstream(context, is, item);
+            b.setStoreNumber(storeNumber);
             b.setName(context, name);
             b.setSource(context, source);
         } catch (Exception e) {
