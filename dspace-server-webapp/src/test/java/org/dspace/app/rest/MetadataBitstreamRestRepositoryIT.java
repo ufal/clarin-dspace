@@ -269,40 +269,38 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
     public void previewingDisabledByReadPermission() throws Exception {
         context.turnOffAuthorisationSystem();
         Collection col = CollectionBuilder.createCollection(context, parentCommunity).withName("Collection2").build();
-        Item item = ItemBuilder.createItem(context, col)
-                .withAuthor(AUTHOR)
-                .build();
+        Item item = ItemBuilder.createItem(context, col).withAuthor(AUTHOR).build();
 
-        Group adminGroup = groupService.findByName(context, Group.ADMIN);
-
-        // create bitstream with ADMIN reader group,
-        // so the non admin user cannot read the bitstream and preview content is not available for non admin user
-        try (InputStream is = getClass().getResourceAsStream("assetstore/logos.tgz")) {
-            BitstreamBuilder.
-                    createBitstream(context, item, is)
-                    .withName("Bitstream")
-                    .withDescription("Description")
-                    .withMimeType("application/x-gtar")
-                    .withReaderGroup(adminGroup)
-                    .build();
+        try {
+            // create bitstream with ADMIN reader group,
+            // so the non admin user cannot read the bitstream and preview content is not available for non admin user
+            try (InputStream is = getClass().getResourceAsStream("assetstore/logos.tgz")) {
+                BitstreamBuilder.
+                        createBitstream(context, item, is)
+                        .withName("Bitstream")
+                        .withDescription("Description")
+                        .withMimeType("application/x-gtar")
+                        .withReaderGroup(groupService.findByName(context, Group.ADMIN))
+                        .build();
+            }
+            context.restoreAuthSystemState();
+            // Non admin user cannot preview the file because the bitstream has only ADMIN read permission
+            // also the fileInfo should be empty in this case
+            getClient().perform(get(METADATABITSTREAM_SEARCH_BY_HANDLE_ENDPOINT)
+                            .param("handle", item.getHandle())
+                            .param("fileGrpType", FILE_GRP_TYPE))
+                    .andExpect(status().isOk())
+                    .andExpect(content().contentType(contentType))
+                    .andExpect(jsonPath("$._embedded.metadatabitstreams").exists())
+                    .andExpect(jsonPath("$._embedded.metadatabitstreams").isArray())
+                    .andExpect(jsonPath("$._embedded.metadatabitstreams", hasSize(1)))
+                    .andExpect(jsonPath("$._embedded.metadatabitstreams[0].canPreview").value(false))
+                    .andExpect(jsonPath("$._embedded.metadatabitstreams[0].fileInfo").isArray())
+                    .andExpect(jsonPath("$._embedded.metadatabitstreams[0].fileInfo", hasSize(0)));
+        } finally {
+            ItemBuilder.deleteItem(item.getID());
+            CollectionBuilder.deleteCollection(col.getID());
         }
-        context.restoreAuthSystemState();
-        // Non admin user cannot preview the file because the bitstream has only ADMIN read permission
-        // also the fileInfo should be empty in this case
-        getClient().perform(get(METADATABITSTREAM_SEARCH_BY_HANDLE_ENDPOINT)
-                        .param("handle", item.getHandle())
-                        .param("fileGrpType", FILE_GRP_TYPE))
-                .andExpect(status().isOk())
-                .andExpect(content().contentType(contentType))
-                .andExpect(jsonPath("$._embedded.metadatabitstreams").exists())
-                .andExpect(jsonPath("$._embedded.metadatabitstreams").isArray())
-                .andExpect(jsonPath("$._embedded.metadatabitstreams", hasSize(1)))
-                .andExpect(jsonPath("$._embedded.metadatabitstreams[0].canPreview").value(false))
-                .andExpect(jsonPath("$._embedded.metadatabitstreams[0].fileInfo").isArray())
-                .andExpect(jsonPath("$._embedded.metadatabitstreams[0].fileInfo", hasSize(0)));
-
-        ItemBuilder.deleteItem(item.getID());
-        CollectionBuilder.deleteCollection(col.getID());
     }
 
     private void composeURL() {
