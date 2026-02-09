@@ -9,6 +9,7 @@ package org.dspace.app.rest;
 
 import static org.dspace.app.rest.utils.Utils.DEFAULT_PAGE_SIZE;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.junit.Assert.assertFalse;
@@ -39,6 +40,8 @@ import org.dspace.content.service.BundleService;
 import org.dspace.content.service.PreviewContentService;
 import org.dspace.content.service.clarin.ClarinLicenseResourceMappingService;
 import org.dspace.core.Constants;
+import org.dspace.eperson.Group;
+import org.dspace.eperson.service.GroupService;
 import org.dspace.services.ConfigurationService;
 import org.hamcrest.Matchers;
 import org.junit.Before;
@@ -70,6 +73,9 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
 
     @Autowired
     PreviewContentService previewContentService;
+
+    @Autowired
+    private GroupService groupService;
 
     @Before
     public void setup() throws Exception {
@@ -257,6 +263,46 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(contentType))
                 .andExpect(jsonPath("$._links.byHandle", notNullValue()));
+    }
+
+    @Test
+    public void previewingDisabledByReadPermission() throws Exception {
+        context.turnOffAuthorisationSystem();
+        Collection col = CollectionBuilder.createCollection(context, parentCommunity).withName("Collection2").build();
+        Item item = ItemBuilder.createItem(context, col)
+                .withAuthor(AUTHOR)
+                .build();
+
+        Group adminGroup = groupService.findByName(context, Group.ADMIN);
+
+        // create bitstream with ADMIN reader group,
+        // so the non admin user cannot read the bitstream and preview content is not available for non admin user
+        try (InputStream is = getClass().getResourceAsStream("assetstore/logos.tgz")) {
+            BitstreamBuilder.
+                    createBitstream(context, item, is)
+                    .withName("Bitstream")
+                    .withDescription("Description")
+                    .withMimeType("application/x-gtar")
+                    .withReaderGroup(adminGroup)
+                    .build();
+        }
+        context.restoreAuthSystemState();
+        // Non admin user cannot preview the file because the bitstream has only ADMIN read permission
+        // also the fileInfo should be empty in this case
+        getClient().perform(get(METADATABITSTREAM_SEARCH_BY_HANDLE_ENDPOINT)
+                        .param("handle", item.getHandle())
+                        .param("fileGrpType", FILE_GRP_TYPE))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(contentType))
+                .andExpect(jsonPath("$._embedded.metadatabitstreams").exists())
+                .andExpect(jsonPath("$._embedded.metadatabitstreams").isArray())
+                .andExpect(jsonPath("$._embedded.metadatabitstreams", hasSize(1)))
+                .andExpect(jsonPath("$._embedded.metadatabitstreams[0].canPreview").value(false))
+                .andExpect(jsonPath("$._embedded.metadatabitstreams[0].fileInfo").isArray())
+                .andExpect(jsonPath("$._embedded.metadatabitstreams[0].fileInfo", hasSize(0)));
+
+        ItemBuilder.deleteItem(item.getID());
+        CollectionBuilder.deleteCollection(col.getID());
     }
 
     private void composeURL() {

@@ -161,12 +161,12 @@ public class PreviewContentServiceImpl implements PreviewContentService {
                 return false;
             }
 
-            // Check it is allowed by license
+            // Check it is allowed by license, or user has permission to READ the bitstream
             if (authorization) {
                 authorizeService.authorizeAction(context, bitstream, Constants.READ);
             }
             return true;
-        } catch (MissingLicenseAgreementException e) {
+        } catch (AuthorizeException e) {
             return false;
         }
     }
