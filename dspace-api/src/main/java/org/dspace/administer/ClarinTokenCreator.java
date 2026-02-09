@@ -35,6 +35,12 @@ import org.dspace.utils.DSpace;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * This script creates or invalidates a clarin token, with given expiration time,  for the logged-in user.
+ * The created token is sent to user by e-mail.
+ *
+ * @author Milan Kuchtiak
+ */
 public class ClarinTokenCreator extends DSpaceRunnable<ClarinTokenConfiguration> {
 
     private final static int HOURS_TO_MILLIS = 60 * 60 * 1000;
@@ -115,9 +121,7 @@ public class ClarinTokenCreator extends DSpaceRunnable<ClarinTokenConfiguration>
 
         Context context = new Context();
         EPerson ePerson = getEperson(context);
-        if (ePerson == null) {
-            throw new RuntimeException("Only authenticated user can run the script");
-        }
+        // ePerson cannot be null here because the script can only be run by an authenticated user
         context.setCurrentUser(ePerson);
         try {
             if (expirationDate != null) {

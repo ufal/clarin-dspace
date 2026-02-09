@@ -150,6 +150,7 @@ public class VersioningConsumer implements Consumer {
             // handles versions for ORCID publications waiting to be shipped, or already published (history-queue).
             handleOrcidSynchronization(ctx, previousItem, latestItem);
         }
+
         // update relationships
         updateRelationships(ctx, latestItem, previousItem);
     }

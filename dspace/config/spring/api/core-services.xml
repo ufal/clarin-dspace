@@ -97,6 +97,7 @@
     <bean class="org.dspace.content.clarin.ClarinWorkspaceItemServiceImpl"/>
     <bean class="org.dspace.content.clarin.MatomoReportSubscriptionServiceImpl"/>
     <bean class="org.dspace.content.clarin.ClarinTokenServiceImpl"/>
+    <bean class="org.dspace.content.ReportResultServiceImpl"/>
 
     <bean class="org.dspace.core.NewsServiceImpl">
         <property name="acceptableFilenames">

@@ -8,6 +8,7 @@
 package org.dspace.health;
 
 import org.apache.logging.log4j.Logger;
+import org.json.JSONObject;
 
 /**
  * Abstract check interface.
@@ -21,11 +22,14 @@ public abstract class Check {
     long took_ = -1L;
     String report_ = null;
     private String errors_ = "";
+    private JSONObject reportJson_;
 
     // this method should be overridden
     protected abstract String run(ReportInfo ri);
 
     public void report(ReportInfo ri) {
+        reportJson_ = new JSONObject();
+        errors_ = "";
         took_ = System.currentTimeMillis();
         try {
             String run_report = run(ri);
@@ -60,5 +64,13 @@ public abstract class Check {
 
     public long getTook() {
         return took_;
+    }
+
+    public JSONObject getReportJson() {
+        return reportJson_;
+    }
+
+    public void setReportJson(JSONObject reportJson_) {
+        this.reportJson_ = reportJson_;
     }
 }

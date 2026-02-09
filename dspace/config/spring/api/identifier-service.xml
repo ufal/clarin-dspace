@@ -24,9 +24,19 @@
          The VersionedHandleIdentifierProvider creates a new versioned
          handle for every new version.
          -->
+    <!--
     <bean id="org.dspace.identifier.HandleIdentifierProvider" class="org.dspace.identifier.VersionedHandleIdentifierProvider" scope="singleton">
         <property name="configurationService" ref="org.dspace.services.ConfigurationService"/>
     </bean>
+    -->
+
+    <!-- Comment it out if you do not want to use the ClarinVersionedHandleIdentifierProvider as an identify provider. -->
+    <bean id="org.dspace.identifier.ClarinVersionedHandleIdentifierProvider"
+          class="org.dspace.identifier.ClarinVersionedHandleIdentifierProvider"
+          scope="singleton">
+        <property name="configurationService" ref="org.dspace.services.ConfigurationService"/>
+    </bean>
+
     <!--
            The VersionedHandleIdentifierProviderWithCanonicalHandles
            preserves the first handle for every new version. Whenever

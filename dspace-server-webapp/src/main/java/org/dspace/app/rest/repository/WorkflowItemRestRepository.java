@@ -182,6 +182,9 @@ public class WorkflowItemRestRepository extends DSpaceRestRepository<WorkflowIte
             throw new RuntimeException("SQLException in " + this.getClass() + "#findBySubmitter trying to create " +
                 "a workflow and adding it to db.", e);
         }
+
+        // Reindex after successful workflow creation to ensure OAI-PMH reflects the new state
+        // Only reindex once after the state change is complete
         solrOAIReindexer.reindexItem(source.getItem());
         //if the item go directly in published status we have to manage a status code 204 with no content
         if (source.getItem().isArchived()) {

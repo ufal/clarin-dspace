@@ -89,6 +89,8 @@ public class OrcidQueueConsumerIT extends AbstractIntegrationTestWithDatabase {
 
         context.turnOffAuthorisationSystem();
 
+        configurationService.setProperty("versioning.unarchive.previous.version", true);
+
         parentCommunity = CommunityBuilder.createCommunity(context)
             .withName("Parent community")
             .build();

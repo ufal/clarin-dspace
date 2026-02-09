@@ -88,28 +88,7 @@ public class RequiredMetadata extends AbstractCurationTask {
                 }
                 sb.append("Item: ").append(handle);
 
-                Collection collection = item.getOwningCollection();
-
-                // when the owning collection is null it may be the case
-                // when the item is a workspace item or a workflow item
-                if (collection == null) {
-                    try {
-                        Context context = Curator.curationContext();
-                        if (itemService.isInProgressSubmission(context, item)) {
-                            WorkflowItem workflowItem = workflowItemService.findByItem(context, item);
-                            if (workflowItem != null) {
-                                collection = workflowItem.getCollection();
-                            } else {
-                                WorkspaceItem workspaceItem = workspaceItemService.findByItem(context, item);
-                                if (workspaceItem != null) {
-                                    collection = workspaceItem.getCollection();
-                                }
-                            }
-                        }
-                    } catch (SQLException ex) {
-                        throw new IOException(ex.getMessage(), ex);
-                    }
-                }
+                Collection collection = getCollection(item);
 
                 String resourceType = itemService.getMetadataFirstValue(
                         item, MetadataSchemaEnum.DC.getName(), "type", null, Item.ANY);
@@ -176,6 +155,32 @@ public class RequiredMetadata extends AbstractCurationTask {
             reqMap.put(reqKey, reqList);
         }
         return reqList;
+    }
+
+    private Collection getCollection(Item item) throws IOException {
+        Collection collection = item.getOwningCollection();
+
+        // when the owning collection is null it may be the case
+        // when the item is a workspace item or a workflow item
+        if (collection == null) {
+            try {
+                Context context = Curator.curationContext();
+                if (itemService.isInProgressSubmission(context, item)) {
+                    WorkflowItem workflowItem = workflowItemService.findByItem(context, item);
+                    if (workflowItem != null) {
+                        collection = workflowItem.getCollection();
+                    } else {
+                        WorkspaceItem workspaceItem = workspaceItemService.findByItem(context, item);
+                        if (workspaceItem != null) {
+                            collection = workspaceItem.getCollection();
+                        }
+                    }
+                }
+            } catch (SQLException ex) {
+                throw new IOException(ex.getMessage(), ex);
+            }
+        }
+        return collection;
     }
 
     protected static class ReqKey {

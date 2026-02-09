@@ -106,4 +106,9 @@
         <property name="dspaceRunnableClass" value="org.dspace.scripts.filepreview.FilePreview"/>
     </bean>
 
+    <bean id="report-diff" class="org.dspace.app.reportdiff.ReportDiffScriptConfiguration" primary="true">
+        <property name="description" value="Compares two health reports and shows the differences between them."/>
+        <property name="dspaceRunnableClass" value="org.dspace.app.reportdiff.ReportDiff"/>
+    </bean>
+
 </beans>
