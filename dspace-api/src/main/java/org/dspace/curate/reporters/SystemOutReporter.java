@@ -50,6 +50,7 @@ public class SystemOutReporter implements Reporter {
 
     @Override
     public void close() {
+        // Note: We don't close the PrintWriter to avoid closing System.out
         writer.flush();
     }
 }
