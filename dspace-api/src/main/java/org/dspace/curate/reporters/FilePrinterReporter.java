@@ -37,9 +37,10 @@ public class FilePrinterReporter implements Reporter {
 
     @Override
     public Appendable append(CharSequence csq) {
-        writer.print(csq);
-        if (!StringUtils.isBlank(csq) && !csq.toString().endsWith(System.lineSeparator())) {
-            writer.println();
+        // strip newline from the end of the string to avoid double newlines when using println
+        // do not print empty lines
+        if (!StringUtils.isEmpty(csq)) {
+            writer.println(StringUtils.chomp(csq.toString()));
         }
         return this;
     }
