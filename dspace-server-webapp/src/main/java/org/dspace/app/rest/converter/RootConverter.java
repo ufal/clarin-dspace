@@ -44,7 +44,7 @@ public class RootConverter {
         } else {
             rootRest.setDspaceServer(dspaceUrl);
         }
-        rootRest.setDspaceVersion("DSpace " + getSourceVersion());
+        rootRest.setDspaceVersion("CLARIN-DSpace " + getSourceVersion());
         rootRest.setBuildVersion(getBuildVersion());
         return rootRest;
     }
