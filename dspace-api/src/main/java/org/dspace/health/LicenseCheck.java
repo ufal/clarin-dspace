@@ -16,7 +16,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
-import com.amazonaws.util.CollectionUtils;
 import org.dspace.content.Bitstream;
 import org.dspace.content.Bundle;
 import org.dspace.content.Item;
@@ -28,6 +27,8 @@ import org.dspace.content.service.ItemService;
 import org.dspace.content.service.clarin.ClarinLicenseResourceMappingService;
 import org.dspace.core.Constants;
 import org.dspace.core.Context;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 /**
  * This check provides information about the number of items categorized by clarin license type (PUB/RES/ACA),
@@ -38,92 +39,111 @@ public class LicenseCheck extends Check {
     private ClarinLicenseResourceMappingService clarinLicenseResourceMappingService =
             ClarinServiceFactory.getInstance().getClarinLicenseResourceMappingService();
 
-    private Map<String, Integer> licensesCount = new HashMap<>();
-    private Map<String, List<UUID>> problemItems = new HashMap<>();
 
     @Override
     protected String run(ReportInfo ri) {
         Context context = new Context();
         StringBuilder sb = new StringBuilder();
+        JSONObject root = new JSONObject();
 
         Iterator<Item> items;
         ItemService itemService = ContentServiceFactory.getInstance().getItemService();
+        Map<String, Integer> licensesCount = new HashMap<>();
+        Map<String, List<UUID>> problemItems = new HashMap<>();
+        List<UUID> bitstreamUUIDs = new ArrayList<>();
         try {
             items = itemService.findAll(context);
-        } catch (SQLException e) {
-            throw new RuntimeException("Error while fetching items. ", e);
-        }
-
-        for (Iterator<Item> it = items; it.hasNext(); ) {
-            Item item = it.next();
-
-            List<Bundle> bundles = item.getBundles(Constants.DEFAULT_BUNDLE_NAME);
-            if (bundles.isEmpty()) {
-                licensesCount.put("no bundle", licensesCount.getOrDefault("no bundle", 0) + 1);
-                continue;
-            }
-
-            if (item.getBundles(Constants.LICENSE_BUNDLE_NAME).isEmpty()) {
-                problemItems.computeIfAbsent(
-                        "UUIDs of items without license bundle", k -> new ArrayList<>()).add(item.getID());
-            }
-
-            List<Bitstream> bitstreams = bundles.get(0).getBitstreams();
-            if (bitstreams.isEmpty()) {
-                problemItems.computeIfAbsent(
-                        "UUIDs of items without bitstreams", k -> new ArrayList<>()).add(item.getID());
-                continue;
-            }
-
-            // one bitstream is enough as there is only one license for all bitstreams in item
-            Bitstream firstBitstream = bitstreams.get(0);
-            UUID uuid = firstBitstream.getID();
-            try {
-                List<ClarinLicenseResourceMapping> clarinLicenseResourceMappingList =
-                        clarinLicenseResourceMappingService.findByBitstreamUUID(context, uuid);
-
-                if (CollectionUtils.isNullOrEmpty(clarinLicenseResourceMappingList)) {
-                    log.error("No license mapping found for bitstream with uuid {}", uuid);
-                    problemItems.computeIfAbsent(
-                            "UUIDs of bitstreams without license mappings", k -> new ArrayList<>()).add(uuid);
+            while (items.hasNext()) {
+                Item item = items.next();
+                List<Bundle> bundles = item.getBundles(Constants.DEFAULT_BUNDLE_NAME);
+                if (bundles.isEmpty()) {
+                    licensesCount.put("no bundle", licensesCount.getOrDefault("no bundle", 0) + 1);
                     continue;
                 }
-
+                if (item.getBundles(Constants.LICENSE_BUNDLE_NAME).isEmpty()) {
+                    problemItems.computeIfAbsent(
+                            "UUIDs of items without license bundle", k -> new ArrayList<>()).add(item.getID());
+                }
+                List<Bitstream> bitstreams = bundles.get(0).getBitstreams();
+                if (bitstreams.isEmpty()) {
+                    problemItems.computeIfAbsent(
+                            "UUIDs of items without bitstreams", k -> new ArrayList<>()).add(item.getID());
+                    continue;
+                }
+                Bitstream firstBitstream = bitstreams.get(0);
+                UUID uuid = firstBitstream.getID();
+                bitstreamUUIDs.add(uuid);
+            }
+            // Batch fetch all mappings for the collected UUIDs
+            List<ClarinLicenseResourceMapping> mappingList =
+                clarinLicenseResourceMappingService.findByBitstreamUUIDs(context, bitstreamUUIDs);
+            Map<UUID, ClarinLicenseResourceMapping> mappingByUUID = new HashMap<>();
+            for (ClarinLicenseResourceMapping mapping : mappingList) {
+                if (mapping.getBitstream() != null) {
+                    mappingByUUID.put(mapping.getBitstream().getID(), mapping);
+                }
+            }
+            // Process results in memory
+            for (UUID uuid : bitstreamUUIDs) {
+                ClarinLicenseResourceMapping mapping = mappingByUUID.get(uuid);
+                if (mapping == null) {
+                    problemItems.computeIfAbsent(
+                        "UUIDs of bitstreams without license mappings", k -> new ArrayList<>()).add(uuid);
+                    continue;
+                }
                 // Every resource mapping between license and the bitstream has only one record,
                 // because the bitstream has unique UUID, so get the first record from the List
-                ClarinLicenseResourceMapping clarinLicenseResourceMapping = clarinLicenseResourceMappingList.get(0);
-
-                ClarinLicenseLabel nonExtendedLabel =
-                        clarinLicenseResourceMapping.getLicense().getNonExtendedClarinLicenseLabel();
-
+                ClarinLicenseLabel nonExtendedLabel = mapping.getLicense().getNonExtendedClarinLicenseLabel();
                 if (Objects.isNull(nonExtendedLabel)) {
-                    log.error("Item {} with id {} does not have non extended license label.",
-                            item.getName(), item.getID());
+                    problemItems.computeIfAbsent(
+                            "UUIDs of bitstreams without non-extended license labels",
+                            k -> new ArrayList<>()).add(uuid);
                 } else {
                     licensesCount.put(nonExtendedLabel.getLabel(),
                             licensesCount.getOrDefault(nonExtendedLabel.getLabel(), 0) + 1);
                 }
-            } catch (SQLException e) {
-                throw new RuntimeException("Error while fetching ClarinLicenseResourceMapping by Bitstream UUID: " +
-                        uuid, e);
             }
+        } catch (SQLException e) {
+            throw new RuntimeException("Error while fetching items or license mappings.", e);
+        } finally {
+            context.close();
         }
 
+        JSONArray licensesArray = new JSONArray();
         for (Map.Entry<String, Integer> result : licensesCount.entrySet()) {
+            JSONObject oneLicense = new JSONObject();
+
             sb.append(String.format("%-20s: %d\n", result.getKey(), result.getValue()));
+            oneLicense.put("type", result.getKey());
+            oneLicense.put("count", result.getValue());
+
+            licensesArray.put(oneLicense);
         }
+        root.put("licenses", licensesArray);
 
         if (!problemItems.isEmpty()) {
-            for (Map.Entry<String, List<UUID>> problemItems : problemItems.entrySet()) {
-                List<UUID> uuids = problemItems.getValue();
-                sb.append(String.format("\n%s: %d\n", problemItems.getKey(), uuids.size()));
+            JSONArray problemItemsArray = new JSONArray();
+            for (Map.Entry<String, List<UUID>> entry: problemItems.entrySet()) {
+                List<UUID> uuids = entry.getValue();
+                JSONObject oneProblemItem = new JSONObject();
+                JSONArray problemUUIDsArray = new JSONArray();
+
+                sb.append(String.format("\n%s: %d\n", entry.getKey(), uuids.size()));
+                oneProblemItem.put("type", entry.getKey());
+                oneProblemItem.put("count", uuids.size());
+
                 for (UUID uuid : uuids) {
                     sb.append(String.format("     %s\n", uuid));
+                    problemUUIDsArray.put(uuid.toString());
                 }
+                oneProblemItem.put("problemUUIDs", problemUUIDsArray);
+                problemItemsArray.put(oneProblemItem);
             }
+            root.put("problemItems", problemItemsArray);
         }
 
         context.close();
+        this.setReportJson(root);
         return sb.toString();
     }
 }

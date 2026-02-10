@@ -11,7 +11,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import org.dspace.app.rest.RestResourceController;
 
 /**
- * The Epic Handle REST Resource
+ * The Epic Handle REST Resource.
  *
  * @author Milan Kuchtiak
  */
@@ -33,7 +33,6 @@ public class EpicHandleRest extends BaseObjectRest<String> {
     }
 
     @Override
-    // @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     @JsonIgnore
     public String getType() {
         return NAME;

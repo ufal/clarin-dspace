@@ -19,6 +19,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.logging.log4j.Logger;
 import org.dspace.authorize.dao.ResourcePolicyDAO;
+import org.dspace.authorize.service.AuthorizeService;
 import org.dspace.authorize.service.ResourcePolicyService;
 import org.dspace.content.DSpaceObject;
 import org.dspace.content.factory.ContentServiceFactory;
@@ -53,6 +54,9 @@ public class ResourcePolicyServiceImpl implements ResourcePolicyService {
     private GroupService groupService;
 
     @Autowired
+    private AuthorizeService authorizeService;
+
+    @Autowired
     ProvenanceService provenanceService;
 
     @Autowired
@@ -72,6 +76,16 @@ public class ResourcePolicyServiceImpl implements ResourcePolicyService {
     @Override
     public ResourcePolicy find(Context context, int id) throws SQLException {
         return resourcePolicyDAO.findByID(context, ResourcePolicy.class, id);
+    }
+
+    @Override
+    public List<ResourcePolicy> findAll(Context context, int offset, int limit) throws SQLException {
+        return resourcePolicyDAO.findAll(context, offset, limit);
+    }
+
+    @Override
+    public int countAll(Context context) throws SQLException {
+        return resourcePolicyDAO.countAll(context);
     }
 
     /**
@@ -423,17 +437,28 @@ public class ResourcePolicyServiceImpl implements ResourcePolicyService {
     }
 
     @Override
+    public List<ResourcePolicy> findByDate(Context context, Boolean hasStartDate, Boolean hasEndDate,
+                                                   int offset, int limit) throws SQLException {
+        return resourcePolicyDAO.findByDate(context, hasStartDate, hasEndDate, offset, limit);
+    }
+
+    @Override
+    public int countByDate(Context context, Boolean hasStartDate, Boolean hasEndDate) throws SQLException {
+        return resourcePolicyDAO.countByDate(context, hasStartDate, hasEndDate);
+    }
+
+    @Override
     public boolean isMyResourcePolicy(Context context, EPerson eperson, Integer id) throws SQLException {
         boolean isMy = false;
 
         ResourcePolicy resourcePolicy = resourcePolicyDAO.findOneById(context, id);
         Group group = resourcePolicy.getGroup();
 
-        if (resourcePolicy.getEPerson() != null && resourcePolicy.getEPerson().getID() == eperson.getID()) {
+        if (resourcePolicy.getEPerson() != null && resourcePolicy.getEPerson().getID().equals(eperson.getID())) {
             isMy = true;
         } else if (group != null && groupService.isMember(context, eperson, group)) {
             isMy = true;
         }
-        return isMy;
+        return isMy || authorizeService.isAdmin(context, eperson, resourcePolicy.getdSpaceObject());
     }
 }

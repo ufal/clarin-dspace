@@ -693,7 +693,7 @@
 <!--            </row>-->
             <row>
                 <relation-field>
-                    <relationship-type>isProjectOfPerson</relationship-type>
+                    <relationship-type>isPersonOfProject</relationship-type>
                     <search-configuration>person</search-configuration>
                     <repeatable>true</repeatable>
                     <label>Investigator</label>
@@ -1309,29 +1309,6 @@
                     <externalsources>openAIREFunding</externalsources>
                     <required></required>
                 </relation-field>
-            </row>
-            <row>
-                <field>
-                    <dc-schema>dc</dc-schema>
-                    <dc-element>rights</dc-element>
-                    <repeatable>false</repeatable>
-                    <label>Access Type</label>
-                    <input-type value-pairs-name="openaire_rights">dropdown</input-type>
-                    <hint>Select the access type of the resource.</hint>
-                    <required></required>
-                </field>
-            </row>
-            <row>
-                <field>
-                    <dc-schema>oaire</dc-schema>
-                    <dc-element>license</dc-element>
-                    <dc-qualifier>condition</dc-qualifier>
-                    <repeatable>false</repeatable>
-                    <label>License</label>
-                    <input-type value-pairs-name="openaire_license_types">dropdown</input-type>
-                    <hint>Select the license of the resource.</hint>
-                    <required></required>
-                </field>
             </row>
             <row>
                 <field>
@@ -2301,27 +2278,27 @@
             </pair>
             <pair>
                 <displayed-value>Attribution (CC-BY)</displayed-value>
-                <stored-value>http://creativecommons.org/licenses/by/4.0/</stored-value>
+                <stored-value>https://creativecommons.org/licenses/by/4.0/</stored-value>
             </pair>
             <pair>
                 <displayed-value>Attribution, No Derivative Works (CC-BY-ND)</displayed-value>
-                <stored-value>http://creativecommons.org/licenses/by-nd/4.0/</stored-value>
+                <stored-value>https://creativecommons.org/licenses/by-nd/4.0/</stored-value>
             </pair>
             <pair>
                 <displayed-value>Attribution, Share-alike (CC-BY-SA)</displayed-value>
-                <stored-value>http://creativecommons.org/licenses/by-sa/4.0/</stored-value>
+                <stored-value>https://creativecommons.org/licenses/by-sa/4.0/</stored-value>
             </pair>
             <pair>
                 <displayed-value>Attribution, Non-commercial (CC-BY-NC)</displayed-value>
-                <stored-value>http://creativecommons.org/licenses/by-nc/4.0/</stored-value>
+                <stored-value>https://creativecommons.org/licenses/by-nc/4.0/</stored-value>
             </pair>
             <pair>
                 <displayed-value>Attribution, Non-commercial, No Derivative Works (CC-BY-NC-ND)</displayed-value>
-                <stored-value>http://creativecommons.org/licenses/by-nc-nd/4.0/</stored-value>
+                <stored-value>https://creativecommons.org/licenses/by-nc-nd/4.0/</stored-value>
             </pair>
             <pair>
                 <displayed-value>Attribution, Non-commercial, Share-alike (CC-BY-NC-SA)</displayed-value>
-                <stored-value>http://creativecommons.org/licenses/by-nc-sa/4.0/</stored-value>
+                <stored-value>https://creativecommons.org/licenses/by-nc-sa/4.0/</stored-value>
             </pair>
             <!-- Add here other licenses -->
             <pair>

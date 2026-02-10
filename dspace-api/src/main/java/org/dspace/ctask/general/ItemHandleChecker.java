@@ -8,6 +8,7 @@
 package org.dspace.ctask.general;
 
 import java.io.IOException;
+import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -113,7 +114,12 @@ public class ItemHandleChecker extends BasicLinkChecker {
                 return handleResponse;
             }
         } catch (Exception ex) {
-            HandleResponse err = new HandleResponse(500, Response.Status.Family.SERVER_ERROR, ex.getMessage());
+            HandleResponse err;
+            if (ex.getCause() instanceof SocketTimeoutException) {
+                err = new HandleResponse(617, Response.Status.Family.OTHER, ex.getMessage());
+            } else {
+                err = new HandleResponse(500, Response.Status.Family.SERVER_ERROR, ex.getMessage());
+            }
             appendResults(url, err, results);
             checkedResults.putIfAbsent(url, err);
             return err;

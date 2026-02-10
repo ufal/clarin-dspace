@@ -89,11 +89,10 @@ public class InstallItemServiceImpl implements InstallItemService {
         AuthorizeException {
         Item item = is.getItem();
         Collection collection = is.getCollection();
-
-        // Get map of filters to use for identifier types.
-        Map<Class<? extends Identifier>, Filter> filters = FilterUtils.getIdentifierFilters(false);
         try {
             if (suppliedHandle == null) {
+                // Get map of filters to use for identifier types.
+                Map<Class<? extends Identifier>, Filter> filters = FilterUtils.getIdentifierFilters(false);
                 // Register with the filters we've set up
                 identifierService.register(c, item, filters);
             } else {

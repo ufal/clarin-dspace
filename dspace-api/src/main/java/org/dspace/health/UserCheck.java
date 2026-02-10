@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.google.common.base.CaseFormat;
 import org.dspace.content.Collection;
 import org.dspace.content.DSpaceObject;
 import org.dspace.content.factory.ContentServiceFactory;
@@ -22,6 +23,8 @@ import org.dspace.eperson.Group;
 import org.dspace.eperson.factory.EPersonServiceFactory;
 import org.dspace.eperson.service.EPersonService;
 import org.dspace.eperson.service.GroupService;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 /**
  * @author LINDAT/CLARIN dev team
@@ -32,17 +35,20 @@ public class UserCheck extends Check {
     private static final GroupService groupService = EPersonServiceFactory.getInstance().getGroupService();
     private static final CollectionService collectionService = ContentServiceFactory.getInstance()
                                                                                     .getCollectionService();
+    private static final String HAVE_EMAIL = "Have email";
+    private static final String COUNT = "Count";
 
     @Override
     public String run(ReportInfo ri) {
         Context context = new Context();
-        String ret = "";
+        StringBuilder sb = new StringBuilder();
+        JSONObject root = new JSONObject();
         Map<String, Integer> info = new HashMap<String, Integer>();
         try {
             List<EPerson> epersons = ePersonService.findAll(context, EPerson.LASTNAME);
-            info.put("Count", epersons.size());
+            info.put(COUNT, epersons.size());
             info.put("Can log in (password)", 0);
-            info.put("Have email", 0);
+            info.put(HAVE_EMAIL, 0);
             info.put("Have 1st name", 0);
             info.put("Have 2nd name", 0);
             info.put("Have lang", 0);
@@ -51,7 +57,7 @@ public class UserCheck extends Check {
 
             for (EPerson e : epersons) {
                 if (e.getEmail() != null && e.getEmail().length() > 0) {
-                    info.put("Have email", info.get("Have email") + 1);
+                    info.put(HAVE_EMAIL, info.get(HAVE_EMAIL) + 1);
                 }
                 if (e.canLogIn()) {
                     info.put("Can log in (password)",
@@ -69,7 +75,7 @@ public class UserCheck extends Check {
                 if (e.getNetid() != null && e.getNetid().length() > 0) {
                     info.put("Have netid", info.get("Have netid") + 1);
                 }
-                if (e.getNetid() != null && e.getNetid().length() > 0) {
+                if (e.getSelfRegistered()) {
                     info.put("Self registered", info.get("Self registered") + 1);
                 }
             }
@@ -78,38 +84,54 @@ public class UserCheck extends Check {
             error(e);
         }
 
-        ret += String.format(
-            "%-20s: %d\n", "Users", info.get("Count"));
-        ret += String.format(
-            "%-20s: %d\n", "Have email", info.get("Have email"));
+        sb.append(String.format("%-22s: %d\n", "Users", info.get(COUNT)));
+        root.put("users", info.get(COUNT));
+        sb.append(String.format("%-22s: %d\n", HAVE_EMAIL, info.get(HAVE_EMAIL)));
+        root.put("haveEmail", info.get(HAVE_EMAIL));
         for (Map.Entry<String, Integer> e : info.entrySet()) {
-            if (!e.getKey().equals("Count") && !e.getKey().equals("Have email")) {
-                ret += String.format("%-21s: %s\n", e.getKey(),
-                                     String.valueOf(e.getValue()));
+            if (!e.getKey().equals(COUNT) && !e.getKey().equals(HAVE_EMAIL)) {
+                String key = e.getKey();
+                int value = e.getValue();
+                sb.append(String.format("%-22s: %s\n", key, value));
+
+                key = toCamelCase(key);
+                root.put(key, value);
             }
         }
 
-        ret += "\n";
+        sb.append("\n");
 
         try {
             // empty group
             List<Group> emptyGroups = groupService.getEmptyGroups(context);
-            ret += String.format("Empty groups: #%d\n    ", emptyGroups.size());
+            sb.append(String.format("Empty groups: #%d\n    ", emptyGroups.size()));
+            JSONArray emptyGroupsArray = new JSONArray();
             for (Group group : emptyGroups) {
-                ret += String.format("id=%s;name=%s,\n    ", group.getID(), group.getName());
+                JSONObject oneEmptyGroup = new JSONObject();
+                sb.append(String.format("id=%s;name=%s,\n    ", group.getID(), group.getName()));
+                oneEmptyGroup.put("id", group.getID());
+                oneEmptyGroup.put("name", group.getName());
+                emptyGroupsArray.put(oneEmptyGroup);
             }
+            root.put("emptyGroups", emptyGroupsArray);
+
+            sb.append("\n");
 
             //subscribers
             List<EPerson> subscribers = ePersonService.findEPeopleWithSubscription(context);
-            ret += String.format(
-                "Subscribers: #%d [%s]\n",
-                subscribers.size(), formatIds(subscribers));
+            JSONArray subsIdsArray = new JSONArray();
+            sb.append(String.format("Subscribers: #%d ", subscribers.size()));
+            formatIds(subscribers, subsIdsArray, sb);
+            sb.append("\n");
+            root.put("subscribers", subsIdsArray);
 
             //subscribed collections
             List<Collection> subscribedCols = collectionService.findCollectionsWithSubscribers(context);
-            ret += String.format(
-                "Subscribed cols.: #%d [%s]\n",
-                subscribedCols.size(), formatIds(subscribedCols));
+            JSONArray subsColsArray = new JSONArray();
+            sb.append(String.format("Subscribed cols.: #%d ", subscribedCols.size()));
+            formatIds(subscribedCols, subsColsArray, sb);
+            sb.append("\n");
+            root.put("subscribedCollections", subsColsArray);
 
             context.complete();
 
@@ -117,14 +139,42 @@ public class UserCheck extends Check {
             error(e);
         }
 
-        return ret;
+        this.setReportJson(root);
+        return sb.toString();
     }
 
-    private String formatIds(List<? extends DSpaceObject> objects) {
-        StringBuilder ids = new StringBuilder();
+    /**
+     * Formats a list of DSpace objects' IDs into both a JSON array and a human-readable string representation.
+     * <p>
+     * This method takes a list of DSpace objects and extracts their IDs, adding them to:
+     * <ul>
+     *   <li>A JSON array for programmatic access</li>
+     *   <li>A StringBuilder in the format "[id1, id2, id3]" for logging or display purposes</li>
+     * </ul>
+     *
+     * @param objects The list of DSpace objects whose IDs should be formatted
+     * @param jsonOut The JSON array to which the object IDs will be added
+     * @param strOut The StringBuilder that will be populated with the formatted string representation of IDs
+     *              in the format "[id1, id2, id3]"
+     */
+    private void formatIds(List<? extends DSpaceObject> objects, JSONArray jsonOut, StringBuilder strOut) {
+        strOut.append("[");
         for (DSpaceObject o : objects) {
-            ids.append(o.getID()).append(", ");
+            strOut.append(o.getID()).append(", ");
+            jsonOut.put(o.getID());
         }
-        return ids.toString();
+
+        //deleting last delimiter (comma and space)
+        if (!objects.isEmpty() && strOut.length() > 1) {
+            strOut.delete(strOut.length() - 2, strOut.length());
+        }
+
+        strOut.append("]");
+    }
+
+    private String toCamelCase(String str) {
+        str = str.toLowerCase().replace(" ", "_");
+        str = CaseFormat.LOWER_UNDERSCORE.to(CaseFormat.LOWER_CAMEL, str);
+        return str;
     }
 }

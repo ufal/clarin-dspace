@@ -1,17 +1,17 @@
-## E-mail clarin token
+## E-mail CLARIN-DSpace personal access token
 ##
-## Parameters: {0} clarin token
+## Parameters: {0} the access token
 ##             {1} User Name
 ##             {2} Valid until
 ##
 ## See org.dspace.core.Email for information on the format of this file.
 ##
-#set($subject = "Clarin Token for ${params[1]}")
+#set($subject = "Access Token for ${params[1]}")
 #set($phone = ${config.get('mail.message.helpdesk.telephone')})
 
 Dear ${params[1]},
 
-This is your Clarin-DSpace application token:
+This is your Personal Access Token:
 
 ${params[0]}
 

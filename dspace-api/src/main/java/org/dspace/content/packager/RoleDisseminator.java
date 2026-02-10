@@ -434,7 +434,7 @@ public class RoleDisseminator implements PackageDisseminator {
 
         if (emitPassword) {
             PasswordHash password = ePersonService.getPasswordHash(eperson);
-            if (null != password) {
+            if (null != password && password.getHashString() != null) {
                 writer.writeStartElement(PASSWORD_HASH);
 
                 String algorithm = password.getAlgorithm();

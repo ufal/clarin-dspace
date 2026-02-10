@@ -9,6 +9,7 @@ package org.dspace.core;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.dspace.authorize.AuthorizeException;
@@ -49,6 +50,14 @@ public class ProvenanceMessageFormatter {
         EPerson currentUser = context.getCurrentUser();
         String timestamp = DCDate.getCurrent().toString();
         String details = validateMessageTemplate(messageTemplate, args);
+
+        // Handle null user case
+        if (currentUser == null) {
+            return String.format("%s by None on %s",
+                    details,
+                    timestamp);
+        }
+
         return String.format("%s by %s (%s) on %s",
                 details,
                 currentUser.getFullName(),
@@ -86,8 +95,37 @@ public class ProvenanceMessageFormatter {
                 .collect(Collectors.joining(";"));
     }
 
+    public String getMessage(ResourcePolicy resourcePolicy) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("[Action: ")
+                .append(Constants.actionText[resourcePolicy.getAction()]);
+        if (resourcePolicy.getEPerson() != null) {
+            sb.append(", EPerson: ").append(resourcePolicy.getEPerson().getEmail());
+        }
+        if (resourcePolicy.getGroup() != null) {
+            sb.append(", Group: ").append(resourcePolicy.getGroup().getName());
+        }
+        if (resourcePolicy.getStartDate() != null) {
+            sb.append(", Start: ").append(resourcePolicy.getStartDate().toString());
+        }
+        if (resourcePolicy.getEndDate() != null) {
+            sb.append(", End: ").append(resourcePolicy.getEndDate().toString());
+        }
+        if (resourcePolicy.getRpDescription() != null) {
+            sb.append(", Description: ").append(resourcePolicy.getRpDescription());
+        }
+        sb.append("]");
+        return sb.toString();
+    }
+
     public String getMetadata(String oldMtdKey, String oldMtdValue) {
         return oldMtdKey + ": " + oldMtdValue;
+    }
+
+    public String getMetadataReplacement(String metadataKey, String oldValue, String newValue) {
+        return String.format("%s [%s -> %s]", metadataKey,
+                Objects.toString(oldValue, "empty"),
+                Objects.toString(newValue, "empty"));
     }
 
     public String getMetadataField(MetadataField metadataField) {

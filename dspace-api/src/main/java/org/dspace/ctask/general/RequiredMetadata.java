@@ -88,33 +88,12 @@ public class RequiredMetadata extends AbstractCurationTask {
                 }
                 sb.append("Item: ").append(handle);
 
-                Collection collection = item.getOwningCollection();
-
-                // when the owning collection is null it may be the case
-                // when the item is a workspace item or a workflow item
-                if (collection == null) {
-                    try {
-                        Context context = Curator.curationContext();
-                        if (itemService.isInProgressSubmission(context, item)) {
-                            WorkflowItem workflowItem = workflowItemService.findByItem(context, item);
-                            if (workflowItem != null) {
-                                collection = workflowItem.getCollection();
-                            } else {
-                                WorkspaceItem workspaceItem = workspaceItemService.findByItem(context, item);
-                                if (workspaceItem != null) {
-                                    collection = workspaceItem.getCollection();
-                                }
-                            }
-                        }
-                    } catch (SQLException ex) {
-                        throw new IOException(ex.getMessage(), ex);
-                    }
-                }
+                Collection collection = getCollection(item);
 
                 String resourceType = itemService.getMetadataFirstValue(
                         item, MetadataSchemaEnum.DC.getName(), "type", null, Item.ANY);
 
-                for (String req : getReqList(collection.getHandle(), resourceType)) {
+                for (String req : getReqList(collection, resourceType)) {
                     List<MetadataValue> vals = itemService.getMetadataByMetadataString(item, req);
                     if (vals.size() == 0) {
                         sb.append(" missing required field: ").append(req);
@@ -143,17 +122,18 @@ public class RequiredMetadata extends AbstractCurationTask {
      * In order to avoid required metadata list calculation repeatedly,
      * the lists are cached into reqMap object for given collection handle and item resource type.
      *
-     * @param collectionHandle item's owning collection handle
+     * @param collection item's owning collection
      * @param resourceType item resource type
      * @return the list of required metadata
      * @throws DCInputsReaderException when DCInputsReader error occurs
      */
-    private List<String> getReqList(String collectionHandle, String resourceType) throws DCInputsReaderException {
+    private List<String> getReqList(Collection collection, String resourceType) throws DCInputsReaderException {
+        String collectionHandle = collection.getHandle();
         ReqKey reqKey = new ReqKey(collectionHandle, resourceType);
         List<String> reqList = reqMap.get(reqKey);
         if (reqList == null) {
             Set<String> reqSet = new LinkedHashSet<>();
-            List<DCInputSet> inputSet = reader.getInputsByCollectionHandle(collectionHandle);
+            List<DCInputSet> inputSet = reader.getInputsByCollection(collection);
             for (DCInputSet inputs : inputSet) {
                 for (DCInput[] row : inputs.getFields()) {
                     for (DCInput input : row) {
@@ -175,6 +155,32 @@ public class RequiredMetadata extends AbstractCurationTask {
             reqMap.put(reqKey, reqList);
         }
         return reqList;
+    }
+
+    private Collection getCollection(Item item) throws IOException {
+        Collection collection = item.getOwningCollection();
+
+        // when the owning collection is null it may be the case
+        // when the item is a workspace item or a workflow item
+        if (collection == null) {
+            try {
+                Context context = Curator.curationContext();
+                if (itemService.isInProgressSubmission(context, item)) {
+                    WorkflowItem workflowItem = workflowItemService.findByItem(context, item);
+                    if (workflowItem != null) {
+                        collection = workflowItem.getCollection();
+                    } else {
+                        WorkspaceItem workspaceItem = workspaceItemService.findByItem(context, item);
+                        if (workspaceItem != null) {
+                            collection = workspaceItem.getCollection();
+                        }
+                    }
+                }
+            } catch (SQLException ex) {
+                throw new IOException(ex.getMessage(), ex);
+            }
+        }
+        return collection;
     }
 
     protected static class ReqKey {

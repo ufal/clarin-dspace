@@ -95,7 +95,7 @@ public class MatomoPDFExporter {
     private static String MATOMO_API_MODE;
     private static boolean MATOMO_KEEP_REPORTS;
 
-    private static URL LINDAT_LOGO;
+    private static URL ITEM_STATISTICS_LOGO;
 
     private static SimpleDateFormat inputDateFormat = new SimpleDateFormat("yyyy-MM-dd");
     private static SimpleDateFormat outputDateFormat = new SimpleDateFormat("MMM-dd");
@@ -142,7 +142,7 @@ public class MatomoPDFExporter {
         MATOMO_API_MODE = configurationService.getProperty("lr.statistics.api.mode", "cached");
         MATOMO_REPORTS_OUTPUT_PATH = configurationService.getProperty("lr.statistics.report.path");
         MATOMO_KEEP_REPORTS = configurationService.getBooleanProperty("lr.statistics.keep.reports", true);
-        LINDAT_LOGO = MatomoPDFExporter.class.getResource("/org/dspace/lindat/lindat-logo.png");
+        ITEM_STATISTICS_LOGO = MatomoPDFExporter.class.getResource("/org/dspace/lindat/lindat-logo.png");
     }
 
     private static void generateReports(String adminEmail, boolean verboseOutput)
@@ -180,37 +180,36 @@ public class MatomoPDFExporter {
 
         for (MatomoReportSubscription mr : matomoReports) {
             Item item = mr.getItem();
-            if (item != null) {
-                if (!done.contains(item)) {
-                    if (!getHandle(item).isEmpty()) {
-                        try {
-                            log.info("Processing Item: {}", getHandle(item));
-                            if (verboseOutput) {
-                                System.out.println("Processing Item: " + item.getID() + "(" + getHandle(item) + ")");
-                            }
-                            generateItemReport(item);
-                            done.add(item);
-                        } catch (FileNotFoundException e) {
-                            log.info("404 '{}' probably nothing logged for that date", e.getMessage());
-                            if (verboseOutput) {
-                                System.out.println("Nothing logged for: " + e.getMessage());
-                            }
-                            continue;
-                        } catch (Exception e) {
-                            log.error("Unable to generate report.", e);
-                            continue;
+            // item cannot be null by design
+            if (!done.contains(item)) {
+                if (!getHandle(item).isEmpty()) {
+                    try {
+                        log.info("Processing Item: {}", getHandle(item));
+                        if (verboseOutput) {
+                            System.out.println("Processing Item: " + item.getID() + "(" + getHandle(item) + ")");
                         }
-                    } else {
-                        log.info("Item handle not found : item_id={}", item.getID());
+                        generateItemReport(item);
+                        done.add(item);
+                    } catch (FileNotFoundException e) {
+                        log.info("404 '{}' probably nothing logged for that date", e.getMessage());
+                        if (verboseOutput) {
+                            System.out.println("Nothing logged for: " + e.getMessage());
+                        }
+                        continue;
+                    } catch (Exception e) {
+                        log.error("Unable to generate report.", e);
+                        continue;
                     }
+                } else {
+                    log.info("Item handle not found : item_id={}", item.getID());
                 }
-                EPerson to = mr.getEPerson();
-                try {
-                    sendEmail(to, item, verboseOutput);
-                } catch (Exception e) {
-                    log.error("Failed to send email to recipient: {} for item ID: {}. Error: {}",
-                            to.getEmail(), item.getID(), e.getMessage(), e);
-                }
+            }
+            EPerson to = mr.getEPerson();
+            try {
+                sendEmail(to, item, verboseOutput);
+            } catch (Exception e) {
+                log.error("Failed to send email to recipient: {} for item ID: {}. Error: {}",
+                        to.getEmail(), item.getID(), e.getMessage(), e);
             }
         }
         //cleanup
@@ -429,7 +428,7 @@ public class MatomoPDFExporter {
         FONT[6] = new Font(FontFamily.HELVETICA, 8);
         FONT[7] = new Font(FontFamily.HELVETICA, 10, Font.BOLD);
 
-        Image logo = Image.getInstance(LINDAT_LOGO);
+        Image logo = Image.getInstance(ITEM_STATISTICS_LOGO);
         logo.scaleAbsolute(82, 48);
         logo.setAlignment(Image.RIGHT);
 

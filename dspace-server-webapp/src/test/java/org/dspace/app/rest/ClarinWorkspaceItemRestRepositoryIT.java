@@ -10,7 +10,10 @@ package org.dspace.app.rest;
 import static org.dspace.app.rest.repository.ClarinLicenseRestRepository.OPERATION_PATH_LICENSE_RESOURCE;
 import static org.dspace.content.InstallItemServiceImpl.SET_OWNING_COLLECTION_EVENT_DETAIL;
 import static org.dspace.content.clarin.ClarinLicense.Confirmation;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.hasProperty;
 import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -31,7 +34,6 @@ import javax.ws.rs.core.MediaType;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.dspace.app.rest.matcher.WorkspaceItemMatcher;
 import org.dspace.app.rest.model.patch.AddOperation;
 import org.dspace.app.rest.model.patch.Operation;
 import org.dspace.app.rest.model.patch.ReplaceOperation;
@@ -45,10 +47,12 @@ import org.dspace.builder.WorkspaceItemBuilder;
 import org.dspace.content.Collection;
 import org.dspace.content.Community;
 import org.dspace.content.Item;
+import org.dspace.content.MetadataValue;
 import org.dspace.content.WorkspaceItem;
 import org.dspace.content.clarin.ClarinLicense;
 import org.dspace.content.clarin.ClarinLicenseLabel;
 import org.dspace.content.service.InstallItemService;
+import org.dspace.content.service.ItemService;
 import org.dspace.content.service.clarin.ClarinLicenseLabelService;
 import org.dspace.content.service.clarin.ClarinLicenseResourceMappingService;
 import org.dspace.content.service.clarin.ClarinLicenseService;
@@ -83,6 +87,8 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
     private ClarinLicenseResourceMappingService clarinLicenseResourceMappingService;
     @Autowired
     private InstallItemService installItemService;
+    @Autowired
+    private ItemService itemService;
 
     @Test
     public void uploadFileBiggerThanUploadFileSizeLimit() throws Exception {
@@ -180,9 +186,9 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
         getClient(tokenEperson).perform(patch("/api/submission/workspaceitems/" + witem.getID())
                         .content(patchBody)
                         .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$",  WorkspaceItemMatcher.matchItemWithSponsorRelation(witem,
-                        EU_SPONSOR, EU_SPONSOR_RELATION)));
+                .andExpect(status().isOk());
+        assertClarinLicenseMetadata(witem, "local", "sponsor", null, EU_SPONSOR, false);
+        assertClarinLicenseMetadata(witem, "dc", "relation", null, EU_SPONSOR_RELATION, false);
     }
 
     @Test
@@ -204,9 +210,8 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
         getClient(tokenEperson).perform(patch("/api/submission/workspaceitems/" + witem.getID())
                         .content(patchBody)
                         .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$",  WorkspaceItemMatcher.matchItemWithSponsorRelation(witem,
-                        NON_EU_SPONSOR, null)));
+                .andExpect(status().isOk());
+        assertClarinLicenseMetadata(witem, "local", "sponsor", null, NON_EU_SPONSOR, false);
     }
 
     @Test
@@ -252,11 +257,11 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
                 .andExpect(jsonPath("$.sections.traditionalpageone['local.sponsor'][2].value",
                         is(secondNonEUSponsor)))
                 .andExpect(jsonPath("$.sections.traditionalpageone['local.sponsor'][3].value",
-                        is(secondEUSponsor)))
-                .andExpect(jsonPath("$._embedded.item.metadata['dc.relation'][0].value",
-                        is(EU_SPONSOR_RELATION)))
-                .andExpect(jsonPath("$._embedded.item.metadata['dc.relation'][1].value",
-                        is(EU_SPONSOR_RELATION)));
+                        is(secondEUSponsor)));
+        witem = context.reloadEntity(witem);
+        List<MetadataValue> metadataValues = itemService.getMetadata(witem.getItem(), "dc", "relation", null, Item.ANY);
+        assertThat(metadataValues.get(0).getValue(), is(EU_SPONSOR_RELATION));
+        assertThat(metadataValues.get(1).getValue(), is(EU_SPONSOR_RELATION));
     }
 
     @Test
@@ -302,11 +307,11 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
                 .andExpect(jsonPath("$.sections.traditionalpageone['local.sponsor'][2].value",
                         is(secondEUSponsor)))
                 .andExpect(jsonPath("$.sections.traditionalpageone['local.sponsor'][3].value",
-                        is(secondNonEUSponsor)))
-                .andExpect(jsonPath("$._embedded.item.metadata['dc.relation'][0].value",
-                        is(EU_SPONSOR_RELATION)))
-                .andExpect(jsonPath("$._embedded.item.metadata['dc.relation'][1].value",
-                        is(EU_SPONSOR_RELATION)));
+                        is(secondNonEUSponsor)));
+        witem = context.reloadEntity(witem);
+        List<MetadataValue> metadataValues = itemService.getMetadata(witem.getItem(), "dc", "relation", null, Item.ANY);
+        assertThat(metadataValues.get(0).getValue(), containsString(EU_SPONSOR_RELATION));
+        assertThat(metadataValues.get(1).getValue(), containsString(EU_SPONSOR_RELATION));
     }
 
     // replace nonEU - should do not have relation
@@ -341,19 +346,17 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
         getClient(tokenEperson).perform(patch("/api/submission/workspaceitems/" + witem.getID())
                         .content(patchBody)
                         .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$",  WorkspaceItemMatcher.matchItemWithSponsorRelation(witem,
-                        NON_EU_SPONSOR, null)))
-                .andExpect(jsonPath("$._embedded.item.metadata['dc.relation'][0].value").doesNotExist());
+                .andExpect(status().isOk());
+        assertClarinLicenseMetadata(witem, "local", "sponsor", null, NON_EU_SPONSOR, false);
+        assertClarinLicenseMetadata(witem, "dc", "relation", null, null, true);
 
         // Replace operation
         getClient(tokenEperson).perform(patch("/api/submission/workspaceitems/" + witem.getID())
                         .content(updateBody)
                         .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$",  WorkspaceItemMatcher.matchItemWithSponsorRelation(witem,
-                        updatedSponsor, null)))
-                .andExpect(jsonPath("$._embedded.item.metadata['dc.relation'][0].value").doesNotExist());
+                .andExpect(status().isOk());
+        assertClarinLicenseMetadata(witem, "local", "sponsor", null, updatedSponsor, false);
+        assertClarinLicenseMetadata(witem, "dc", "relation", null, null, true);
     }
 
     // replace EU - should do not have relation
@@ -388,19 +391,17 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
         getClient(tokenEperson).perform(patch("/api/submission/workspaceitems/" + witem.getID())
                         .content(patchBody)
                         .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$",  WorkspaceItemMatcher.matchItemWithSponsorRelation(witem,
-                        EU_SPONSOR, EU_SPONSOR_RELATION)))
-                .andExpect(jsonPath("$._embedded.item.metadata['dc.relation'][1].value").doesNotExist());
+                .andExpect(status().isOk());
+        assertClarinLicenseMetadata(witem, "local", "sponsor", null, EU_SPONSOR, false);
+        assertClarinLicenseMetadata(witem, "dc", "relation", null, EU_SPONSOR_RELATION, false);
 
         // Replace operation
         getClient(tokenEperson).perform(patch("/api/submission/workspaceitems/" + witem.getID())
                         .content(updateBody)
                         .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$",  WorkspaceItemMatcher.matchItemWithSponsorRelation(witem,
-                        updatedSponsor, EU_SPONSOR_RELATION)))
-                .andExpect(jsonPath("$._embedded.item.metadata['dc.relation'][1].value").doesNotExist());
+                .andExpect(status().isOk());
+        assertClarinLicenseMetadata(witem, "local", "sponsor", null, updatedSponsor, false);
+        assertClarinLicenseMetadata(witem, "dc", "relation", null, EU_SPONSOR_RELATION, false);
     }
 
     // replace non EU to EU - should have relation
@@ -434,19 +435,17 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
         getClient(tokenEperson).perform(patch("/api/submission/workspaceitems/" + witem.getID())
                         .content(patchBody)
                         .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$",  WorkspaceItemMatcher.matchItemWithSponsorRelation(witem,
-                        NON_EU_SPONSOR, null)))
-                .andExpect(jsonPath("$._embedded.item.metadata['dc.relation'][0].value").doesNotExist());
+                .andExpect(status().isOk());
+        assertClarinLicenseMetadata(witem, "local", "sponsor", null, NON_EU_SPONSOR, false);
+        assertClarinLicenseMetadata(witem, "dc", "relation", null, null, true);
 
         // Replace operation
         getClient(tokenEperson).perform(patch("/api/submission/workspaceitems/" + witem.getID())
                         .content(updateBody)
                         .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$",  WorkspaceItemMatcher.matchItemWithSponsorRelation(witem,
-                        EU_SPONSOR, EU_SPONSOR_RELATION)))
-                .andExpect(jsonPath("$._embedded.item.metadata['dc.relation'][1].value").doesNotExist());
+                .andExpect(status().isOk());
+        assertClarinLicenseMetadata(witem, "local", "sponsor", null, EU_SPONSOR, false);
+        assertClarinLicenseMetadata(witem, "dc", "relation", null, EU_SPONSOR_RELATION, false);
     }
 
     // replace EU to non EU - should do not have relation
@@ -480,18 +479,23 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
                         .content(patchBody)
                         .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$",  WorkspaceItemMatcher.matchItemWithSponsorRelation(witem,
-                        EU_SPONSOR, EU_SPONSOR_RELATION)))
                 .andExpect(jsonPath("$._embedded.item.metadata['dc.relation'][1].value").doesNotExist());
+
+        witem = context.reloadEntity(witem);
+        // Assert sponsor metadata
+        List<MetadataValue> sponsors = itemService.getMetadata(witem.getItem(), "local", "sponsor", null, Item.ANY);
+        assertThat(sponsors, hasItem(hasProperty("value", is(EU_SPONSOR))));
+
+        // Assert relation metadata
+        List<MetadataValue> relations = itemService.getMetadata(witem.getItem(), "dc", "relation", null, Item.ANY);
+        assertThat(relations, hasItem(hasProperty("value", is(EU_SPONSOR_RELATION))));
 
         // Replace operation
         getClient(tokenEperson).perform(patch("/api/submission/workspaceitems/" + witem.getID())
                         .content(updateBody)
                         .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$",  WorkspaceItemMatcher.matchItemWithSponsorRelation(witem,
-                        NON_EU_SPONSOR, null)))
-                .andExpect(jsonPath("$._embedded.item.metadata['dc.relation'][1].value").doesNotExist());
+                .andExpect(status().isOk());
+        assertClarinLicenseMetadata(witem, "local", "sponsor", null, NON_EU_SPONSOR, false);
     }
 
     // add EU, add nonEU, changee EU to nonEU, change nonEU to EU
@@ -533,10 +537,11 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
                 .andExpect(jsonPath("$.sections.traditionalpageone['local.sponsor'][0].value",
                         is(EU_SPONSOR)))
                 .andExpect(jsonPath("$.sections.traditionalpageone['local.sponsor'][1].value",
-                        is(NON_EU_SPONSOR)))
-                .andExpect(jsonPath("$._embedded.item.metadata['dc.relation'][0].value",
-                        is(EU_SPONSOR_RELATION)))
-                .andExpect(jsonPath("$._embedded.item.metadata['dc.relation'][1].value").doesNotExist());
+                        is(NON_EU_SPONSOR)));
+        witem = context.reloadEntity(witem);
+        List<MetadataValue> metadataValues = itemService.getMetadata(witem.getItem(), "dc", "relation", null, Item.ANY);
+        assertThat(metadataValues.get(0).getValue(), containsString(EU_SPONSOR_RELATION));
+        assertThat(metadataValues.size(), is(1));
 
         // Replace operation
         getClient(tokenEperson).perform(patch("/api/submission/workspaceitems/" + witem.getID())
@@ -546,11 +551,12 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
                 .andExpect(jsonPath("$.sections.traditionalpageone['local.sponsor'][0].value",
                         is(EU_SPONSOR)))
                 .andExpect(jsonPath("$.sections.traditionalpageone['local.sponsor'][1].value",
-                        is(secondEuSponsor)))
-                .andExpect(jsonPath("$._embedded.item.metadata['dc.relation'][0].value",
-                        is(EU_SPONSOR_RELATION)))
-                .andExpect(jsonPath("$._embedded.item.metadata['dc.relation'][1].value",
-                        is(EU_SPONSOR_RELATION)));
+                        is(secondEuSponsor)));
+
+        witem = context.reloadEntity(witem);
+        metadataValues = itemService.getMetadata(witem.getItem(), "dc", "relation", null, Item.ANY);
+        assertThat(metadataValues.get(0).getValue(), containsString(EU_SPONSOR_RELATION));
+        assertThat(metadataValues.get(1).getValue(), containsString(EU_SPONSOR_RELATION));
     }
 
     // add EU, add nonEU, changee EU to nonEU, change nonEU to EU
@@ -592,10 +598,11 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
                 .andExpect(jsonPath("$.sections.traditionalpageone['local.sponsor'][0].value",
                         is(NON_EU_SPONSOR)))
                 .andExpect(jsonPath("$.sections.traditionalpageone['local.sponsor'][1].value",
-                        is(EU_SPONSOR)))
-                .andExpect(jsonPath("$._embedded.item.metadata['dc.relation'][0].value",
-                        is(EU_SPONSOR_RELATION)))
-                .andExpect(jsonPath("$._embedded.item.metadata['dc.relation'][1].value").doesNotExist());
+                        is(EU_SPONSOR)));
+        witem = context.reloadEntity(witem);
+        List<MetadataValue> metadataValues = itemService.getMetadata(witem.getItem(), "dc", "relation", null, Item.ANY);
+        assertThat(metadataValues.get(0).getValue(), containsString(EU_SPONSOR_RELATION));
+        assertThat(metadataValues.size(), is(1));
 
         // Replace operation
         getClient(tokenEperson).perform(patch("/api/submission/workspaceitems/" + witem.getID())
@@ -605,9 +612,10 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
                 .andExpect(jsonPath("$.sections.traditionalpageone['local.sponsor'][0].value",
                         is(NON_EU_SPONSOR)))
                 .andExpect(jsonPath("$.sections.traditionalpageone['local.sponsor'][1].value",
-                        is(secondNonEuSponsor)))
-                .andExpect(jsonPath("$._embedded.item.metadata['dc.relation'][0].value").doesNotExist())
-                .andExpect(jsonPath("$._embedded.item.metadata['dc.relation'][1].value").doesNotExist());
+                        is(secondNonEuSponsor)));
+        witem = context.reloadEntity(witem);
+        metadataValues = itemService.getMetadata(witem.getItem(), "dc", "relation", null, Item.ANY);
+        assertThat(metadataValues.size(), is(0));
     }
 
     /**
@@ -650,9 +658,7 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
                 .andExpect(status().isOk());
 
         // 4. Check if the Clarin License name was added to the Item's metadata `dc.rights`
-        getClient(tokenAdmin).perform(get("/api/submission/workspaceitems/" + witem.getID()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$._embedded.item.metadata['dc.rights'][0].value", is(clarinLicenseName)));
+        assertClarinLicenseMetadata(witem, "dc", "rights", null, clarinLicenseName, false);
 
         // 5. Check if the Clarin License was attached to the Bitstream
         getClient(tokenAdmin).perform(get("/api/core/clarinlicenses/" + clarinLicense.getID()))
@@ -702,9 +708,7 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
                 .andExpect(status().isOk());
 
         // 4. Check if the Clarin License name was added to the Item's metadata `dc.rights`
-        getClient(tokenAdmin).perform(get("/api/submission/workspaceitems/" + witem.getID()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$._embedded.item.metadata['dc.rights'][0].value", is(clarinLicenseName)));
+        assertClarinLicenseMetadata(witem, "dc", "rights", null, clarinLicenseName, false);
 
         // 5. Check if the Clarin License was attached to the Bitstream
         getClient(tokenAdmin).perform(get("/api/core/clarinlicenses/" + clarinLicense.getID()))
@@ -727,9 +731,7 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
                 .andExpect(status().isOk());
 
         // 7. Check if the Item has cleared `dc.rights` metadata
-        getClient(tokenAdmin).perform(get("/api/submission/workspaceitems/" + witem.getID()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$._embedded.item.metadata['dc.rights'][0].value").doesNotExist());
+        assertClarinLicenseMetadata(witem, "dc", "rights", null, null, true);
 
         // 8. Check if the Clarin License was detached from the Workspace Item bitstream
         getClient(tokenAdmin).perform(get("/api/core/clarinlicenses/" + clarinLicense.getID()))
@@ -783,9 +785,7 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
                 .andExpect(status().isOk());
 
         // 4. Check if the Clarin License name was added to the Item's metadata `dc.rights`
-        getClient(tokenAdmin).perform(get("/api/submission/workspaceitems/" + witem.getID()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$._embedded.item.metadata['dc.rights'][0].value", is(clarinLicenseName)));
+        assertClarinLicenseMetadata(witem, "dc", "rights", null, clarinLicenseName, false);
 
         // 5. Check if the Clarin License was attached to the Bitstream
         getClient(tokenAdmin).perform(get("/api/core/clarinlicenses/" + clarinLicense.getID()))
@@ -807,10 +807,7 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
                 .andExpect(status().isOk());
 
         // 7. Check if the Clarin License name was updated in the Item's `dc.rights` metadata
-        getClient(tokenAdmin).perform(get("/api/submission/workspaceitems/" + witem.getID()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$._embedded.item.metadata['dc.rights'][0].value",
-                        is(updateClarinLicenseName)));
+        assertClarinLicenseMetadata(witem, "dc", "rights", null, updateClarinLicenseName, false);
 
         // 8. Check if the Clarin License was detached from the Workspace Item bitstream
         getClient(tokenAdmin).perform(get("/api/core/clarinlicenses/" + clarinLicense.getID()))
@@ -1089,5 +1086,28 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
         context.restoreAuthSystemState();
 
         return witem;
+    }
+
+    /**
+     * Assert that the Clarin License metadata is present in the Workspace Item.
+     * @param witem the Workspace Item to check
+     * @param schema the metadata schema (e.g., "dc")
+     * @param element the metadata element (e.g., "rights")
+     * @param qualifier the metadata qualifier (e.g., null for no qualifier)
+     * @param valueToCompare the expected value of the metadata
+     * @param isEmpty true if the metadata should be empty, false otherwise
+     */
+    private void assertClarinLicenseMetadata(WorkspaceItem witem, String schema, String element, String qualifier,
+                                             String valueToCompare, boolean isEmpty)
+            throws SQLException {
+        witem = context.reloadEntity(witem);
+        List<MetadataValue> rightsMetadata = itemService.getMetadata(witem.getItem(), schema, element, qualifier,
+                null, Item.ANY);
+        if (isEmpty) {
+            Assert.assertTrue(rightsMetadata.isEmpty());
+            return;
+        }
+        Assert.assertFalse(rightsMetadata.isEmpty());
+        Assert.assertEquals(valueToCompare, rightsMetadata.get(0).getValue());
     }
 }
