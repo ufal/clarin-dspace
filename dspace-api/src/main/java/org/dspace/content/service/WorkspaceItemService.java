@@ -62,14 +62,32 @@ public interface WorkspaceItemService extends InProgressSubmissionService<Worksp
      *
      * @param context    DSpace context object
      * @param collection Collection being submitted to
-     * @param uuid       the preferred uuid of the new item (used if restoring an item and retaining old uuid)
      * @param template   if <code>true</code>, the workspace item starts as a copy
      *                   of the collection's template item
+     * @param isNewVersion whether we are creating a new workspace item version of an existing item
      * @return the newly created workspace item
      * @throws SQLException       if database error
      * @throws AuthorizeException if authorization error
      */
-    public WorkspaceItem create(Context context, Collection collection, UUID uuid, boolean template)
+    public WorkspaceItem create(Context context, Collection collection, boolean template, boolean isNewVersion)
+            throws AuthorizeException, SQLException;
+
+    /**
+     * Create a new workspace item, with a new ID. An Item is also created. The
+     * submitter is the current user in the context.
+     *
+     * @param context    DSpace context object
+     * @param collection Collection being submitted to
+     * @param uuid       the preferred uuid of the new item (used if restoring an item and retaining old uuid)
+     * @param template   if <code>true</code>, the workspace item starts as a copy
+     *                   of the collection's template item
+     * @param isNewVersion whether we are creating a new workspace item version of an existing item
+     * @return the newly created workspace item
+     * @throws SQLException       if database error
+     * @throws AuthorizeException if authorization error
+     */
+    public WorkspaceItem create(Context context, Collection collection, UUID uuid, boolean template,
+                                boolean isNewVersion)
             throws AuthorizeException, SQLException;
 
     public WorkspaceItem create(Context c, WorkflowItem wfi) throws SQLException, AuthorizeException;

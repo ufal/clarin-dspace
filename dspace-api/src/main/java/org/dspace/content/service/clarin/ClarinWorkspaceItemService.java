@@ -36,6 +36,9 @@ public interface ClarinWorkspaceItemService {
      * @param pageReached     page reached
      * @param template        if <code>true</code>, the workspace item starts as a copy
      *                        of the collection's template item
+     * @param isNewVersion    controls handle creation behavior during import operations:
+     *                        if <code>false</code>, a new handle is created;
+     *                        if <code>true</code>, the existing handle is preserved.
      * @return created workspace item
      * @throws AuthorizeException if authorization error
      * @throws SQLException       if database error
@@ -43,7 +46,7 @@ public interface ClarinWorkspaceItemService {
     public WorkspaceItem create(Context context, Collection collection,
                                 boolean multipleTitles, boolean publishedBefore,
                                 boolean multipleFiles, Integer stageReached,
-                                Integer pageReached, boolean template)
+                                Integer pageReached, boolean template, boolean isNewVersion)
             throws AuthorizeException, SQLException;
 
     /***

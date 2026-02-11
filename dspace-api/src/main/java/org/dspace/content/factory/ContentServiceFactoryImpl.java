@@ -29,6 +29,7 @@ import org.dspace.content.service.MetadataValueService;
 import org.dspace.content.service.PreviewContentService;
 import org.dspace.content.service.RelationshipService;
 import org.dspace.content.service.RelationshipTypeService;
+import org.dspace.content.service.ReportResultService;
 import org.dspace.content.service.SiteService;
 import org.dspace.content.service.WorkspaceItemService;
 import org.dspace.core.ProvenanceService;
@@ -96,6 +97,9 @@ public class ContentServiceFactoryImpl extends ContentServiceFactory {
 
     @Autowired(required = true)
     private ProvenanceService provenanceService;
+
+    @Autowired(required = true)
+    private ReportResultService reportResultService;
 
     @Override
     public List<DSpaceObjectService<? extends DSpaceObject>> getDSpaceObjectServices() {
@@ -180,6 +184,11 @@ public class ContentServiceFactoryImpl extends ContentServiceFactory {
     @Override
     public ProvenanceService getProvenanceService() {
         return provenanceService;
+    }
+
+    @Override
+    public ReportResultService getReportResultService() {
+        return reportResultService;
     }
 
     @Override

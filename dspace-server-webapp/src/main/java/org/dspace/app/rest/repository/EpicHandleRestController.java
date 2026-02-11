@@ -156,11 +156,11 @@ public class EpicHandleRestController extends DSpaceRestRepository<EpicHandleRes
         }
         String urlQuery = request.getParameter("url");
         int page = Optional.ofNullable(request.getParameter("page"))
-                .map(Integer::parseInt).orElse(0);
+                .map(p -> safeParseInt(p, 0)).orElse(0);
         int size = Optional.ofNullable(request.getParameter("size"))
-                .map(Integer::parseInt).orElse(DEFAULT_PAGE_SIZE);
+                .map(p -> safeParseInt(p, DEFAULT_PAGE_SIZE)).orElse(DEFAULT_PAGE_SIZE);
         int totalElements = Optional.ofNullable(request.getParameter("totalElements"))
-                .map(Integer::parseInt).orElse(-1);
+                .map(p -> safeParseInt(p, -1)).orElse(-1);
         boolean runCountSynchronously = Optional.ofNullable(request.getParameter("runCountSynchronously"))
                 .map(Boolean::parseBoolean).orElse(false);
         try {
@@ -261,6 +261,14 @@ public class EpicHandleRestController extends DSpaceRestRepository<EpicHandleRes
                 ? new URI(request.getRequestURL().toString() + pid.substring(pid.indexOf("/")))
                 : new URI(request.getRequestURL().toString());
         return ResponseEntity.created(urlLocation).body(handleResource);
+    }
+
+    private static int safeParseInt(String str, int defaultValue) {
+        try {
+            return Integer.parseInt(str);
+        } catch (NumberFormatException ex) {
+            return defaultValue;
+        }
     }
 
     /**

@@ -6,13 +6,11 @@
 # http://www.dspace.org/license/
 #
 
-version: "3.7"
-
 services:
   dspace-cli:
     environment:
     - AIPZIP=https://github.com/DSpace-Labs/AIP-Files/raw/main/dogAndReport.zip
-    - ADMIN_EMAIL=test@test.edu
+    - ADMIN_EMAIL=dspace.admin.dev@dataquest.sk
     - AIPDIR=/tmp/aip-dir
     entrypoint:
       - /bin/bash

@@ -78,6 +78,7 @@ docker-compose -p d7 up -d
 ```
 docker-compose -p d7 -f docker-compose.yml -f dspace/src/main/docker-compose/docker-compose-angular.yml up -d
 ```
+NOTE: This starts the UI in development mode. It will take a few minutes to see the UI as the Angular code needs to be compiled.
 
 ## Run DSpace REST and DSpace Angular from local branches
 
@@ -184,7 +185,7 @@ Prerequisites
 
 Create an admin account.  By default, the dspace-cli container runs the dspace command.
 ```
-docker-compose -p d7 -f docker-compose-cli.yml run --rm dspace-cli create-administrator -e test@test.edu -f admin -l user -p admin -c en
+docker-compose -p d7 -f docker-compose-cli.yml run --rm dspace-cli create-administrator -e dspace.admin.dev@dataquest.sk -f admin -l user -p admin -c en
 ```
 
 Download a Zip file of AIP content and ingest test data

@@ -25,7 +25,6 @@ import javax.xml.stream.XMLStreamException;
 import com.lyncode.xoai.dataprovider.exceptions.WritingXmlException;
 import com.lyncode.xoai.dataprovider.xml.XmlOutputContext;
 import com.lyncode.xoai.dataprovider.xml.xoai.Metadata;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.solr.client.solrj.SolrClient;
@@ -48,6 +47,7 @@ import org.dspace.content.factory.ContentServiceFactory;
 import org.dspace.content.service.ItemService;
 import org.dspace.core.Constants;
 import org.dspace.core.Context;
+import org.dspace.event.Event;
 import org.dspace.util.SolrUtils;
 import org.dspace.utils.DSpace;
 import org.dspace.xoai.app.BasicConfiguration;
@@ -316,50 +316,136 @@ public class SolrOAIReindexer {
             SolrInputDocument solrInput = index(item);
             server.add(solrInput);
             server.commit();
-            cacheService.deleteAll();
-            itemCacheService.deleteAll();
+
+            // Try to clear caches safely, but don't fail if it doesn't work
+            safeClearCaches(item);
+            log.info("Successfully reindexed item ID: " + item.getID());
         } catch (IOException | XMLStreamException | SQLException | WritingXmlException | SolrServerException e) {
-            // Do not throw RuntimeException in tests
-            if (this.isTest()) {
-                log.error("Cannot reindex the item with ID: " + item.getID() + " because: " + e.getMessage());
+            log.warn("Direct reindexing failed for item ID: " + item.getID() + " because: " + e.getMessage() +
+                    ". Attempting fallback reindexing via event.");
+
+            boolean fallbackSuccessful = triggerReindexingViaEvent(item);
+
+            if (fallbackSuccessful) {
+                log.info("Fallback reindexing event triggered successfully for item ID: " + item.getID());
+                // Still try to clear caches even after fallback
+                safeClearCaches(item);
             } else {
-                log.error("Cannot reindex the item with ID: " + item.getID() + " because: " + e.getMessage());
-                throw new RuntimeException("Cannot reindex the item with ID: " + item.getID() + " because: "
-                        + e.getMessage());
+                // Fallback also failed
+                handleFinalFailure("Cannot reindex the item with ID: " + item.getID() + " because: " + e.getMessage() +
+                        ". Fallback reindexing via event also failed.");
             }
+        }
+    }
+
+    /**
+     * Triggers reindexing through the event system as a fallback mechanism.
+     * This will fire a MODIFY event which should be picked up by consumers that handle
+     * indexing operations.
+     *
+     * @param item The item to trigger reindexing for
+     * @return true if the event was successfully fired, false otherwise
+     */
+    protected boolean triggerReindexingViaEvent(Item item) {
+        try (Context eventContext = new Context()) {
+            eventContext.addEvent(new Event(Event.MODIFY, Constants.ITEM, item.getID(), null));
+            eventContext.complete();
+            log.info("Triggered fallback reindexing event for item ID: " + item.getID());
+            return true;
+        } catch (Exception e) {
+            log.warn("Failed to trigger fallback reindexing event for item ID: " + item.getID() +
+                    " - " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Triggers deletion through the event system as a fallback mechanism.
+     * This will fire a DELETE event which should be picked up by consumers that handle
+     * indexing operations.
+     *
+     * @param item The item to trigger deletion for
+     * @return true if the event was successfully fired, false otherwise
+     */
+    protected boolean triggerDeletionViaEvent(Item item) {
+        try (Context eventContext = new Context()) {
+            eventContext.addEvent(new Event(Event.DELETE, Constants.ITEM, item.getID(), null));
+            eventContext.complete();
+            log.info("Triggered fallback deletion event for item ID: " + item.getID());
+            return true;
+        } catch (Exception e) {
+            log.warn("Failed to trigger fallback deletion event for item ID: " + item.getID() +
+                    " - " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Attempts to clear OAI caches safely. If cache clearing fails due to concurrent access,
+     * it logs a warning but doesn't throw an exception to avoid breaking the workflow.
+     *
+     * @param item The item that was reindexed
+     */
+    private void safeClearCaches(Item item) {
+        try {
+            // Try to clear item-specific cache first (less likely to cause conflicts)
+            if (itemCacheService != null) {
+                itemCacheService.delete(item);
+                log.debug("Cleared item-specific cache for item ID: " + item.getID());
+            }
+        } catch (Exception e) {
+            log.warn("Failed to clear item-specific cache for item ID: " + item.getID() +
+                     "(will refresh naturally): " + e.getMessage());
+        }
+
+        try {
+            // Try to clear general OAI request cache (more likely to cause conflicts)
+            if (cacheService != null && cacheService.isActive()) {
+                cacheService.deleteAll();
+                log.debug("Cleared OAI request cache after reindexing item ID: " + item.getID());
+            }
+        } catch (Exception e) {
+            // This is expected to sometimes fail with "Device or resource busy"
+            log.warn("Could not clear OAI request cache for item ID: " + item.getID() +
+                    " (harvesters will get fresh data on cache miss): " + e.getMessage());
         }
     }
 
     public void deleteItem(Item item) {
         try {
             deleteItemByQuery(item);
-            cacheService.deleteAll();
-            itemCacheService.deleteAll();
-        } catch (SolrServerException | IOException e) {
-            // Do not throw RuntimeException in tests
-            if (this.isTest()) {
-                log.error("Cannot reindex the Solr after deleting the item with ID: " + item.getID() +
-                        " because: " + e.getMessage());
-            } else {
-                log.error("Cannot reindex the Solr after deleting the item with ID: " + item.getID() +
-                        " because: " + e.getMessage());
-                throw new RuntimeException("Cannot reindex the Solr after deleting the item with ID: " + item.getID() +
-                        " because: " + e.getMessage());
-            }
+            // Try to clear caches safely, but don't fail if it doesn't work
+            safeClearCaches(item);
 
+            log.info("Successfully deleted item from Solr index: " + item.getID());
+        } catch (SolrServerException | IOException e) {
+            // Before logging error and throwing exception, attempt fallback deletion via event
+            log.warn("Direct deletion from Solr failed for item ID: " + item.getID() + " because: " + e.getMessage() +
+                    ". Attempting fallback deletion via event.");
+
+            boolean fallbackSuccessful = triggerDeletionViaEvent(item);
+
+            if (fallbackSuccessful) {
+                log.info("Fallback deletion event triggered successfully for item ID: " + item.getID());
+                // Still try to clear caches even after fallback
+                safeClearCaches(item);
+            } else {
+                // Fallback also failed
+                handleFinalFailure("Cannot reindex the Solr after deleting the item with ID: " + item.getID() +
+                        " because: " + e.getMessage() + ". Fallback deletion via event also failed.");
+            }
         }
     }
 
-    private boolean isTest() {
-        try {
-            if (StringUtils.equals("jdbc:h2:mem:test", this.context.getDBConfig().getDatabaseUrl())) {
-                return true;
-            }
-        } catch (SQLException exception) {
-            return false;
-        }
-
-        return false;
+    /**
+     * Handles final failure when both direct Solr operation and event fallback fail.
+     * This method is public to allow mocking in tests to avoid RuntimeExceptions during testing.
+     *
+     * @param message The error message describing the failure
+     */
+    public void handleFinalFailure(String message) {
+        log.error(message);
+        throw new RuntimeException(message);
     }
 
     /**

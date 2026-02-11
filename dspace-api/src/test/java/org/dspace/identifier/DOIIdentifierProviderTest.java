@@ -24,6 +24,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Random;
 
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -200,15 +201,18 @@ public class DOIIdentifierProviderTest
         }
 
         itemService.clearMetadata(context, item,
-                                  DOIIdentifierProvider.MD_SCHEMA,
-                                  DOIIdentifierProvider.DOI_ELEMENT,
-                                  DOIIdentifierProvider.DOI_QUALIFIER,
-                                  null);
-        itemService.addMetadata(context, item, DOIIdentifierProvider.MD_SCHEMA,
-                                DOIIdentifierProvider.DOI_ELEMENT,
-                                DOIIdentifierProvider.DOI_QUALIFIER,
-                                null,
-                                remainder);
+                DOIIdentifierProvider.MD_SCHEMA,
+                DOIIdentifierProvider.DOI_ELEMENT,
+                DOIIdentifierProvider.DOI_QUALIFIER,
+                null);
+        // There could be scenario when the `dc.identifier.doi` metadata field is empty, so do not try to remove it
+        if (CollectionUtils.isNotEmpty(remainder)) {
+            itemService.addMetadata(context, item, DOIIdentifierProvider.MD_SCHEMA,
+                    DOIIdentifierProvider.DOI_ELEMENT,
+                    DOIIdentifierProvider.DOI_QUALIFIER,
+                    null,
+                    remainder);
+        }
 
         itemService.update(context, item);
         //we need to commit the changes so we don't block the table for testing

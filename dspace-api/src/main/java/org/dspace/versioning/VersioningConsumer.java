@@ -33,6 +33,11 @@ import org.dspace.core.Context;
 import org.dspace.discovery.IndexEventConsumer;
 import org.dspace.event.Consumer;
 import org.dspace.event.Event;
+import org.dspace.orcid.OrcidHistory;
+import org.dspace.orcid.OrcidQueue;
+import org.dspace.orcid.factory.OrcidServiceFactory;
+import org.dspace.orcid.service.OrcidHistoryService;
+import org.dspace.orcid.service.OrcidQueueService;
 import org.dspace.services.ConfigurationService;
 import org.dspace.services.factory.DSpaceServicesFactory;
 import org.dspace.versioning.factory.VersionServiceFactory;
@@ -60,6 +65,8 @@ public class VersioningConsumer implements Consumer {
     private RelationshipTypeService relationshipTypeService;
     private RelationshipService relationshipService;
     private RelationshipVersioningUtils relationshipVersioningUtils;
+    private OrcidQueueService orcidQueueService;
+    private OrcidHistoryService orcidHistoryService;
     private ConfigurationService configurationService;
 
     @Override
@@ -70,6 +77,8 @@ public class VersioningConsumer implements Consumer {
         relationshipTypeService = ContentServiceFactory.getInstance().getRelationshipTypeService();
         relationshipService = ContentServiceFactory.getInstance().getRelationshipService();
         relationshipVersioningUtils = VersionServiceFactory.getInstance().getRelationshipVersioningUtils();
+        this.orcidQueueService = OrcidServiceFactory.getInstance().getOrcidQueueService();
+        this.orcidHistoryService = OrcidServiceFactory.getInstance().getOrcidHistoryService();
         configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
     }
 
@@ -138,6 +147,8 @@ public class VersioningConsumer implements Consumer {
         // the "versioning.unarchive.previous.version" property controls whether previous item is unarchived or not
         if (configurationService.getBooleanProperty("versioning.unarchive.previous.version", true)) {
             unarchiveItem(ctx, previousItem);
+            // handles versions for ORCID publications waiting to be shipped, or already published (history-queue).
+            handleOrcidSynchronization(ctx, previousItem, latestItem);
         }
 
         // update relationships
@@ -153,6 +164,29 @@ public class VersioningConsumer implements Consumer {
         ctx.addEvent(new Event(
             Event.MODIFY, item.getType(), item.getID(), null, itemService.getIdentifiers(ctx, item)
         ));
+    }
+
+    private void handleOrcidSynchronization(Context ctx, Item previousItem, Item latestItem) {
+        try {
+            replaceOrcidHistoryEntities(ctx, previousItem, latestItem);
+            removeOrcidQueueEntries(ctx, previousItem);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private void removeOrcidQueueEntries(Context ctx, Item previousItem) throws SQLException {
+        List<OrcidQueue> queueEntries = orcidQueueService.findByEntity(ctx, previousItem);
+        for (OrcidQueue queueEntry : queueEntries) {
+            orcidQueueService.delete(ctx, queueEntry);
+        }
+    }
+
+    private void replaceOrcidHistoryEntities(Context ctx, Item previousItem, Item latestItem) throws SQLException {
+        List<OrcidHistory> entries = orcidHistoryService.findByEntity(ctx, previousItem);
+        for (OrcidHistory entry : entries) {
+            entry.setEntity(latestItem);
+        }
     }
 
     /**

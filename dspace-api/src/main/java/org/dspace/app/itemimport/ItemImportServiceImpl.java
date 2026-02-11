@@ -30,6 +30,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.URL;
+import java.nio.file.Path;
 import java.sql.SQLException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -50,7 +51,6 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import javax.mail.MessagingException;
 import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.transform.TransformerException;
 import javax.xml.xpath.XPath;
@@ -70,6 +70,7 @@ import org.apache.logging.log4j.Logger;
 import org.dspace.app.itemimport.service.ItemImportService;
 import org.dspace.app.util.LocalSchemaFilenameFilter;
 import org.dspace.app.util.RelationshipUtils;
+import org.dspace.app.util.XMLUtils;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.authorize.ResourcePolicy;
 import org.dspace.authorize.service.AuthorizeService;
@@ -191,6 +192,8 @@ public class ItemImportServiceImpl implements ItemImportService, InitializingBea
     protected ClarinLicenseResourceMappingService clarinLicenseResourceMappingService;
     @Autowired(required = true)
     protected ClarinItemService clarinItemService;
+
+    protected DocumentBuilder builder;
 
     protected String tempWorkDir;
 
@@ -345,7 +348,7 @@ public class ItemImportServiceImpl implements ItemImportService, InitializingBea
 
      /**
       * Add relationships from a 'relationships' manifest file.
-      * 
+      *
       * @param c Context
       * @param sourceDir The parent import source directory
       * @throws Exception
@@ -449,7 +452,7 @@ public class ItemImportServiceImpl implements ItemImportService, InitializingBea
 
     /**
      * Get the item's entity type from meta.
-     * 
+     *
      * @param item
      * @return
      */
@@ -459,7 +462,7 @@ public class ItemImportServiceImpl implements ItemImportService, InitializingBea
 
     /**
      * Read the relationship manifest file.
-     * 
+     *
      * Each line in the file contains a relationship type id and an item
      * identifier in the following format:
      *
@@ -545,7 +548,7 @@ public class ItemImportServiceImpl implements ItemImportService, InitializingBea
       * The import item map will be checked first to see if the identifier refers to an item folder
       * that was just imported. Next it will try to find the item by handle or UUID, or by a unique
       * meta value.
-      * 
+      *
       * @param c Context
       * @param itemIdentifier The identifier string found in the import manifest (handle, uuid, or import subfolder)
       * @return Item if found, or null.
@@ -603,7 +606,7 @@ public class ItemImportServiceImpl implements ItemImportService, InitializingBea
 
     /**
      * Lookup an item by a (unique) meta value.
-     * 
+     *
      * @param c current DSpace session.
      * @param metaKey name of the metadata field to match.
      * @param metaValue value to be matched.
@@ -783,20 +786,37 @@ public class ItemImportServiceImpl implements ItemImportService, InitializingBea
         WorkspaceItem wi = null;
         WorkflowItem wfi = null;
 
+        String myhandle = null;
+
         if (!isTest) {
-            wi = workspaceItemService.create(c, mycollections.iterator().next(), template);
+            if (!useWorkflow) {
+                // only process handle file if not using workflow system
+                myhandle = processHandleFile(path + File.separatorChar + itemname, "handle");
+            }
+
+            // in case the handle exists in import file, we need to avoid new handle registration
+            // (it's almost the same as we'd create a new version of an existing item)
+            boolean isNewVersion = (myhandle != null);
+            wi = workspaceItemService.create(c, mycollections.iterator().next(), template, isNewVersion);
             myitem = wi.getItem();
         }
 
+        // normalize and validate path to make sure itemname doesn't contain path traversal
+        Path itemPath = new File(path + File.separatorChar + itemname + File.separatorChar)
+            .toPath().normalize();
+        if (!itemPath.startsWith(path)) {
+            throw new IOException("Illegal item metadata path: '" + itemPath);
+        }
+        // Normalization chops off the last separator, and we need to put it back
+        String itemPathDir = itemPath.toString() + File.separatorChar;
+
         // now fill out dublin core for item
-        loadMetadata(c, myitem, path + File.separatorChar + itemname
-            + File.separatorChar);
+        loadMetadata(c, myitem, itemPathDir);
 
         // and the bitstreams from the contents file
         // process contents file, add bistreams and bundles, return any
         // non-standard permissions
-        List<String> options = processContentsFile(c, myitem, path
-            + File.separatorChar + itemname, "contents");
+        List<String> options = processContentsFile(c, myitem, itemPathDir, "contents");
 
         if (useWorkflow) {
             // don't process handle file
@@ -813,10 +833,6 @@ public class ItemImportServiceImpl implements ItemImportService, InitializingBea
                 mapOutputString = itemname + " " + myitem.getID();
             }
         } else {
-            // only process handle file if not using workflow system
-            String myhandle = processHandleFile(c, myitem, path
-                + File.separatorChar + itemname, "handle");
-
             // put item in system
             if (!isTest) {
                 try {
@@ -1048,6 +1064,34 @@ public class ItemImportServiceImpl implements ItemImportService, InitializingBea
     }
 
     /**
+     * Ensures a file path does not attempt to access files outside the designated parent directory.
+     *
+     * @param parentDir          The absolute path to the parent directory that should contain the file
+     * @param fileName           The name or path of the file to validate
+     * @throws IOException       If an error occurs while resolving canonical paths, or the file path attempts
+     *                           to access a location outside the parent directory
+     */
+    private void validateFilePath(String parentDir, String fileName) throws IOException {
+        File parent = new File(parentDir);
+        File file = new File(fileName);
+
+        // If the fileName is not an absolute path, we resolve it against the parentDir
+        if (!file.isAbsolute()) {
+            file = new File(parent, fileName);
+        }
+
+        String parentCanonicalPath = parent.getCanonicalPath();
+        String fileCanonicalPath = file.getCanonicalPath();
+
+        if (!fileCanonicalPath.startsWith(parentCanonicalPath)) {
+            log.error("File path outside of canonical root requested: fileCanonicalPath={} does not begin " +
+                "with parentCanonicalPath={}", fileCanonicalPath, parentCanonicalPath);
+            throw new IOException("Illegal file path '" + fileName + "' encountered. This references a path " +
+                "outside of the import package. Please see the system logs for more details.");
+        }
+    }
+
+    /**
      * Read the collections file inside the item directory. If there
      * is one and it is not empty return a list of collections in
      * which the item should be inserted. If it does not exist or it
@@ -1111,13 +1155,11 @@ public class ItemImportServiceImpl implements ItemImportService, InitializingBea
     /**
      * Read in the handle file contents or return null if empty or doesn't exist
      *
-     * @param c        DSpace context
-     * @param i        DSpace item
      * @param path     path to handle file
      * @param filename name of file
      * @return handle file contents or null if doesn't exist
      */
-    protected String processHandleFile(Context c, Item i, String path, String filename) {
+    protected String processHandleFile(String path, String filename) {
         File file = new File(path + File.separatorChar + filename);
         String result = null;
 
@@ -1247,6 +1289,7 @@ public class ItemImportServiceImpl implements ItemImportService, InitializingBea
                             sDescription = sDescription.replaceFirst("description:", "");
                         }
 
+                        validateFilePath(path, sFilePath);
                         registerBitstream(c, i, iAssetstore, sFilePath, sBundle, sDescription);
                         logInfo("\tRegistering Bitstream: " + sFilePath
                             + "\tAssetstore: " + iAssetstore
@@ -1460,6 +1503,7 @@ public class ItemImportServiceImpl implements ItemImportService, InitializingBea
             return;
         }
 
+        validateFilePath(path, fileName);
         String fullpath = path + File.separatorChar + fileName;
 
         // get an input stream
@@ -1934,9 +1978,7 @@ public class ItemImportServiceImpl implements ItemImportService, InitializingBea
      */
     protected Document loadXML(String filename) throws IOException,
         ParserConfigurationException, SAXException {
-        DocumentBuilder builder = DocumentBuilderFactory.newInstance()
-                                                        .newDocumentBuilder();
-
+        DocumentBuilder builder = XMLUtils.getDocumentBuilder();
         return builder.parse(new File(filename));
     }
 
@@ -2005,58 +2047,57 @@ public class ItemImportServiceImpl implements ItemImportService, InitializingBea
         try {
             while (entries.hasMoreElements()) {
                 entry = entries.nextElement();
+                String entryName = entry.getName();
+                File outFile = new File(zipDir + entryName);
+                // Verify that this file/directory will be extracted into our zipDir (and not somewhere else!)
+                if (!outFile.toPath().normalize().startsWith(zipDir)) {
+                    throw new IOException("Bad zip entry: '" + entryName
+                                              + "' in file '" + zipfile.getAbsolutePath() + "'!"
+                                              + " Cannot process this file or directory.");
+                }
                 if (entry.isDirectory()) {
-                    if (!new File(zipDir + entry.getName()).mkdirs()) {
+                    if (!outFile.mkdirs()) {
                         logError("Unable to create contents directory: " + zipDir + entry.getName());
                     }
                 } else {
-                    String entryName = entry.getName();
-                    File outFile = new File(zipDir + entryName);
-                    // Verify that this file will be extracted into our zipDir (and not somewhere else!)
-                    if (!outFile.toPath().normalize().startsWith(zipDir)) {
-                        throw new IOException("Bad zip entry: '" + entryName
-                                                  + "' in file '" + zipfile.getAbsolutePath() + "'!"
-                                                  + " Cannot process this file.");
-                    } else {
-                        logInfo("Extracting file: " + entryName);
+                    logInfo("Extracting file: " + entryName);
 
-                        int index = entryName.lastIndexOf('/');
-                        if (index == -1) {
-                            // Was it created on Windows instead?
-                            index = entryName.lastIndexOf('\\');
-                        }
-                        if (index > 0) {
-                            File dir = new File(zipDir + entryName.substring(0, index));
-                            if (!dir.exists() && !dir.mkdirs()) {
-                                logError("Unable to create directory: " + dir.getAbsolutePath());
-                            }
-
-                            //Entries could have too many directories, and we need to adjust the sourcedir
-                            // file1.zip (SimpleArchiveFormat / item1 / contents|dublin_core|...
-                            //            SimpleArchiveFormat / item2 / contents|dublin_core|...
-                            // or
-                            // file2.zip (item1 / contents|dublin_core|...
-                            //            item2 / contents|dublin_core|...
-
-                            //regex supports either windows or *nix file paths
-                            String[] entryChunks = entryName.split("/|\\\\");
-                            if (entryChunks.length > 2) {
-                                if (StringUtils.equals(sourceDirForZip, sourcedir)) {
-                                    sourceDirForZip = sourcedir + "/" + entryChunks[0];
-                                }
-                            }
-                        }
-                        byte[] buffer = new byte[1024];
-                        int len;
-                        InputStream in = zf.getInputStream(entry);
-                        BufferedOutputStream out = new BufferedOutputStream(
-                            new FileOutputStream(outFile));
-                        while ((len = in.read(buffer)) >= 0) {
-                            out.write(buffer, 0, len);
-                        }
-                        in.close();
-                        out.close();
+                    int index = entryName.lastIndexOf('/');
+                    if (index == -1) {
+                        // Was it created on Windows instead?
+                        index = entryName.lastIndexOf('\\');
                     }
+                    if (index > 0) {
+                        File dir = new File(zipDir + entryName.substring(0, index));
+                        if (!dir.exists() && !dir.mkdirs()) {
+                            logError("Unable to create directory: " + dir.getAbsolutePath());
+                        }
+
+                        //Entries could have too many directories, and we need to adjust the sourcedir
+                        // file1.zip (SimpleArchiveFormat / item1 / contents|dublin_core|...
+                        //            SimpleArchiveFormat / item2 / contents|dublin_core|...
+                        // or
+                        // file2.zip (item1 / contents|dublin_core|...
+                        //            item2 / contents|dublin_core|...
+
+                        //regex supports either windows or *nix file paths
+                        String[] entryChunks = entryName.split("/|\\\\");
+                        if (entryChunks.length > 2) {
+                            if (StringUtils.equals(sourceDirForZip, sourcedir)) {
+                                sourceDirForZip = sourcedir + "/" + entryChunks[0];
+                            }
+                        }
+                    }
+                    byte[] buffer = new byte[1024];
+                    int len;
+                    InputStream in = zf.getInputStream(entry);
+                    BufferedOutputStream out = new BufferedOutputStream(
+                        new FileOutputStream(outFile));
+                    while ((len = in.read(buffer)) >= 0) {
+                        out.write(buffer, 0, len);
+                    }
+                    in.close();
+                    out.close();
                 }
             }
         } finally {
@@ -2281,7 +2322,7 @@ public class ItemImportServiceImpl implements ItemImportService, InitializingBea
                                     String fileName) throws MessagingException {
         try {
             Locale supportedLocale = I18nUtil.getEPersonLocale(eperson);
-            Email email = Email.getEmail(I18nUtil.getEmailFilename(supportedLocale, "bte_batch_import_success"));
+            Email email = Email.getEmail(I18nUtil.getEmailFilename(supportedLocale, "batch_import_success"));
             email.addRecipient(eperson.getEmail());
             email.addArgument(fileName);
 
@@ -2297,7 +2338,7 @@ public class ItemImportServiceImpl implements ItemImportService, InitializingBea
         logError("An error occurred during item import, the user will be notified. " + error);
         try {
             Locale supportedLocale = I18nUtil.getEPersonLocale(eperson);
-            Email email = Email.getEmail(I18nUtil.getEmailFilename(supportedLocale, "bte_batch_import_error"));
+            Email email = Email.getEmail(I18nUtil.getEmailFilename(supportedLocale, "batch_import_error"));
             email.addRecipient(eperson.getEmail());
             email.addArgument(error);
             email.addArgument(configurationService.getProperty("dspace.ui.url") + "/feedback");
