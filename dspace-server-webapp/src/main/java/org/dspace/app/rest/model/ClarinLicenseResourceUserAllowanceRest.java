@@ -11,17 +11,17 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.dspace.app.rest.RestResourceController;
 
 @LinksRest(links = {
-        @LinkRest(
-                name = ClarinLicenseResourceUserAllowanceRest.RESOURCE_MAPPING,
-                method = "getResourceMapping"
+    @LinkRest(
+        name = ClarinLicenseResourceUserAllowanceRest.RESOURCE_MAPPING,
+        method = "getResourceMapping"
         ),
-        @LinkRest(
-                name = ClarinLicenseResourceUserAllowanceRest.USER_REGISTRATION,
-                method = "getUserRegistration"
+    @LinkRest(
+        name = ClarinLicenseResourceUserAllowanceRest.USER_REGISTRATION,
+        method = "getUserRegistration"
         ),
-        @LinkRest(
-                name = ClarinLicenseResourceUserAllowanceRest.USER_METADATA,
-                method = "getUserMetadata"
+    @LinkRest(
+        name = ClarinLicenseResourceUserAllowanceRest.USER_METADATA,
+        method = "getUserMetadata"
         )
 })
 public class ClarinLicenseResourceUserAllowanceRest extends BaseObjectRest<Integer> {

@@ -23,6 +23,7 @@ import javax.ws.rs.InternalServerErrorException;
 import javax.ws.rs.core.Response;
 
 import org.apache.catalina.connector.ClientAbortException;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
 import org.dspace.app.rest.converter.ConverterService;
@@ -147,14 +148,33 @@ public class BitstreamRestController {
         }
 
         try {
+            boolean s3DirectDownload = configurationService.getBooleanProperty("s3.download.direct.enabled");
+            boolean s3AssetstoreEnabled = configurationService.getBooleanProperty("assetstore.s3.enabled");
+            boolean hasOriginalBundle = false;
+            if (s3DirectDownload && s3AssetstoreEnabled) {
+                // Download only files which are stored in the `ORIGINAL` bundle, because some specific files are
+                // not correctly downloaded and displayed in the UI when using presigned URLs. E.g., the
+                // process output.
+                hasOriginalBundle = bit.getBundles().stream()
+                        .anyMatch(bundle -> CONTENT_BUNDLE_NAME.equals(bundle.getName()));
+            }
+
             long filesize = bit.getSizeBytes();
             Boolean citationEnabledForBitstream = citationDocumentService.isCitationEnabledForBitstream(bit, context);
+
+            var bitstreamResource =
+                new org.dspace.app.rest.utils.BitstreamResource(name, uuid,
+                    currentUser != null ? currentUser.getID() : null,
+                    context.getSpecialGroupUuids(), citationEnabledForBitstream);
+
+            // Track the download statistics - only if the downloading has started (the condition is inside the method)
+            matomoBitstreamTracker.trackBitstreamDownload(context, request, bit, false);
 
             HttpHeadersInitializer httpHeadersInitializer = new HttpHeadersInitializer()
                 .withBufferSize(BUFFER_SIZE)
                 .withFileName(name)
-                .withChecksum(bit.getChecksum())
-                .withLength(bit.getSizeBytes())
+                .withChecksum(bitstreamResource.getChecksum())
+                .withLength(bitstreamResource.contentLength())
                 .withMimetype(mimetype)
                 .with(request)
                 .with(response);
@@ -172,32 +192,16 @@ public class BitstreamRestController {
                 httpHeadersInitializer.withDisposition(HttpHeadersInitializer.CONTENT_DISPOSITION_ATTACHMENT);
             }
 
-            org.dspace.app.rest.utils.BitstreamResource bitstreamResource =
-                new org.dspace.app.rest.utils.BitstreamResource(name, uuid,
-                    currentUser != null ? currentUser.getID() : null,
-                    context.getSpecialGroupUuids(), citationEnabledForBitstream);
-
-            // Track the download statistics - only if the downloading has started (the condition is inside the method)
-            matomoBitstreamTracker.trackBitstreamDownload(context, request, bit, false);
-
             //We have all the data we need, close the connection to the database so that it doesn't stay open during
             //download/streaming
             context.complete();
 
-            boolean s3DirectDownload = configurationService.getBooleanProperty("s3.download.direct.enabled");
             //Send the data
             if (httpHeadersInitializer.isValid()) {
                 HttpHeaders httpHeaders = httpHeadersInitializer.initialiseHeaders();
-                if (s3DirectDownload) {
-                    // Download only files which are stored in the `ORIGINAL` bundle, because some specific files are
-                    // not correctly downloaded and displayed in the UI when using presigned URLs. E.g., the
-                    // process output.
-                    boolean hasOriginalBundle = bit.getBundles().stream()
-                            .anyMatch(bundle -> CONTENT_BUNDLE_NAME.equals(bundle.getName()));
 
-                    if (hasOriginalBundle) {
-                        return redirectToS3DownloadUrl(httpHeaders, name, bit.getInternalId());
-                    }
+                if (hasOriginalBundle) {
+                    return redirectToS3DownloadUrl(httpHeaders, name, bit.getInternalId());
                 }
 
                 if (RequestMethod.HEAD.name().equals(request.getMethod())) {
@@ -278,12 +282,39 @@ public class BitstreamRestController {
             || responseCode.equals(Response.Status.Family.REDIRECTION);
     }
 
+    /**
+     * Check if a Bitstream of the specified format should always be downloaded (i.e. "content-disposition: attachment")
+     * or can be opened inline (i.e. "content-disposition: inline").
+     * <P>
+     * NOTE that downloading via "attachment" is more secure, as the user's browser will not attempt to process or
+     * display the file. But, downloading via "inline" may be seen as more user-friendly for common formats.
+     * @param format BitstreamFormat
+     * @return true if always download ("attachment"). false if can be opened inline ("inline")
+     */
     private boolean checkFormatForContentDisposition(BitstreamFormat format) {
-        // never automatically download undefined formats
-        if (format == null) {
-            return false;
+        // Undefined or Unknown formats should ALWAYS be downloaded for additional security.
+        if (format == null || format.getSupportLevel() == BitstreamFormat.UNKNOWN) {
+            return true;
         }
-        List<String> formats = List.of((configurationService.getArrayProperty("webui.content_disposition_format")));
+
+        // Load additional formats configured to require download
+        List<String> configuredFormats = List.of(configurationService.
+                                                     getArrayProperty("webui.content_disposition_format"));
+
+        // If configuration includes "*", then all formats will always be downloaded.
+        if (configuredFormats.contains("*")) {
+            return true;
+        }
+
+        // Define a download list of formats which DSpace forces to ALWAYS be downloaded.
+        // These formats can embed JavaScript which may be run in the user's browser if the file is opened inline.
+        // Therefore, DSpace blocks opening these formats inline as it could be used for an XSS attack.
+        List<String> downloadOnlyFormats = List.of("text/html", "text/javascript", "text/xml", "rdf");
+
+        // Combine our two lists
+        List<String> formats = ListUtils.union(downloadOnlyFormats, configuredFormats);
+
+        // See if the passed in format's MIME type or file extension is listed.
         boolean download = formats.contains(format.getMIMEType());
         if (!download) {
             for (String ext : format.getExtensions()) {

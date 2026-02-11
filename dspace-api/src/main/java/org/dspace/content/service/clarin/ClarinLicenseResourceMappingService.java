@@ -40,5 +40,8 @@ public interface ClarinLicenseResourceMappingService {
 
     List<ClarinLicenseResourceMapping> findByBitstreamUUID(Context context, UUID bitstreamID) throws SQLException;
 
+    List<ClarinLicenseResourceMapping> findByBitstreamUUIDs(Context context, List<UUID> bitstreamIDs)
+        throws SQLException;
+
     ClarinLicense getLicenseToAgree(Context context, UUID userId, UUID resourceID) throws SQLException;
 }

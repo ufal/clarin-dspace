@@ -27,7 +27,11 @@ import org.dspace.authorize.AuthorizeException;
 import org.dspace.authorize.ResourcePolicy;
 import org.dspace.authorize.service.AuthorizeService;
 import org.dspace.authorize.service.ResourcePolicyService;
+import org.dspace.content.Bitstream;
+import org.dspace.content.Bundle;
 import org.dspace.content.Collection;
+import org.dspace.content.DSpaceObject;
+import org.dspace.content.Item;
 import org.dspace.content.WorkspaceItem;
 import org.dspace.content.service.WorkspaceItemService;
 import org.dspace.core.Constants;
@@ -167,9 +171,10 @@ public class SubmissionController {
 
         Collection collection = wsi.getCollection();
         Group submittersGroup = collection.getSubmitters();
+        Item item = wsi.getItem();
         boolean isSubmitterGroupMember = submittersGroup != null &&
                 groupService.isMember(context, currentUser, submittersGroup);
-        boolean canRead = authorizeService.authorizeActionBoolean(context, wsi.getItem(), Constants.READ);
+        boolean canRead = authorizeService.authorizeActionBoolean(context, item, Constants.READ);
         if (!canRead && !isSubmitterGroupMember) {
             String errorMessage = "The current user does not have rights to view or claim the WorkspaceItem";
             log.error(errorMessage);
@@ -177,20 +182,42 @@ public class SubmissionController {
         }
 
         List<ResourcePolicy> resourcePolicies = resourcePolicyService.find(context,
-                wsi.getItem(), ResourcePolicy.TYPE_SUBMISSION);
-        // Set submitter
+                item, ResourcePolicy.TYPE_SUBMISSION);
+        // Set submitter on item policies
         for (ResourcePolicy resourcePolicy: resourcePolicies) {
             resourcePolicy.setEPerson(currentUser);
             resourcePolicyService.update(context, resourcePolicy);
         }
 
-        wsi.getItem().setSubmitter(currentUser);
+        // Update resource policies on all bundles and their bitstreams of the item
+        List<Bundle> bundles = item.getBundles();
+        for (Bundle bundle : bundles) {
+            updateSubmissionPolicies(context, bundle, currentUser);
+            for (Bitstream bitstream : bundle.getBitstreams()) {
+                updateSubmissionPolicies(context, bitstream, currentUser);
+            }
+        }
+
+        item.setSubmitter(currentUser);
         workspaceItemService.update(context, wsi);
         WorkspaceItemRest wsiRest = converter.toRest(wsi, utils.obtainProjection());
 
         // Without commit the changes are not persisted into the database
         context.commit();
         return wsiRest;
+    }
+
+    /**
+     * Updates TYPE_SUBMISSION policies for the given DSpaceObject.
+     */
+    private void updateSubmissionPolicies(Context context, DSpaceObject dso, EPerson user)
+            throws SQLException, AuthorizeException {
+        List<ResourcePolicy> policies =
+                resourcePolicyService.find(context, dso, ResourcePolicy.TYPE_SUBMISSION);
+        for (ResourcePolicy policy : policies) {
+            policy.setEPerson(user);
+            resourcePolicyService.update(context, policy);
+        }
     }
 
     private static String generateShareToken() {

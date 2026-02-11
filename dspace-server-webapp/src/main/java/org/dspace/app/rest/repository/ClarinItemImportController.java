@@ -172,8 +172,9 @@ public class ClarinItemImportController {
         context.setCurrentUser(eperson);
         //we have to turn off authorization system, because in service there are authorization controls
         context.turnOffAuthorisationSystem();
+        // Since we are importing, we don't want to create a new handle for the item -> isNewVersion = true
         WorkspaceItem workspaceItem = clarinWorkspaceItemService.create(context, collection, multipleTitles,
-                publishedBefore, multipleFiles, stageReached, pageReached,false);
+                publishedBefore, multipleFiles, stageReached, pageReached, false, true);
         context.restoreAuthSystemState();
         //set current user back to saved current user
         context.setCurrentUser(currUser);
@@ -317,7 +318,7 @@ public class ClarinItemImportController {
         EPerson eperson = ePersonService.find(context, epersonUUID);
         context.setCurrentUser(eperson);
         context.turnOffAuthorisationSystem();
-        WorkspaceItem workspaceItem = workspaceItemService.create(context, collection, false);
+        WorkspaceItem workspaceItem = workspaceItemService.create(context, collection, false, true);
         // created item
         Item item = workspaceItem.getItem();
         // if the created item has pre-registered PID and the importing Item has handle which must be imported, the

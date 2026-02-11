@@ -13,9 +13,9 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.dspace.app.rest.RestResourceController;
 
 @LinksRest(links = {
-        @LinkRest(
-                name = ClarinLicenseResourceMappingRest.CLARIN_LICENSE,
-                method = "getClarinLicense"
+    @LinkRest(
+        name = ClarinLicenseResourceMappingRest.CLARIN_LICENSE,
+        method = "getClarinLicense"
         )
 })
 public class ClarinLicenseResourceMappingRest extends BaseObjectRest<Integer> {

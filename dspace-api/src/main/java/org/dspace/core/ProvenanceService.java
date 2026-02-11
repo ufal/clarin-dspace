@@ -116,8 +116,9 @@ public interface ProvenanceService {
      * @param context DSpace context object
      * @param dso DSpace object to which the metadata is added
      * @param metadataField metadata field that is added
+     * @param metadataValue metadata value that is added
      */
-    void addMetadata(Context context, DSpaceObject dso, MetadataField metadataField);
+    void addMetadata(Context context, DSpaceObject dso, MetadataField metadataField, String metadataValue);
 
     /**
      * Add a provenance message to the item when metadata is removed
@@ -139,14 +140,16 @@ public interface ProvenanceService {
                                int indexInt);
 
     /**
-     * Add a provenance message to the item when metadata is replaced
+     * Add a provenance message to the item when metadata is replaced, showing both old and new values
      *
      * @param context DSpace context object
      * @param dso DSpace object to which the metadata is replaced
      * @param metadataField metadata field that is replaced
      * @param oldMtdVal old metadata value
+     * @param newMtdVal new metadata value
      */
-    void replaceMetadata(Context context, DSpaceObject dso, MetadataField metadataField, String oldMtdVal);
+    void replaceMetadata(Context context, DSpaceObject dso, MetadataField metadataField, String oldMtdVal,
+                         String newMtdVal);
 
     /**
      * Add a provenance message to the item when metadata is replaced
@@ -157,7 +160,7 @@ public interface ProvenanceService {
      * @param oldMtdVal old metadata value
      */
     void replaceMetadataSingle(Context context, DSpaceObject dso, MetadataField metadataField,
-                               String oldMtdVal);
+                               String oldMtdVal, String newMtdVal);
 
     /**
      * Add a provenance message to the item when metadata is updated
@@ -175,6 +178,30 @@ public interface ProvenanceService {
      * @param bundle bundle to which the bitstream is uploaded
      */
     void uploadBitstream(Context context, Bundle bundle);
+
+    /**
+     * Add a provenance message to the item when a resource policy is created
+     *
+     * @param context DSpace context object
+     * @param resourcePolicy the resource policy that was created
+     */
+    void createResourcePolicy(Context context, ResourcePolicy resourcePolicy);
+
+    /**
+     * Add a provenance message to the item when a resource policy is updated
+     *
+     * @param context DSpace context object
+     * @param resourcePolicy the resource policy that was updated
+     */
+    void updateResourcePolicy(Context context, ResourcePolicy resourcePolicy);
+
+    /**
+     * Add a provenance message to the item when a resource policy is deleted
+     *
+     * @param context DSpace context object
+     * @param resourcePolicy the resource policy that was deleted
+     */
+    void deleteResourcePolicy(Context context, ResourcePolicy resourcePolicy);
 
     /**
      * Fetch an Item object using a service and return the first Item object from the list.

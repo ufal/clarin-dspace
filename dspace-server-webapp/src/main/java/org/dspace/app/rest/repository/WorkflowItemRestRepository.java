@@ -72,6 +72,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class WorkflowItemRestRepository extends DSpaceRestRepository<WorkflowItemRest, Integer> {
 
     public static final String OPERATION_PATH_SECTIONS = "sections";
+    public static final String REQUESTPARAMETER_EXPUNGE = "expunge";
 
     private static final Logger log = LogManager.getLogger();
 
@@ -181,6 +182,9 @@ public class WorkflowItemRestRepository extends DSpaceRestRepository<WorkflowIte
             throw new RuntimeException("SQLException in " + this.getClass() + "#findBySubmitter trying to create " +
                 "a workflow and adding it to db.", e);
         }
+
+        // Reindex after successful workflow creation to ensure OAI-PMH reflects the new state
+        // Only reindex once after the state change is complete
         solrOAIReindexer.reindexItem(source.getItem());
         //if the item go directly in published status we have to manage a status code 204 with no content
         if (source.getItem().isArchived()) {
@@ -244,13 +248,25 @@ public class WorkflowItemRestRepository extends DSpaceRestRepository<WorkflowIte
      * move the workflowitem back to the submitter workspace regardless to how the workflow is designed
      */
     protected void delete(Context context, Integer id) {
+        String expungeParam = getRequestService()
+            .getCurrentRequest()
+            .getServletRequest()
+            .getParameter(REQUESTPARAMETER_EXPUNGE);
+        boolean expunge = false;
+        if (expungeParam != null) {
+            expunge = Boolean.parseBoolean(expungeParam);
+        }
         XmlWorkflowItem witem = null;
         try {
             witem = wis.find(context, id);
             if (witem == null) {
                 throw new ResourceNotFoundException("WorkflowItem ID " + id + " not found");
             }
-            wfs.abort(context, witem, context.getCurrentUser());
+            if (expunge) {
+                wis.delete(context, witem);
+            } else {
+                wfs.abort(context, witem, context.getCurrentUser());
+            }
         } catch (AuthorizeException e) {
             throw new RESTAuthorizationException(e);
         } catch (SQLException e) {
