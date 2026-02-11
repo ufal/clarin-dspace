@@ -92,7 +92,9 @@ public class ScriptRestRepositoryIT extends AbstractControllerIntegrationTest {
     public void findAllScriptsTest() throws Exception {
         String token = getAuthToken(admin.getEmail(), password);
 
-        getClient(token).perform(get("/api/system/scripts"))
+        getClient(token).perform(get("/api/system/scripts")
+                        .param("size", String.valueOf(scriptConfigurations.size()))
+                        .param("page", "0"))
                         .andExpect(status().isOk())
                         .andExpect(jsonPath("$._embedded.scripts", containsInAnyOrder(
                             scriptConfigurations

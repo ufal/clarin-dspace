@@ -32,6 +32,7 @@ import org.dspace.content.service.MetadataValueService;
 import org.dspace.content.service.PreviewContentService;
 import org.dspace.content.service.RelationshipService;
 import org.dspace.content.service.RelationshipTypeService;
+import org.dspace.content.service.ReportResultService;
 import org.dspace.content.service.SiteService;
 import org.dspace.content.service.WorkspaceItemService;
 import org.dspace.core.ProvenanceService;
@@ -131,6 +132,8 @@ public abstract class ContentServiceFactory {
      * @return the ProvenanceService
      */
     public abstract ProvenanceService getProvenanceService();
+
+    public abstract ReportResultService getReportResultService();
 
     public InProgressSubmissionService getInProgressSubmissionService(InProgressSubmission inProgressSubmission) {
         if (inProgressSubmission instanceof WorkspaceItem) {

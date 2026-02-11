@@ -83,6 +83,9 @@ public class ItemConverter
     /**
      * Retrieves the metadata list filtered according to the hidden metadata configuration
      * When the context is null, it will return the metadatalist as for an anonymous user
+     * When the context is not null, it will return the full metadata list if the user
+     * is allowed to edit the item or if the user is an admin. Otherwise, it will
+     * return the metadata list filtered according to the hidden metadata configuration
      * Overrides the parent method to include virtual metadata
      * @param context The context
      * @param obj     The object of which the filtered metadata will be retrieved
@@ -95,8 +98,10 @@ public class ItemConverter
         List<MetadataValue> returnList = new LinkedList<>();
         try {
             if (obj.isWithdrawn() && (Objects.isNull(context) ||
-                                      Objects.isNull(context.getCurrentUser()) || !authorizeService.isAdmin(context)) &&
-                    ObjectUtils.isEmpty(itemService.getMetadataByMetadataString(obj, "local.withdrawn.reason"))) {
+                    Objects.isNull(context.getCurrentUser()) ||
+                    !authorizeService.isAdmin(context, obj)) &&
+                    ObjectUtils.isEmpty(itemService
+                            .getMetadataByMetadataString(obj, "local.withdrawn.reason"))) {
                 // if the item is withdrawn and is replaced the item could have a tombstone -
                 // return message for the tombstone
                 List<MetadataValue> isReplacedBy =
@@ -111,7 +116,7 @@ public class ItemConverter
                             itemService.getMetadataByMetadataString(obj, "dc.contributor.other"));
                     return new MetadataValueList(allowedMetadataValues);
                 } else {
-                    return new MetadataValueList(new ArrayList<MetadataValue>());
+                    return new MetadataValueList(List.of());
                 }
             }
             if (context != null && (authorizeService.isAdmin(context) || itemService.canEdit(context, obj))) {

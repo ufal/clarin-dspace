@@ -19,7 +19,6 @@ import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.stream.StreamSource;
 
 import com.lyncode.xoai.dataprovider.services.api.ResourceResolver;
-import net.sf.saxon.jaxp.SaxonTransformerFactory;
 import net.sf.saxon.s9api.ExtensionFunction;
 import org.dspace.services.ConfigurationService;
 import org.dspace.services.factory.DSpaceServicesFactory;
@@ -46,6 +45,9 @@ public class DSpaceResourceResolver implements ResourceResolver {
     private static final TransformerFactory transformerFactory = TransformerFactory
             .newInstance("net.sf.saxon.TransformerFactoryImpl", null);
     static {
+        // Initialize the shared processor first
+        SharedSaxonProcessor.initialize(transformerFactory);
+
         /*
          * Any additional extension functions that might be used in XST transformations
          * should be added to this list. Look at those already added for inspiration.
@@ -58,10 +60,9 @@ public class DSpaceResourceResolver implements ResourceResolver {
                 new BibtexifyFn(), new FormatFn(), new GetAvailableFn()
         );
 
-        SaxonTransformerFactory saxonTransformerFactory = (SaxonTransformerFactory) transformerFactory;
-        for (ExtensionFunction en :
-                extensionFunctionList) {
-            saxonTransformerFactory.getProcessor().registerExtensionFunction(en);
+        // Use the shared processor to ensure configuration compatibility
+        for (ExtensionFunction en : extensionFunctionList) {
+            SharedSaxonProcessor.getProcessor().registerExtensionFunction(en);
         }
     }
 
@@ -87,6 +88,9 @@ public class DSpaceResourceResolver implements ResourceResolver {
         // XSLT-files (like <xsl:import href="utils.xsl"/>)
         String systemId = basePath + "/" + path;
         mySrc.setSystemId(systemId);
-        return transformerFactory.newTemplates(mySrc);
+
+        // Use the shared Saxon transformer factory to ensure
+        // compatibility with registered extension functions
+        return SharedSaxonProcessor.getTransformerFactory().newTemplates(mySrc);
     }
 }

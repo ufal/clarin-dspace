@@ -16,6 +16,9 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 /**
  *  Class is copied from the LINDAT/CLARIAH-CZ (This class is taken from UFAL-clarin.
  *  <a href="https://github.com/ufal/clarin-dspace/blob/clarin
@@ -26,8 +29,7 @@ import java.util.HashMap;
 public class LangUtil {
 
     private LangUtil() {}
-    private static org.apache.log4j.Logger log = org.apache.log4j.Logger
-            .getLogger(LangUtil.class);
+    private static Logger log = LogManager.getLogger(LangUtil.class);
 
     static final HashMap<String, Lang> idToLang;
 

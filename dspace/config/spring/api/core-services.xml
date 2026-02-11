@@ -31,6 +31,9 @@
     <bean class="org.dspace.authority.AuthorityValueServiceImpl"/>
     <bean class="org.dspace.authority.AuthorityServiceImpl"/>
 
+    <bean class="org.dspace.browse.ItemCounter"/>
+    <bean id="itemCountDAO" class="org.dspace.browse.ItemCountDAOSolr" scope="prototype"/>
+
     <bean class="org.dspace.checker.ChecksumHistoryServiceImpl"/>
     <bean class="org.dspace.checker.ChecksumResultServiceImpl"/>
     <bean class="org.dspace.checker.MostRecentChecksumServiceImpl"/>
@@ -94,6 +97,7 @@
     <bean class="org.dspace.content.clarin.ClarinWorkspaceItemServiceImpl"/>
     <bean class="org.dspace.content.clarin.MatomoReportSubscriptionServiceImpl"/>
     <bean class="org.dspace.content.clarin.ClarinTokenServiceImpl"/>
+    <bean class="org.dspace.content.ReportResultServiceImpl"/>
 
     <bean class="org.dspace.core.NewsServiceImpl">
         <property name="acceptableFilenames">
@@ -169,6 +173,9 @@
 
     <bean class="org.dspace.authorize.ValidatePasswordServiceImpl"/>
     <bean class="org.dspace.authorize.RegexPasswordValidator" />
+
+    <bean id="org.dspace.app.client.DSpaceHttpClientFactory" class="org.dspace.app.client.DSpaceHttpClientFactory"/>
+    <bean class="org.dspace.app.client.DSpaceProxyRoutePlanner"/>
 
     <bean class="org.dspace.supervision.SupervisionOrderServiceImpl"/>
 

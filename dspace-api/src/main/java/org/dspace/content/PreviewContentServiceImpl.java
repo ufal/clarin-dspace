@@ -14,6 +14,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
@@ -219,7 +220,7 @@ public class PreviewContentServiceImpl implements PreviewContentService {
         List<FileInfo> fileInfos = new ArrayList<>();
         String bitstreamMimeType = bitstream.getFormat(context).getMIMEType();
         if (bitstreamMimeType.equals("text/plain")) {
-            if (!validateBitstreamNameWithType(bitstream, "zip,tar,gz,tar.gz,xz,tar.xz,7z")) {
+            if (!validateBitstreamNameWithType(bitstream, "zip,tar,gz,tar.gz,tar.bz2,tar.xz,xz,7z")) {
                 throw new IOException("The file has an incorrect type according to the MIME type stored in the " +
                         "database. This could cause the ZIP file to be previewed as a text file, potentially leading" +
                         " to a database error.");
@@ -358,7 +359,9 @@ public class PreviewContentServiceImpl implements PreviewContentService {
      */
     private void processGzipFile(List<String> filePaths, File file, Bitstream bitstream) {
         String fileName = bitstream.getName();
-        if (fileName != null) {
+        if (fileName == null) {
+            logBitstreamNameIsNull();
+        } else {
             if (fileName.toLowerCase().endsWith("tar.gz")) {
                 processTarGzipFile(filePaths, file, bitstream);
             } else {
@@ -380,7 +383,9 @@ public class PreviewContentServiceImpl implements PreviewContentService {
      */
     private void processXzFile(List<String> filePaths, File file, Bitstream bitstream) {
         String fileName = bitstream.getName();
-        if (fileName != null) {
+        if (fileName == null) {
+            logBitstreamNameIsNull();
+        } else {
             if (fileName.toLowerCase().endsWith("tar.xz")) {
                 try (TarArchiveInputStream tarInput = getTarXzInputStream(file)) {
                     processTarFile(filePaths, tarInput);
@@ -622,13 +627,7 @@ public class PreviewContentServiceImpl implements PreviewContentService {
     }
 
     private static long getUncompressedFileSize(InputStream is) throws IOException {
-        byte[] buffer = new byte[4096];
-        int i;
-        long count = 0;
-        while ((i = is.read(buffer)) != -1) {
-            count += i;
-        }
-        return count;
+        return is.transferTo(OutputStream.nullOutputStream());
     }
 
     private static String getFileNameFromBitstream(String fileName, String extension) {
@@ -637,5 +636,9 @@ public class PreviewContentServiceImpl implements PreviewContentService {
         } else {
             return fileName;
         }
+    }
+
+    private static void logBitstreamNameIsNull() {
+        log.warn("Error while processing file: Bitstream name is null");
     }
 }

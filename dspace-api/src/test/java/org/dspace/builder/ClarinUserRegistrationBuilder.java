@@ -47,6 +47,21 @@ public class ClarinUserRegistrationBuilder extends AbstractBuilder<ClarinUserReg
         return this;
     }
 
+    public ClarinUserRegistrationBuilder withEmail(String email) {
+        clarinUserRegistration.setEmail(email);
+        return this;
+    }
+
+    public ClarinUserRegistrationBuilder withOrganization(String organization) {
+        clarinUserRegistration.setOrganization(organization);
+        return this;
+    }
+
+    public ClarinUserRegistrationBuilder withConfirmation(boolean confirmation) {
+        clarinUserRegistration.setConfirmation(confirmation);
+        return this;
+    }
+
     public static void deleteClarinUserRegistration(Integer id) throws Exception {
         if (Objects.isNull(id)) {
             return;

@@ -18,4 +18,6 @@ import org.dspace.core.GenericDAO;
 public interface ClarinLicenseResourceMappingDAO extends GenericDAO<ClarinLicenseResourceMapping> {
 
     List<ClarinLicenseResourceMapping> findByBitstreamUUID(Context context, UUID bitstreamUUID) throws SQLException;
+    List<ClarinLicenseResourceMapping> findByBitstreamUUIDs(Context context, List<UUID> bitstreamUUIDs)
+        throws SQLException;
 }
