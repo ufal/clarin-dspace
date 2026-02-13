@@ -173,43 +173,42 @@ public class OpenAIRERestConnector {
                 httpGet.addHeader("Authorization", "Bearer " + accessToken);
             }
 
-            try (CloseableHttpClient httpClient = DSpaceHttpClientFactory.getInstance().build()) {
-                getResponse = httpClient.execute(httpGet);
+            CloseableHttpClient httpClient = DSpaceHttpClientFactory.getInstance().build();
+            getResponse = httpClient.execute(httpGet);
 
-                StatusLine status = getResponse.getStatusLine();
+            StatusLine status = getResponse.getStatusLine();
 
-                // registering errors
-                switch (status.getStatusCode()) {
-                    case HttpStatus.SC_NOT_FOUND:
-                        // 404 - Not found
-                    case HttpStatus.SC_FORBIDDEN:
-                        // 403 - Invalid Access Token
-                    case 429:
-                        // 429 - Rate limit abuse for unauthenticated user
-                        Header[] limitUsed = getResponse.getHeaders("x-ratelimit-used");
-                        Header[] limitMax = getResponse.getHeaders("x-ratelimit-limit");
+            // registering errors
+            switch (status.getStatusCode()) {
+                case HttpStatus.SC_NOT_FOUND:
+                    // 404 - Not found
+                case HttpStatus.SC_FORBIDDEN:
+                    // 403 - Invalid Access Token
+                case 429:
+                    // 429 - Rate limit abuse for unauthenticated user
+                    Header[] limitUsed = getResponse.getHeaders("x-ratelimit-used");
+                    Header[] limitMax = getResponse.getHeaders("x-ratelimit-limit");
 
-                        if (limitUsed.length > 0) {
-                            String limitMsg = limitUsed[0].getValue();
-                            if (limitMax.length > 0) {
-                                limitMsg = limitMsg.concat(" of " + limitMax[0].getValue());
-                            }
-                            getGotError(new NoHttpResponseException(status.getReasonPhrase() + " with usage limit "
-                                            + limitMsg),
-                                    url + '/' + file);
-                        } else {
-                            // 429 - Rate limit abuse
-                            getGotError(new NoHttpResponseException(status.getReasonPhrase()), url + '/' + file);
+                    if (limitUsed.length > 0) {
+                        String limitMsg = limitUsed[0].getValue();
+                        if (limitMax.length > 0) {
+                            limitMsg = limitMsg.concat(" of " + limitMax[0].getValue());
                         }
-                        break;
-                    default:
-                        // 200 or other
-                        break;
-                }
-
-                // do not close this httpClient
-                result = getResponse.getEntity().getContent();
+                        getGotError(new NoHttpResponseException(status.getReasonPhrase() + " with usage limit "
+                                        + limitMsg),
+                                url + '/' + file);
+                    } else {
+                        // 429 - Rate limit abuse
+                        getGotError(new NoHttpResponseException(status.getReasonPhrase()), url + '/' + file);
+                    }
+                    break;
+                default:
+                    // 200 or other
+                    break;
             }
+
+            // do not close this httpClient
+            result = getResponse.getEntity().getContent();
         } catch (MalformedURLException e1) {
             getGotError(e1, url + '/' + file);
         } catch (Exception e) {
