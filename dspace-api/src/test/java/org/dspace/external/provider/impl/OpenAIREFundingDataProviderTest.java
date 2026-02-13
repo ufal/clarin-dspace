@@ -102,4 +102,21 @@ public class OpenAIREFundingDataProviderTest extends AbstractDSpaceTest {
 
         assertTrue("openAIREFunding.getExternalDataObject.notExists:WRONGID", result.isEmpty());
     }
+
+    @Test
+    public void testGetNumberOfResultsWhenResponseIsNull() {
+        // Create a mock connector that returns null
+        OpenAIREFundingDataProvider provider = new OpenAIREFundingDataProvider();
+        provider.setSourceIdentifier("test");
+        provider.setConnector(new org.dspace.external.OpenAIRERestConnector("test") {
+            @Override
+            public eu.openaire.jaxb.model.Response searchProjectByKeywords(int page, int size, String... keywords) {
+                return null;
+            }
+        });
+
+        // Should return 0 when response is null, not throw NullPointerException
+        int result = provider.getNumberOfResults("test");
+        assertEquals("Should return 0 when response is null", 0, result);
+    }
 }

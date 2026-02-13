@@ -169,6 +169,9 @@ public class OpenAIREFundingDataProvider extends AbstractExternalDataProvider {
         String encodedQuery = encodeValue(query);
 
         Response projectResponse = connector.searchProjectByKeywords(0, 0, encodedQuery);
+        if (projectResponse == null || projectResponse.getHeader() == null) {
+            return 0;
+        }
         return Integer.parseInt(projectResponse.getHeader().getTotal());
     }
 
