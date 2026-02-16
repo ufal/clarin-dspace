@@ -216,6 +216,7 @@ public class XmlWorkflowServiceImpl implements XmlWorkflowService {
             context.turnOffAuthorisationSystem();
             Step firstStep = wf.getFirstStep();
             if (firstStep.isValidStep(context, wfi)) {
+                System.out.println("First step is valid, activating it");
                 activateFirstStep(context, wf, firstStep, wfi);
             } else {
                 //Get our next step, if none is found, archive our item

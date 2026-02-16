@@ -35,6 +35,7 @@ public class MarkerTask
     @Override
     public int perform(DSpaceObject dso)
             throws IOException {
+        System.out.println("Curation Task is performing on DSpaceObject: " + dso.getHandle());
         if (dso instanceof Item) {
             Context context;
             try {

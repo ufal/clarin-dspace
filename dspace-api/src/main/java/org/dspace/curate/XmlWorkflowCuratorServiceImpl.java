@@ -132,23 +132,29 @@ public class XmlWorkflowCuratorServiceImpl
     @Override
     public boolean curate(Curator curator, Context c, XmlWorkflowItem wfi)
             throws AuthorizeException, IOException, SQLException {
+        System.out.println("Curating workflow item " + wfi.getID());
         FlowStep step = getFlowStep(c, wfi);
 
         if (step != null) {
+            System.out.println("Found step " + step.step + " with " + step.tasks.size() + " tasks.");
             // assign collection to item in case task needs it
             Item item = wfi.getItem();
             item.setOwningCollection(wfi.getCollection());
             for (Task task : step.tasks) {
+                System.out.println("Adding task " + task.name);
                 curator.addTask(task.name);
             }
 
             if (StringUtils.isNotEmpty(step.queue)) { // Step's tasks are to be queued.
+                System.out.println("Queueing tasks for workflow item " + wfi.getID() + " to queue " + step.queue);
                 curator.queue(c, item.getID().toString(), step.queue);
             } else { // Step's tasks are to be run now.
+                System.out.println("Running tasks for workflow item " + wfi.getID());
                 curator.curate(c, item);
 
                 for (Task task : step.tasks) {
                     int status = curator.getStatus(task.name);
+                    System.out.println("Task " + task.name + " returned status " + status);
                     String result = curator.getResult(task.name);
                     String action = "none";
                     switch (status) {
