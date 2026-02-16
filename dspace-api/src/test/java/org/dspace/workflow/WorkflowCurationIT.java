@@ -98,6 +98,11 @@ public class WorkflowCurationIT
         // Search the Item's provenance for MarkerTask's name.
         List<MetadataValue> provenance = itemService.getMetadata(wfi.getItem(),
                 MarkerTask.SCHEMA, MarkerTask.ELEMENT, MarkerTask.QUALIFIER, MarkerTask.LANGUAGE);
+        System.out.println("Provenance metadata:" + provenance.size());
+        Thread.sleep(1000);
+        provenance = itemService.getMetadata(wfi.getItem(),
+                MarkerTask.SCHEMA, MarkerTask.ELEMENT, MarkerTask.QUALIFIER, MarkerTask.LANGUAGE);
+        System.out.println("Provenance metadata:" + provenance.size());
         Pattern markerPattern = Pattern.compile(MarkerTask.class.getCanonicalName());
         boolean found = false;
         for (MetadataValue record : provenance) {
