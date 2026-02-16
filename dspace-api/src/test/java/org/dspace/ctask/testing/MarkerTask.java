@@ -10,6 +10,7 @@ package org.dspace.ctask.testing;
 import java.io.IOException;
 import java.sql.SQLException;
 
+import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.DCDate;
 import org.dspace.content.DSpaceObject;
 import org.dspace.content.Item;
@@ -52,7 +53,8 @@ public class MarkerTask
                 itemService.addMetadata(context, item,
                         SCHEMA, ELEMENT, QUALIFIER, LANGUAGE,
                         marker);
-            } catch (SQLException ex) {
+                itemService.update(context, item);
+            } catch (SQLException | AuthorizeException ex) {
                 throw new IOException("Failed to mark the Item:", ex);
             } finally {
                 context.restoreAuthSystemState();
