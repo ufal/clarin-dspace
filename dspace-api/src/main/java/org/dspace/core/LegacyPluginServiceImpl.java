@@ -336,6 +336,10 @@ public class LegacyPluginServiceImpl implements PluginService {
             String iname = interfaceClass.getName();
             configureNamedPlugin(iname);
             String key = iname + SEP + name;
+            System.out.println("Looking for named plugin with key: " + key);
+            System.out.println("All named plugin Classes:");
+            namedPluginClasses.forEach((k, v)
+                    -> System.out.println("(" + k + ", class: " + v + ")"));
             String cname = namedPluginClasses.get(key);
             if (cname == null) {
                 log.warn("Cannot find named plugin for interface=" + iname + ", name=\"" + name + "\"");
