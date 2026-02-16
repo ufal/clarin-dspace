@@ -98,14 +98,20 @@ public class WorkflowCurationIT
         // Search the Item's provenance for MarkerTask's name.
         List<MetadataValue> provenance = itemService.getMetadata(wfi.getItem(),
                 MarkerTask.SCHEMA, MarkerTask.ELEMENT, MarkerTask.QUALIFIER, MarkerTask.LANGUAGE);
+        System.out.println("Class canonical name: " + MarkerTask.class.getCanonicalName());
         Pattern markerPattern = Pattern.compile(MarkerTask.class.getCanonicalName());
+        System.out.println("Marker Pattern: " + markerPattern);
         boolean found = false;
         for (MetadataValue record : provenance) {
+            System.out.println("Provenance record: " + record.getValue());
+            System.out.println("Matches? " + markerPattern.matcher(record.getValue()).find());
             if (markerPattern.matcher(record.getValue()).find()) {
+                System.out.println("Found a match in provenance: " + record.getValue());
                 found = true;
                 break;
             }
         }
+        System.out.println("Found? " + found);
         assertThat("Item should have been curated", found);
     }
 }
