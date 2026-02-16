@@ -54,6 +54,7 @@ public class MarkerTask
                         SCHEMA, ELEMENT, QUALIFIER, LANGUAGE,
                         marker);
                 itemService.update(context, item);
+                System.out.println("MarkerTask: added metadata: " + marker);
             } catch (SQLException | AuthorizeException ex) {
                 throw new IOException("Failed to mark the Item:", ex);
             } finally {
