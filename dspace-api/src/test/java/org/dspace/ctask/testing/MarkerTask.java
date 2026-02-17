@@ -10,7 +10,6 @@ package org.dspace.ctask.testing;
 import java.io.IOException;
 import java.sql.SQLException;
 
-import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.DCDate;
 import org.dspace.content.DSpaceObject;
 import org.dspace.content.Item;
@@ -35,7 +34,6 @@ public class MarkerTask
     @Override
     public int perform(DSpaceObject dso)
             throws IOException {
-        System.out.println("Curation Task is performing on DSpaceObject: " + dso.getHandle());
         if (dso instanceof Item) {
             Context context;
             try {
@@ -54,9 +52,7 @@ public class MarkerTask
                 itemService.addMetadata(context, item,
                         SCHEMA, ELEMENT, QUALIFIER, LANGUAGE,
                         marker);
-                itemService.update(context, item);
-                System.out.println("MarkerTask: added metadata: " + marker);
-            } catch (SQLException | AuthorizeException ex) {
+            } catch (SQLException ex) {
                 throw new IOException("Failed to mark the Item:", ex);
             } finally {
                 context.restoreAuthSystemState();

@@ -232,10 +232,6 @@ public class LegacyPluginServiceImpl implements PluginService {
          * There is ALSO a "marker key" of "intfc" by itself to show we
          * loaded this intfc's configuration.
          */
-
-        System.out.println("Configuring named plugins for interface: " + iname);
-        namedPluginClasses.forEach((k, v) -> System.out.println("  " + k + ", class: " + v));
-
         if (!namedPluginClasses.containsKey(iname)) {
             // 1. Get classes named by the configuration. format is:
             //    plugin.named.<INTF> = <CLASS> = <name>\, <name> [,] \
@@ -243,13 +239,6 @@ public class LegacyPluginServiceImpl implements PluginService {
             // NOTE: module name is ignored, as named plugins ALWAYS begin with NAMED_PREFIX
             String key = NAMED_PREFIX + iname;
             String[] namedVals = configurationService.getArrayProperty(key);
-
-            System.out.println("Configuring named plugins for interface, get Classes: " + key + ":" + namedVals.length);
-            for (int i = 0; i < namedVals.length; ++i) {
-                System.out.print("  " + namedVals[i]);
-            }
-            System.out.println();
-
             if (namedVals != null && namedVals.length > 0) {
                 String prevClassName = null;
                 for (String namedVal : namedVals) {
@@ -275,8 +264,6 @@ public class LegacyPluginServiceImpl implements PluginService {
                     // The name may be *multiple* names (separated by escaped commas: \,)
                     String[] names = name.trim().split("\\s*,\\s*");
 
-                    System.out.println("Installing Named Config: " +
-                            className + ", names: " + (names.length > 0 ? names[0] : "none"));
                     found += installNamedConfigs(iname, className, names);
                 }
             }
@@ -349,10 +336,6 @@ public class LegacyPluginServiceImpl implements PluginService {
             String iname = interfaceClass.getName();
             configureNamedPlugin(iname);
             String key = iname + SEP + name;
-            System.out.println("Looking for named plugin with key: " + key);
-            System.out.println("All named plugin Classes:");
-            namedPluginClasses.forEach((k, v)
-                    -> System.out.println("(" + k + ", class: " + v + ")"));
             String cname = namedPluginClasses.get(key);
             if (cname == null) {
                 log.warn("Cannot find named plugin for interface=" + iname + ", name=\"" + name + "\"");
