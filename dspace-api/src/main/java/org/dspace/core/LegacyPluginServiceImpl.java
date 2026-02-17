@@ -232,6 +232,10 @@ public class LegacyPluginServiceImpl implements PluginService {
          * There is ALSO a "marker key" of "intfc" by itself to show we
          * loaded this intfc's configuration.
          */
+
+        System.out.println("Configuring named plugins for interface: " + iname);
+        namedPluginClasses.forEach((k, v) -> System.out.println("  " + k + ", class: " + v));
+
         if (!namedPluginClasses.containsKey(iname)) {
             // 1. Get classes named by the configuration. format is:
             //    plugin.named.<INTF> = <CLASS> = <name>\, <name> [,] \
@@ -240,7 +244,7 @@ public class LegacyPluginServiceImpl implements PluginService {
             String key = NAMED_PREFIX + iname;
             String[] namedVals = configurationService.getArrayProperty(key);
 
-            System.out.println("Configuring named plugins for interface: " + key + ":" + namedVals.length);
+            System.out.println("Configuring named plugins for interface, get Classes: " + key + ":" + namedVals.length);
             for (int i = 0; i < namedVals.length; ++i) {
                 System.out.print("  " + namedVals[i]);
             }
