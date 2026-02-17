@@ -84,6 +84,8 @@ public class CreateMissingIdentifiersIT
         assertEquals("Curation should succeed", Curator.CURATE_SUCCESS, status);
 
         // reload config to avoid clash with other tests which may use the same property
+
         configurationService.reloadConfig();
+        System.out.println("Size = " + configurationService.getArrayProperty(P_TASK_DEF).length);
     }
 }

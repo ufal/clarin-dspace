@@ -9,6 +9,7 @@ package org.dspace.workflow;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 
+import java.util.Date;
 import java.util.List;
 import java.util.regex.Pattern;
 import javax.inject.Inject;
@@ -24,6 +25,8 @@ import org.dspace.content.MetadataValue;
 import org.dspace.content.service.ItemService;
 import org.dspace.ctask.testing.MarkerTask;
 import org.dspace.eperson.EPerson;
+import org.dspace.services.ConfigurationService;
+import org.dspace.services.factory.DSpaceServicesFactory;
 import org.dspace.util.DSpaceConfigurationInitializer;
 import org.dspace.util.DSpaceKernelInitializer;
 import org.dspace.xmlworkflow.storedcomponents.XmlWorkflowItem;
@@ -46,6 +49,8 @@ public class WorkflowCurationIT
         extends AbstractIntegrationTestWithDatabase {
     @Inject
     private ItemService itemService;
+
+    private ConfigurationService configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
 
     /**
      * Basic smoke test of a curation task attached to a workflow step.
@@ -84,6 +89,11 @@ public class WorkflowCurationIT
         // This should include MarkerTask.
 
         // A workflow item;
+
+        System.out.println("Creating workflow item with submitter: " + new Date());
+        System.out.println("Named Plugin Size = " +
+                configurationService.getArrayProperty("plugin.named.org.dspace.curate.CurationTask").length);
+
         context.setCurrentUser(submitter);
         XmlWorkflowItem wfi = WorkflowItemBuilder.createWorkflowItem(context, collection)
                 .withTitle("Test of workflow curation")

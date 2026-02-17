@@ -10,6 +10,7 @@ package org.dspace;
 import static org.junit.Assert.fail;
 
 import java.sql.SQLException;
+import java.util.Date;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -191,6 +192,7 @@ public class AbstractIntegrationTestWithDatabase extends AbstractDSpaceIntegrati
             authorityService.reset();
 
             // Reload our ConfigurationService (to reset configs to defaults again)
+            System.out.println("Reloading configuration to reset any changed configs to defaults: " + new Date());
             DSpaceServicesFactory.getInstance().getConfigurationService().reloadConfig();
 
             AbstractBuilder.cleanupBuilderCache();
