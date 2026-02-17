@@ -239,6 +239,13 @@ public class LegacyPluginServiceImpl implements PluginService {
             // NOTE: module name is ignored, as named plugins ALWAYS begin with NAMED_PREFIX
             String key = NAMED_PREFIX + iname;
             String[] namedVals = configurationService.getArrayProperty(key);
+
+            System.out.println("Configuring named plugins for interface: " + key + ":" + namedVals.length);
+            for (int i = 0; i < namedVals.length; ++i) {
+                System.out.print("  " + namedVals[i]);
+            }
+            System.out.println();
+
             if (namedVals != null && namedVals.length > 0) {
                 String prevClassName = null;
                 for (String namedVal : namedVals) {
@@ -264,6 +271,8 @@ public class LegacyPluginServiceImpl implements PluginService {
                     // The name may be *multiple* names (separated by escaped commas: \,)
                     String[] names = name.trim().split("\\s*,\\s*");
 
+                    System.out.println("Installing Named Config: " +
+                            className + ", names: " + (names.length > 0 ? names[0] : "none"));
                     found += installNamedConfigs(iname, className, names);
                 }
             }
