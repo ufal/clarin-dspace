@@ -23,6 +23,7 @@ import java.util.Date;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.Properties;
+import java.util.stream.Collectors;
 import javax.activation.DataHandler;
 import javax.activation.DataSource;
 import javax.activation.FileDataSource;
@@ -395,7 +396,7 @@ public class Email {
         for (String headerName : templateHeaders) {
             String headerValue = (String) vctx.get(headerName);
             if ("subject".equalsIgnoreCase(headerName)) {
-                if (null != headerValue) {
+                if ((subject == null || subject.isEmpty()) && null != headerValue) {
                     subject = headerValue;
                 }
             } else if ("charset".equalsIgnoreCase(headerName)) {
@@ -458,6 +459,14 @@ public class Email {
             message.setReplyTo(replyToAddr);
         }
 
+        // Log email sending information
+        String templateName = contentName != null ? contentName : "unknown";
+        String recipientsList = recipients.stream()
+                .map(Utils::maskEmail)
+                .collect(Collectors.joining(", "));
+        LOG.info("Sending email - Template: '{}', Recipients: [{}], Subject: '{}'",
+                templateName, recipientsList, subject);
+
         if (disabled) {
             StringBuilder text = new StringBuilder(
                 "Message not sent due to mail.server.disabled:\n");
@@ -480,6 +489,8 @@ public class Email {
             LOG.info(text.toString());
         } else {
             Transport.send(message);
+            LOG.info("Email successfully sent - Template: '{}', Recipients: [{}]",
+                    templateName, recipientsList);
         }
     }
 
@@ -556,7 +567,7 @@ public class Email {
             message.setSubject(subject);
             message.addRecipient(to);
             System.out.println("\nAbout to send test email:");
-            System.out.println(" - To: " + to);
+            System.out.println(" - To: " + Utils.maskEmail(to));
             System.out.println(" - Subject: " + subject);
             System.out.println(" - Server: " + server);
             boolean disabled = config.getBooleanProperty("mail.server.disabled", false);

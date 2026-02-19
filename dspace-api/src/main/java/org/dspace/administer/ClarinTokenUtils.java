@@ -11,11 +11,14 @@ import static org.dspace.content.clarin.ClarinToken.E_PERSON_ID;
 
 import java.text.ParseException;
 import java.util.Date;
+import java.util.Optional;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 
 import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.JWEObject;
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.JWSHeader;
 import com.nimbusds.jose.JWSVerifier;
 import com.nimbusds.jose.crypto.MACVerifier;
 import com.nimbusds.jwt.JWT;
@@ -25,6 +28,11 @@ import com.nimbusds.jwt.SignedJWT;
 import com.nimbusds.jwt.util.DateUtils;
 import org.dspace.content.clarin.ClarinToken;
 
+/**
+ * Utility methods for Clarin Token.
+ *
+ * @author Milan Kuchtiak
+ */
 public final class ClarinTokenUtils {
 
     private ClarinTokenUtils() {
@@ -37,7 +45,11 @@ public final class ClarinTokenUtils {
 
     public static Integer getTokenId(String token) throws ParseException {
         JWEObject jweObj = JWEObject.parse(token);
-        return Integer.parseInt(jweObj.getHeader().getKeyID());
+        try {
+            return Integer.parseInt(jweObj.getHeader().getKeyID());
+        } catch (NumberFormatException e) {
+            throw new ParseException("Invalid KeyID: not a valid integer", 0);
+        }
     }
 
     public static SecretKey getSecretKeyFromBase64EncodedString(String encodedSecretKey) {
@@ -48,7 +60,7 @@ public final class ClarinTokenUtils {
     public static boolean isSignedJWTValid(SignedJWT signedJWT, ClarinToken clarinToken)
             throws ParseException, JOSEException {
         JWSVerifier verifier = new MACVerifier(clarinToken.getSignKey());
-        if (signedJWT.verify(verifier)) {
+        if (signedJWT.verify(verifier) && JWSAlgorithm.HS256.equals(getAlgorithm(signedJWT))) {
             JWTClaimsSet jwtClaimsSet = signedJWT.getJWTClaimsSet();
             if (ClarinToken.TOKEN_ISSUER.equals(jwtClaimsSet.getIssuer()) &&
                     clarinToken.getEPerson().getID().toString().equals(jwtClaimsSet.getClaim(E_PERSON_ID))) {
@@ -59,6 +71,10 @@ public final class ClarinTokenUtils {
             }
         }
         return false;
+    }
+
+    private static JWSAlgorithm getAlgorithm(SignedJWT signedJWT) {
+        return Optional.ofNullable(signedJWT.getHeader()).map(JWSHeader::getAlgorithm).orElse(null);
     }
 
 }

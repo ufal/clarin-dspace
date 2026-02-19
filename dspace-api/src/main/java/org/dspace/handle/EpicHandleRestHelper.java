@@ -18,6 +18,11 @@ import javax.ws.rs.client.WebTarget;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
+/**
+ * Helper class to perform REST calls to ePIC Handle PID Service.
+ *
+ * @author Milan Kuchtiak
+ */
 public class EpicHandleRestHelper {
 
     private static final Client client = ClientBuilder.newClient();

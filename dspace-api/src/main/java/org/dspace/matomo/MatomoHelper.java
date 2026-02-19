@@ -437,8 +437,8 @@ public class MatomoHelper {
     private List<String[]> getCountryDataFromLindatMatomoCacheServer() throws Exception {
         String url = MATOMO_API_URL_CACHED + "handle?h=" + handle + "&period=month&country=true";
 
-        if (date != null) {
-            url += "&date=" + date;
+        if (this.date != null) {
+            url += "&date=" + this.date;
         }
         ObjectNode countriesReport = (ObjectNode) OBJECT_MAPPER.readTree(readFromURL(url));
 
@@ -446,8 +446,8 @@ public class MatomoHelper {
 
         Iterator<String> fieldNames = countriesReport.fieldNames();
         while (fieldNames.hasNext()) {
-            String date = fieldNames.next();
-            ArrayNode countryData = countriesReport.withArray(date);
+            String reportedDate = fieldNames.next();
+            ArrayNode countryData = countriesReport.withArray(reportedDate);
             countryData.forEach(country -> {
                 if (country.isObject()) {
                     String label = country.get("label").asText();
@@ -509,10 +509,12 @@ public class MatomoHelper {
         } catch (ParserConfigurationException e) {
             log.error("Error creating DocumentBuilder", e);
         }
-        try {
-            doc = builder.parse(new StringInputStream(xml));
-        } catch (Exception e) {
-            log.error("Error occurred while parsing XML document.", e);
+        if (builder != null) {
+            try {
+                doc = builder.parse(new StringInputStream(xml));
+            } catch (Exception e) {
+                log.error("Error occurred while parsing XML document.", e);
+            }
         }
         return doc;
     }

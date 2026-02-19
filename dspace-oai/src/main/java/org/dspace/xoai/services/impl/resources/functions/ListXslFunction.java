@@ -10,6 +10,7 @@ package org.dspace.xoai.services.impl.resources.functions;
 
 import static org.dspace.xoai.services.impl.resources.functions.StringXSLFunction.BASE;
 
+import java.util.Arrays;
 import java.util.Objects;
 
 import net.sf.saxon.s9api.ExtensionFunction;
@@ -20,13 +21,15 @@ import net.sf.saxon.s9api.SaxonApiException;
 import net.sf.saxon.s9api.SequenceType;
 import net.sf.saxon.s9api.XdmAtomicValue;
 import net.sf.saxon.s9api.XdmValue;
-import org.bouncycastle.util.Arrays;
+import org.apache.logging.log4j.Logger;
 
 /**
  * Serves as proxy for call from XSL engine.
  * @author Marian Berger (marian.berger at dataquest.sk)
  */
 public abstract class ListXslFunction implements ExtensionFunction {
+
+    private static final Logger log = org.apache.logging.log4j.LogManager.getLogger(ListXslFunction.class);
 
     protected abstract String getFnName();
 
@@ -50,15 +53,39 @@ public abstract class ListXslFunction implements ExtensionFunction {
     }
 
     @Override
-    final public XdmValue call(XdmValue[] xdmValues) throws SaxonApiException {
-        if (Objects.isNull(xdmValues) || Arrays.isNullOrContainsNull(xdmValues)) {
+    public final XdmValue call(XdmValue[] xdmValues) throws SaxonApiException {
+        if (xdmValues == null || xdmValues.length == 0) {
+            log.debug("Null or empty parameters passed to {}, returning empty string", getFnName());
             return new XdmAtomicValue("");
         }
-        String response = "";
-        for (XdmValue item :
-                xdmValues) {
-            response += getStringResponse(item.itemAt(0).getStringValue());
+        if (Arrays.stream(xdmValues).anyMatch(Objects::isNull)) {
+            log.debug("Null or empty parameters passed to {}, returning empty string", getFnName());
+            return new XdmAtomicValue("");
         }
-        return new XdmAtomicValue(response);
+
+        StringBuilder response = new StringBuilder();
+
+        for (XdmValue arg : xdmValues) {
+            if (arg == null || arg.size() == 0) {
+                continue;
+            }
+
+            for (int i = 0; i < arg.size(); i++) {
+                try {
+                    String param = arg.itemAt(i).getStringValue();
+                    String result = getStringResponse(param);
+                    if (result != null) {
+                        response.append(result);
+                    }
+                } catch (Exception e) {
+                    log.warn("Error processing parameter in function {}: {}", getFnName(), e.getMessage());
+                }
+            }
+        }
+
+        String finalResponse = response.toString();
+        log.debug("Function {} processed {} parameters and returned response of length {}",
+                getFnName(), xdmValues.length, finalResponse.length());
+        return new XdmAtomicValue(finalResponse);
     }
 }

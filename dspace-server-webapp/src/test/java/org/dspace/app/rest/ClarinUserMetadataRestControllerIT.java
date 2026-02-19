@@ -44,12 +44,15 @@ import org.dspace.builder.WorkspaceItemBuilder;
 import org.dspace.content.Bitstream;
 import org.dspace.content.Collection;
 import org.dspace.content.Community;
+import org.dspace.content.Item;
+import org.dspace.content.MetadataValue;
 import org.dspace.content.WorkspaceItem;
 import org.dspace.content.clarin.ClarinLicense;
 import org.dspace.content.clarin.ClarinLicenseLabel;
 import org.dspace.content.clarin.ClarinLicenseResourceUserAllowance;
 import org.dspace.content.clarin.ClarinUserMetadata;
 import org.dspace.content.clarin.ClarinUserRegistration;
+import org.dspace.content.service.ItemService;
 import org.dspace.content.service.clarin.ClarinLicenseLabelService;
 import org.dspace.content.service.clarin.ClarinLicenseService;
 import org.dspace.content.service.clarin.ClarinUserMetadataService;
@@ -66,6 +69,8 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
     ClarinLicenseLabelService clarinLicenseLabelService;
     @Autowired
     ClarinUserMetadataService clarinUserMetadataService;
+    @Autowired
+    ItemService itemService;
 
     WorkspaceItem witem;
     WorkspaceItem witem2;
@@ -114,11 +119,17 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
 
         // 4. Check if the Clarin License name was added to the Item's metadata `dc.rights`
         getClient(tokenAdmin).perform(get("/api/submission/workspaceitems/" + witem.getID()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$._embedded.item.metadata['dc.rights'][0].value", is(clarinLicenseName)));
+                .andExpect(status().isOk());
         getClient(tokenAdmin).perform(get("/api/submission/workspaceitems/" + witem2.getID()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$._embedded.item.metadata['dc.rights'][0].value", is(clarinLicenseName)));
+                .andExpect(status().isOk());
+        witem = context.reloadEntity(witem);
+        witem2 = context.reloadEntity(witem2);
+        List<MetadataValue> mv1 = itemService.getMetadata(witem.getItem(), "dc", "rights", null, Item.ANY);
+        List<MetadataValue> mv2 = itemService.getMetadata(witem2.getItem(), "dc", "rights", null, Item.ANY);
+        assertThat(mv1.size(), is(1));
+        assertThat(mv1.get(0).getValue(), is(clarinLicenseName));
+        assertThat(mv2.size(), is(1));
+        assertThat(mv2.get(0).getValue(), is(clarinLicenseName));
 
         // 5. Check if the Clarin License was attached to the Bitstream
         getClient(tokenAdmin).perform(get("/api/core/clarinlicenses/" + clarinLicense.getID()))

@@ -31,7 +31,7 @@ jobs:
       build_id: dspace-dependencies
       image_name: ufal/dspace-dependencies
       dockerfile_path: ./Dockerfile.dependencies
-  
+
 
   #######################################
   # Build/Push the 'ufal/dspace' image
@@ -43,7 +43,7 @@ jobs:
     needs: dspace-dependencies
     uses: ./.github/workflows/reusable-docker-build.yml
     with:
-      build_id: dspace
+      build_id: dspace-prod
       image_name: ufal/dspace
       dockerfile_path: ./Dockerfile
       run_python_version_script: true

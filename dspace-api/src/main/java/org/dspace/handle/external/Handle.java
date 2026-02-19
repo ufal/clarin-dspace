@@ -38,7 +38,7 @@ public class Handle {
     public String query;
     public String token;
 
-    public Handle(){
+    public Handle() {
 
     }
 

@@ -14,6 +14,11 @@ import org.dspace.core.Context;
 import org.dspace.scripts.DSpaceCommandLineParameter;
 import org.dspace.scripts.configuration.ScriptConfiguration;
 
+/**
+ * This is a ScriptConfiguration for {@link ClarinTokenCreator}.
+ *
+ * @author Milan Kuchtiak
+ */
 public class ClarinTokenConfiguration extends ScriptConfiguration<ClarinTokenCreator> {
 
     private Class<ClarinTokenCreator> dspaceRunnableClass;
