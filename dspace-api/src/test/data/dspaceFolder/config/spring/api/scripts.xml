@@ -39,7 +39,7 @@
         <property name="description" value="Retry all failed commits to the OpenURLTracker"/>
         <property name="dspaceRunnableClass" value="org.dspace.statistics.export.RetryFailedOpenUrlTracker"/>
     </bean>
-    
+
     <bean id="metadata-deletion" class="org.dspace.app.bulkedit.MetadataDeletionCliScriptConfiguration">
         <property name="description" value="Delete all the values of the specified metadata field"/>
         <property name="dspaceRunnableClass" value="org.dspace.app.bulkedit.MetadataDeletionCli"/>
@@ -106,6 +106,11 @@
         <property name="dspaceRunnableClass" value="org.dspace.scripts.filepreview.FilePreview"/>
     </bean>
 
+    <bean id="item-version-linker" class="org.dspace.administer.ItemVersionLinkerConfiguration" primary="true">
+        <property name="description" value="Link items into versioning relationship."/>
+        <property name="dspaceRunnableClass" value="org.dspace.administer.ItemVersionLinker"/>
+    </bean>
+  
     <bean id="report-diff" class="org.dspace.app.reportdiff.ReportDiffScriptConfiguration" primary="true">
         <property name="description" value="Compares two health reports and shows the differences between them."/>
         <property name="dspaceRunnableClass" value="org.dspace.app.reportdiff.ReportDiff"/>
