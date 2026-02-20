@@ -355,7 +355,7 @@ public class ItemVersionLinker extends DSpaceRunnable<ItemVersionLinkerConfigura
     }
 
     private String getHandleRef(Item item) {
-        return itemService.getMetadata(item, "dc", "identifier", "uri", null)
+        return itemService.getMetadata(item, "dc", "identifier", "uri", Item.ANY)
                 .stream()
                 .findFirst()
                 .map(MetadataValue::getValue)
