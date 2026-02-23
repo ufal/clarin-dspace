@@ -106,4 +106,9 @@
         <property name="dspaceRunnableClass" value="org.dspace.app.reportdiff.ReportDiff"/>
     </bean>
 
+    <bean id="item-version-linker" class="org.dspace.administer.ItemVersionLinkerConfiguration" primary="true">
+        <property name="description" value="Link items into versioning relationship."/>
+        <property name="dspaceRunnableClass" value="org.dspace.administer.ItemVersionLinker"/>
+    </bean>
+
 </beans>

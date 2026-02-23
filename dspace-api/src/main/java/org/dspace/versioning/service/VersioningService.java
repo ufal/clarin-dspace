@@ -45,7 +45,7 @@ public interface VersioningService {
      * To keep version numbers stable we do not delete versions, we do only set
      * the item, date, summary and eperson null. This methods returns only those
      * versions that have an item assigned.
-     * 
+     *
      * @param c                   The relevant DSpace Context.
      * @param vh                  Version history
      * @param offset              The position of the first result to return
@@ -80,6 +80,16 @@ public interface VersioningService {
                              int versionNumber);
 
     /**
+     * This method deletes the version associated with the item from the versioning history,
+     * but unlike the {@link #delete} method this doesn't delete the entire item.
+     *
+     * @param c             context
+     * @param version       version
+     * @throws SQLException if database error
+     */
+    void deleteVersion(Context c, Version version) throws SQLException;
+
+    /**
      * Update the Version
      *
      * @param context        context
@@ -94,7 +104,7 @@ public interface VersioningService {
      * remove a version we set the item, date, summary and eperson null. This
      * method returns only versions that aren't soft deleted and have items
      * assigned.
-     * 
+     *
      * @param context            The relevant DSpace Context.
      * @param versionHistory     Version history
      * @return                   Total versions of an version history that have items assigned.
