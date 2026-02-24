@@ -17,7 +17,7 @@
       "^Title "
     ],
     "dc.relation": [
-      "^contains 'dc.relation."
+      "^contains dc.relation"
     ],
     "dc.rights": [
       "^has labels ",
@@ -29,17 +29,17 @@
     "local.branding": [
       "^local.branding "
     ],
-    "validation.duplicates": [
+    "validation.duplicate.value": [
       "is present multiple times$"
     ],
-    "validation.handle.missing": [
+    "validation.missing.handle": [
       "^Does not have a handle"
     ],
     "validation.empty.value": [
       " is empty$",
       " is null$"
     ],
-    "validation.complex.types": [
+    "validation.complex.type": [
       " is a component with "
     ]
   },
