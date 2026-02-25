@@ -45,7 +45,7 @@
   },
   "warnings": {
     "dc.subject": [
-      "^does not contain any dc.subject values"
+      "^does not contain any [dc.subject] values"
     ]
   }
 }
