@@ -155,22 +155,25 @@ public class PreviewContentServiceImpl implements PreviewContentService {
     @Override
     public boolean canPreview(Context context, Bitstream bitstream, boolean authorization)
             throws SQLException, AuthorizeException {
-        try {
-            // Check it is allowed by configuration
-            boolean isAllowedByCfg = configurationService.getBooleanProperty("file.preview.enabled", true);
-            if (!isAllowedByCfg) {
-                return false;
-            }
-
-            // Verify that the current user is authorized to READ the bitstream,
-            // and whether the bitstream is allowed by the license
-            if (authorization) {
-                authorizeService.authorizeAction(context, bitstream, Constants.READ);
-            }
-            return true;
-        } catch (AuthorizeException e) {
+        // Check it is allowed by configuration
+        boolean isAllowedByCfg = configurationService.getBooleanProperty("file.preview.enabled", true);
+        if (!isAllowedByCfg) {
             return false;
         }
+        if (authorization) {
+            // Verify that bitstream policy allows user to READ the bitstream.
+            // If not, the preview content is disabled.
+            try {
+                authorizeService.authorizeAction(context, bitstream, Constants.READ);
+            } catch (MissingLicenseAgreementException e) {
+                // In case the license agreement(for bitstream downloading) is only needed,
+                // we still enable the preview content.
+                return true;
+            } catch (AuthorizeException e) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override

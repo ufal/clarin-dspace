@@ -22,6 +22,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.sql.SQLException;
+import java.util.Set;
 
 import org.apache.commons.codec.CharEncoding;
 import org.apache.commons.io.IOUtils;
@@ -30,15 +31,22 @@ import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
 import org.dspace.app.util.Util;
 import org.dspace.authorize.service.AuthorizeService;
 import org.dspace.builder.BitstreamBuilder;
+import org.dspace.builder.ClarinLicenseBuilder;
+import org.dspace.builder.ClarinLicenseLabelBuilder;
 import org.dspace.builder.CollectionBuilder;
 import org.dspace.builder.CommunityBuilder;
 import org.dspace.builder.ItemBuilder;
 import org.dspace.content.Bitstream;
 import org.dspace.content.Collection;
 import org.dspace.content.Item;
+import org.dspace.content.clarin.ClarinLicense;
+import org.dspace.content.clarin.ClarinLicenseLabel;
+import org.dspace.content.factory.ClarinServiceFactory;
 import org.dspace.content.service.BundleService;
 import org.dspace.content.service.PreviewContentService;
+import org.dspace.content.service.clarin.ClarinLicenseLabelService;
 import org.dspace.content.service.clarin.ClarinLicenseResourceMappingService;
+import org.dspace.content.service.clarin.ClarinLicenseService;
 import org.dspace.core.Constants;
 import org.dspace.eperson.Group;
 import org.dspace.eperson.service.GroupService;
@@ -300,6 +308,69 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
         } finally {
             ItemBuilder.deleteItem(item.getID());
             CollectionBuilder.deleteCollection(col.getID());
+        }
+    }
+
+    @Test
+    public void previewingAllowedWhenClarinLicenceAgreementIsNeeded() throws Exception {
+        context.turnOffAuthorisationSystem();
+        Collection col = CollectionBuilder.createCollection(context, parentCommunity).withName("Collection2").build();
+        Item item = ItemBuilder.createItem(context, col).withAuthor(AUTHOR).build();
+
+        // create license that needs confirmation,
+        // so the non admin user has to confirm the license agreement before downloading the file
+        ClarinLicenseLabelService clarinLicenseLabelService =
+                ClarinServiceFactory.getInstance().getClarinLicenseLabelService();
+
+        ClarinLicenseLabel clarinLicenseLabel = ClarinLicenseLabelBuilder.createClarinLicenseLabel(context).build();
+        clarinLicenseLabel.setLabel("CLL");
+        clarinLicenseLabel.setTitle("CLL Title");
+        clarinLicenseLabelService.update(context, clarinLicenseLabel);
+
+        ClarinLicense clarinLicense = ClarinLicenseBuilder.createClarinLicense(context).build();
+        clarinLicense.setName("CL Name");
+        clarinLicense.setConfirmation(ClarinLicense.Confirmation.ASK_ALWAYS);
+        clarinLicense.setDefinition("CL Definition");
+        clarinLicense.setRequiredInfo("CL Req");
+        clarinLicense.setLicenseLabels(Set.of(clarinLicenseLabel));
+
+        ClarinLicenseService clarinLicenseService = ClarinServiceFactory.getInstance().getClarinLicenseService();
+
+        clarinLicenseService.addLicenseMetadataToItem(context, clarinLicense, item);
+        clarinLicenseService.update(context, clarinLicense);
+
+        try {
+            Bitstream bitstream;
+            try (InputStream is = getClass().getResourceAsStream("assetstore/logos.tgz")) {
+                bitstream = BitstreamBuilder.
+                        createBitstream(context, item, is)
+                        .withName("Bitstream")
+                        .withDescription("Description")
+                        .withMimeType("application/x-gtar")
+                        .build();
+            }
+
+            clarinLicenseService.addClarinLicenseToBitstream(context, item, bitstream.getBundles().get(0), bitstream);
+
+            context.restoreAuthSystemState();
+            // Non admin user can preview the file even the license agreement is needed,
+            // because the license agreement is only needed for file download.
+            getClient().perform(get(METADATABITSTREAM_SEARCH_BY_HANDLE_ENDPOINT)
+                            .param("handle", item.getHandle())
+                            .param("fileGrpType", FILE_GRP_TYPE))
+                    .andExpect(status().isOk())
+                    .andExpect(content().contentType(contentType))
+                    .andExpect(jsonPath("$._embedded.metadatabitstreams").exists())
+                    .andExpect(jsonPath("$._embedded.metadatabitstreams").isArray())
+                    .andExpect(jsonPath("$._embedded.metadatabitstreams", hasSize(1)))
+                    .andExpect(jsonPath("$._embedded.metadatabitstreams[0].canPreview").value(true))
+                    .andExpect(jsonPath("$._embedded.metadatabitstreams[0].fileInfo").isArray())
+                    .andExpect(jsonPath("$._embedded.metadatabitstreams[0].fileInfo", hasSize(2)));
+        } finally {
+            ItemBuilder.deleteItem(item.getID());
+            CollectionBuilder.deleteCollection(col.getID());
+            ClarinLicenseBuilder.deleteClarinLicense(clarinLicense.getID());
+            ClarinLicenseLabelBuilder.deleteClarinLicenseLabel(clarinLicenseLabel.getID());
         }
     }
 
