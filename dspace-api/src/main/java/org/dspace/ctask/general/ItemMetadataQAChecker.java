@@ -15,6 +15,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -340,33 +341,38 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
     }
 
     private boolean checkRelations(Item item,
-                                   List<MetadataValue> lhsReferences,
-                                   String lhsRelation,
-                                   String rhsRelation,
+                                   List<MetadataValue> references,
+                                   String referencesFieldName,
+                                   String fieldNameInOtherDirection,
                                    String handlePrefixLocal) throws SQLException, IOException, CurateException {
-        for (MetadataValue lhsReference : lhsReferences) {
-            boolean found = false;
-            String referencedItemHandle =  getHandle(lhsReference, handlePrefixLocal);
-            DSpaceObject referencedObject = dereference(Curator.curationContext(), referencedItemHandle);
-            if (referencedObject instanceof Item) {
-                Item referencedItem = (Item) referencedObject;
-                List<MetadataValue> rhsReferences =
-                        itemService.getMetadataByMetadataString(referencedItem, rhsRelation);
-                for (MetadataValue rhsReference : rhsReferences) {
-                    String backReferencedItemHandle = getHandle(rhsReference, handlePrefixLocal);
-                    // compare the handles and, if they match, verify whether items are in the same version history
-                    if (backReferencedItemHandle != null && backReferencedItemHandle.equals(item.getHandle()) &&
-                            checkVersionHistory(item, referencedItem, lhsRelation)) {
-                        found = true;
-                        break;
-                    }
-                }
-            }
-            if (!found) {
+        for (MetadataValue ref : references) {
+            Item referencedItem = getReferencedItem(ref, handlePrefixLocal);
+            boolean checksPass = Objects.nonNull(referencedItem) &&
+                    hasReferenceBack(referencedItem, item.getHandle(), fieldNameInOtherDirection, handlePrefixLocal) &&
+                    checkVersionHistory(item, referencedItem, referencesFieldName);
+            if (!checksPass) {
                 return false;
             }
         }
         return true;
+    }
+
+    private Item getReferencedItem(MetadataValue relatedReference, String handlePrefixLocal)
+            throws SQLException, IOException {
+        String referencedItemHandle =  getHandle(relatedReference, handlePrefixLocal);
+        DSpaceObject referencedObject = dereference(Curator.curationContext(), referencedItemHandle);
+        if (referencedObject instanceof Item) {
+            return (Item) referencedObject;
+        } else {
+            return null;
+        }
+    }
+
+    private boolean hasReferenceBack(Item referencedItem, String handleBack, String fieldNameInOtherDirection,
+                                     String handlePrefixLocal) {
+        return itemService.getMetadataByMetadataString(referencedItem, fieldNameInOtherDirection).stream()
+                .map(mdv -> getHandle(mdv, handlePrefixLocal))
+                .anyMatch(handle -> handle != null && handle.equals(handleBack));
     }
 
     private String getHandle(MetadataValue relationReference, String handlePrefixLocal) {
