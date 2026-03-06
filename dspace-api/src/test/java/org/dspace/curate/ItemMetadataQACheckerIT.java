@@ -27,6 +27,8 @@ import org.dspace.content.factory.ContentServiceFactory;
 import org.dspace.content.service.CollectionService;
 import org.dspace.content.service.CommunityService;
 import org.dspace.content.service.ItemService;
+import org.dspace.services.ConfigurationService;
+import org.dspace.services.factory.DSpaceServicesFactory;
 import org.dspace.versioning.VersionHistory;
 import org.dspace.versioning.factory.VersionServiceFactory;
 import org.dspace.versioning.service.VersionHistoryService;
@@ -49,6 +51,7 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
     protected VersionHistoryService versionHistoryService =
             VersionServiceFactory.getInstance().getVersionHistoryService();
     protected VersioningService versioningService = VersionServiceFactory.getInstance().getVersionService();
+    protected ConfigurationService configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
 
     Community parentCommunity;
     Collection collection;
@@ -63,6 +66,7 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
     Item itemVersion2;
     Item itemVersion3;
     Item itemVersion4;
+    private String handlePrefix;
 
     @Before
     @Override
@@ -183,6 +187,8 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
             versioningService.createNewVersion(context, versionHistory, itemVersion3, "Version 3", new Date(), 3);
 
             context.restoreAuthSystemState();
+            handlePrefix = configurationService.getProperty("handle.canonical.prefix");
+
         } catch (Exception ex) {
             fail("Error in init: " + ex.getMessage());
         }
@@ -310,19 +316,20 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
 
         testItemWithRelationError(
                 itemVersion2,
-                "contains '%s' but the referenced object doesn't exist or doesn't contain '%s'",
-                "dc.relation.isreplacedby",
+                "the referenced item [[%s]] does not refer back via %s",
+                ref4,
                 "dc.relation.replaces");
     }
 
     @Test
     public void testItemWithBadRelationship2() throws IOException {
+        String ref2 = itemService.getMetadataFirstValue(itemVersion2, "dc", "identifier", "uri", Item.ANY);
         // itemVersion3 has 'dc.relation.replaces' that points back to itemVersion2
         // but itemVersion2 doesn't have 'dc.relation.isreplacedby' that points forward to itemVersion3
         testItemWithRelationError(
                 itemVersion3,
-                "contains '%s' but the referenced object doesn't exist or doesn't contain '%s'",
-                "dc.relation.replaces",
+                "the referenced item [[%s]] does not refer back via %s",
+                ref2,
                 "dc.relation.isreplacedby");
     }
 
@@ -356,7 +363,8 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
         context.restoreAuthSystemState();
 
         testItemWithRelationError(itemVersion2,
-                "contains '%s' but the referenced item is not part of any version history", "dc.relation.isreplacedby");
+                "contains '%s' but the referenced item [[%s]] is not part of any version history",
+                "dc.relation.isreplacedby", ref4);
     }
 
     @Test
@@ -376,7 +384,8 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
                 "Another Version History - Version 1", new Date(), 1);
 
         testItemWithRelationError(itemVersion4,
-                "contains '%s' but the referenced item is not in the same version history", "dc.relation.replaces");
+                "contains '%s' but the referenced item [[%s]] is not in the same version history",
+                "dc.relation.replaces", ref2);
     }
 
     @Test
@@ -404,8 +413,9 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
         int status = curator.getStatus(TASK_NAME);
         String result = curator.getResult(TASK_NAME);
         assertEquals("Curation should fail for incorrect relationship", Curator.CURATE_FAIL, status);
-        assertTrue("Result must contain fail message " + result,
-                result.contains(String.format(errorMessage, args))
+        String failMessage = String.format(errorMessage, args);
+        assertTrue(String.format("Result: %s\n must contain fail message \n %s ", result, failMessage),
+                result.contains(failMessage)
         );
     }
 

@@ -369,10 +369,15 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
     }
 
     private boolean hasReferenceBack(Item referencedItem, String handleBack, String fieldNameInOtherDirection,
-                                     String handlePrefixLocal) {
-        return itemService.getMetadataByMetadataString(referencedItem, fieldNameInOtherDirection).stream()
+                                     String handlePrefixLocal) throws CurateException {
+        boolean ok = itemService.getMetadataByMetadataString(referencedItem, fieldNameInOtherDirection).stream()
                 .map(mdv -> getHandle(mdv, handlePrefixLocal))
                 .anyMatch(handle -> handle != null && handle.equals(handleBack));
+        if (!ok) {
+            throw new CurateException(String.format("the referenced item %s does not refer back via %s",
+                           addMagicString(getHandle(referencedItem)), fieldNameInOtherDirection), Curator.CURATE_FAIL);
+        }
+        return true;
     }
 
     private String getHandle(MetadataValue relationReference, String handlePrefixLocal) {
@@ -394,16 +399,16 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
         VersionHistory item2History = versionHistoryService.findByItem(Curator.curationContext(), item2);
         if (item2History == null) {
             throw new CurateException(
-                    String.format("contains '%s' but the referenced item is not part of any version history",
-                            relation),
+                    String.format("contains '%s' but the referenced item %s is not part of any version history",
+                            relation, addMagicString(getHandle(item2))),
                     Curator.CURATE_FAIL
             );
         }
 
         if (!item1History.equals(item2History)) {
             throw new CurateException(
-                    String.format("contains '%s' but the referenced item is not in the same version history",
-                            relation),
+                    String.format("contains '%s' but the referenced item %s is not in the same version history",
+                            relation, addMagicString(getHandle(item2))),
                     Curator.CURATE_FAIL
             );
         }
