@@ -66,6 +66,7 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
     Item itemVersion2;
     Item itemVersion3;
     Item itemVersion4;
+    Item itemVersion5;
     private String handlePrefix;
 
     @Before
@@ -166,6 +167,13 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
 
             itemVersion4 = ItemBuilder.createItem(context, collection)
                     .withTitle("Item Version 4")
+                    .withMetadata("dc", "type", null, "corpus")
+                    .withMetadata("dc", "subject", null, "test subject")
+                    .withMetadata("local", "branding", null, "Test Community")
+                    .build();
+
+            itemVersion5 = ItemBuilder.createItem(context, collection)
+                    .withTitle("Item Version 5")
                     .withMetadata("dc", "type", null, "corpus")
                     .withMetadata("dc", "subject", null, "test subject")
                     .withMetadata("local", "branding", null, "Test Community")
@@ -330,6 +338,21 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
                 itemVersion3,
                 "the referenced item [[%s]] does not refer back via %s",
                 ref2,
+                "dc.relation.isreplacedby");
+    }
+    @Test
+    public void testItemWithBadRelationship3() throws IOException, SQLException, AuthorizeException {
+
+        context.turnOffAuthorisationSystem();
+        String ref = "https://example.org/this-doesnt-resolve";
+        itemService.addMetadata(context, itemVersion5, "dc", "relation", "replaces", null, ref);
+        itemService.update(context, itemVersion5);
+        context.restoreAuthSystemState();
+
+        testItemWithRelationError(
+                itemVersion5,
+                //"the referenced item [[%s]] does not refer back via %s",
+                "referenced object doesn't exist or doesn't contain '%s' or doesn't point to this item",
                 "dc.relation.isreplacedby");
     }
 
