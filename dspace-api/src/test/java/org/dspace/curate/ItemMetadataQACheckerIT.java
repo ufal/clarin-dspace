@@ -351,9 +351,9 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
 
         testItemWithRelationError(
                 itemVersion5,
-                //"the referenced item [[%s]] does not refer back via %s",
-                "referenced object doesn't exist or doesn't contain '%s' or doesn't point to this item",
-                "dc.relation.isreplacedby");
+                "contains '%s' but the referenced object [[%s]] is not an item or doesn't exist",
+                "dc.relation.replaces",
+                ref);
     }
 
     @Test

@@ -15,7 +15,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -347,8 +346,8 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
                                    String handlePrefixLocal) throws SQLException, IOException, CurateException {
         for (MetadataValue ref : references) {
             Item referencedItem = getReferencedItem(ref, handlePrefixLocal);
-            boolean checksPass = Objects.nonNull(referencedItem) &&
-                    hasReferenceBack(referencedItem, item.getHandle(), fieldNameInOtherDirection, handlePrefixLocal) &&
+            boolean checksPass = hasReferenceBack(referencedItem, item.getHandle(),
+                    fieldNameInOtherDirection, handlePrefixLocal) &&
                     checkVersionHistory(item, referencedItem, referencesFieldName);
             if (!checksPass) {
                 return false;
@@ -358,13 +357,16 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
     }
 
     private Item getReferencedItem(MetadataValue relatedReference, String handlePrefixLocal)
-            throws SQLException, IOException {
+            throws SQLException, IOException, CurateException {
         String referencedItemHandle =  getHandle(relatedReference, handlePrefixLocal);
         DSpaceObject referencedObject = dereference(Curator.curationContext(), referencedItemHandle);
         if (referencedObject instanceof Item) {
             return (Item) referencedObject;
         } else {
-            return null;
+            throw new CurateException(
+                    String.format("contains '%s' but the referenced object [[%s]] is not an item or doesn't exist",
+                            relatedReference.getMetadataField().toString('.'), referencedItemHandle),
+                    Curator.CURATE_FAIL);
         }
     }
 
