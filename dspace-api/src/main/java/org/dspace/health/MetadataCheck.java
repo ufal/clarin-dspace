@@ -20,6 +20,7 @@ import java.util.stream.StreamSupport;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import org.apache.commons.collections.ListUtils;
 import org.dspace.content.factory.ContentServiceFactory;
 import org.dspace.core.Context;
 import org.dspace.curate.Curator;
@@ -34,14 +35,14 @@ public class MetadataCheck extends Check {
     private static final String QA_METADATA_ERROR_PATTERNS_JSON = "qa-metadata-error-patterns.json";
     private static final String VALIDATION_TYPE_OTHER = "validation.other";
     private static final int COUNT_INDENTATION = 30;
-    private static final int MAXIMUM_ERRORS_TO_SHOW = 50;
+
+    private static final int MAXIMUM_ERRORS_TO_SHOW = 100;
+    private static final int MAXIMUM_WARNINGS_TO_SHOW = 50;
+    private static final int ERRORS_DISPERSION_QUOTA = 10;
+    private static final int WARNINGS_DISPERSION_QUOTA = 5;
 
     private static Map<String, List<String>> errorPatterns;
-    private static Map<String, String> errorExamples;
-    private static Map<String, Integer> errorCounts;
     private static Map<String, List<String>> warningPatterns;
-    private static Map<String, String> warningExamples;
-    private static Map<String, Integer> warningCounts;
 
     @Override
     public String run(ReportInfo ri) {
@@ -54,18 +55,10 @@ public class MetadataCheck extends Check {
             error(e, "Cannot load error patterns");
         }
 
-        errorExamples = new HashMap<>();
-        // Use TreeMap to keep the error types sorted
-        errorCounts = new TreeMap<>();
-
-        warningExamples = new HashMap<>();
-        // Use TreeMap to keep the warning types sorted
-        warningCounts = new TreeMap<>();
-
         Curator curator = new Curator();
         curator.addTask("metadataqa");
 
-        ErrorReporter reporter = new ErrorReporter();
+        MetadataReporter reporter = new MetadataReporter();
         curator.setReporter(reporter);
         Context context = new Context();
         try {
@@ -74,10 +67,14 @@ public class MetadataCheck extends Check {
             error(e, "Error during curation");
         }
 
-        List<String> report = reporter.getReport();
-
+        Map<String, Integer> errorCounts = reporter.getErrorCount();
         int errorCount = errorCounts.values().stream().mapToInt(Integer::intValue).sum();
+
+        Map<String, Integer> warningCounts = reporter.getWarningCount();
         int warningCount = warningCounts.values().stream().mapToInt(Integer::intValue).sum();
+
+        Map<String, List<String>> errorMessages = reporter.getErrorMessages();
+        Map<String, List<String>> warningMessages = reporter.getWarningMessages();
 
         // error statistics
         if (errorCount > 0) {
@@ -109,35 +106,27 @@ public class MetadataCheck extends Check {
 
         // list of errors
         if (errorCount > 0) {
+            sb.append("\nErrors:\n");
+            errorMessages.forEach((key, messages) ->
+                    messages.forEach(message -> sb.append(message).append("\n"))
+            );
             if (errorCount > MAXIMUM_ERRORS_TO_SHOW) {
-                sb.append("\nError examples:\n");
-                errorExamples.forEach((key, val) -> sb.append(val.substring(val.indexOf("ERROR! "))).append("\n"));
-            } else {
-                sb.append("\nErrors:\n");
-                report.forEach(line -> {
-                    if (line.contains("ERROR! ")) {
-                        sb.append(line.substring(line.indexOf("ERROR! "))).append("\n");
-                    }
-                });
+                sb.append("and more...\n");
             }
         }
 
         // list of warnings
         if (warningCount > 0) {
-            if (warningCount > MAXIMUM_ERRORS_TO_SHOW) {
-                sb.append("\nWarning examples:\n");
-                warningExamples.forEach((key, val) -> sb.append(val.substring(val.indexOf("Warning: "))).append("\n"));
-            } else {
-                sb.append("\nWarnings:\n");
-                report.forEach(line -> {
-                    if (!line.contains("ERROR! ") && line.contains("Warning: ")) {
-                        sb.append(line.substring(line.indexOf("Warning: "))).append("\n");
-                    }
-                });
+            sb.append("\nWarnings:\n");
+            warningMessages.forEach((key, messages) ->
+                    messages.forEach(message -> sb.append(message).append("\n"))
+            );
+            if (warningCount > MAXIMUM_WARNINGS_TO_SHOW) {
+                sb.append("and more...\n");
             }
         }
 
-        // populate report with error counts
+        // populate JSON report
         root.put("errorCount", errorCount);
         root.put("warningCount", warningCount);
 
@@ -165,42 +154,6 @@ public class MetadataCheck extends Check {
         return sb.toString();
     }
 
-    static class ErrorReporter implements Appendable {
-        private final List<String> report = new ArrayList<>();
-
-        /**
-         * Get the content of the report accumulator.
-         * @return accumulated reports.
-         */
-        List<String> getReport() {
-            return report;
-        }
-
-        @Override
-        public Appendable append(CharSequence cs) throws IOException {
-            String line = cs.toString();
-            if (line.contains("ERROR! ")) {
-                report.add(line);
-                populateData("ERROR! ", line, errorPatterns, errorCounts, errorExamples);
-            } else if (line.contains("Warning: ")) {
-                report.add(line);
-                populateData("Warning: ", line, warningPatterns, warningCounts, warningExamples);
-            }
-            return this;
-        }
-
-        @Override
-        public Appendable append(CharSequence cs, int i, int i1) throws IOException {
-            throw new UnsupportedOperationException("Not supported.");
-        }
-
-        @Override
-        public Appendable append(char c)
-                throws IOException {
-            throw new UnsupportedOperationException("Not supported.");
-        }
-    }
-
     private void loadPatterns() throws IOException {
         InputStream qaMetadataErrors = Thread.currentThread()
                 .getContextClassLoader().getResourceAsStream(QA_METADATA_ERROR_PATTERNS_JSON);
@@ -225,47 +178,220 @@ public class MetadataCheck extends Check {
         return validationPatterns;
     }
 
-    private static void populateData(String prefix,
-                                     String line,
-                                     Map<String, List<String>> patterns,
-                                     Map<String, Integer> counts,
-                                     Map<String, String> examples) {
-        String message = line.substring(line.indexOf(prefix) + prefix.length(), line.indexOf("[[") - 1);
-        boolean found = false;
-        for (Map.Entry<String, List<String>> entry : patterns.entrySet()) {
-            String type = entry.getKey();
-            List<String> typePatterns = entry.getValue();
-            for (String pattern : typePatterns) {
-                boolean startsWithCaret = pattern.startsWith("^");
-                boolean endsWithDollar = pattern.endsWith("$");
-                if ((startsWithCaret && message.startsWith(pattern.substring(1))) ||
-                        (endsWithDollar && message.endsWith(pattern.substring(0, pattern.length() - 1))) ||
-                        (!startsWithCaret && !endsWithDollar && message.contains(pattern))
-                ) {
-                    // increase the count for this validation type
-                    counts.merge(type, 1, Integer::sum);
-                    examples.putIfAbsent(message, line);
-                    found = true;
-                    break;
-                }
-            }
-            if (found) {
-                break; // If a pattern is found, no need to check other patterns for this message
-            }
-        }
-        if (!found) {
-            // If no pattern matched, categorize under "validation.other"
-            counts.merge(VALIDATION_TYPE_OTHER, 1, Integer::sum);
-            examples.putIfAbsent(message, line);
-        }
-    }
-
     private static String formatErrorCode(String errorCode) {
         if (errorCode.startsWith("validation.")) {
             String validationCode = errorCode.substring("validation.".length());
             return validationCode.replaceAll("\\.", " ") + " issues: ";
         } else {
             return errorCode + " issues: ";
+        }
+    }
+
+    private static class MetadataReporter implements Appendable {
+        private final Map<String, Integer> errorCount = new TreeMap<>();
+        private final Map<String, Integer> warningCount = new TreeMap<>();
+
+        // represent stored messages for errors and warnings
+        private final StoredMessages errorMessages = new StoredMessages();
+        private final StoredMessages warningMessages = new StoredMessages();
+
+        Map<String, List<String>> getErrorMessages() {
+            return errorMessages.getMessages();
+        }
+
+        Map<String, Integer> getErrorCount() {
+            return errorCount;
+        }
+
+        Map<String, List<String>> getWarningMessages() {
+            return warningMessages.getMessages();
+        }
+
+        Map<String, Integer> getWarningCount() {
+            return warningCount;
+        }
+
+        @Override
+        public Appendable append(CharSequence cs) throws IOException {
+            String line = cs.toString();
+            if (line.contains("ERROR! ")) {
+                populateData(
+                        "ERROR! ",
+                        line,
+                        errorPatterns,
+                        errorCount,
+                        errorMessages,
+                        MAXIMUM_ERRORS_TO_SHOW,
+                        ERRORS_DISPERSION_QUOTA
+                );
+            } else if (line.contains("Warning: ")) {
+                populateData(
+                        "Warning: ",
+                        line,
+                        warningPatterns,
+                        warningCount,
+                        warningMessages,
+                        MAXIMUM_WARNINGS_TO_SHOW,
+                        WARNINGS_DISPERSION_QUOTA
+                );
+            }
+            return this;
+        }
+
+        @Override
+        public Appendable append(CharSequence cs, int i, int i1) throws IOException {
+            throw new UnsupportedOperationException("Not supported.");
+        }
+
+        @Override
+        public Appendable append(char c)
+                throws IOException {
+            throw new UnsupportedOperationException("Not supported.");
+        }
+
+        private void populateData(String prefix,
+                                  String line,
+                                  Map<String, List<String>> patterns,
+                                  Map<String, Integer> counts,
+                                  StoredMessages storedMessages,
+                                  int limit,
+                                  int dispersionQuota
+                                  ) {
+            int startIndex = line.indexOf(prefix) + prefix.length();
+            String longMessage = line.substring(startIndex);
+            String shortMessage = longMessage.substring(0, longMessage.indexOf("[[") - 1);
+            MessageInfo messageInfo = new MessageInfo(shortMessage, longMessage);
+            boolean found = false;
+            for (Map.Entry<String, List<String>> entry : patterns.entrySet()) {
+                String type = entry.getKey();
+                List<String> typePatterns = entry.getValue();
+                for (String pattern : typePatterns) {
+                    boolean startsWithCaret = pattern.startsWith("^");
+                    boolean endsWithDollar = pattern.endsWith("$");
+                    if ((startsWithCaret && shortMessage.startsWith(pattern.substring(1))) ||
+                            (endsWithDollar && shortMessage.endsWith(pattern.substring(0, pattern.length() - 1))) ||
+                            (!startsWithCaret && !endsWithDollar && shortMessage.contains(pattern))
+                    ) {
+                        addMessage(type, messageInfo, counts, storedMessages, limit, dispersionQuota);
+                        found = true;
+                        break;
+                    }
+                }
+                if (found) {
+                    break; // If a pattern is found, no need to check other patterns for this message
+                }
+            }
+            if (!found) {
+                // If no pattern matched, categorize under "validation.other"
+                addMessage(VALIDATION_TYPE_OTHER, messageInfo, counts, storedMessages, limit, dispersionQuota);
+            }
+        }
+
+        private void addMessage(String validationType,
+                                MessageInfo messageInfo,
+                                Map<String, Integer> counts,
+                                StoredMessages storedMessages,
+                                int limit,
+                                int dispersionQuota) {
+            // increase the count for this validation type
+            counts.merge(validationType, 1, Integer::sum);
+            int mCount = storedMessages.getCount();
+            Map<String, List<String>> messages = storedMessages.getMessages();
+            if (mCount < limit) {
+                // add error|warning to messages and increase the count
+                messages.merge(messageInfo.getShortMessage(), List.of(messageInfo.getLongMessage()), ListUtils::union);
+                storedMessages.setCount(mCount + 1);
+            } else {
+                replaceData(messageInfo, storedMessages, dispersionQuota);
+            }
+        }
+
+        private void replaceData(MessageInfo messageInfo, StoredMessages storedMessages, int dispersionQuota) {
+            if (storedMessages.getHighestCount() > 1) {
+                Map<String, List<String>> messages = storedMessages.getMessages();
+                String shortMessage = messageInfo.getShortMessage();
+                List<String> fullMessages = messages.get(shortMessage);
+                if (fullMessages == null ||
+                        (fullMessages.size() + dispersionQuota < storedMessages.getHighestCount())) {
+                    String messageWithHighestCount = getMessageWithHighestCount(messages);
+                    int highestMessageCount = messages.get(messageWithHighestCount).size();
+                    storedMessages.setHighestCount(highestMessageCount);
+
+                    if (fullMessages == null) {
+                        if (highestMessageCount > 1) {
+                            // short message not present in messages yet,
+                            // so the last message with the highest count is removed and this new message is added
+                            messages.get(messageWithHighestCount).remove(highestMessageCount - 1);
+                            messages.put(shortMessage, List.of(messageInfo.getLongMessage()));
+                        }
+                    } else {
+                        // short message is present in messages,
+                        // but the count of full messages for this short message is much lower
+                        // than the count of full messages for the message with the highest count,
+                        // so the last message with the highest count is removed and this new message is added
+                        messages.get(messageWithHighestCount).remove(highestMessageCount - 1);
+                        messages.merge(shortMessage, List.of(messageInfo.getLongMessage()), ListUtils::union);
+                    }
+                }
+            }
+        }
+
+        private static String getMessageWithHighestCount(Map<String, List<String>> examples) {
+            return examples.entrySet()
+                    .stream()
+                    .max((e1, e2) -> Integer.compare(e1.getValue().size(), e2.getValue().size()))
+                    .map(Map.Entry::getKey)
+                    .orElseThrow();
+        }
+    }
+
+    private static class StoredMessages {
+        private int count;
+        private int highestCount;
+        private final Map<String, List<String>> messages;
+
+        StoredMessages() {
+            this.count = 0;
+            this.highestCount = Integer.MAX_VALUE;
+            messages = new TreeMap<>();
+        }
+
+        public int getCount() {
+            return count;
+        }
+
+        public void setCount(int count) {
+            this.count = count;
+        }
+
+        public int getHighestCount() {
+            return highestCount;
+        }
+
+        public void setHighestCount(int highestCount) {
+            this.highestCount = highestCount;
+        }
+
+        public Map<String, List<String>> getMessages() {
+            return messages;
+        }
+    }
+
+    private static class MessageInfo {
+        private final String shortMessage;
+        private final String longMessage;
+
+        public MessageInfo(String shortMessage, String longMessage) {
+            this.shortMessage = shortMessage;
+            this.longMessage = longMessage;
+        }
+
+        public String getShortMessage() {
+            return shortMessage;
+        }
+
+        public String getLongMessage() {
+            return longMessage;
         }
     }
 }

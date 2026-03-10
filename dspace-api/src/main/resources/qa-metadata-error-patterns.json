@@ -17,7 +17,7 @@
       "^Title "
     ],
     "dc.relation": [
-      "^contains dc.relation"
+      "^contains dc.relation."
     ],
     "dc.rights": [
       "^has labels ",
