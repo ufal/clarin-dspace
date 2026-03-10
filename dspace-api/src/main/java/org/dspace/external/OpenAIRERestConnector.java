@@ -207,8 +207,11 @@ public class OpenAIRERestConnector {
                         break;
                 }
 
-                // do not close this httpClient
-                result = getResponse.getEntity().getContent();
+                // the client will be closed, we need to copy the response stream to a new one that we can return
+                try (InputStream is = getResponse.getEntity().getContent()) {
+                    byte[] bytes = is.readAllBytes();
+                    result = new java.io.ByteArrayInputStream(bytes);
+                }
             }
         } catch (MalformedURLException e1) {
             getGotError(e1, url + '/' + file);
