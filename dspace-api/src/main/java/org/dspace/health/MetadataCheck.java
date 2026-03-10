@@ -302,36 +302,33 @@ public class MetadataCheck extends Check {
                 messages.merge(messageInfo.getShortMessage(), List.of(messageInfo.getLongMessage()), ListUtils::union);
                 storedMessages.setCount(mCount + 1);
             } else {
-                replaceData(messageInfo, storedMessages, dispersionQuota);
+                replaceMessage(messageInfo, storedMessages, dispersionQuota);
             }
         }
 
-        private void replaceData(MessageInfo messageInfo, StoredMessages storedMessages, int dispersionQuota) {
+        private void replaceMessage(MessageInfo messageInfo, StoredMessages storedMessages, int dispersionQuota) {
             if (storedMessages.getHighestCount() > 1) {
                 Map<String, List<String>> messages = storedMessages.getMessages();
                 String shortMessage = messageInfo.getShortMessage();
                 List<String> fullMessages = messages.get(shortMessage);
-                if (fullMessages == null ||
-                        (fullMessages.size() + dispersionQuota < storedMessages.getHighestCount())) {
-                    String messageWithHighestCount = getMessageWithHighestCount(messages);
-                    int highestMessageCount = messages.get(messageWithHighestCount).size();
-                    storedMessages.setHighestCount(highestMessageCount);
 
-                    if (fullMessages == null) {
-                        if (highestMessageCount > 1) {
-                            // short message not present in messages yet,
-                            // so the last message with the highest count is removed and this new message is added
-                            messages.get(messageWithHighestCount).remove(highestMessageCount - 1);
-                            messages.put(shortMessage, List.of(messageInfo.getLongMessage()));
-                        }
-                    } else {
-                        // short message is present in messages,
-                        // but the count of full messages for this short message is much lower
-                        // than the count of full messages for the message with the highest count,
-                        // so the last message with the highest count is removed and this new message is added
-                        messages.get(messageWithHighestCount).remove(highestMessageCount - 1);
-                        messages.merge(shortMessage, List.of(messageInfo.getLongMessage()), ListUtils::union);
-                    }
+                // recalculate the highest count of messages for any short message in messages,
+                // because it can be changed after each replacement
+                String messageWithHighestCount = getMessageWithHighestCount(messages);
+                int highestMessageCount = messages.get(messageWithHighestCount).size();
+                storedMessages.setHighestCount(highestMessageCount);
+
+                if ((highestMessageCount > 1) &&
+                    (fullMessages == null || (fullMessages.size() + dispersionQuota < highestMessageCount))) {
+                    // either (1) short message is not present in messages yet,
+                    // so the last message with the highest count is removed and this new message is added
+                    //
+                    // or (2) short message is present in messages,
+                    // but the count of full messages for this short message is much lower
+                    // than the count of full messages for the message with the highest count,
+                    // so the last message with the highest count is removed and this new message is added
+                    messages.get(messageWithHighestCount).remove(highestMessageCount - 1);
+                    messages.merge(shortMessage, List.of(messageInfo.getLongMessage()), ListUtils::union);
                 }
             }
         }
