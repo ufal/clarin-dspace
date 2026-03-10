@@ -12,10 +12,6 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
-import java.io.OutputStream;
-import java.io.OutputStreamWriter;
-import java.io.PrintStream;
-import java.io.Writer;
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -23,7 +19,6 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.apache.commons.cli.ParseException;
-import org.apache.commons.io.output.NullOutputStream;
 import org.dspace.app.util.DSpaceObjectUtilsImpl;
 import org.dspace.app.util.service.DSpaceObjectUtils;
 import org.dspace.authorize.AuthorizeException;
@@ -31,6 +26,9 @@ import org.dspace.content.DSpaceObject;
 import org.dspace.content.factory.ContentServiceFactory;
 import org.dspace.core.Context;
 import org.dspace.core.factory.CoreServiceFactory;
+import org.dspace.curate.reporters.DoNothingReporter;
+import org.dspace.curate.reporters.FilePrinterReporter;
+import org.dspace.curate.reporters.SystemOutReporter;
 import org.dspace.eperson.EPerson;
 import org.dspace.eperson.factory.EPersonServiceFactory;
 import org.dspace.eperson.service.EPersonService;
@@ -53,6 +51,7 @@ public class Curation extends DSpaceRunnable<CurationScriptConfiguration> {
     HandleService handleService = HandleServiceFactory.getInstance().getHandleService();
     protected Context context;
     private CurationClientOptions curationClientOptions;
+    private Reporter outputReporter;
 
     private String task;
     private String taskFile;
@@ -173,10 +172,20 @@ public class Curation extends DSpaceRunnable<CurationScriptConfiguration> {
      * @throws SQLException If DSpace context can't complete
      */
     private void endScript(long timeRun) throws SQLException {
-        context.complete();
-        if (verbose) {
-            long elapsed = System.currentTimeMillis() - timeRun;
-            this.handler.logInfo("Ending curation. Elapsed time: " + elapsed);
+        try {
+            context.complete();
+            if (verbose) {
+                long elapsed = System.currentTimeMillis() - timeRun;
+                this.handler.logInfo("Ending curation. Elapsed time: " + elapsed);
+            }
+        } finally {
+            if (outputReporter != null) {
+                try {
+                    outputReporter.close();
+                } catch (Exception e) {
+                    handler.handleException("Something went wrong trying to close the reporter", e);
+                }
+            }
         }
     }
 
@@ -188,16 +197,14 @@ public class Curation extends DSpaceRunnable<CurationScriptConfiguration> {
      */
     private Curator initCurator() throws FileNotFoundException {
         Curator curator = new Curator(handler);
-        OutputStream reporterStream;
         if (null == this.reporter) {
-            reporterStream = NullOutputStream.NULL_OUTPUT_STREAM;
+            outputReporter = new DoNothingReporter();
         } else if ("-".equals(this.reporter)) {
-            reporterStream = System.out;
+            outputReporter = new SystemOutReporter();
         } else {
-            reporterStream = new PrintStream(this.reporter);
+            outputReporter = new FilePrinterReporter(this.reporter);
         }
-        Writer reportWriter = new OutputStreamWriter(reporterStream);
-        curator.setReporter(reportWriter);
+        curator.setReporter(outputReporter);
 
         if (this.scope != null) {
             Curator.TxScope txScope = Curator.TxScope.valueOf(this.scope.toUpperCase());
