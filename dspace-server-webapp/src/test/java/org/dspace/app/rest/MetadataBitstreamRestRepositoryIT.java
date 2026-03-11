@@ -295,7 +295,7 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
             context.restoreAuthSystemState();
             // Non admin user cannot preview the archive file because the bitstream has only ADMIN read permission,
             // and also the fileInfo should be empty in this case
-            checkFilePreviewDisabled(item);
+            checkFilePreview(item, false, 0);
         } finally {
             ItemBuilder.deleteItem(item.getID());
             CollectionBuilder.deleteCollection(col.getID());
@@ -323,7 +323,33 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
             context.restoreAuthSystemState();
             // Non admin user cannot preview the html file because the bitstream has only ADMIN read permission,
             // and also the fileInfo should be empty in this case
-            checkFilePreviewDisabled(item);
+            checkFilePreview(item, false, 0);
+        } finally {
+            ItemBuilder.deleteItem(item.getID());
+            CollectionBuilder.deleteCollection(col.getID());
+        }
+    }
+
+    @Test
+    public void previewEnabledForHtmlFile() throws Exception {
+        context.turnOffAuthorisationSystem();
+        Collection col = CollectionBuilder.createCollection(context, parentCommunity).withName("Collection2").build();
+        Item item = ItemBuilder.createItem(context, col).withAuthor(AUTHOR).build();
+
+        try {
+            // create bitstream with ADMIN reader group,
+            // so the non admin user cannot read the bitstream and preview content is not available for non admin user
+            try (InputStream is = getClass().getResourceAsStream("assetstore/hello.html")) {
+                BitstreamBuilder.
+                        createBitstream(context, item, is)
+                        .withName("hello.html")
+                        .withDescription("HTML file")
+                        .withMimeType("text/html")
+                        .build();
+            }
+            context.restoreAuthSystemState();
+            // user can preview the html file because the bitstream has read permission
+            checkFilePreview(item, true, 1);
         } finally {
             ItemBuilder.deleteItem(item.getID());
             CollectionBuilder.deleteCollection(col.getID());
@@ -354,7 +380,7 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
 
             context.restoreAuthSystemState();
             // Non admin user cannot preview the archive file when the license agreement is needed.
-            checkFilePreviewDisabled(item);
+            checkFilePreview(item, false, 0);
         } finally {
             ItemBuilder.deleteItem(item.getID());
             CollectionBuilder.deleteCollection(col.getID());
@@ -387,7 +413,7 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
 
             context.restoreAuthSystemState();
             // Non admin user cannot preview the html file when the license agreement is needed.
-            checkFilePreviewDisabled(item);
+            checkFilePreview(item, false, 0);
         } finally {
             ItemBuilder.deleteItem(item.getID());
             CollectionBuilder.deleteCollection(col.getID());
@@ -457,7 +483,7 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
         return clarinLicense;
     }
 
-    private void checkFilePreviewDisabled(Item item) throws Exception {
+    private void checkFilePreview(Item item, boolean filePreviewExpected, int expectedFileInfoSize) throws Exception {
         getClient().perform(get(METADATABITSTREAM_SEARCH_BY_HANDLE_ENDPOINT)
                         .param("handle", item.getHandle())
                         .param("fileGrpType", FILE_GRP_TYPE))
@@ -466,8 +492,8 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
                 .andExpect(jsonPath("$._embedded.metadatabitstreams").exists())
                 .andExpect(jsonPath("$._embedded.metadatabitstreams").isArray())
                 .andExpect(jsonPath("$._embedded.metadatabitstreams", hasSize(1)))
-                .andExpect(jsonPath("$._embedded.metadatabitstreams[0].canPreview").value(false))
+                .andExpect(jsonPath("$._embedded.metadatabitstreams[0].canPreview").value(filePreviewExpected))
                 .andExpect(jsonPath("$._embedded.metadatabitstreams[0].fileInfo").isArray())
-                .andExpect(jsonPath("$._embedded.metadatabitstreams[0].fileInfo", hasSize(0)));
+                .andExpect(jsonPath("$._embedded.metadatabitstreams[0].fileInfo", hasSize(expectedFileInfoSize)));
     }
 }
