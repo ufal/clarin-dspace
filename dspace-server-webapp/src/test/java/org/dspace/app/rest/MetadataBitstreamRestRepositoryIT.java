@@ -29,6 +29,7 @@ import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
 import org.dspace.app.util.Util;
+import org.dspace.authorize.AuthorizeException;
 import org.dspace.authorize.service.AuthorizeService;
 import org.dspace.builder.BitstreamBuilder;
 import org.dspace.builder.ClarinLicenseBuilder;
@@ -274,7 +275,7 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
     }
 
     @Test
-    public void previewingDisabledByReadPermission() throws Exception {
+    public void previewDisabledByReadPermission() throws Exception {
         context.turnOffAuthorisationSystem();
         Collection col = CollectionBuilder.createCollection(context, parentCommunity).withName("Collection2").build();
         Item item = ItemBuilder.createItem(context, col).withAuthor(AUTHOR).build();
@@ -292,19 +293,9 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
                         .build();
             }
             context.restoreAuthSystemState();
-            // Non admin user cannot preview the file because the bitstream has only ADMIN read permission
-            // also the fileInfo should be empty in this case
-            getClient().perform(get(METADATABITSTREAM_SEARCH_BY_HANDLE_ENDPOINT)
-                            .param("handle", item.getHandle())
-                            .param("fileGrpType", FILE_GRP_TYPE))
-                    .andExpect(status().isOk())
-                    .andExpect(content().contentType(contentType))
-                    .andExpect(jsonPath("$._embedded.metadatabitstreams").exists())
-                    .andExpect(jsonPath("$._embedded.metadatabitstreams").isArray())
-                    .andExpect(jsonPath("$._embedded.metadatabitstreams", hasSize(1)))
-                    .andExpect(jsonPath("$._embedded.metadatabitstreams[0].canPreview").value(false))
-                    .andExpect(jsonPath("$._embedded.metadatabitstreams[0].fileInfo").isArray())
-                    .andExpect(jsonPath("$._embedded.metadatabitstreams[0].fileInfo", hasSize(0)));
+            // Non admin user cannot preview the archive file because the bitstream has only ADMIN read permission,
+            // and also the fileInfo should be empty in this case
+            checkFilePreviewDisabled(item);
         } finally {
             ItemBuilder.deleteItem(item.getID());
             CollectionBuilder.deleteCollection(col.getID());
@@ -312,32 +303,41 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
     }
 
     @Test
-    public void previewingAllowedWhenClarinLicenceAgreementIsNeeded() throws Exception {
+    public void previewDisabledForHtmlFileByReadPermission() throws Exception {
         context.turnOffAuthorisationSystem();
         Collection col = CollectionBuilder.createCollection(context, parentCommunity).withName("Collection2").build();
         Item item = ItemBuilder.createItem(context, col).withAuthor(AUTHOR).build();
 
-        // create license that needs confirmation,
-        // so the non admin user has to confirm the license agreement before downloading the file
-        ClarinLicenseLabelService clarinLicenseLabelService =
-                ClarinServiceFactory.getInstance().getClarinLicenseLabelService();
+        try {
+            // create bitstream with ADMIN reader group,
+            // so the non admin user cannot read the bitstream and preview content is not available for non admin user
+            try (InputStream is = getClass().getResourceAsStream("assetstore/hello.html")) {
+                BitstreamBuilder.
+                        createBitstream(context, item, is)
+                        .withName("hello.html")
+                        .withDescription("HTML file")
+                        .withMimeType("text/html")
+                        .withReaderGroup(groupService.findByName(context, Group.ADMIN))
+                        .build();
+            }
+            context.restoreAuthSystemState();
+            // Non admin user cannot preview the html file because the bitstream has only ADMIN read permission,
+            // and also the fileInfo should be empty in this case
+            checkFilePreviewDisabled(item);
+        } finally {
+            ItemBuilder.deleteItem(item.getID());
+            CollectionBuilder.deleteCollection(col.getID());
+        }
+    }
 
-        ClarinLicenseLabel clarinLicenseLabel = ClarinLicenseLabelBuilder.createClarinLicenseLabel(context).build();
-        clarinLicenseLabel.setLabel("CLL");
-        clarinLicenseLabel.setTitle("CLL Title");
-        clarinLicenseLabelService.update(context, clarinLicenseLabel);
-
-        ClarinLicense clarinLicense = ClarinLicenseBuilder.createClarinLicense(context).build();
-        clarinLicense.setName("CL Name");
-        clarinLicense.setConfirmation(ClarinLicense.Confirmation.ASK_ALWAYS);
-        clarinLicense.setDefinition("CL Definition");
-        clarinLicense.setRequiredInfo("CL Req");
-        clarinLicense.setLicenseLabels(Set.of(clarinLicenseLabel));
+    @Test
+    public void previewNotAllowedWhenClarinLicenceAgreementIsNeeded() throws Exception {
+        context.turnOffAuthorisationSystem();
+        Collection col = CollectionBuilder.createCollection(context, parentCommunity).withName("Collection2").build();
+        Item item = ItemBuilder.createItem(context, col).withAuthor(AUTHOR).build();
 
         ClarinLicenseService clarinLicenseService = ClarinServiceFactory.getInstance().getClarinLicenseService();
-
-        clarinLicenseService.addLicenseMetadataToItem(context, clarinLicense, item);
-        clarinLicenseService.update(context, clarinLicense);
+        ClarinLicense clarinLicense = addClarinLicenseThatNeedsConfirmation(clarinLicenseService, item);
 
         try {
             Bitstream bitstream;
@@ -353,24 +353,46 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
             clarinLicenseService.addClarinLicenseToBitstream(context, item, bitstream.getBundles().get(0), bitstream);
 
             context.restoreAuthSystemState();
-            // Non admin user can preview the file even the license agreement is needed,
-            // because the license agreement is only needed for file download.
-            getClient().perform(get(METADATABITSTREAM_SEARCH_BY_HANDLE_ENDPOINT)
-                            .param("handle", item.getHandle())
-                            .param("fileGrpType", FILE_GRP_TYPE))
-                    .andExpect(status().isOk())
-                    .andExpect(content().contentType(contentType))
-                    .andExpect(jsonPath("$._embedded.metadatabitstreams").exists())
-                    .andExpect(jsonPath("$._embedded.metadatabitstreams").isArray())
-                    .andExpect(jsonPath("$._embedded.metadatabitstreams", hasSize(1)))
-                    .andExpect(jsonPath("$._embedded.metadatabitstreams[0].canPreview").value(false))
-                    .andExpect(jsonPath("$._embedded.metadatabitstreams[0].fileInfo").isArray())
-                    .andExpect(jsonPath("$._embedded.metadatabitstreams[0].fileInfo", hasSize(0)));
+            // Non admin user cannot preview the archive file when the license agreement is needed.
+            checkFilePreviewDisabled(item);
         } finally {
             ItemBuilder.deleteItem(item.getID());
             CollectionBuilder.deleteCollection(col.getID());
             ClarinLicenseBuilder.deleteClarinLicense(clarinLicense.getID());
-            ClarinLicenseLabelBuilder.deleteClarinLicenseLabel(clarinLicenseLabel.getID());
+            ClarinLicenseLabelBuilder.deleteClarinLicenseLabel(clarinLicense.getLicenseLabels().get(0).getID());
+        }
+    }
+
+    @Test
+    public void previewNotAllowedForHtmlFileWhenLicenceAgreementIsNeeded() throws Exception {
+        context.turnOffAuthorisationSystem();
+        Collection col = CollectionBuilder.createCollection(context, parentCommunity).withName("Collection2").build();
+        Item item = ItemBuilder.createItem(context, col).withAuthor(AUTHOR).build();
+
+        ClarinLicenseService clarinLicenseService = ClarinServiceFactory.getInstance().getClarinLicenseService();
+        ClarinLicense clarinLicense = addClarinLicenseThatNeedsConfirmation(clarinLicenseService, item);
+
+        try {
+            Bitstream bitstream;
+            try (InputStream is = getClass().getResourceAsStream("assetstore/hello.html")) {
+                bitstream = BitstreamBuilder.
+                        createBitstream(context, item, is)
+                        .withName("Hello.html")
+                        .withDescription("HTML file")
+                        .withMimeType("text/html")
+                        .build();
+            }
+
+            clarinLicenseService.addClarinLicenseToBitstream(context, item, bitstream.getBundles().get(0), bitstream);
+
+            context.restoreAuthSystemState();
+            // Non admin user cannot preview the html file when the license agreement is needed.
+            checkFilePreviewDisabled(item);
+        } finally {
+            ItemBuilder.deleteItem(item.getID());
+            CollectionBuilder.deleteCollection(col.getID());
+            ClarinLicenseBuilder.deleteClarinLicense(clarinLicense.getID());
+            ClarinLicenseLabelBuilder.deleteClarinLicenseLabel(clarinLicense.getLicenseLabels().get(0).getID());
         }
     }
 
@@ -399,5 +421,53 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
         } catch (SQLException e) { /* Do nothing */ }
 
         url += "&isAllowed=" + isAllowed;
+    }
+
+    /**
+     *  Create a license that needs confirmation and set this license to the item,
+     *  so the user has to confirm the license agreement before downloading the file(s).
+     *
+     * @param clarinLicenseService ClarinLicenseService
+     * @param item Item
+     * @return ClarinLicense that needs confirmation
+     * @throws SQLException SQLException
+     * @throws AuthorizeException AuthorizeException
+     */
+    private ClarinLicense addClarinLicenseThatNeedsConfirmation(ClarinLicenseService clarinLicenseService, Item item)
+            throws SQLException, AuthorizeException {
+
+        ClarinLicenseLabelService clarinLicenseLabelService =
+                ClarinServiceFactory.getInstance().getClarinLicenseLabelService();
+
+        ClarinLicenseLabel clarinLicenseLabel = ClarinLicenseLabelBuilder.createClarinLicenseLabel(context).build();
+        clarinLicenseLabel.setLabel("CLL");
+        clarinLicenseLabel.setTitle("CLL Title");
+        clarinLicenseLabelService.update(context, clarinLicenseLabel);
+
+        ClarinLicense clarinLicense = ClarinLicenseBuilder.createClarinLicense(context).build();
+        clarinLicense.setName("CL Name");
+        clarinLicense.setConfirmation(ClarinLicense.Confirmation.ASK_ALWAYS);
+        clarinLicense.setDefinition("CL Definition");
+        clarinLicense.setRequiredInfo("CL Req");
+        clarinLicense.setLicenseLabels(Set.of(clarinLicenseLabel));
+
+        clarinLicenseService.addLicenseMetadataToItem(context, clarinLicense, item);
+        clarinLicenseService.update(context, clarinLicense);
+
+        return clarinLicense;
+    }
+
+    private void checkFilePreviewDisabled(Item item) throws Exception {
+        getClient().perform(get(METADATABITSTREAM_SEARCH_BY_HANDLE_ENDPOINT)
+                        .param("handle", item.getHandle())
+                        .param("fileGrpType", FILE_GRP_TYPE))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(contentType))
+                .andExpect(jsonPath("$._embedded.metadatabitstreams").exists())
+                .andExpect(jsonPath("$._embedded.metadatabitstreams").isArray())
+                .andExpect(jsonPath("$._embedded.metadatabitstreams", hasSize(1)))
+                .andExpect(jsonPath("$._embedded.metadatabitstreams[0].canPreview").value(false))
+                .andExpect(jsonPath("$._embedded.metadatabitstreams[0].fileInfo").isArray())
+                .andExpect(jsonPath("$._embedded.metadatabitstreams[0].fileInfo", hasSize(0)));
     }
 }
