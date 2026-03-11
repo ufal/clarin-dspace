@@ -189,10 +189,10 @@ public class PreviewContentServiceImpl implements PreviewContentService {
                 fileInfos = processFileToFilePreview(context, bitstream, file);
             }
         } catch (MissingLicenseAgreementException e) {
-            log.warn("Missing license agreement: ");
+            log.warn("File Preview disabled: Missing license agreement!");
             throw e;
         } catch (AuthorizeException e) {
-            log.warn("Authorization error: ");
+            log.warn("File Preview disabled: Authorization error!");
             throw e;
         } catch (IOException e) {
             log.error("IOException during file processing: ", e);
