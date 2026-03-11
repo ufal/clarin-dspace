@@ -363,9 +363,9 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
                     .andExpect(jsonPath("$._embedded.metadatabitstreams").exists())
                     .andExpect(jsonPath("$._embedded.metadatabitstreams").isArray())
                     .andExpect(jsonPath("$._embedded.metadatabitstreams", hasSize(1)))
-                    .andExpect(jsonPath("$._embedded.metadatabitstreams[0].canPreview").value(true))
+                    .andExpect(jsonPath("$._embedded.metadatabitstreams[0].canPreview").value(false))
                     .andExpect(jsonPath("$._embedded.metadatabitstreams[0].fileInfo").isArray())
-                    .andExpect(jsonPath("$._embedded.metadatabitstreams[0].fileInfo", hasSize(2)));
+                    .andExpect(jsonPath("$._embedded.metadatabitstreams[0].fileInfo", hasSize(0)));
         } finally {
             ItemBuilder.deleteItem(item.getID());
             CollectionBuilder.deleteCollection(col.getID());

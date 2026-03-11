@@ -22,6 +22,7 @@ import org.dspace.app.rest.exception.DSpaceBadRequestException;
 import org.dspace.app.rest.exception.UnprocessableEntityException;
 import org.dspace.app.rest.model.MetadataBitstreamWrapperRest;
 import org.dspace.app.rest.model.wrapper.MetadataBitstreamWrapper;
+import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.Bitstream;
 import org.dspace.content.Bundle;
 import org.dspace.content.DSpaceObject;
@@ -119,7 +120,12 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
                             boolean allowComposePreviewContent = configurationService.getBooleanProperty
                                     ("create.file-preview.on-item-page-load", false);
                             if (allowComposePreviewContent) {
-                                fileInfos.addAll(previewContentService.getFilePreviewContent(context, bitstream));
+                                try {
+                                    fileInfos.addAll(previewContentService.getFilePreviewContent(context, bitstream));
+                                } catch (AuthorizeException e) {
+                                    log.warn("Cannot create preview content for bitstream: {} because: {}",
+                                            bitstream.getID(), e.getMessage());
+                                }
                                 // Do not store HTML content in the database because it could be longer than the limit
                                 // of the database column
                                 if (!fileInfos.isEmpty() &&

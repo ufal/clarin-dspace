@@ -165,11 +165,12 @@ public class PreviewContentServiceImpl implements PreviewContentService {
             // If not, the preview content is disabled.
             try {
                 authorizeService.authorizeAction(context, bitstream, Constants.READ);
-            } catch (MissingLicenseAgreementException e) {
-                // In case the license agreement(for bitstream downloading) is only needed,
-                // we still enable the preview content.
-                return true;
             } catch (AuthorizeException e) {
+                // In case the license agreement(for bitstream downloading) is needed,
+                // the MissingLicenseAgreementException, that extends AuthorizeException, is thrown.
+                // For this case we also disable the content preview.
+                // Otherwise, user could see the content of some files without accepting the agreement,
+                // which could cause a security issue.
                 return false;
             }
         }
@@ -182,13 +183,16 @@ public class PreviewContentServiceImpl implements PreviewContentService {
         File file = null;
 
         try {
-            file = bitstreamService.retrieveFile(context, bitstream, false); // Retrieve the file
+            file = bitstreamService.retrieveFile(context, bitstream, true); // Retrieve the file
 
             if (Objects.nonNull(file)) {
                 fileInfos = processFileToFilePreview(context, bitstream, file);
             }
         } catch (MissingLicenseAgreementException e) {
-            log.error("Missing license agreement: ", e);
+            log.warn("Missing license agreement: ");
+            throw e;
+        } catch (AuthorizeException e) {
+            log.warn("Authorization error: ");
             throw e;
         } catch (IOException e) {
             log.error("IOException during file processing: ", e);
