@@ -8,6 +8,8 @@
 package org.dspace.scripts;
 
 import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.notNullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.hasItem;
@@ -20,6 +22,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.dspace.AbstractIntegrationTestWithDatabase;
 import org.dspace.app.launcher.ScriptLauncher;
 import org.dspace.app.scripts.handler.impl.TestDSpaceRunnableHandler;
@@ -31,6 +36,8 @@ import org.dspace.content.Bundle;
 import org.dspace.content.Collection;
 import org.dspace.content.Community;
 import org.dspace.content.Item;
+import org.dspace.content.MetadataValue;
+import org.dspace.content.ReportResult;
 import org.dspace.content.clarin.ClarinLicense;
 import org.dspace.content.clarin.ClarinLicenseLabel;
 import org.dspace.content.clarin.ClarinLicenseResourceMapping;
@@ -38,6 +45,7 @@ import org.dspace.content.factory.ClarinServiceFactory;
 import org.dspace.content.factory.ContentServiceFactory;
 import org.dspace.content.service.BitstreamService;
 import org.dspace.content.service.BundleService;
+import org.dspace.content.service.ReportResultService;
 import org.dspace.content.service.clarin.ClarinLicenseLabelService;
 import org.dspace.content.service.clarin.ClarinLicenseResourceMappingService;
 import org.dspace.content.service.clarin.ClarinLicenseService;
@@ -138,5 +146,108 @@ public class HealthReportIT extends AbstractIntegrationTestWithDatabase {
         assertThat(messages, hasItem(containsString("no bundle")));
         assertThat(messages, hasItem(containsString("UUIDs of items without license bundle:")));
         assertThat(messages, hasItem(containsString("PUB")));
+    }
+
+    @Test
+    public void testMetadataCheck() throws Exception {
+        context.turnOffAuthorisationSystem();
+
+        Community community = CommunityBuilder.createCommunity(context)
+                .withName("Community")
+                .build();
+
+        Collection collection = CollectionBuilder.createCollection(context, community)
+                .withName("Collection")
+                .withSubmitterGroup(eperson)
+                .build();
+
+        Item item1 = ItemBuilder.createItem(context, collection)
+                .withTitle("Test item 1m")
+                .withType("corpus")
+                .withMetadata("local", "branding", null, "Community")
+                .build();
+
+        Item item2 = ItemBuilder.createItem(context, collection)
+                .withTitle("Test item 2")
+                .withType("toolService")
+                .withSubject("Test subject")
+                .withMetadata("local", "branding", null, "Community")
+                .withMetadata("dc", "relation", "replaces", findItemUri(item1))
+                .build();
+
+        ItemBuilder.createItem(context, collection)
+                .withTitle("Test item 3")
+                .withType("toolService")
+                .withSubject("Test subject")
+                .withMetadata("local", "branding", null, "Community")
+                .withMetadata("dc", "relation", "isreplacedby", findItemUri(item2))
+                .build();
+
+        TestDSpaceRunnableHandler testDSpaceRunnableHandler = new TestDSpaceRunnableHandler();
+
+        // with "health-report -c 5", only Metadata check is running
+        String[] args = new String[]{"health-report", "-c", "5"};
+        ScriptLauncher.handleScript(args, ScriptLauncher.getConfig(kernelImpl), testDSpaceRunnableHandler, kernelImpl);
+
+        assertThat(testDSpaceRunnableHandler.getErrorMessages(), empty());
+        List<String> messages = testDSpaceRunnableHandler.getInfoMessages();
+
+        assertThat(messages, hasSize(1));
+        assertThat(messages.get(0), containsString("dc.relation issues:  " + " ".repeat(15) + "2"));
+        assertThat(messages.get(0), containsString("Error count total:   " + " ".repeat(15) + "2"));
+        assertThat(messages.get(0), containsString("dc.subject issues:   " + " ".repeat(15) + "1"));
+        assertThat(messages.get(0), containsString("Warning count total: " + " ".repeat(15) + "1"));
+        assertThat(messages.get(0), containsString("Errors:"));
+        assertThat(messages.get(0), containsString("does not refer back via dc.relation.isreplacedby"));
+        assertThat(messages.get(0), containsString("does not refer back via dc.relation.replaces"));
+        assertThat(messages.get(0), containsString("Warnings:"));
+        assertThat(messages.get(0), containsString("does not contain any [dc.subject] values"));
+
+        ReportResultService reportResultService = ContentServiceFactory.getInstance().getReportResultService();
+        List<ReportResult> reportResults = reportResultService.findAll(context);
+        ReportResult reportResult  = findLastReportResult(reportResults);
+        assertThat(reportResult.getType(), is("healthcheck"));
+
+        JsonNode root = new ObjectMapper().readTree(reportResult.getValue());
+        JsonNode metadataCheckNode = findCheckByName(root, "Metadata check");
+        assertThat(metadataCheckNode, notNullValue());
+
+        JsonNode reportNode = metadataCheckNode.get("report");
+        assertThat(reportNode, notNullValue());
+
+        assertThat(reportNode.get("errorCount").asInt(), is(2));
+        assertThat(reportNode.get("warningCount").asInt(), is(1));
+
+        ArrayNode errorsNode = reportNode.withArray("errors");
+        assertThat(errorsNode.size(), is(1));
+        assertThat(errorsNode.get(0).get("count").asInt(), is(2));
+        assertThat(errorsNode.get(0).get("type").asText(), is("dc.relation"));
+
+        ArrayNode warningsNode = reportNode.withArray("warnings");
+        assertThat(warningsNode.size(), is(1));
+        assertThat(warningsNode.get(0).get("count").asInt(), is(1));
+        assertThat(warningsNode.get(0).get("type").asText(), is("dc.subject"));
+    }
+
+    private String findItemUri(Item item) {
+        return item.getMetadata().stream()
+                .filter(metadataValue -> "dc_identifier_uri".equals(metadataValue.getMetadataField().toString()))
+                .findFirst()
+                .map(MetadataValue::getValue)
+                .orElse(null);
+    }
+
+    ReportResult findLastReportResult(List<ReportResult> reportResults) {
+        return reportResults.stream().max((reportResult1, reportResult2) ->
+                reportResult1.getLastModified().compareTo(reportResult2.getLastModified())).orElseThrow();
+    }
+
+    JsonNode findCheckByName(JsonNode root, String checkName) {
+        for (JsonNode check : root.get("checks")) {
+            if (check.get("name").asText().equals(checkName)) {
+                return check;
+            }
+        }
+        return null;
     }
 }
