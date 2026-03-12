@@ -32,7 +32,7 @@ import org.json.JSONObject;
  */
 public class MetadataCheck extends Check {
 
-    private static final String QA_METADATA_ERROR_PATTERNS_JSON = "qa-metadata-error-patterns.json";
+    private static final String QA_METADATA_ERROR_PATTERNS_JSON = "metadata-check-patterns.json";
     private static final String VALIDATION_TYPE_OTHER = "validation.other";
     private static final int COUNT_INDENTATION = 30;
 
