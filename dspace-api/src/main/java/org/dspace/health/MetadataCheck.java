@@ -44,25 +44,27 @@ public class MetadataCheck extends Check {
     private static Map<String, List<String>> errorPatterns;
     private static Map<String, List<String>> warningPatterns;
 
+    static {
+        try {
+            loadPatterns();
+        } catch (IOException e) {
+            throw new RuntimeException("Cannot load error patterns", e);
+        }
+    }
+
     @Override
     public String run(ReportInfo ri) {
         StringBuilder sb = new StringBuilder();
         JSONObject root = new JSONObject();
-
-        try {
-            loadPatterns();
-        } catch (IOException e) {
-            error(e, "Cannot load error patterns");
-        }
 
         Curator curator = new Curator();
         curator.addTask("metadataqa");
 
         MetadataReporter reporter = new MetadataReporter();
         curator.setReporter(reporter);
-        Context context = new Context();
-        try {
+        try (Context context = new Context()) {
             curator.curate(context, ContentServiceFactory.getInstance().getSiteService().findSite(context).getHandle());
+            context.complete();
         } catch (IOException | SQLException e) {
             error(e, "Error during curation");
         }
@@ -146,25 +148,29 @@ public class MetadataCheck extends Check {
                     .put("count", val);
             warnings.put(warning);
         });
-
-        root.put("errors", errors);
         root.put("warnings", warnings);
 
         this.setReportJson(root);
         return sb.toString();
     }
 
-    private void loadPatterns() throws IOException {
-        InputStream qaMetadataErrors = Thread.currentThread()
-                .getContextClassLoader().getResourceAsStream(QA_METADATA_ERROR_PATTERNS_JSON);
-        JsonNode root = new ObjectMapper().readTree(qaMetadataErrors);
+    private static void loadPatterns() throws IOException {
+        try (InputStream qaMetadataErrors = Thread.currentThread()
+                .getContextClassLoader().getResourceAsStream(QA_METADATA_ERROR_PATTERNS_JSON);) {
+            if (qaMetadataErrors == null) {
+                throw new IOException("Resource '" + QA_METADATA_ERROR_PATTERNS_JSON
+                        + "' not found in classpath");
+            }
+            JsonNode root = new ObjectMapper().readTree(qaMetadataErrors);
 
-        // Load error types and their associated error messages
-        errorPatterns = getPatterns(root.withObject("errors"));
-        warningPatterns = getPatterns(root.withObject("warnings"));
+            // Load error types and their associated error patterns
+            errorPatterns = getPatterns(root.withObject("errors"));
+            // Load warning types and their associated warning patterns
+            warningPatterns = getPatterns(root.withObject("warnings"));
+        }
     }
 
-    private Map<String, List<String>> getPatterns(JsonNode parentNode) {
+    private static Map<String, List<String>> getPatterns(JsonNode parentNode) {
         Map<String, List<String>> validationPatterns = new HashMap<>();
         parentNode.fieldNames().forEachRemaining(validationType -> {
             List<String> validationMessages = new ArrayList<>();
@@ -240,13 +246,12 @@ public class MetadataCheck extends Check {
 
         @Override
         public Appendable append(CharSequence cs, int i, int i1) throws IOException {
-            throw new UnsupportedOperationException("Not supported.");
+            return this.append(cs.subSequence(i, i1));
         }
 
         @Override
-        public Appendable append(char c)
-                throws IOException {
-            throw new UnsupportedOperationException("Not supported.");
+        public Appendable append(char c) throws IOException {
+            return this.append(String.valueOf(c));
         }
 
         private void populateData(String prefix,
@@ -259,7 +264,13 @@ public class MetadataCheck extends Check {
                                   ) {
             int startIndex = line.indexOf(prefix) + prefix.length();
             String longMessage = line.substring(startIndex);
-            String shortMessage = longMessage.substring(0, longMessage.indexOf("[[") - 1);
+            int endIndex = longMessage.lastIndexOf("[[");
+            String shortMessage;
+            if (endIndex > 0) {
+                shortMessage = longMessage.substring(0, endIndex - 1);
+            } else {
+                shortMessage = longMessage;
+            }
             MessageInfo messageInfo = new MessageInfo(shortMessage, longMessage);
             boolean found = false;
             for (Map.Entry<String, List<String>> entry : patterns.entrySet()) {
