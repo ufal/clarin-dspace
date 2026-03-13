@@ -9,6 +9,7 @@ package org.dspace.app.rest;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.io.ByteArrayOutputStream;
@@ -96,5 +97,67 @@ public class MetadataBitstreamControllerIT extends AbstractControllerIntegration
                 .andExpect(status().isOk())
                 .andExpect(content().bytes(byteArrayOutputStream.toByteArray()));
 
+    }
+
+    @Test
+    public void downloadAllZipWithDoubleQuotesInItemName() throws Exception {
+        context.turnOffAuthorisationSystem();
+
+        // Create an item with double quotes in the name — reproduces the
+        // ERR_RESPONSE_HEADERS_MULTIPLE_CONTENT_DISPOSITION browser error.
+        Item itemWithQuotes = ItemBuilder.createItem(context, col)
+                .withTitle("Supported data for manuscript \"Thermally-induced evolution\"")
+                .withAuthor(AUTHOR)
+                .build();
+
+        String bitstreamContent = "QuotedItemContent";
+        try (InputStream is = IOUtils.toInputStream(bitstreamContent, CharEncoding.UTF_8)) {
+            BitstreamBuilder
+                    .createBitstream(context, itemWithQuotes, is)
+                    .withName("data.csv")
+                    .withMimeType("text/csv")
+                    .build();
+        }
+        context.restoreAuthSystemState();
+
+        String token = getAuthToken(admin.getEmail(), password);
+        getClient(token).perform(get(METADATABITSTREAM_ENDPOINT + "/" + itemWithQuotes.getID() +
+                        "/" + ALL_ZIP_PATH).param(HANDLE_PARAM, itemWithQuotes.getHandle()))
+                .andExpect(status().isOk())
+                // The filename must have escaped quotes so the header is valid
+                .andExpect(header().string("Content-Disposition",
+                        "attachment; filename=\"Supported data for manuscript"
+                        + " \\\"Thermally-induced evolution\\\".zip\";"
+                        + " filename*=UTF-8''Supported%20data%20for%20manuscript"
+                        + "%20%22Thermally-induced%20evolution%22.zip"));
+    }
+
+    @Test
+    public void downloadAllZipWithNonAsciiItemName() throws Exception {
+        context.turnOffAuthorisationSystem();
+
+        Item itemWithDiacritics = ItemBuilder.createItem(context, col)
+                .withTitle("Příliš žluťoučký kůň")
+                .withAuthor(AUTHOR)
+                .build();
+
+        String bitstreamContent = "DiacriticsContent";
+        try (InputStream is = IOUtils.toInputStream(bitstreamContent, CharEncoding.UTF_8)) {
+            BitstreamBuilder.createBitstream(context, itemWithDiacritics, is)
+                    .withName("file.txt")
+                    .withMimeType("text/plain")
+                    .build();
+        }
+        context.restoreAuthSystemState();
+
+        String token = getAuthToken(admin.getEmail(), password);
+        getClient(token).perform(get(METADATABITSTREAM_ENDPOINT + "/" + itemWithDiacritics.getID() +
+                        "/" + ALL_ZIP_PATH).param(HANDLE_PARAM, itemWithDiacritics.getHandle()))
+                .andExpect(status().isOk())
+                // Non-ASCII chars replaced with _ in filename, full UTF-8 in filename*
+                .andExpect(header().string("Content-Disposition",
+                        "attachment; filename=\"P__li_ _lu_ou_k_ k__.zip\";"
+                        + " filename*=UTF-8''P%C5%99%C3%ADli%C5%A1%20%C5%BElu%C5%A5ou%C4%8Dk%C3%BD"
+                        + "%20k%C5%AF%C5%88.zip"));
     }
 }
