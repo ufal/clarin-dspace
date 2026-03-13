@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 
 import eu.openaire.jaxb.model.Response;
 import okhttp3.mockwebserver.MockResponse;
@@ -33,7 +34,7 @@ public class OpenAIRERestConnectorTest {
     public void searchProjectByKeywords() {
         try (InputStream is = this.getClass().getResourceAsStream("openaire-projects.xml");
                MockWebServer mockServer = new MockWebServer()) {
-            String projects = new String(is.readAllBytes())
+            String projects = new String(is.readAllBytes(), StandardCharsets.UTF_8)
                     .replaceAll("( mushroom)", "( DEADBEEF)");
             mockServer.enqueue(new MockResponse().setResponseCode(200).setBody(projects));
 
