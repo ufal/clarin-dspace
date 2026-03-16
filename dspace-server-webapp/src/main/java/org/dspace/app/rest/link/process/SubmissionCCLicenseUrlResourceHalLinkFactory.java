@@ -54,6 +54,7 @@ public class SubmissionCCLicenseUrlResourceHalLinkFactory
                 SubmissionCCLicenseUrlRest.CATEGORY, SubmissionCCLicenseUrlRest.PLURAL, "rightsByQuestions", null, null,
                 null, null, new LinkedMultiValueMap<>()));
         for (String key : parameterMap.keySet()) {
+            // Add all current request parameters to the URI being built.
             uriComponentsBuilder.queryParam(key, parameterMap.get(key));
         }
 
