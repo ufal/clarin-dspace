@@ -36,6 +36,7 @@ import org.dspace.builder.ClarinLicenseBuilder;
 import org.dspace.builder.ClarinLicenseLabelBuilder;
 import org.dspace.builder.CollectionBuilder;
 import org.dspace.builder.CommunityBuilder;
+import org.dspace.builder.EPersonBuilder;
 import org.dspace.builder.ItemBuilder;
 import org.dspace.content.Bitstream;
 import org.dspace.content.Collection;
@@ -49,6 +50,7 @@ import org.dspace.content.service.clarin.ClarinLicenseLabelService;
 import org.dspace.content.service.clarin.ClarinLicenseResourceMappingService;
 import org.dspace.content.service.clarin.ClarinLicenseService;
 import org.dspace.core.Constants;
+import org.dspace.eperson.EPerson;
 import org.dspace.eperson.Group;
 import org.dspace.eperson.service.GroupService;
 import org.dspace.services.ConfigurationService;
@@ -56,6 +58,7 @@ import org.hamcrest.Matchers;
 import org.junit.Before;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.web.servlet.MockMvc;
 
 public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegrationTest {
 
@@ -86,9 +89,16 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
     @Autowired
     private GroupService groupService;
 
+    EPerson ePerson;
+    String PASSWORD = "test";
+
     @Before
     public void setup() throws Exception {
         context.turnOffAuthorisationSystem();
+
+        ePerson = EPersonBuilder.createEPerson(context)
+                .withEmail("test@test.edu").withPassword(PASSWORD).build();
+
         parentCommunity = CommunityBuilder.createCommunity(context)
                 .withName("Parent Community")
                 .build();
@@ -293,8 +303,14 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
                         .build();
             }
             context.restoreAuthSystemState();
+
+            // Admin user can preview the archive file because the bitstream has the ADMIN read permission,
+            // and also the fileInfo should be generated for admin user.
+            checkFilePreviewAsAdmin(item, true, 2);
+
             // Non admin user cannot preview the archive file because the bitstream has only ADMIN read permission,
-            // and also the fileInfo should be empty in this case
+            // and also the fileInfo should be empty in this case.
+            // Note that file preview was generated in the previous check, but it's not visible for non-authorized user.
             checkFilePreview(item, false, 0);
         } finally {
             ItemBuilder.deleteItem(item.getID());
@@ -321,8 +337,13 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
                         .build();
             }
             context.restoreAuthSystemState();
+
+            // Admin user can preview the html file because the bitstream has the ADMIN read permission,
+            // and also the fileInfo should be generated for admin user.
+            checkFilePreviewAsAdmin(item, true, 1);
+
             // Non admin user cannot preview the html file because the bitstream has only ADMIN read permission,
-            // and also the fileInfo should be empty in this case
+            // and also the fileInfo should be empty in this case.
             checkFilePreview(item, false, 0);
         } finally {
             ItemBuilder.deleteItem(item.getID());
@@ -484,7 +505,19 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
     }
 
     private void checkFilePreview(Item item, boolean filePreviewExpected, int expectedFileInfoSize) throws Exception {
-        getClient().perform(get(METADATABITSTREAM_SEARCH_BY_HANDLE_ENDPOINT)
+        MockMvc client = getClient(getAuthToken(ePerson.getEmail(), PASSWORD));
+        performCheck(client, item, filePreviewExpected, expectedFileInfoSize);
+    }
+
+    private void checkFilePreviewAsAdmin(Item item, boolean filePreviewExpected, int expectedFileInfoSize)
+            throws Exception {
+        MockMvc client = getClient(getAuthToken(admin.getEmail(), password));
+        performCheck(client, item, filePreviewExpected, expectedFileInfoSize);
+    }
+
+    private void performCheck(MockMvc client, Item item, boolean filePreviewExpected, int expectedFileInfoSize)
+            throws Exception {
+        client.perform(get(METADATABITSTREAM_SEARCH_BY_HANDLE_ENDPOINT)
                         .param("handle", item.getHandle())
                         .param("fileGrpType", FILE_GRP_TYPE))
                 .andExpect(status().isOk())
