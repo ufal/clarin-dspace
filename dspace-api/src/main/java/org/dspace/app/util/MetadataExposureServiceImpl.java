@@ -118,7 +118,7 @@ public class MetadataExposureServiceImpl implements MetadataExposureService {
 
         // The user is not administrator, but he could be a submitter
         if (hidden && Objects.nonNull(context) && Objects.nonNull(item) &&
-                this.submitterShouldSee(schema, element, qualifier)) {
+                Objects.nonNull(item.getSubmitter()) && this.submitterShouldSee(schema, element, qualifier)) {
             // the submitters override
             hidden = !item.getSubmitter().equals(context.getCurrentUser());
         }
