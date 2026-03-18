@@ -5103,7 +5103,8 @@ public class ItemRestRepositoryIT extends AbstractControllerIntegrationTest {
                 .andExpect(jsonPath("$", existNoteLocalMetadataMatcher))
                 .andExpect(jsonPath("$", existDescriptionProvenanceMetadataMatcher));
 
-        // After the submitter is deleted, the response, for the request made by deleted submitter, should not contain
+        // After the submitter is deleted, the response for the request made using the previously issued submitter
+        // token (which now authenticates as anonymous) should not contain
         // `local.submission.note` and `dc.description.provenance` metadata
         context.turnOffAuthorisationSystem();
         EPersonBuilder.deleteEPerson(submitter.getID());
