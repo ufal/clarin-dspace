@@ -164,9 +164,9 @@ public class LinksetRestController {
         DisseminationCrosswalk xwalk = (DisseminationCrosswalk)
                 pluginService.getNamedPlugin(DisseminationCrosswalk.class, xwalkName);
         // Output valid XML: disseminate using root element as opposed to list
-        Element elements = xwalk.disseminateElement(context, object);
+        Element element = xwalk.disseminateElement(context, object);
         XMLOutputter outputter = new XMLOutputter(Format.getCompactFormat());
-        return outputter.outputString(elements);
+        return outputter.outputString(element);
     }
 
     private DSpaceObject findObject(Context context, UUID uuid) {
