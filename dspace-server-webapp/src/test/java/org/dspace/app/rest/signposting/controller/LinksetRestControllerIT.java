@@ -878,6 +878,8 @@ public class LinksetRestControllerIT extends AbstractControllerIntegrationTest {
 
         getClient().perform(get("/signposting/describedby/" + item.getID()))
                 .andExpect(status().isOk())
+                .andExpect(content().string(
+                        Matchers.startsWith("<resource xmlns=\"http://datacite.org/schema/kernel-4\"")))
                 .andExpect(content().string(Matchers.containsString(title)))
                 .andExpect(header().stringValues("Content-Type", responseMimeType + ";charset=UTF-8"));
     }
