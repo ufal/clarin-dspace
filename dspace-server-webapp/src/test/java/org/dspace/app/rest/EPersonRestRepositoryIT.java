@@ -1133,7 +1133,7 @@ public class EPersonRestRepositoryIT extends AbstractControllerIntegrationTest {
 
         // Deleting yourself is forbidden
         getClient(adminToken).perform(delete("/api/eperson/epersons/" + admin.getID()))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isBadRequest());
 
         // Verify the admin is still here
         getClient(adminToken).perform(get("/api/eperson/epersons/" + admin.getID()))

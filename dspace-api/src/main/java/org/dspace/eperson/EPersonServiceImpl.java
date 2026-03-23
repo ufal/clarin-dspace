@@ -380,7 +380,7 @@ public class EPersonServiceImpl extends DSpaceObjectServiceImpl<EPerson> impleme
         if (!context.ignoreAuthorization()) {
             EPerson currentUser = context.getCurrentUser();
             if (currentUser != null && ePerson.getID().equals(currentUser.getID())) {
-                throw new AuthorizeException(
+                throw new IllegalStateException(
                         "You, as admin user, cannot delete yourself");
             }
         }
