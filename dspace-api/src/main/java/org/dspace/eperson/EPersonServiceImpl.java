@@ -376,7 +376,7 @@ public class EPersonServiceImpl extends DSpaceObjectServiceImpl<EPerson> impleme
             throw new AuthorizeException(
                     "You must be an admin to delete an EPerson");
         }
-        // You, as admin,  cannot delete yourself
+        // Admin cannot delete himself/herself
         if (!context.ignoreAuthorization() && context.getCurrentUser().equals(ePerson)) {
             throw new AuthorizeException(
                     "You, as admin user, cannot delete yourself");
