@@ -377,9 +377,12 @@ public class EPersonServiceImpl extends DSpaceObjectServiceImpl<EPerson> impleme
                     "You must be an admin to delete an EPerson");
         }
         // Admin cannot delete himself/herself
-        if (!context.ignoreAuthorization() && ePerson.getID().equals(context.getCurrentUser().getID())) {
-            throw new AuthorizeException(
-                    "You, as admin user, cannot delete yourself");
+        if (!context.ignoreAuthorization()) {
+            EPerson currentUser = context.getCurrentUser();
+            if (currentUser != null && ePerson.getID().equals(currentUser.getID())) {
+                throw new AuthorizeException(
+                        "You, as admin user, cannot delete yourself");
+            }
         }
         // Get all workflow-related groups that the current EPerson belongs to
         Set<Group> workFlowGroups = getAllWorkFlowGroups(context, ePerson);

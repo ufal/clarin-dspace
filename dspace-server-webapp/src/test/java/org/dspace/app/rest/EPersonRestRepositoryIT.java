@@ -1131,10 +1131,6 @@ public class EPersonRestRepositoryIT extends AbstractControllerIntegrationTest {
         // login as admin
         String adminToken = getAuthToken(admin.getEmail(), password);
 
-        context.turnOffAuthorisationSystem();
-        ePersonService.delete(context, null);
-        context.restoreAuthSystemState();
-
         // Deleting yourself is forbidden
         getClient(adminToken).perform(delete("/api/eperson/epersons/" + admin.getID()))
                 .andExpect(status().isForbidden());
