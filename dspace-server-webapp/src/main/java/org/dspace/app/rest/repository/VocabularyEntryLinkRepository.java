@@ -14,6 +14,7 @@ import javax.servlet.http.HttpServletRequest;
 
 import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.dspace.app.rest.exception.DSpaceBadRequestException;
 import org.dspace.app.rest.exception.UnprocessableEntityException;
 import org.dspace.app.rest.model.VocabularyEntryRest;
 import org.dspace.app.rest.model.VocabularyRest;
@@ -74,19 +75,23 @@ public class VocabularyEntryLinkRepository extends AbstractDSpaceRestRepository
                     "one of filter or entryID parameter is required for not scrollable vocabularies");
         }
         Choices choices = null;
-        if (BooleanUtils.toBoolean(exact)) {
-            choices = ca.getBestMatch(filter, context.getCurrentLocale().toString());
-        } else if (StringUtils.isNotBlank(entryID)) {
-            Choice choice = ca.getChoice(entryID,
-                    context.getCurrentLocale().toString());
-            if (choice != null) {
-                choices = new Choices(new Choice[] {choice}, 0, 1, Choices.CF_ACCEPTED, false);
+        try {
+            if (StringUtils.isNotBlank(entryID)) {
+                Choice choice = ca.getChoice(entryID,
+                        context.getCurrentLocale().toString());
+                if (choice != null) {
+                    choices = new Choices(new Choice[]{choice}, 0, 1, Choices.CF_ACCEPTED, false);
+                } else {
+                    choices = new Choices(false);
+                }
+            } else if (BooleanUtils.toBoolean(exact)) {
+                choices = ca.getBestMatch(filter, context.getCurrentLocale().toString());
             } else {
-                choices = new Choices(false);
+                choices = ca.getMatches(filter, Math.toIntExact(pageable.getOffset()),
+                        pageable.getPageSize(), context.getCurrentLocale().toString());
             }
-        } else {
-            choices = ca.getMatches(filter, Math.toIntExact(pageable.getOffset()),
-                          pageable.getPageSize(), context.getCurrentLocale().toString());
+        } catch (IllegalArgumentException ex) {
+            throw new DSpaceBadRequestException(ex.getMessage(), ex);
         }
         boolean storeAuthority = ca.storeAuthorityInMetadata();
         for (Choice value : choices.values) {
