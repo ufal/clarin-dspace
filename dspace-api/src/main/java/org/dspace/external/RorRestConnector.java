@@ -18,7 +18,7 @@ import javax.ws.rs.core.Response;
  */
 public class RorRestConnector {
 
-    public static final String ROR_ID_PATTERN = "^0[a-z|0-9]{6}[0-9]{2}$";
+    static final String ROR_ID_PATTERN = "^0[a-z|0-9]{6}[0-9]{2}$";
 
     private String apiUrl;
     private String clientId;

@@ -7,52 +7,42 @@
  */
 package org.dspace.external;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.Objects;
 import javax.ws.rs.ProcessingException;
 import javax.ws.rs.core.Configuration;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
-import org.apache.commons.io.IOUtils;
 import org.glassfish.jersey.message.internal.OutboundJaxrsResponse;
 import org.glassfish.jersey.message.internal.OutboundMessageContext;
 
+/**
+ * Mock implementation of RorRestConnector for testing purposes.
+ * It returns predefined responses based on the input query or ID.
+ *
+ * @author Milan Kuchtiak
+ */
 public class MockRorRestConnector extends RorRestConnector {
 
     @Override
     public Response getByQuery(String query, int page) {
-        try (InputStream is = MockRorRestConnector.class
-                .getResourceAsStream( query.startsWith("\"") ?
-                        "/org/dspace/external/ror/UniversityOfPisaByQueryExact.json" :
-                        "/org/dspace/external/ror/UniversityOfPisa.json") ) {
-            return new MockResponse<>(Response.Status.OK, getMockResponse(is));
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+        if (query != null && query.startsWith("\"")) {
+            return getMockResponse("/org/dspace/external/ror/UniversityOfPisaByQueryExact.json");
+        } else {
+            return getMockResponse("/org/dspace/external/ror/UniversityOfPisa.json");
         }
     }
 
     @Override
     public Response getByID(String id) {
         if (id.matches(ROR_ID_PATTERN)) {
-            try (InputStream is = MockRorRestConnector.class
-                    .getResourceAsStream("/org/dspace/external/ror/UniversityOfPisaById.json")) {
-                return new MockResponse<>(Response.Status.OK, getMockResponse(is));
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
+            return getMockResponse("/org/dspace/external/ror/UniversityOfPisaById.json");
         } else {
             return Response.status(Response.Status.NOT_FOUND).build();
         }
     }
 
-    private InputStream getMockResponse(InputStream original) throws IOException {
-        ByteArrayOutputStream os = new ByteArrayOutputStream();
-        IOUtils.copy(Objects.requireNonNull(original), os);
-        return new ByteArrayInputStream(os.toByteArray());
+    private static Response getMockResponse(String filePath) {
+        return new MockResponse<>(Response.Status.OK, MockRorRestConnector.class.getResourceAsStream(filePath));
     }
 
     public static class MockResponse<T> extends OutboundJaxrsResponse {

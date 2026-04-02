@@ -139,27 +139,18 @@ public class SimpleRORAuthority implements ChoiceAuthority {
      */
     @Override
     public Choices getBestMatch(String text, String locale) {
-        if (text.matches(RorRestConnector.ROR_ID_PATTERN)) {
-            Choice choice = getChoice(text, locale);
-            if (choice != null) {
-                return new Choices(new Choice[]{choice}, 0, 1, Choices.CF_ACCEPTED, false);
-            } else {
-                return new Choices(false);
-            }
-        } else {
-            try (Response response = rorRestConnector.getByQuery(sanitizeQuery(text))) {
-                if (response.getStatus() == Response.Status.OK.getStatusCode()) {
-                    try (InputStream is = response.readEntity(InputStream.class)) {
-                        RorItems rorItems = new ObjectMapper().readValue(is, RorItems.class);
-                        List<RorItem> items = rorItems.getItems();
-                        if (items.isEmpty()) {
-                            return new Choices(false);
-                        }
-                        Choice[] choices = {toChoice(items.get(0), locale)};
-                        return new Choices(choices, 0, 1, Choices.CF_UNCERTAIN, false);
-                    } catch (Exception e) {
-                        log.error("Error during search", e);
+        try (Response response = rorRestConnector.getByQuery(sanitizeQuery(text))) {
+            if (response.getStatus() == Response.Status.OK.getStatusCode()) {
+                try (InputStream is = response.readEntity(InputStream.class)) {
+                    RorItems rorItems = new ObjectMapper().readValue(is, RorItems.class);
+                    List<RorItem> items = rorItems.getItems();
+                    if (items.isEmpty()) {
+                        return new Choices(false);
                     }
+                    Choice[] choices = {toChoice(items.get(0), locale)};
+                    return new Choices(choices, 0, 1, Choices.CF_UNCERTAIN, false);
+                } catch (Exception e) {
+                    log.error("Error during search", e);
                 }
             }
         }
