@@ -164,6 +164,9 @@ public class TaskResolver {
     public ResolvedTask resolveTask(String taskName) {
         CurationTask ctask = (CurationTask) CoreServiceFactory.getInstance().getPluginService()
                                                               .getNamedPlugin(CurationTask.class, taskName);
+        if ("requiredmetadata".equals(taskName)) {
+            System.out.println("Found requiredmetadata task: " + ctask);
+        }
         if (ctask != null) {
             return new ResolvedTask(taskName, ctask);
         }
