@@ -12,9 +12,13 @@ import javax.ws.rs.client.WebTarget;
 import javax.ws.rs.core.Response;
 
 /**
+ * REST connector for ROR API. It is used by RORAuthority to retrieve data from ROR API.
+ *
  * @author Milan Kuchtiak
  */
 public class RorRestConnector {
+
+    public static final String ROR_ID_PATTERN = "^0[a-z|0-9]{6}[0-9]{2}$";
 
     private String apiUrl;
     private String clientId;
@@ -34,11 +38,15 @@ public class RorRestConnector {
     }
 
     public Response getByID(String rorID) {
-        return getTarget().path(rorID)
-                .request()
-                .header("Client-Id", clientId)
-                .accept("application/json")
-                .get();
+        if (rorID.matches(ROR_ID_PATTERN)) {
+            return getTarget().path(rorID)
+                    .request()
+                    .header("Client-Id", clientId)
+                    .accept("application/json")
+                    .get();
+        } else {
+            return Response.status(Response.Status.NOT_FOUND).build();
+        }
     }
 
     private WebTarget getTarget() {
@@ -52,7 +60,5 @@ public class RorRestConnector {
     public void setClientId(String clientId) {
         this.clientId = clientId;
     }
-
-
 
 }

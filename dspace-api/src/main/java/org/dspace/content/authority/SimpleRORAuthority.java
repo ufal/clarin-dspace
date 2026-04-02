@@ -23,11 +23,12 @@ import org.dspace.utils.DSpace;
 
 /**
  * ChoiceAuthority using the ROR API.
+ *
+ * @author Milan Kuchtiak
  */
 public class SimpleRORAuthority implements ChoiceAuthority {
 
     private static final Logger log = LogManager.getLogger(SimpleRORAuthority.class);
-    private static final String ROR_ID_PATTERN = "^0[a-z|0-9]{6}[0-9]{2}$";
 
     private String pluginInstanceName;
 
@@ -71,7 +72,7 @@ public class SimpleRORAuthority implements ChoiceAuthority {
         if (limit <= 0) {
             limit = ROR_ITEMS_COUNT;
         } else if (limit > ROR_ITEMS_COUNT || ROR_ITEMS_COUNT % limit != 0) {
-            throw new IllegalArgumentException("The page size limit must be a divisor of " + ROR_ITEMS_COUNT);
+            throw new IllegalArgumentException("The page size must be a divisor of " + ROR_ITEMS_COUNT + ".");
         }
 
         // calculate the offset (page parameter) to use in the ROR API call
@@ -81,7 +82,7 @@ public class SimpleRORAuthority implements ChoiceAuthority {
         // so we return an empty result instead of making an API call
         if (offset + 1 > ROR_MAX_PAGES) {
             throw new IllegalArgumentException("Exceeded maximal page number for the ROR API, which is " +
-                    (ROR_MAX_PAGES * (ROR_ITEMS_COUNT / limit) - 1) + " for page size limit: " + limit);
+                    (ROR_MAX_PAGES * (ROR_ITEMS_COUNT / limit) - 1) + ", for page size " + limit + ".");
         }
 
         try (Response response = rorRestConnector.getByQuery(text, offset + 1)) {
@@ -138,7 +139,7 @@ public class SimpleRORAuthority implements ChoiceAuthority {
      */
     @Override
     public Choices getBestMatch(String text, String locale) {
-        if (text.matches(ROR_ID_PATTERN)) {
+        if (text.matches(RorRestConnector.ROR_ID_PATTERN)) {
             Choice choice = getChoice(text, locale);
             if (choice != null) {
                 return new Choices(new Choice[]{choice}, 0, 1, Choices.CF_ACCEPTED, false);
