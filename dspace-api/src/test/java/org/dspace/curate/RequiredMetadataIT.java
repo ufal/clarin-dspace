@@ -24,32 +24,23 @@ import org.dspace.content.Collection;
 import org.dspace.content.Community;
 import org.dspace.content.Item;
 import org.dspace.content.WorkspaceItem;
+import org.dspace.content.factory.ContentServiceFactory;
 import org.dspace.content.service.CollectionService;
 import org.dspace.content.service.CommunityService;
 import org.dspace.content.service.ItemService;
 import org.dspace.content.service.WorkspaceItemService;
-import org.dspace.core.LegacyPluginServiceImpl;
+import org.dspace.core.factory.CoreServiceFactory;
+import org.dspace.identifier.factory.IdentifierServiceFactory;
 import org.dspace.identifier.service.IdentifierService;
-import org.dspace.util.DSpaceConfigurationInitializer;
-import org.dspace.util.DSpaceKernelInitializer;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.test.context.ContextConfiguration;
-import org.springframework.test.context.junit4.SpringRunner;
 
 /**
  * Test for requiredmetadata curation task.
  *
  * @author mkuchtiak
  */
-@RunWith(SpringRunner.class)
-@ContextConfiguration(
-        initializers = { DSpaceKernelInitializer.class, DSpaceConfigurationInitializer.class },
-        locations = { "classpath:spring/*.xml" }
-)
 public class RequiredMetadataIT extends AbstractIntegrationTestWithDatabase {
     private static final String TASK_NAME = "requiredmetadata";
 
@@ -58,18 +49,11 @@ public class RequiredMetadataIT extends AbstractIntegrationTestWithDatabase {
     private static final String HANDLE_ITEM2 = HANDLE_COLLECTION + "-2";
     private static final String HANDLE_ITEM3 = HANDLE_COLLECTION + "-3";
 
-    @Autowired
-    private LegacyPluginServiceImpl legacyPluginService;
-    @Autowired
-    private CommunityService communityService;
-    @Autowired
-    private CollectionService collectionService;
-    @Autowired
-    private ItemService itemService;
-    @Autowired
-    private WorkspaceItemService workspaceItemService;
-    @Autowired
-    private IdentifierService identifierService;
+    protected CommunityService communityService = ContentServiceFactory.getInstance().getCommunityService();
+    protected CollectionService collectionService = ContentServiceFactory.getInstance().getCollectionService();
+    protected ItemService itemService = ContentServiceFactory.getInstance().getItemService();
+    protected WorkspaceItemService workspaceItemService = ContentServiceFactory.getInstance().getWorkspaceItemService();
+    protected IdentifierService identifierService = IdentifierServiceFactory.getInstance().getIdentifierService();
 
     Community parentCommunity;
     Collection collection;
@@ -84,7 +68,6 @@ public class RequiredMetadataIT extends AbstractIntegrationTestWithDatabase {
         try {
             //we have to create a new community in the database
             context.turnOffAuthorisationSystem();
-            legacyPluginService.clearNamedPluginClasses();
             this.parentCommunity = communityService.create(null, context);
             this.collection = collectionService.create(context, parentCommunity, HANDLE_COLLECTION);
             item1 = ItemBuilder.createItem(context, collection)
@@ -114,6 +97,8 @@ public class RequiredMetadataIT extends AbstractIntegrationTestWithDatabase {
 
     @Test
     public void testPerform() throws IOException {
+        CoreServiceFactory.getInstance().getPluginService().clearNamedPluginClasses();
+
         Curator curator = new Curator();
         curator.addTask(TASK_NAME);
         CuratorReportTest.ListReporter reporter = new CuratorReportTest.ListReporter();
