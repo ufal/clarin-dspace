@@ -7,8 +7,8 @@
  */
 package org.dspace.external;
 
+import javax.ws.rs.client.Client;
 import javax.ws.rs.client.ClientBuilder;
-import javax.ws.rs.client.WebTarget;
 import javax.ws.rs.core.Response;
 
 /**
@@ -18,7 +18,8 @@ import javax.ws.rs.core.Response;
  */
 public class RorRestConnector {
 
-    static final String ROR_ID_PATTERN = "^0[a-z|0-9]{6}[0-9]{2}$";
+    static final String ROR_ID_PATTERN = "^0[a-z0-9]{6}[0-9]{2}$";
+    private static final Client client = ClientBuilder.newClient();
 
     private String apiUrl;
     private String clientId;
@@ -28,7 +29,7 @@ public class RorRestConnector {
     }
 
     public Response getByQuery(String query, int page) {
-        return getTarget()
+        return client.target(apiUrl)
                 .queryParam("query", query)
                 .queryParam("page", page)
                 .request()
@@ -39,7 +40,7 @@ public class RorRestConnector {
 
     public Response getByID(String rorID) {
         if (rorID.matches(ROR_ID_PATTERN)) {
-            return getTarget().path(rorID)
+            return client.target(apiUrl).path(rorID)
                     .request()
                     .header("Client-Id", clientId)
                     .accept("application/json")
@@ -47,10 +48,6 @@ public class RorRestConnector {
         } else {
             return Response.status(Response.Status.NOT_FOUND).build();
         }
-    }
-
-    private WebTarget getTarget() {
-        return ClientBuilder.newClient().target(apiUrl);
     }
 
     public void setApiUrl(String apiUrl) {

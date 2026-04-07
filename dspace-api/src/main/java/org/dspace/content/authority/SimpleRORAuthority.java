@@ -9,10 +9,13 @@ package org.dspace.content.authority;
 
 import java.io.InputStream;
 import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import javax.ws.rs.core.Response;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.commons.lang.LocaleUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.dspace.external.RorRestConnector;
@@ -94,15 +97,18 @@ public class SimpleRORAuthority implements ChoiceAuthority {
                     if (items.isEmpty()) {
                         return new Choices(new Choice[0], start, total, Choices.CF_NOTFOUND, false);
                     }
+
+                    String localeLanguage = getLocaleLanguage(locale);
+
                     List<Choice> choices = items.stream()
-                            .map(item -> toChoice(item, locale))
+                            .map(item -> toChoice(item, localeLanguage))
                             .collect(Collectors.toList());
 
                     // select sublist of results to return based on the start and limit parameters
                     int startIndex = 0;
                     if (limit != ROR_ITEMS_COUNT) {
                         startIndex = start % ROR_ITEMS_COUNT;
-                        if (startIndex > choices.size()) {
+                        if (startIndex >= choices.size()) {
                             // the start index is greater than the choices size
                             // so we cannot select a sublist of results
                             return new Choices(new Choice[0], start, total, Choices.CF_NOTFOUND, false);
@@ -227,8 +233,11 @@ public class SimpleRORAuthority implements ChoiceAuthority {
         }
     }
 
-    private Choice toChoice(RorItem rorItem, String locale) {
-        String loc = (locale == null) ? "en" : locale;
+    private String getLocaleLanguage(String locale) {
+        return Optional.ofNullable(LocaleUtils.toLocale(locale)).map(Locale::getLanguage).orElse("en");
+    }
+
+    private Choice toChoice(RorItem rorItem, String localeLanguage) {
         String authority = rorItem.getId();
         int slashIndex = authority.lastIndexOf("/");
         if (slashIndex != -1) {
@@ -243,13 +252,13 @@ public class SimpleRORAuthority implements ChoiceAuthority {
             String label = null;
             String value = null;
             StringBuilder aliases = new StringBuilder();
-            int labelQuality = 0; // 1- any label, 2- english label, 3- label in the same language as the locale
+            int labelQuality = 0; // 1 - any label, 2 - english label, 3 - label in the same language as the locale
             for (RorItem.Name name : names) {
                 if (value == null && name.getTypes().contains("ror_display")) {
                     value = name.getValue();
                 }
                 if (labelQuality < 3 && name.getTypes().contains("label")) {
-                    if (loc.equals(name.getLang())) {
+                    if (localeLanguage.equals(name.getLang())) {
                         labelQuality = 3;
                         label = name.getValue();
                     } else if (labelQuality < 2 && "en".equals(name.getLang())) {

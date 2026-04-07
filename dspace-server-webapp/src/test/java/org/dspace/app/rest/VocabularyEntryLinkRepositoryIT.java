@@ -26,7 +26,7 @@ public class VocabularyEntryLinkRepositoryIT extends AbstractControllerIntegrati
 
     private static final String BASE_VOCABULARY_URL = "/api/submission/vocabularies";
     private static final String ROR_AUTHORITY_ENTRIES_URL = BASE_VOCABULARY_URL + "/SimpleRORAuthority/entries";
-    private static final int MOCK_TOTAL_PAGES = 30133;
+    private static final int MOCK_TOTAL_ELEMENTS = 30133;
 
     @Autowired
     ConfigurationService configurationService;
@@ -63,7 +63,7 @@ public class VocabularyEntryLinkRepositoryIT extends AbstractControllerIntegrati
     }
 
     @Test
-    public void rorAuthorityTooManyPagesForSize2() throws Exception {
+    public void rorAuthorityTooManyPagesForSize4() throws Exception {
         getClient().perform(get(ROR_AUTHORITY_ENTRIES_URL)
                         .param("filter", "University")
                         .param("size", "4")
@@ -107,8 +107,8 @@ public class VocabularyEntryLinkRepositoryIT extends AbstractControllerIntegrati
                 .andExpect(jsonPath("$._embedded.entries", Matchers.hasSize(20)))
                 .andExpect(jsonPath("$.page.size", Matchers.is(20)))
                 .andExpect(jsonPath("$.page.number", Matchers.is(0)))
-                .andExpect(jsonPath("$.page.totalElements", Matchers.is(MOCK_TOTAL_PAGES)))
-                .andExpect(jsonPath("$.page.totalPages", Matchers.is(MOCK_TOTAL_PAGES / 20 + 1)));
+                .andExpect(jsonPath("$.page.totalElements", Matchers.is(MOCK_TOTAL_ELEMENTS)))
+                .andExpect(jsonPath("$.page.totalPages", Matchers.is(MOCK_TOTAL_ELEMENTS / 20 + 1)));
     }
 
     @Test
@@ -121,8 +121,8 @@ public class VocabularyEntryLinkRepositoryIT extends AbstractControllerIntegrati
                 .andExpect(jsonPath("$._embedded.entries", Matchers.hasSize(4)))
                 .andExpect(jsonPath("$.page.size", Matchers.is(4)))
                 .andExpect(jsonPath("$.page.number", Matchers.is(2000)))
-                .andExpect(jsonPath("$.page.totalElements", Matchers.is(MOCK_TOTAL_PAGES)))
-                .andExpect(jsonPath("$.page.totalPages", Matchers.is(MOCK_TOTAL_PAGES / 4 + 1)));
+                .andExpect(jsonPath("$.page.totalElements", Matchers.is(MOCK_TOTAL_ELEMENTS)))
+                .andExpect(jsonPath("$.page.totalPages", Matchers.is(MOCK_TOTAL_ELEMENTS / 4 + 1)));
     }
 
     private void checkSingleItemResponse(ResultActions resultActions) throws Exception {

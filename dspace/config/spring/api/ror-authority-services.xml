@@ -10,8 +10,8 @@
     <context:annotation-config /> <!-- allows us to use spring annotations in beans -->
 
     <bean name="RorRestConnector" class="org.dspace.external.RorRestConnector">
-        <property name="apiUrl" value="${ror.api-url}"/>
-        <property name="clientId" value="${ror.client-id}"/>
+        <property name="apiUrl" value="${ror.api-url:https://api.ror.org/v2/organizations}"/>
+        <property name="clientId" value="${ror.client-id:}"/>
     </bean>
 
 </beans>

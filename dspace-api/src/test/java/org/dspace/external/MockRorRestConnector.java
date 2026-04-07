@@ -7,6 +7,7 @@
  */
 package org.dspace.external;
 
+import java.util.Optional;
 import javax.ws.rs.ProcessingException;
 import javax.ws.rs.core.Configuration;
 import javax.ws.rs.core.MediaType;
@@ -35,14 +36,16 @@ public class MockRorRestConnector extends RorRestConnector {
     @Override
     public Response getByID(String id) {
         if (id.matches(ROR_ID_PATTERN)) {
-            return getMockResponse("/org/dspace/external/ror/UniversityOfPisaById.json");
+            return getMockResponse("/org/dspace/external/ror/UniversityOfPisaByID.json");
         } else {
             return Response.status(Response.Status.NOT_FOUND).build();
         }
     }
 
     private static Response getMockResponse(String filePath) {
-        return new MockResponse<>(Response.Status.OK, MockRorRestConnector.class.getResourceAsStream(filePath));
+        return new MockResponse<>(Response.Status.OK,
+                Optional.ofNullable(MockRorRestConnector.class.getResourceAsStream(filePath))
+                        .orElseThrow(() -> new IllegalStateException("Resource " + filePath + " not found.")));
     }
 
     public static class MockResponse<T> extends OutboundJaxrsResponse {
