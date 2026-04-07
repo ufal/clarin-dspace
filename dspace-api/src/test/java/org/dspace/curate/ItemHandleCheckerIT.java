@@ -32,7 +32,6 @@ import org.dspace.content.factory.ContentServiceFactory;
 import org.dspace.content.service.CollectionService;
 import org.dspace.content.service.CommunityService;
 import org.dspace.content.service.ItemService;
-import org.dspace.core.factory.CoreServiceFactory;
 import org.dspace.identifier.factory.IdentifierServiceFactory;
 import org.dspace.identifier.service.IdentifierService;
 import org.dspace.services.ConfigurationService;
@@ -81,7 +80,6 @@ public class ItemHandleCheckerIT extends AbstractIntegrationTestWithDatabase {
     @Override
     public void setUp() throws Exception {
         super.setUp();
-        CoreServiceFactory.getInstance().getPluginService().clearNamedPluginClasses();
         try {
             //we have to create a new community in the database
             context.turnOffAuthorisationSystem();
