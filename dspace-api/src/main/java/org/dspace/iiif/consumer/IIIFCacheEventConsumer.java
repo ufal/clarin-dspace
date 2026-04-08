@@ -141,6 +141,10 @@ public class IIIFCacheEventConsumer implements Consumer {
                 manifestsCacheEvictService.evictAllCacheValues();
             } else {
                 for (DSpaceObject dso : toEvictFromManifestCache) {
+                    if (dso == null) {
+                        System.out.println("DSpaceObject is null, skipping eviction from manifest cache");
+                        continue;
+                    }
                     UUID uuid = dso.getID();
                     manifestsCacheEvictService.evictSingleCacheValue(uuid.toString());
                 }
