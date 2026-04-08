@@ -32,6 +32,7 @@ import org.dspace.content.Collection;
 import org.dspace.content.Community;
 import org.dspace.content.Item;
 import org.dspace.content.PreviewContent;
+import org.dspace.content.service.BitstreamFormatService;
 import org.dspace.content.service.PreviewContentService;
 import org.dspace.util.FileInfo;
 import org.junit.After;
@@ -44,6 +45,8 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
 
     @Autowired
     PreviewContentService previewContentService;
+    @Autowired
+    BitstreamFormatService bitstreamFormatService;
 
     PreviewContent previewContent0;
     PreviewContent previewContent1;
@@ -236,6 +239,8 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
         BitstreamBuilder.deleteBitstream(xzFile.getID());
         BitstreamBuilder.deleteBitstream(tarGzFileWithWrongExtension.getID());
         BitstreamBuilder.deleteBitstream(tarXzFileWithIncorrectMimeType.getID());
+
+        bitstreamFormatService.delete(context, bitstreamFormatService.findByMIMEType(context, "application/x-gzip"));
         super.destroy();
     }
 
