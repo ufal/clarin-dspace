@@ -262,7 +262,7 @@ public class BitstreamFormatRestRepositoryIT extends AbstractControllerIntegrati
                             .andExpect(status().isInternalServerError());
 
             // Check that the new bitstreamformat was created only once
-            getClient().perform(get("/api/core/bitstreamformats/"))
+            getClient().perform(get("/api/core/bitstreamformats?size=40&page=2"))
                        .andExpect(status().isOk())
                        .andExpect(jsonPath("$.page.totalElements", is(DEFAULT_AMOUNT_FORMATS + 1)));
 
