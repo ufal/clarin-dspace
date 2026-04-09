@@ -46,7 +46,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * This is the Repository that takes care of the operations on the {@link VersionRest} objects
- * 
+ *
  * @author Mykhaylo Boychuk (mykhaylo.boychuk at 4science.it)
  */
 @Component(VersionRest.CATEGORY + "." + VersionRest.NAME)
@@ -148,19 +148,7 @@ public class VersionRestRepository extends DSpaceRestRepository<VersionRest, Int
         if (Objects.isNull(version)) {
             throw new RuntimeException("Cannot create the new version for the item with id: " + item.getID());
         }
-        if (Objects.isNull(version.getItem())) {
-            throw new RuntimeException("Add metadata `dc.relation.isreplacedby` to the previous version item " +
-                    "because the new item wasn't assigned to the version object.");
-        }
 
-        // Add metadata `dc.relation.isreplacedby` to the previous version item.
-        // The metadata value is: `dc.identifier.uri` from the new item.
-        String handleref = handleService.getCanonicalForm(version.getItem().getHandle());
-        if (org.apache.commons.lang3.StringUtils.isBlank(handleref)) {
-            throw new RuntimeException("Cannot get handle in canonical form.");
-        }
-        itemService.addMetadata(context, item, "dc", "relation", "isreplacedby", null,
-                handleref);
         return converter.toRest(version, utils.obtainProjection());
     }
 

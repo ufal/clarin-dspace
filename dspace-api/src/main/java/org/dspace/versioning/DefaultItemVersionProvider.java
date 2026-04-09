@@ -28,6 +28,7 @@ import org.dspace.identifier.IdentifierException;
 import org.dspace.identifier.service.IdentifierService;
 import org.dspace.versioning.service.VersionHistoryService;
 import org.dspace.versioning.service.VersioningService;
+import org.dspace.versioning.utils.RelationMetadataUtils;
 import org.dspace.workflow.WorkflowItemService;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -130,9 +131,8 @@ public class DefaultItemVersionProvider extends AbstractVersionProvider implemen
                 authorizeService.findPoliciesByDSOAndType(c, previousItem, ResourcePolicy.TYPE_CUSTOM);
             authorizeService.addPolicies(c, policies, itemNew);
 
-            // Add metadata `dc.relation.replaces` to the new item. The metadata `dc.relation.isreplacedby`
-            // are added to the previous item in the VersionRestRepository.
-            manageRelationMetadata(c, itemNew, previousItem);
+            // Add metadata `dc.relation.replaces` to the new item.
+            // The metadata `dc.relation.isreplacedby`is added only when the previousItem is archived
 
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
             String formattedDate = LocalDate.now().format(formatter);
@@ -210,5 +210,10 @@ public class DefaultItemVersionProvider extends AbstractVersionProvider implemen
                 "identifier","uri", Item.ANY);
         itemService.addMetadata(c, itemNew, "dc", "relation", "replaces", null,
                 identifierUriPrevItem);
+
+        if (previousItem.isArchived()) {
+            RelationMetadataUtils.setIsReplacedByMetadata(c, itemService, previousItem, itemNew);
+        }
+
     }
 }

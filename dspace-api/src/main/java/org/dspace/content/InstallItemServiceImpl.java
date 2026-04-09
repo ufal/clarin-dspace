@@ -41,6 +41,10 @@ import org.dspace.identifier.service.IdentifierService;
 import org.dspace.services.ConfigurationService;
 import org.dspace.supervision.SupervisionOrder;
 import org.dspace.supervision.service.SupervisionOrderService;
+import org.dspace.versioning.Version;
+import org.dspace.versioning.service.VersionHistoryService;
+import org.dspace.versioning.service.VersioningService;
+import org.dspace.versioning.utils.RelationMetadataUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -71,6 +75,10 @@ public class InstallItemServiceImpl implements InstallItemService {
     private ResourcePolicyService resourcePolicyService;
     @Autowired(required = true)
     protected ConfigurationService configurationService;
+    @Autowired(required = true)
+    protected VersioningService versioningService;
+    @Autowired(required = true)
+    protected VersionHistoryService versionHistoryService;
 
     Logger log = LogManager.getLogger(InstallItemServiceImpl.class);
 
@@ -227,6 +235,11 @@ public class InstallItemServiceImpl implements InstallItemService {
 
         // Add language name into metadata. The lang name is fetched from the `lang_codes.txt`.
         addLanguageNameToMetadata(c, item);
+
+        String dcRelationReplaces = itemService.getMetadataFirstValue(item, "dc", "relation", "replaces", Item.ANY);
+        if (dcRelationReplaces != null) {
+            fixRelationMetadata(c, item, dcRelationReplaces);
+        }
     }
 
     /**
@@ -408,6 +421,32 @@ public class InstallItemServiceImpl implements InstallItemService {
         resPol.setAction(action);
         resPol.setdSpaceObject(item);
         context.restoreAuthSystemState();
+    }
+
+    /**
+     * This method adds the "dc.relation.isreplacedby" metadata field to the previous item, if exists.
+     *
+     * @param c Context
+     * @param item Item being installed
+     * @param dcRelationReplaces The value of "dc.relation.replaces" metadata field of the item being installed
+     * @throws SQLException If there is an issue interacting with the database.
+     */
+    private void fixRelationMetadata(Context c, Item item, String dcRelationReplaces) throws SQLException {
+        Version itemVersion = versioningService.getVersion(c, item);
+        if (itemVersion != null) {
+            Version previousItemVersion =
+                    versionHistoryService.getPrevious(c, itemVersion.getVersionHistory(), itemVersion);
+            if (previousItemVersion != null) {
+                Item previousItem = previousItemVersion.getItem();
+                if (previousItem != null) {
+                    String previousIdentifierUri =
+                            itemService.getMetadataFirstValue(previousItem, "dc", "identifier", "uri", Item.ANY);
+                    if (dcRelationReplaces.equals(previousIdentifierUri)) {
+                        RelationMetadataUtils.setIsReplacedByMetadata(c, itemService, previousItem, item);
+                    }
+                }
+            }
+        }
     }
 
 }
