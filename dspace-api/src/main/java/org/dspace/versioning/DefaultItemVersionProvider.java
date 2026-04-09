@@ -133,6 +133,7 @@ public class DefaultItemVersionProvider extends AbstractVersionProvider implemen
 
             // Add metadata `dc.relation.replaces` to the new item.
             // The metadata `dc.relation.isreplacedby`is added only when the previousItem is archived
+            manageRelationMetadata(c, previousItem, itemNew);
 
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
             String formattedDate = LocalDate.now().format(formatter);
@@ -200,19 +201,19 @@ public class DefaultItemVersionProvider extends AbstractVersionProvider implemen
     /**
      * Add metadata `dc.relation.replaces` to the new item.
      */
-    private void manageRelationMetadata(Context c, Item itemNew, Item previousItem) throws SQLException {
+    private void manageRelationMetadata(Context c, Item previousItem, Item newItem) throws SQLException {
         // Remove copied `dc.relation.replaces` metadata for the new item.
-        itemService.clearMetadata(c, itemNew, "dc", "relation", "replaces", Item.ANY);
+        itemService.clearMetadata(c, newItem, "dc", "relation", "replaces", Item.ANY);
 
         // Add metadata `dc.relation.replaces` to the new item.
         // The metadata value is: `dc.identifier.uri` from the previous item.
         String identifierUriPrevItem = itemService.getMetadataFirstValue(previousItem, "dc",
                 "identifier","uri", Item.ANY);
-        itemService.addMetadata(c, itemNew, "dc", "relation", "replaces", null,
+        itemService.addMetadata(c, newItem, "dc", "relation", "replaces", null,
                 identifierUriPrevItem);
 
         if (previousItem.isArchived()) {
-            RelationMetadataUtils.setIsReplacedByMetadata(c, itemService, previousItem, itemNew);
+            RelationMetadataUtils.setIsReplacedByMetadata(c, itemService, previousItem, newItem);
         }
 
     }
