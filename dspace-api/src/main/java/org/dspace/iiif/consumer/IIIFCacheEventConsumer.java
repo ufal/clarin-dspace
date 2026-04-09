@@ -50,6 +50,11 @@ public class IIIFCacheEventConsumer implements Consumer {
         // This subject may become a reference to the parent Item that will be evicted from
         // the manifests cache.
         DSpaceObject subject = event.getSubject(ctx);
+        if (subject == null) {
+            log.warn("IIIF event consumer received an event with a null subject, skipping: " + event);
+            return;
+        }
+
         DSpaceObject unmodifiedSubject = event.getSubject(ctx);
 
         int et = event.getEventType();
@@ -102,23 +107,18 @@ public class IIIFCacheEventConsumer implements Consumer {
 
         switch (et) {
             case Event.ADD:
-                System.out.println("ADD event for subject " + subject + ", adding to cache eviction");
                 addToCacheEviction(subject, unmodifiedSubject, st);
                 break;
             case Event.MODIFY:
-                System.out.println("MODIFY event for subject " + subject + ", adding to cache eviction");
                 addToCacheEviction(subject, unmodifiedSubject, st);
                 break;
             case Event.MODIFY_METADATA:
-                System.out.println("MODIFY_METADATA event for subject " + subject + ", adding to cache eviction");
                 addToCacheEviction(subject, unmodifiedSubject, st);
                 break;
             case Event.REMOVE:
-                System.out.println("REMOVE event for subject " + subject + ", adding to cache eviction");
                 addToCacheEviction(subject, unmodifiedSubject, st);
                 break;
             case Event.DELETE:
-                System.out.println("DELETE event for subject " + subject + ", adding to cache eviction");
                 addToCacheEviction(subject, unmodifiedSubject, st);
                 break;
             default: {
@@ -131,12 +131,6 @@ public class IIIFCacheEventConsumer implements Consumer {
     private void addToCacheEviction(DSpaceObject subject, DSpaceObject subject2, int type) {
         if (type == Constants.BITSTREAM) {
             toEvictFromCanvasCache.add(subject2);
-        }
-        if (subject == null) {
-            System.out.println("DSpaceObject is null");
-            Thread.dumpStack();
-        } else {
-            System.out.println("Adding DSpaceObject with name '" + subject.getName() + "' to eviction list");
         }
         toEvictFromManifestCache.add(subject);
     }
@@ -152,10 +146,6 @@ public class IIIFCacheEventConsumer implements Consumer {
                 manifestsCacheEvictService.evictAllCacheValues();
             } else {
                 for (DSpaceObject dso : toEvictFromManifestCache) {
-                    if (dso == null) {
-                        System.out.println("Method:end - DSpaceObject is null");
-                        // continue;
-                    }
                     UUID uuid = dso.getID();
                     manifestsCacheEvictService.evictSingleCacheValue(uuid.toString());
                 }

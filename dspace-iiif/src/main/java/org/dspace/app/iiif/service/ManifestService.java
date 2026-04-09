@@ -113,7 +113,6 @@ public class ManifestService extends AbstractResourceService {
         String hgt = configurationService.getProperty("iiif.canvas.default-height");
         guessCanvasDimension = (wid == null && hgt == null);
         populateManifest(item, context);
-        System.out.println("ManifestService#getManifest(): " + utils.asJson(manifestGenerator.generateResource()));
         return utils.asJson(manifestGenerator.generateResource());
     }
 

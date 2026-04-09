@@ -80,7 +80,6 @@ public class IIIFServiceFacade {
         if (item == null || !utils.isIIIFEnabled(item)) {
             throw new ResourceNotFoundException("IIIF manifest for  id " + id + " not found");
         }
-        System.out.println("getManifest(), Item Title: " + item.getName());
         return manifestService.getManifest(item, context);
     }
 
