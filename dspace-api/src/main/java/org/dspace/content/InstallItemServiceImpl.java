@@ -44,7 +44,6 @@ import org.dspace.supervision.service.SupervisionOrderService;
 import org.dspace.versioning.Version;
 import org.dspace.versioning.service.VersionHistoryService;
 import org.dspace.versioning.service.VersioningService;
-import org.dspace.versioning.utils.RelationMetadataUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -442,10 +441,27 @@ public class InstallItemServiceImpl implements InstallItemService {
                     String previousIdentifierUri =
                             itemService.getMetadataFirstValue(previousItem, "dc", "identifier", "uri", Item.ANY);
                     if (dcRelationReplaces.equals(previousIdentifierUri)) {
-                        RelationMetadataUtils.setIsReplacedByMetadata(
-                                c, itemService, itemService.find(c, previousItem.getID()), item);
+                        setIsReplacedByMetadata(c, itemService, itemService.find(c, previousItem.getID()), item);
                     }
                 }
+            }
+        }
+    }
+
+    private void setIsReplacedByMetadata(Context c, ItemService itemService, Item previousItem, Item newItem)
+            throws SQLException {
+        String identifierUri = itemService.getMetadataFirstValue(newItem, "dc", "identifier","uri", Item.ANY);
+        if (StringUtils.isBlank(identifierUri)) {
+            log.warn("The new item (id: {}) doesn't have the metadata dc.identifier.uri, " +
+                            "so it's not possible to add dc.relation.isreplacedby to the previous item",
+                    newItem.getID());
+        } else {
+            boolean isReplacedByAlreadyExists =
+                    itemService.getMetadata(previousItem, "dc", "relation", "isreplacedby", Item.ANY)
+                            .stream()
+                            .anyMatch(m -> identifierUri.equals(m.getValue()));
+            if (!isReplacedByAlreadyExists) {
+                itemService.addMetadata(c, previousItem, "dc", "relation", "isreplacedby", null, identifierUri);
             }
         }
     }
