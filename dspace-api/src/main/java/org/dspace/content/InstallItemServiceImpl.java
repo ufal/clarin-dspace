@@ -442,7 +442,8 @@ public class InstallItemServiceImpl implements InstallItemService {
                     String previousIdentifierUri =
                             itemService.getMetadataFirstValue(previousItem, "dc", "identifier", "uri", Item.ANY);
                     if (dcRelationReplaces.equals(previousIdentifierUri)) {
-                        RelationMetadataUtils.setIsReplacedByMetadata(c, itemService, previousItem, item);
+                        RelationMetadataUtils.setIsReplacedByMetadata(
+                                c, itemService, itemService.find(c, previousItem.getID()), item);
                     }
                 }
             }
