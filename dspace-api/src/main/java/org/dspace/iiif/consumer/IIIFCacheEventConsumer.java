@@ -50,11 +50,6 @@ public class IIIFCacheEventConsumer implements Consumer {
         // This subject may become a reference to the parent Item that will be evicted from
         // the manifests cache.
         DSpaceObject subject = event.getSubject(ctx);
-        if (subject == null) {
-            log.warn("IIIF event consumer received an event with a null subject, skipping: " + event);
-            return;
-        }
-
         DSpaceObject unmodifiedSubject = event.getSubject(ctx);
 
         int et = event.getEventType();
@@ -129,6 +124,10 @@ public class IIIFCacheEventConsumer implements Consumer {
     }
 
     private void addToCacheEviction(DSpaceObject subject, DSpaceObject subject2, int type) {
+        if (subject == null) {
+            log.warn("IIIF event consumer cannot evict from cache when subject is null.");
+            return;
+        }
         if (type == Constants.BITSTREAM) {
             toEvictFromCanvasCache.add(subject2);
         }
