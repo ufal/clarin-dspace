@@ -40,7 +40,7 @@ import org.junit.Test;
 /**
  * Unit Tests for ClarinVersionedHandleIdentifierProvider
  *
- * @authorMilan Kuchtiak
+ * @author Milan Kuchtiak
  */
 public class ClarinVersionedHandleIdentifierProviderIT extends AbstractIntegrationTestWithDatabase {
     private IdentifierServiceImpl identifierService;
