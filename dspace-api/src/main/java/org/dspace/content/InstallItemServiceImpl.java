@@ -441,7 +441,11 @@ public class InstallItemServiceImpl implements InstallItemService {
                     String previousIdentifierUri =
                             itemService.getMetadataFirstValue(previousItem, "dc", "identifier", "uri", Item.ANY);
                     if (dcRelationReplaces.equals(previousIdentifierUri)) {
-                        setIsReplacedByMetadata(c, itemService, itemService.find(c, previousItem.getID()), item);
+                        // set "dc.relation.isreplacedby" metadata field to the previous item,
+                        // pointing to the handle of the new item
+                        // reload the previous item to avoid "detached entity" error
+                        // when updating it in the setIsReplacedByMetadata() method
+                        setIsReplacedByMetadata(c, itemService, c.reloadEntity(previousItem), item);
                     }
                 }
             }
