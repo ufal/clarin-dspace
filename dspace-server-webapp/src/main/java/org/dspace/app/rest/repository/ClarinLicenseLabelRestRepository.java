@@ -13,8 +13,11 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Objects;
+import javax.servlet.http.HttpServletRequest;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.dspace.app.rest.exception.ClarinLicenseLabelNotFoundException;
 import org.dspace.app.rest.exception.DSpaceBadRequestException;
 import org.dspace.app.rest.exception.UnprocessableEntityException;
 import org.dspace.app.rest.model.ClarinLicenseLabelRest;
@@ -101,6 +104,65 @@ public class ClarinLicenseLabelRestRepository extends DSpaceRestRepository<Clari
         return converter.toRest(clarinLicenseLabel, utils.obtainProjection());
     }
 
+    @Override
+    @PreAuthorize("hasAuthority('ADMIN')")
+    public ClarinLicenseLabelRest put(HttpServletRequest request,
+                                      String apiCategory,
+                                      String model,
+                                      Integer id,
+                                      JsonNode jsonNode) {
+        Context context = obtainContext();
+        ClarinLicenseLabel clarinLicenseLabel;
+        try {
+            clarinLicenseLabel = clarinLicenseLabelService.find(context, id);
+            if (Objects.isNull(clarinLicenseLabel)) {
+                throw new ClarinLicenseLabelNotFoundException("Clarin License Label with id " + id + " was not found");
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e.getMessage(), e);
+        }
+
+        // parse request body
+        ClarinLicenseLabelRest clarinLicenseLabelRest;
+        try {
+            clarinLicenseLabelRest = new ObjectMapper().readValue(jsonNode.toString(), ClarinLicenseLabelRest.class);
+        } catch (IOException excIO) {
+            throw new DSpaceBadRequestException("error parsing request body", excIO);
+        }
+
+        // validate fields
+        if (isBlank(clarinLicenseLabelRest.getLabel()) || isBlank(clarinLicenseLabelRest.getTitle())) {
+            throw new DSpaceBadRequestException("CLARIN License Label title and label cannot be null or empty");
+        }
+
+        clarinLicenseLabel.setId(id);
+        clarinLicenseLabel.setLabel(clarinLicenseLabelRest.getLabel());
+        clarinLicenseLabel.setTitle(clarinLicenseLabelRest.getTitle());
+        clarinLicenseLabel.setIcon(clarinLicenseLabelRest.getIcon());
+        clarinLicenseLabel.setExtended(clarinLicenseLabelRest.isExtended());
+        try {
+            clarinLicenseLabelService.update(context, clarinLicenseLabel);
+        } catch (SQLException | AuthorizeException e) {
+            throw new RuntimeException(e.getMessage(), e);
+        }
+        // return
+        return converter.toRest(clarinLicenseLabel, utils.obtainProjection());
+    }
+
+    @Override
+    @PreAuthorize("hasAuthority('ADMIN')")
+    protected void delete(Context context, Integer id) throws AuthorizeException {
+        ClarinLicenseLabel clarinLicenseLabel;
+        try {
+            clarinLicenseLabel = clarinLicenseLabelService.find(context, id);
+            if (Objects.isNull(clarinLicenseLabel)) {
+                throw new ClarinLicenseLabelNotFoundException("Clarin License Label with id " + id + " was not found");
+            }
+            clarinLicenseLabelService.delete(context, clarinLicenseLabel);
+        } catch (SQLException e) {
+            throw new RuntimeException(e.getMessage(), e);
+        }
+    }
 
     @Override
     public Class<ClarinLicenseLabelRest> getDomainClass() {

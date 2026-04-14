@@ -10,8 +10,10 @@ package org.dspace.app.rest;
 import static com.jayway.jsonpath.JsonPath.read;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -146,4 +148,87 @@ public class ClarinLicenseLabelRestRepositoryIT extends AbstractControllerIntegr
             }
         }
     }
+
+    @Test
+    public void updateOK() throws Exception {
+        String authTokenAdmin = getAuthToken(admin.getEmail(), password);
+
+        String originalTitle = firstCLicenseLabel.getTitle();
+        firstCLicenseLabel.setTitle("Updated CLL Title1");
+
+        ClarinLicenseLabelRest clarinLicenseLabelRest = clarinLicenseLabelConverter.convert(firstCLicenseLabel,
+                Projection.DEFAULT);
+
+        // test if the id from the path is used instead of the id from the body
+        clarinLicenseLabelRest.setId(999);
+
+        getClient(authTokenAdmin).perform(put("/api/core/clarinlicenselabels/" + firstCLicenseLabel.getID())
+                        .content(new ObjectMapper().writeValueAsBytes(clarinLicenseLabelRest))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is(firstCLicenseLabel.getID())))
+                .andExpect(jsonPath("$.label", is(firstCLicenseLabel.getLabel())))
+                .andExpect(jsonPath("$.title", is("Updated CLL Title1")))
+                .andExpect(jsonPath("$.extended", is(firstCLicenseLabel.isExtended())))
+                .andExpect(jsonPath("$.icon", is(notNullValue())))
+                .andExpect(jsonPath("$.type", is(ClarinLicenseLabelRest.NAME)));
+
+        firstCLicenseLabel.setTitle(originalTitle);
+    }
+
+    @Test
+    public void updateNotFound() throws Exception {
+        String authTokenAdmin = getAuthToken(admin.getEmail(), password);
+        getClient(authTokenAdmin).perform(put("/api/core/clarinlicenselabels/999")
+                        .content("{}")
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    public void updateInvalidBody() throws Exception {
+        String authTokenAdmin = getAuthToken(admin.getEmail(), password);
+        getClient(authTokenAdmin).perform(put("/api/core/clarinlicenselabels/" + firstCLicenseLabel.getID())
+                        .content("{\"label\": \"test label\", \"invalid_property\": 0}\"")
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    public void updateMissingTitle() throws Exception {
+        String authTokenAdmin = getAuthToken(admin.getEmail(), password);
+        getClient(authTokenAdmin).perform(put("/api/core/clarinlicenselabels/" + firstCLicenseLabel.getID())
+                        .content("{\"label\": \"test label\"}")
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    public void updateNotAuthorized() throws Exception {
+        getClient().perform(put("/api/core/clarinlicenselabels/999")
+                        .content("{}")
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    public void deleteNotAuthorized() throws Exception {
+        getClient().perform(delete("/api/core/clarinlicenselabels/" + firstCLicenseLabel.getID()))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    public void deleteOk() throws Exception {
+        String authTokenAdmin = getAuthToken(admin.getEmail(), password);
+        getClient(authTokenAdmin).perform(delete("/api/core/clarinlicenselabels/" +  firstCLicenseLabel.getID()))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    public void deleteNotFound() throws Exception {
+        String authTokenAdmin = getAuthToken(admin.getEmail(), password);
+        getClient(authTokenAdmin).perform(delete("/api/core/clarinlicenselabels/999"))
+                .andExpect(status().isNotFound());
+    }
+
 }
