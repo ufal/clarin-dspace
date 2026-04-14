@@ -115,6 +115,8 @@ public class InstallItemServiceImpl implements InstallItemService {
         // Finish up / archive the item
         item = finishItem(c, item, is);
 
+        fixRelationMetadata(c, item);
+
         // As this is a BRAND NEW item, as a final step we need to remove the
         // submitter item policies created during deposit and replace them with
         // the default policies from the collection.
@@ -234,11 +236,6 @@ public class InstallItemServiceImpl implements InstallItemService {
 
         // Add language name into metadata. The lang name is fetched from the `lang_codes.txt`.
         addLanguageNameToMetadata(c, item);
-
-        String dcRelationReplaces = itemService.getMetadataFirstValue(item, "dc", "relation", "replaces", Item.ANY);
-        if (dcRelationReplaces != null) {
-            fixRelationMetadata(c, item, dcRelationReplaces);
-        }
     }
 
     /**
@@ -427,10 +424,14 @@ public class InstallItemServiceImpl implements InstallItemService {
      *
      * @param c Context
      * @param item Item being installed
-     * @param dcRelationReplaces The value of "dc.relation.replaces" metadata field of the item being installed
      * @throws SQLException If there is an issue interacting with the database.
      */
-    private void fixRelationMetadata(Context c, Item item, String dcRelationReplaces) throws SQLException {
+    private void fixRelationMetadata(Context c, Item item) throws SQLException, AuthorizeException {
+        String dcRelationReplaces = itemService.getMetadataFirstValue(item, "dc", "relation", "replaces", Item.ANY);
+        if (dcRelationReplaces == null) {
+            // nothing need to be done if the new item doesn't have "dc.relation.replaces" metadata field
+            return;
+        }
         Version itemVersion = versioningService.getVersion(c, item);
         if (itemVersion != null) {
             Version previousItemVersion =
@@ -445,15 +446,15 @@ public class InstallItemServiceImpl implements InstallItemService {
                         // pointing to the handle of the new item
                         // reload the previous item to avoid "detached entity" error
                         // when updating it in the setIsReplacedByMetadata() method
-                        setIsReplacedByMetadata(c, itemService, c.reloadEntity(previousItem), item);
+                        setIsReplacedByMetadata(c, c.reloadEntity(previousItem), item);
                     }
                 }
             }
         }
     }
 
-    private void setIsReplacedByMetadata(Context c, ItemService itemService, Item previousItem, Item newItem)
-            throws SQLException {
+    private void setIsReplacedByMetadata(Context c, Item previousItem, Item newItem)
+            throws SQLException, AuthorizeException {
         String identifierUri = itemService.getMetadataFirstValue(newItem, "dc", "identifier","uri", Item.ANY);
         if (StringUtils.isBlank(identifierUri)) {
             log.warn("The new item (id: {}) doesn't have the metadata dc.identifier.uri, " +
@@ -466,6 +467,14 @@ public class InstallItemServiceImpl implements InstallItemService {
                             .anyMatch(m -> identifierUri.equals(m.getValue()));
             if (!isReplacedByAlreadyExists) {
                 itemService.addMetadata(c, previousItem, "dc", "relation", "isreplacedby", null, identifierUri);
+                try {
+                    c.turnOffAuthorisationSystem();
+                    itemService.update(c, previousItem);
+                } catch (AuthorizeException e) {
+                    throw new SQLException("Unable to update previous item after adding dc.relation.isreplacedby", e);
+                } finally {
+                    c.restoreAuthSystemState();
+                }
             }
         }
     }
