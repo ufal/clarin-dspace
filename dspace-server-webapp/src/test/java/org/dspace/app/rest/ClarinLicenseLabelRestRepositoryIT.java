@@ -49,6 +49,9 @@ public class ClarinLicenseLabelRestRepositoryIT extends AbstractControllerIntegr
     @Autowired
     ClarinLicenseLabelConverter clarinLicenseLabelConverter;
 
+    @Autowired
+    private ObjectMapper objectMapper;
+
     ClarinLicenseLabel firstCLicenseLabel;
     ClarinLicenseLabel secondCLicenseLabel;
     ClarinLicenseLabel thirdCLicenseLabel;
@@ -126,7 +129,7 @@ public class ClarinLicenseLabelRestRepositoryIT extends AbstractControllerIntegr
         String authTokenAdmin = getAuthToken(admin.getEmail(), password);
         try {
             getClient(authTokenAdmin).perform(post("/api/core/clarinlicenselabels")
-                            .content(new ObjectMapper().writeValueAsBytes(clarinLicenseLabelRest))
+                            .content(objectMapper.writeValueAsBytes(clarinLicenseLabelRest))
                             .contentType(org.springframework.http.MediaType.APPLICATION_JSON))
                     .andExpect(status().isCreated())
                     .andExpect(jsonPath("$.label", is(clarinLicenseLabelRest.getLabel())))
@@ -150,30 +153,36 @@ public class ClarinLicenseLabelRestRepositoryIT extends AbstractControllerIntegr
     }
 
     @Test
-    public void updateOK() throws Exception {
+    public void updateOk() throws Exception {
         String authTokenAdmin = getAuthToken(admin.getEmail(), password);
+        Integer clarinLicenseLabelId = null;
+        try {
+            context.turnOffAuthorisationSystem();
+            ClarinLicenseLabel clarinLicenseLabel = ClarinLicenseLabelBuilder.createClarinLicenseLabel(context).build();
+            clarinLicenseLabelId = Objects.requireNonNull(clarinLicenseLabel.getID());
+            context.restoreAuthSystemState();
 
-        String originalTitle = firstCLicenseLabel.getTitle();
-        firstCLicenseLabel.setTitle("Updated CLL Title1");
+            ClarinLicenseLabelRest clarinLicenseLabelRest = clarinLicenseLabelConverter.convert(clarinLicenseLabel,
+                    Projection.DEFAULT);
+            clarinLicenseLabelRest.setLabel("Updated CLL");
+            clarinLicenseLabelRest.setTitle("Updated CLL Title");
 
-        ClarinLicenseLabelRest clarinLicenseLabelRest = clarinLicenseLabelConverter.convert(firstCLicenseLabel,
-                Projection.DEFAULT);
+            // test if the id from the path is used instead of the id from the body
+            clarinLicenseLabelRest.setId(999);
 
-        // test if the id from the path is used instead of the id from the body
-        clarinLicenseLabelRest.setId(999);
-
-        getClient(authTokenAdmin).perform(put("/api/core/clarinlicenselabels/" + firstCLicenseLabel.getID())
-                        .content(new ObjectMapper().writeValueAsBytes(clarinLicenseLabelRest))
-                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id", is(firstCLicenseLabel.getID())))
-                .andExpect(jsonPath("$.label", is(firstCLicenseLabel.getLabel())))
-                .andExpect(jsonPath("$.title", is("Updated CLL Title1")))
-                .andExpect(jsonPath("$.extended", is(firstCLicenseLabel.isExtended())))
-                .andExpect(jsonPath("$.icon", is(notNullValue())))
-                .andExpect(jsonPath("$.type", is(ClarinLicenseLabelRest.NAME)));
-
-        firstCLicenseLabel.setTitle(originalTitle);
+            getClient(authTokenAdmin).perform(put("/api/core/clarinlicenselabels/" + clarinLicenseLabel.getID())
+                            .content(objectMapper.writeValueAsBytes(clarinLicenseLabelRest))
+                            .contentType(org.springframework.http.MediaType.APPLICATION_JSON))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id", is(clarinLicenseLabelId)))
+                    .andExpect(jsonPath("$.label", is("Updated CLL")))
+                    .andExpect(jsonPath("$.title", is("Updated CLL Title")))
+                    .andExpect(jsonPath("$.extended", is(clarinLicenseLabel.isExtended())))
+                    .andExpect(jsonPath("$.icon", is(clarinLicenseLabel.getIcon())))
+                    .andExpect(jsonPath("$.type", is(ClarinLicenseLabelRest.NAME)));
+        } finally {
+            ClarinLicenseLabelBuilder.deleteClarinLicenseLabel(clarinLicenseLabelId);
+        }
     }
 
     @Test
@@ -189,7 +198,7 @@ public class ClarinLicenseLabelRestRepositoryIT extends AbstractControllerIntegr
     public void updateInvalidBody() throws Exception {
         String authTokenAdmin = getAuthToken(admin.getEmail(), password);
         getClient(authTokenAdmin).perform(put("/api/core/clarinlicenselabels/" + firstCLicenseLabel.getID())
-                        .content("{\"label\": \"test label\", \"invalid_property\": 0}\"")
+                        .content("{\"label\": \"test label\", \"invalid_property\": 0}")
                         .contentType(org.springframework.http.MediaType.APPLICATION_JSON))
                 .andExpect(status().isBadRequest());
     }
@@ -220,7 +229,7 @@ public class ClarinLicenseLabelRestRepositoryIT extends AbstractControllerIntegr
     @Test
     public void deleteOk() throws Exception {
         String authTokenAdmin = getAuthToken(admin.getEmail(), password);
-        getClient(authTokenAdmin).perform(delete("/api/core/clarinlicenselabels/" +  firstCLicenseLabel.getID()))
+        getClient(authTokenAdmin).perform(delete("/api/core/clarinlicenselabels/" + firstCLicenseLabel.getID()))
                 .andExpect(status().isNoContent());
     }
 

@@ -42,6 +42,9 @@ public class ClarinLicenseLabelRestRepository extends DSpaceRestRepository<Clari
     @Autowired
     ClarinLicenseLabelService clarinLicenseLabelService;
 
+    @Autowired
+    ObjectMapper objectMapper;
+
     @Override
     public ClarinLicenseLabelRest findOne(Context context, Integer id) {
         ClarinLicenseLabel clarinLicenseLabel;
@@ -75,7 +78,7 @@ public class ClarinLicenseLabelRestRepository extends DSpaceRestRepository<Clari
         // parse request body
         ClarinLicenseLabelRest clarinLicenseLabelRest;
         try {
-            clarinLicenseLabelRest = new ObjectMapper().readValue(
+            clarinLicenseLabelRest = objectMapper.readValue(
                     getRequestService().getCurrentRequest().getHttpServletRequest().getInputStream(),
                     ClarinLicenseLabelRest.class
             );
@@ -125,7 +128,7 @@ public class ClarinLicenseLabelRestRepository extends DSpaceRestRepository<Clari
         // parse request body
         ClarinLicenseLabelRest clarinLicenseLabelRest;
         try {
-            clarinLicenseLabelRest = new ObjectMapper().readValue(jsonNode.toString(), ClarinLicenseLabelRest.class);
+            clarinLicenseLabelRest = objectMapper.readValue(jsonNode.toString(), ClarinLicenseLabelRest.class);
         } catch (IOException excIO) {
             throw new DSpaceBadRequestException("error parsing request body", excIO);
         }
@@ -145,13 +148,13 @@ public class ClarinLicenseLabelRestRepository extends DSpaceRestRepository<Clari
         } catch (SQLException | AuthorizeException e) {
             throw new RuntimeException(e.getMessage(), e);
         }
-        // return
+
         return converter.toRest(clarinLicenseLabel, utils.obtainProjection());
     }
 
     @Override
     @PreAuthorize("hasAuthority('ADMIN')")
-    protected void delete(Context context, Integer id) throws AuthorizeException {
+    public void delete(Context context, Integer id) throws AuthorizeException {
         ClarinLicenseLabel clarinLicenseLabel;
         try {
             clarinLicenseLabel = clarinLicenseLabelService.find(context, id);
