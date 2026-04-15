@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.TreeMap;
 import java.util.stream.StreamSupport;
 
@@ -70,16 +71,16 @@ public class MetadataCheck extends Check {
         }
 
         Map<String, Integer> errorCounts = reporter.getErrorCount();
-        int errorCount = errorCounts.values().stream().mapToInt(Integer::intValue).sum();
+        int overallErrorCount = errorCounts.values().stream().mapToInt(Integer::intValue).sum();
 
         Map<String, Integer> warningCounts = reporter.getWarningCount();
-        int warningCount = warningCounts.values().stream().mapToInt(Integer::intValue).sum();
+        int overallWarningCount = warningCounts.values().stream().mapToInt(Integer::intValue).sum();
 
         Map<String, List<String>> errorMessages = reporter.getErrorMessages();
         Map<String, List<String>> warningMessages = reporter.getWarningMessages();
 
         // error statistics
-        if (errorCount > 0) {
+        if (overallErrorCount > 0) {
             sb.append("\nError statistics:\n\n");
             errorCounts.forEach((key, val) -> {
                 String errorCode = formatErrorCode(key);
@@ -89,11 +90,11 @@ public class MetadataCheck extends Check {
             sb.append("-".repeat(COUNT_INDENTATION + 7)).append("\n");
             sb.append("Error count total: ")
                     .append(" ".repeat(COUNT_INDENTATION - "Error count total: ".length()))
-                    .append(String.format("%7d", errorCount)).append("\n");
+                    .append(String.format("%7d", overallErrorCount)).append("\n");
         }
 
         // warning statistics
-        if (warningCount > 0) {
+        if (overallWarningCount > 0) {
             sb.append("\nWarning statistics:\n\n");
             warningCounts.forEach((key, val) -> {
                 String errorCode = formatErrorCode(key);
@@ -103,34 +104,34 @@ public class MetadataCheck extends Check {
             sb.append("-".repeat(COUNT_INDENTATION + 7)).append("\n");
             sb.append("Warning count total: ")
                     .append(" ".repeat(COUNT_INDENTATION - "Warning count total: ".length()))
-                    .append(String.format("%7d", warningCount)).append("\n");
+                    .append(String.format("%7d", overallWarningCount)).append("\n");
         }
 
         // list of errors
-        if (errorCount > 0) {
+        if (overallErrorCount > 0) {
             sb.append("\nErrors:\n");
             errorMessages.forEach((key, messages) ->
                     messages.forEach(message -> sb.append(message).append("\n"))
             );
-            if (errorCount > MAXIMUM_ERRORS_TO_SHOW) {
+            if (overallErrorCount > MAXIMUM_ERRORS_TO_SHOW) {
                 sb.append("and more...\n");
             }
         }
 
         // list of warnings
-        if (warningCount > 0) {
+        if (overallWarningCount > 0) {
             sb.append("\nWarnings:\n");
             warningMessages.forEach((key, messages) ->
                     messages.forEach(message -> sb.append(message).append("\n"))
             );
-            if (warningCount > MAXIMUM_WARNINGS_TO_SHOW) {
+            if (overallWarningCount > MAXIMUM_WARNINGS_TO_SHOW) {
                 sb.append("and more...\n");
             }
         }
 
         // populate JSON report
-        root.put("errorCount", errorCount);
-        root.put("warningCount", warningCount);
+        root.put("errorCount", overallErrorCount);
+        root.put("warningCount", overallWarningCount);
 
         JSONArray errors = new JSONArray();
         errorCounts.forEach((key, val) -> {
@@ -198,11 +199,11 @@ public class MetadataCheck extends Check {
         private final Map<String, Integer> warningCount = new TreeMap<>();
 
         // represent stored messages for errors and warnings
-        private final StoredMessages errorMessages = new StoredMessages();
-        private final StoredMessages warningMessages = new StoredMessages();
+        private final StoredMessagesInfo errorMessages = new StoredMessagesInfo();
+        private final StoredMessagesInfo warningMessages = new StoredMessagesInfo();
 
         Map<String, List<String>> getErrorMessages() {
-            return errorMessages.getMessages();
+            return errorMessages.getStoredMessages();
         }
 
         Map<String, Integer> getErrorCount() {
@@ -210,7 +211,7 @@ public class MetadataCheck extends Check {
         }
 
         Map<String, List<String>> getWarningMessages() {
-            return warningMessages.getMessages();
+            return warningMessages.getStoredMessages();
         }
 
         Map<String, Integer> getWarningCount() {
@@ -258,20 +259,20 @@ public class MetadataCheck extends Check {
                                   String line,
                                   Map<String, List<String>> patterns,
                                   Map<String, Integer> counts,
-                                  StoredMessages storedMessages,
+                                  StoredMessagesInfo storedMessagesInfo,
                                   int limit,
                                   int dispersionQuota
                                   ) {
             int startIndex = line.indexOf(prefix) + prefix.length();
-            String longMessage = line.substring(startIndex);
-            int endIndex = longMessage.lastIndexOf("[[");
-            String shortMessage;
+            String fullMessage = line.substring(startIndex);
+            int endIndex = fullMessage.lastIndexOf("[[");
+            String messageKey;
             if (endIndex > 0) {
-                shortMessage = longMessage.substring(0, endIndex - 1);
+                messageKey = fullMessage.substring(0, endIndex - 1);
             } else {
-                shortMessage = longMessage;
+                messageKey = fullMessage;
             }
-            MessageInfo messageInfo = new MessageInfo(shortMessage, longMessage);
+            Message message = new Message(messageKey, fullMessage);
             boolean found = false;
             for (Map.Entry<String, List<String>> entry : patterns.entrySet()) {
                 String type = entry.getKey();
@@ -279,11 +280,11 @@ public class MetadataCheck extends Check {
                 for (String pattern : typePatterns) {
                     boolean startsWithCaret = pattern.startsWith("^");
                     boolean endsWithDollar = pattern.endsWith("$");
-                    if ((startsWithCaret && shortMessage.startsWith(pattern.substring(1))) ||
-                            (endsWithDollar && shortMessage.endsWith(pattern.substring(0, pattern.length() - 1))) ||
-                            (!startsWithCaret && !endsWithDollar && shortMessage.contains(pattern))
+                    if ((startsWithCaret && messageKey.startsWith(pattern.substring(1))) ||
+                            (endsWithDollar && messageKey.endsWith(pattern.substring(0, pattern.length() - 1))) ||
+                            (!startsWithCaret && !endsWithDollar && messageKey.contains(pattern))
                     ) {
-                        addMessage(type, messageInfo, counts, storedMessages, limit, dispersionQuota);
+                        addMessage(type, message, counts, storedMessagesInfo, limit, dispersionQuota);
                         found = true;
                         break;
                     }
@@ -294,58 +295,87 @@ public class MetadataCheck extends Check {
             }
             if (!found) {
                 // If no pattern matched, categorize under "validation.other"
-                addMessage(VALIDATION_TYPE_OTHER, messageInfo, counts, storedMessages, limit, dispersionQuota);
+                addMessage(VALIDATION_TYPE_OTHER, message, counts, storedMessagesInfo, limit, dispersionQuota);
             }
         }
 
         private void addMessage(String validationType,
-                                MessageInfo messageInfo,
+                                Message message,
                                 Map<String, Integer> counts,
-                                StoredMessages storedMessages,
+                                StoredMessagesInfo storedMessagesInfo,
                                 int limit,
                                 int dispersionQuota) {
             // increase the count for this validation type
             counts.merge(validationType, 1, Integer::sum);
-            int mCount = storedMessages.getCount();
-            Map<String, List<String>> messages = storedMessages.getMessages();
+            int mCount = storedMessagesInfo.getCount();
+            Map<String, List<String>> messages = storedMessagesInfo.getStoredMessages();
             if (mCount < limit) {
-                // add error|warning to messages and increase the count
-                messages.merge(messageInfo.getShortMessage(), List.of(messageInfo.getLongMessage()), ListUtils::union);
-                storedMessages.setCount(mCount + 1);
+                // add error|warning to messages and increase the overall messages count
+                messages.merge(message.getMessageKey(), List.of(message.getFullMessage()), ListUtils::union);
+                storedMessagesInfo.count++;
             } else {
-                replaceMessage(messageInfo, storedMessages, dispersionQuota);
+                // replace one of the stored messages with new message when possible
+                // but don't change the overall messages count
+                replaceMessage(message, storedMessagesInfo, dispersionQuota);
             }
         }
 
-        private void replaceMessage(MessageInfo messageInfo, StoredMessages storedMessages, int dispersionQuota) {
-            if (storedMessages.getHighestCount() > 1) {
-                Map<String, List<String>> messages = storedMessages.getMessages();
-                String shortMessage = messageInfo.getShortMessage();
-                List<String> fullMessages = messages.get(shortMessage);
+        /**
+         * Try to replace one of the stored messages, with the highest frequency, with the new message.
+         * The replacement is made when the new message is entirely new
+         * or the frequency of the new message is significantly lower than the messages with the highest frequency.
+         *
+         * @param message the new message that should be added to stored messages
+         * @param storedMessagesInfo the messages that are already stored for the report
+         * @param dispersionQuota quota saying how much of the messages with the highest frequency is acceptable to keep
+         *                        comparing to the frequency of the new message
+         */
+        private void replaceMessage(Message message, StoredMessagesInfo storedMessagesInfo, int dispersionQuota) {
+            int highestMessageFrequency = storedMessagesInfo.getHighestFrequency();
+            if (highestMessageFrequency <= 1) {
+                // no replacement, as there are no messages with the frequency higher than 1, so the replacement
+                // of any message with the new message will not cause significant dispersion of messages
+                return;
+            }
+            String messageKey = message.getMessageKey();
+            Map<String, List<String>> storedMessages = storedMessagesInfo.getStoredMessages();
+            List<String> storedMessagesForMessageKey = storedMessages.get(messageKey);
 
-                // recalculate the highest count of messages for any short message in messages,
-                // because it can be changed after each replacement
-                String messageWithHighestCount = getMessageWithHighestCount(messages);
-                int highestMessageCount = messages.get(messageWithHighestCount).size();
-                storedMessages.setHighestCount(highestMessageCount);
+            if (storedMessagesForMessageKey != null &&
+                    (storedMessagesForMessageKey.size() + dispersionQuota >= highestMessageFrequency)) {
+                // no replacement, as the frequency of the new message is not significantly lower
+                // than the frequency of the message with the highest frequency
+                return;
+            }
 
-                if ((highestMessageCount > 1) &&
-                    (fullMessages == null || (fullMessages.size() + dispersionQuota < highestMessageCount))) {
-                    // either (1) short message is not present in messages yet,
-                    // so the last message with the highest count is removed and this new message is added
-                    //
-                    // or (2) short message is present in messages,
-                    // but the count of full messages for this short message is much lower
-                    // than the count of full messages for the message with the highest count,
-                    // so the last message with the highest count is removed and this new message is added
-                    messages.get(messageWithHighestCount).remove(highestMessageCount - 1);
-                    messages.merge(shortMessage, List.of(messageInfo.getLongMessage()), ListUtils::union);
-                }
+            // recalculate the highest frequency of messages for any short message in storedmessages,
+            // because it can be changed after each replacement
+            String messageKeyWithHighestFrequency = Objects.requireNonNull(getMessageWithHighestCount(storedMessages));
+            highestMessageFrequency = storedMessages.get(messageKeyWithHighestFrequency).size();
+            storedMessagesInfo.setHighestFrequency(highestMessageFrequency);
+
+            if (highestMessageFrequency <= 1) {
+                // no replacement, as there are no messages with the frequency higher than 1 anymore
+                // (after the recalculation)
+                return;
+            }
+
+            if (storedMessagesForMessageKey == null ||
+                    (storedMessagesForMessageKey.size() + dispersionQuota < highestMessageFrequency)) {
+                // either (1) message key is not present in stored messages yet,
+                // so the last stored message with the highest frequency is removed and this new message is added
+                //
+                // or (2) message key is present in stored messages,
+                // but the frequency of messages for this message key is much lower
+                // than the frequency of other stored messages,
+                // so the (last) stored message with the highest frequency is removed and this new message is added
+                storedMessages.get(messageKeyWithHighestFrequency).remove(highestMessageFrequency - 1);
+                storedMessages.merge(messageKey, List.of(message.getFullMessage()), ListUtils::union);
             }
         }
 
-        private static String getMessageWithHighestCount(Map<String, List<String>> examples) {
-            return examples.entrySet()
+        private static String getMessageWithHighestCount(Map<String, List<String>> storedMessages) {
+            return storedMessages.entrySet()
                     .stream()
                     .max((e1, e2) -> Integer.compare(e1.getValue().size(), e2.getValue().size()))
                     .map(Map.Entry::getKey)
@@ -353,53 +383,65 @@ public class MetadataCheck extends Check {
         }
     }
 
-    private static class StoredMessages {
+    /**
+     * Abstraction of the stored messages for errors and warnings, which are stored during the processing of messages
+     * and then used to generate the final report.
+     * The messages are stored in te form of a map, where the key is the message_key and
+     * the value is the list of full messages stored for this message_key.
+     * The count represents the overall number of stored messages.
+     *
+     * Example of message_key: "value [dc.date.available] is present multiple times"
+     * Example of the list of full messages:
+     * [
+     *     "value [dc.date.available] is present multiple times [[http://hdl.handle.net/123456789/2-7371]]",
+     *     "value [dc.date.available] is present multiple times [[http://hdl.handle.net/123456789/2-7373]]",
+     *     "value [dc.date.available] is present multiple times [[http://hdl.handle.net/123456789/2-7375]]"
+     *  ]
+     *
+     */
+    private static class StoredMessagesInfo {
         private int count;
-        private int highestCount;
-        private final Map<String, List<String>> messages;
+        private int highestFrequency;
+        private final Map<String, List<String>> storedMessages;
 
-        StoredMessages() {
+        StoredMessagesInfo() {
             this.count = 0;
-            this.highestCount = Integer.MAX_VALUE;
-            messages = new TreeMap<>();
+            this.highestFrequency = Integer.MAX_VALUE;
+            storedMessages = new TreeMap<>();
         }
 
         public int getCount() {
             return count;
         }
 
-        public void setCount(int count) {
-            this.count = count;
+        public int getHighestFrequency() {
+            return highestFrequency;
         }
 
-        public int getHighestCount() {
-            return highestCount;
+        public void setHighestFrequency(int highestFrequency) {
+            this.highestFrequency = highestFrequency;
         }
 
-        public void setHighestCount(int highestCount) {
-            this.highestCount = highestCount;
-        }
-
-        public Map<String, List<String>> getMessages() {
-            return messages;
+        public Map<String, List<String>> getStoredMessages() {
+            return storedMessages;
         }
     }
 
-    private static class MessageInfo {
-        private final String shortMessage;
-        private final String longMessage;
+    private static class Message {
+        private final String messageKey;
+        private final String fullMessage;
 
-        public MessageInfo(String shortMessage, String longMessage) {
-            this.shortMessage = shortMessage;
-            this.longMessage = longMessage;
+        public Message(String messageKey, String fullMessage) {
+            this.messageKey = messageKey;
+            this.fullMessage = fullMessage;
         }
 
-        public String getShortMessage() {
-            return shortMessage;
+        public String getMessageKey() {
+            return messageKey;
         }
 
-        public String getLongMessage() {
-            return longMessage;
+        public String getFullMessage() {
+            return fullMessage;
         }
     }
 }
