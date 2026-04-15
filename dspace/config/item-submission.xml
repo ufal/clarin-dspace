@@ -448,17 +448,6 @@
             <step id="openAIREOrganizationForm"/>
         </submission-process>
 
-        <submission-process name="clariah">
-            <step id="collection"/>
-            <step id="clarin-notice"/>
-            <step id="traditionalpageone"/>
-            <step id="traditionalpagetwo"/>
-            <step id="upload"/>
-            <step id="license"/>
-            <step id="clarin-license"/>
-            <step id="specialFields"/>
-        </submission-process>
-
         <submission-process name="clariahSubmissions">
             <step id="collection"/>
             <step id="clarin-notice"/>

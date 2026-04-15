@@ -172,7 +172,16 @@ public class OpenAIREFundingDataProvider extends AbstractExternalDataProvider {
         if (projectResponse == null || projectResponse.getHeader() == null) {
             return 0;
         }
-        return Integer.parseInt(projectResponse.getHeader().getTotal());
+        String total = projectResponse.getHeader().getTotal();
+        if (StringUtils.isBlank(total)) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(total);
+        } catch (NumberFormatException e) {
+            log.error("Failed to parse search result count from OpenAIRE: {}", e.getMessage());
+            return 0;
+        }
     }
 
     /**

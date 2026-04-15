@@ -27,11 +27,13 @@ import org.dspace.builder.CommunityBuilder;
 import org.dspace.builder.ItemBuilder;
 import org.dspace.builder.PreviewContentBuilder;
 import org.dspace.content.Bitstream;
+import org.dspace.content.BitstreamFormat;
 import org.dspace.content.Bundle;
 import org.dspace.content.Collection;
 import org.dspace.content.Community;
 import org.dspace.content.Item;
 import org.dspace.content.PreviewContent;
+import org.dspace.content.service.BitstreamFormatService;
 import org.dspace.content.service.PreviewContentService;
 import org.dspace.util.FileInfo;
 import org.junit.After;
@@ -44,6 +46,8 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
 
     @Autowired
     PreviewContentService previewContentService;
+    @Autowired
+    BitstreamFormatService bitstreamFormatService;
 
     PreviewContent previewContent0;
     PreviewContent previewContent1;
@@ -229,13 +233,20 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
         PreviewContentBuilder.deletePreviewContent(previewContent3.getID());
 
         BitstreamBuilder.deleteBitstream(tarGzFile.getID());
+
+        BitstreamFormat customMimeTypeFormat = tarXGzipFile.getFormat(context);
         BitstreamBuilder.deleteBitstream(tarXGzipFile.getID());
+        if (customMimeTypeFormat != null) {
+            bitstreamFormatService.delete(context, customMimeTypeFormat);
+        }
+
         BitstreamBuilder.deleteBitstream(tgzFile.getID());
         BitstreamBuilder.deleteBitstream(gzFile.getID());
         BitstreamBuilder.deleteBitstream(tarXzFile.getID());
         BitstreamBuilder.deleteBitstream(xzFile.getID());
         BitstreamBuilder.deleteBitstream(tarGzFileWithWrongExtension.getID());
         BitstreamBuilder.deleteBitstream(tarXzFileWithIncorrectMimeType.getID());
+
         super.destroy();
     }
 
