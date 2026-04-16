@@ -39,9 +39,20 @@ public class MetadataCheck extends Check {
     private static final String VALIDATION_TYPE_OTHER = "validation.other";
     private static final int COUNT_INDENTATION = 30;
 
+    // default values for configuration properties, which can be overridden in configuration
+
+    // the maximum number of errors to be shown in the report
     private static final int MAXIMUM_ERRORS_TO_SHOW = 100;
+    // the maximum number of warnings to be shown in the report
     private static final int MAXIMUM_WARNINGS_TO_SHOW = 50;
+    // This number is only relevant when the number of errors exceeds the maximum number of errors to be shown.
+    // Represents the dispersion of the error messages.
+    // The frequency of the new (upcoming) message in the report is compared with the frequency of the
+    // most frequent message in the report, and the replacement is made when the frequency of the new message
+    // is significantly lower than the frequency of the most frequent message
+    // (when the difference in occurrence is higher than the dispersion quota).
     private static final int ERROR_DISPERSION_QUOTA = 10;
+    // the same as ERROR_DISPERSION_QUOTA but for warnings
     private static final int WARNING_DISPERSION_QUOTA = 5;
 
     private static Map<String, List<String>> errorPatterns;
@@ -373,7 +384,7 @@ public class MetadataCheck extends Check {
             int highestMessageFrequency = storedMessagesInfo.getHighestFrequency();
             if (highestMessageFrequency <= 1) {
                 // no replacement, as there are no messages with the frequency higher than 1, so the replacement
-                // of any message with the new message will not cause significant dispersion of messages
+                // of any message would not increase the diversity of messages in stored messages
                 return;
             }
             String messageKey = message.getMessageKey();
