@@ -51,7 +51,7 @@ public class MetadataCheck extends Check {
     // most frequent message in the report, and the replacement is made when the frequency of the new message
     // is significantly lower than the frequency of the most frequent message
     // (when the difference in occurrence is higher than the dispersion quota).
-    private static final int ERROR_DISPERSION_QUOTA = 10;
+    private static final int ERROR_DISPERSION_QUOTA = 5;
     // the same as ERROR_DISPERSION_QUOTA but for warnings
     private static final int WARNING_DISPERSION_QUOTA = 5;
 
