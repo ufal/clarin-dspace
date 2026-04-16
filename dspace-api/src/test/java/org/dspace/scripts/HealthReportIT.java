@@ -25,6 +25,7 @@ import java.util.Set;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import org.apache.commons.lang3.StringUtils;
 import org.dspace.AbstractIntegrationTestWithDatabase;
 import org.dspace.app.launcher.ScriptLauncher;
 import org.dspace.app.scripts.handler.impl.TestDSpaceRunnableHandler;
@@ -50,6 +51,8 @@ import org.dspace.content.service.clarin.ClarinLicenseLabelService;
 import org.dspace.content.service.clarin.ClarinLicenseResourceMappingService;
 import org.dspace.content.service.clarin.ClarinLicenseService;
 import org.dspace.core.Constants;
+import org.dspace.services.ConfigurationService;
+import org.dspace.services.factory.DSpaceServicesFactory;
 import org.junit.Test;
 
 /**
@@ -162,7 +165,7 @@ public class HealthReportIT extends AbstractIntegrationTestWithDatabase {
                 .build();
 
         Item item1 = ItemBuilder.createItem(context, collection)
-                .withTitle("Test item 1m")
+                .withTitle("Test item 1")
                 .withType("corpus")
                 .withMetadata("local", "branding", null, "Community")
                 .build();
@@ -183,6 +186,16 @@ public class HealthReportIT extends AbstractIntegrationTestWithDatabase {
                 .withMetadata("dc", "relation", "isreplacedby", findItemUri(item2))
                 .build();
 
+        ItemBuilder.createItem(context, collection)
+                .withTitle("Test item 4")
+                .withMetadata("local", "branding", null, "Community")
+                .build();
+
+        ItemBuilder.createItem(context, collection)
+                .withType("toolService")
+                .withMetadata("local", "branding", null, "Community")
+                .build();
+
         TestDSpaceRunnableHandler testDSpaceRunnableHandler = new TestDSpaceRunnableHandler();
 
         // with "health-report -c 5", only Metadata check is running
@@ -194,10 +207,14 @@ public class HealthReportIT extends AbstractIntegrationTestWithDatabase {
 
         assertThat(messages, hasSize(1));
         assertThat(messages.get(0), containsString("dc.relation issues:  " + " ".repeat(15) + "2"));
-        assertThat(messages.get(0), containsString("Error count total:   " + " ".repeat(15) + "2"));
+        assertThat(messages.get(0), containsString("dc.title issues:     " + " ".repeat(15) + "1"));
+        assertThat(messages.get(0), containsString("dc.type issues:      " + " ".repeat(15) + "1"));
+        assertThat(messages.get(0), containsString("Error count total:   " + " ".repeat(15) + "4"));
         assertThat(messages.get(0), containsString("dc.subject issues:   " + " ".repeat(15) + "1"));
         assertThat(messages.get(0), containsString("Warning count total: " + " ".repeat(15) + "1"));
         assertThat(messages.get(0), containsString("Errors:"));
+        assertThat(messages.get(0), containsString("Does not have dc.type metadata"));
+        assertThat(messages.get(0), containsString("Item has no dc.title metadata"));
         assertThat(messages.get(0), containsString("does not refer back via dc.relation.isreplacedby"));
         assertThat(messages.get(0), containsString("does not refer back via dc.relation.replaces"));
         assertThat(messages.get(0), containsString("Warnings:"));
@@ -215,18 +232,131 @@ public class HealthReportIT extends AbstractIntegrationTestWithDatabase {
         JsonNode reportNode = metadataCheckNode.get("report");
         assertThat(reportNode, notNullValue());
 
-        assertThat(reportNode.get("errorCount").asInt(), is(2));
+        assertThat(reportNode.get("errorCount").asInt(), is(4));
         assertThat(reportNode.get("warningCount").asInt(), is(1));
 
         ArrayNode errorsNode = reportNode.withArray("errors");
-        assertThat(errorsNode.size(), is(1));
+        assertThat(errorsNode.size(), is(3));
+
         assertThat(errorsNode.get(0).get("count").asInt(), is(2));
         assertThat(errorsNode.get(0).get("type").asText(), is("dc.relation"));
+
+        assertThat(errorsNode.get(1).get("count").asInt(), is(1));
+        assertThat(errorsNode.get(1).get("type").asText(), is("dc.title"));
+
+        assertThat(errorsNode.get(2).get("count").asInt(), is(1));
+        assertThat(errorsNode.get(2).get("type").asText(), is("dc.type"));
 
         ArrayNode warningsNode = reportNode.withArray("warnings");
         assertThat(warningsNode.size(), is(1));
         assertThat(warningsNode.get(0).get("count").asInt(), is(1));
         assertThat(warningsNode.get(0).get("type").asText(), is("dc.subject"));
+    }
+
+    @Test
+    public void testMetadataCheckWithRestrictedReportSize() throws Exception {
+        // set max-errors-to-show to 8 and error-dispersion-quota to 1,
+        // This test has 14 errors in total, but the report will contain only 8 error messages.
+        // The errors with low frequency will be prioritized.
+        // The error-dispersion-quota set to 1 means that the number of errors shown
+        // for each error will be almost the same, in this case maximally 2 errors for each error type
+        context.turnOffAuthorisationSystem();
+
+        ConfigurationService configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
+        configurationService.setProperty("healthcheck.metadata.max-errors-to-show", 8);
+        configurationService.setProperty("healthcheck.metadata.error-dispersion-quota", 1);
+
+        Community community = CommunityBuilder.createCommunity(context)
+                .withName("Community")
+                .build();
+
+        Collection collection = CollectionBuilder.createCollection(context, community)
+                .withName("Collection")
+                .withSubmitterGroup(eperson)
+                .build();
+
+        Item item1 = ItemBuilder.createItem(context, collection)
+                .withTitle("Test item 1")
+                .withType("corpus")
+                .withSubject("Test subject")
+                .withMetadata("local", "branding", null, "Community")
+                .build();
+
+        Item item2 = ItemBuilder.createItem(context, collection)
+                .withTitle("Test item 2")
+                .withType("toolService")
+                .withSubject("Test subject")
+                .withMetadata("local", "branding", null, "Community")
+                .withMetadata("dc", "relation", "replaces", findItemUri(item1))
+                .build();
+
+        ItemBuilder.createItem(context, collection)
+                .withTitle("Test item 3")
+                .withType("toolService")
+                .withSubject("Test subject")
+                .withMetadata("local", "branding", null, "Community")
+                .withMetadata("dc", "relation", "isreplacedby", findItemUri(item2))
+                .build();
+
+        // create 4 items with missing title
+        for (int i = 0; i < 4; i++) {
+            ItemBuilder.createItem(context, collection)
+                    .withType("toolService")
+                    .withSubject("Test subject")
+                    .withMetadata("local", "branding", null, "Community")
+                    .build();
+        }
+
+        // create 4 items with missing type
+        for (int i = 4; i < 8; i++) {
+            ItemBuilder.createItem(context, collection)
+                    .withTitle("Test Item " + i)
+                    .withSubject("Test subject")
+                    .withMetadata("local", "branding", null, "Community")
+                    .build();
+        }
+
+        // create 4 items with duplicate type
+        for (int i = 8; i < 12; i++) {
+            ItemBuilder.createItem(context, collection)
+                    .withTitle("Test Item " + i)
+                    .withType("toolService")
+                    .withType("corpus")
+                    .withSubject("Test subject")
+                    .withMetadata("local", "branding", null, "Community")
+                    .build();
+        }
+
+        TestDSpaceRunnableHandler testDSpaceRunnableHandler = new TestDSpaceRunnableHandler();
+
+        // with "health-report -c 5", only Metadata check is running
+        String[] args = new String[]{"health-report", "-c", "5"};
+        ScriptLauncher.handleScript(args, ScriptLauncher.getConfig(kernelImpl), testDSpaceRunnableHandler, kernelImpl);
+
+        assertThat(testDSpaceRunnableHandler.getErrorMessages(), empty());
+        List<String> messages = testDSpaceRunnableHandler.getInfoMessages();
+
+        assertThat(messages, hasSize(1));
+        assertThat(messages.get(0), containsString("dc.relation issues:  " + " ".repeat(15) + "2"));
+        assertThat(messages.get(0), containsString("dc.title issues:     " + " ".repeat(15) + "4"));
+        assertThat(messages.get(0), containsString("dc.type issues:      " + " ".repeat(15) + "4"));
+        assertThat(messages.get(0), containsString("duplicate value issues:" + " ".repeat(13) + "4"));
+        assertThat(messages.get(0), containsString("Error count total:   " + " ".repeat(14) + "14"));
+
+        assertThat(messages.get(0), containsString("Errors:"));
+
+        // check if dc.type error is present exactly 2 times
+        assertThat(StringUtils.countMatches(messages.get(0), "Does not have dc.type metadata"), is(2));
+        // check if dc.title error is present exactly 2 times
+        assertThat(StringUtils.countMatches(messages.get(0), "Item has no dc.title metadata"), is(2));
+        // check id duplicate value error is present exactly 2 times
+        assertThat(StringUtils.countMatches(messages.get(0), "value [dc.type] is present multiple times"), is(2));
+
+        // check if all dc.relation errors are present
+        assertThat(StringUtils.countMatches(messages.get(0), "does not refer back via dc.relation.replaces"), is(1));
+        assertThat(
+                StringUtils.countMatches(messages.get(0), "does not refer back via dc.relation.isreplacedby"), is(1));
+        assertThat(messages.get(0), containsString("and more..."));
     }
 
     private String findItemUri(Item item) {

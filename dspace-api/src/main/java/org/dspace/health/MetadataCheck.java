@@ -25,6 +25,8 @@ import org.apache.commons.collections.ListUtils;
 import org.dspace.content.factory.ContentServiceFactory;
 import org.dspace.core.Context;
 import org.dspace.curate.Curator;
+import org.dspace.services.ConfigurationService;
+import org.dspace.utils.DSpace;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -39,8 +41,8 @@ public class MetadataCheck extends Check {
 
     private static final int MAXIMUM_ERRORS_TO_SHOW = 100;
     private static final int MAXIMUM_WARNINGS_TO_SHOW = 50;
-    private static final int ERRORS_DISPERSION_QUOTA = 10;
-    private static final int WARNINGS_DISPERSION_QUOTA = 5;
+    private static final int ERROR_DISPERSION_QUOTA = 10;
+    private static final int WARNING_DISPERSION_QUOTA = 5;
 
     private static Map<String, List<String>> errorPatterns;
     private static Map<String, List<String>> warningPatterns;
@@ -55,13 +57,34 @@ public class MetadataCheck extends Check {
 
     @Override
     public String run(ReportInfo ri) {
+
+        ConfigurationService configurationService = new DSpace().getConfigurationService();
+
+        int maxErrorsToShow = configurationService.getIntProperty("healthcheck.metadata.max-errors-to-show",
+                MAXIMUM_ERRORS_TO_SHOW);
+
+        int maxWarningsToShow = configurationService.getIntProperty("healthcheck.metadata.max-warnings-to-show",
+                MAXIMUM_WARNINGS_TO_SHOW);
+
+        int errorDispersionQuota = configurationService.getIntProperty("healthcheck.metadata.error-dispersion-quota",
+                ERROR_DISPERSION_QUOTA);
+
+        int warningDispersionQuota =
+                configurationService.getIntProperty("healthcheck.metadata.warning-dispersion-quota",
+                        WARNING_DISPERSION_QUOTA);
+
         StringBuilder sb = new StringBuilder();
         JSONObject root = new JSONObject();
 
         Curator curator = new Curator();
         curator.addTask("metadataqa");
 
-        MetadataReporter reporter = new MetadataReporter();
+        MetadataReporter reporter = new MetadataReporter(
+                maxErrorsToShow,
+                maxWarningsToShow,
+                errorDispersionQuota,
+                warningDispersionQuota);
+
         curator.setReporter(reporter);
         try (Context context = new Context()) {
             curator.curate(context, ContentServiceFactory.getInstance().getSiteService().findSite(context).getHandle());
@@ -113,7 +136,7 @@ public class MetadataCheck extends Check {
             errorMessages.forEach((key, messages) ->
                     messages.forEach(message -> sb.append(message).append("\n"))
             );
-            if (overallErrorCount > MAXIMUM_ERRORS_TO_SHOW) {
+            if (overallErrorCount > maxErrorsToShow) {
                 sb.append("and more...\n");
             }
         }
@@ -124,7 +147,7 @@ public class MetadataCheck extends Check {
             warningMessages.forEach((key, messages) ->
                     messages.forEach(message -> sb.append(message).append("\n"))
             );
-            if (overallWarningCount > MAXIMUM_WARNINGS_TO_SHOW) {
+            if (overallWarningCount > maxWarningsToShow) {
                 sb.append("and more...\n");
             }
         }
@@ -195,6 +218,12 @@ public class MetadataCheck extends Check {
     }
 
     private static class MetadataReporter implements Appendable {
+
+        private final int maxErrorsToShow;
+        private final int maxWarningsToShow;
+        private final int errorDispersionQuota;
+        private final int warningDispersionQuota;
+
         private final Map<String, Integer> errorCount = new TreeMap<>();
         private final Map<String, Integer> warningCount = new TreeMap<>();
 
@@ -218,6 +247,16 @@ public class MetadataCheck extends Check {
             return warningCount;
         }
 
+        MetadataReporter(int maxErrorsToShow,
+                         int maxWarningsToShow,
+                         int errorDispersionQuota,
+                         int warningDispersionQuota) {
+            this.maxErrorsToShow = maxErrorsToShow;
+            this.maxWarningsToShow = maxWarningsToShow;
+            this.errorDispersionQuota = errorDispersionQuota;
+            this.warningDispersionQuota = warningDispersionQuota;
+        }
+
         @Override
         public Appendable append(CharSequence cs) throws IOException {
             String line = cs.toString();
@@ -228,8 +267,8 @@ public class MetadataCheck extends Check {
                         errorPatterns,
                         errorCount,
                         errorMessages,
-                        MAXIMUM_ERRORS_TO_SHOW,
-                        ERRORS_DISPERSION_QUOTA
+                        maxErrorsToShow,
+                        errorDispersionQuota
                 );
             } else if (line.contains("Warning: ")) {
                 populateData(
@@ -238,8 +277,8 @@ public class MetadataCheck extends Check {
                         warningPatterns,
                         warningCount,
                         warningMessages,
-                        MAXIMUM_WARNINGS_TO_SHOW,
-                        WARNINGS_DISPERSION_QUOTA
+                        maxWarningsToShow,
+                        warningDispersionQuota
                 );
             }
             return this;
