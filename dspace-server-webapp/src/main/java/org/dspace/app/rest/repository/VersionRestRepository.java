@@ -79,9 +79,6 @@ public class VersionRestRepository extends DSpaceRestRepository<VersionRest, Int
     @Autowired
     private WorkspaceItemService workspaceItemService;
 
-    @Autowired
-    private HandleService handleService;
-
     @SuppressWarnings("rawtypes")
     @Autowired(required = true)
     protected WorkflowItemService workflowItemService;
