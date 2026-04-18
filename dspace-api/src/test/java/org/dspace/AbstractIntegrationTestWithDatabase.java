@@ -166,30 +166,63 @@ public class AbstractIntegrationTestWithDatabase extends AbstractDSpaceIntegrati
      */
     @After
     public void destroy() throws Exception {
-        // Cleanup our global context object
+        // Contain the blast radius of teardown failures: the shared static state (Solr cores, authority
+        // cache, configuration, builder cache) must be reset regardless of whether builder cleanup threw.
+        // Otherwise a single flake in one test's teardown poisons every subsequent test in the class.
+        Exception primaryFailure = null;
         try {
             AbstractBuilder.cleanupObjects();
             parentCommunity = null;
             cleanupContext();
+        } catch (Exception e) {
+            primaryFailure = new RuntimeException("Error cleaning up builder objects & context object", e);
+        } finally {
+            try {
+                resetSharedState();
+            } catch (Exception e) {
+                if (primaryFailure == null) {
+                    primaryFailure = e;
+                } else {
+                    primaryFailure.addSuppressed(e);
+                }
+            }
+        }
+        if (primaryFailure != null) {
+            throw primaryFailure;
+        }
+    }
 
-            ServiceManager serviceManager = DSpaceServicesFactory.getInstance().getServiceManager();
-            // Clear the search core.
-            MockSolrSearchCore searchService = serviceManager
-                    .getServiceByName(null, MockSolrSearchCore.class);
-            searchService.reset();
-            // Clear the statistics core.
-            serviceManager
-                    .getServiceByName(SolrStatisticsCore.class.getName(), MockSolrStatisticsCore.class)
-                    .reset();
+    /**
+     * Reset all shared static state between tests: Solr cores, authority cache, QA events, configuration
+     * service, and the builder cache. Called from {@link #destroy()} inside a finally block so this always
+     * runs, even if earlier teardown steps failed.
+     *
+     * @throws Exception if reloading configuration or resetting the builder cache fails
+     */
+    private void resetSharedState() throws Exception {
+        ServiceManager serviceManager = DSpaceServicesFactory.getInstance().getServiceManager();
 
-            MockSolrLoggerServiceImpl statisticsService = serviceManager
-                    .getServiceByName("solrLoggerService", MockSolrLoggerServiceImpl.class);
-            statisticsService.reset();
+        // Clear the search core.
+        MockSolrSearchCore searchService = serviceManager
+                .getServiceByName(null, MockSolrSearchCore.class);
+        searchService.reset();
 
-            MockAuthoritySolrServiceImpl authorityService = serviceManager
-                    .getServiceByName(AuthoritySearchService.class.getName(), MockAuthoritySolrServiceImpl.class);
-            authorityService.reset();
+        // Clear the statistics core.
+        serviceManager
+                .getServiceByName(SolrStatisticsCore.class.getName(), MockSolrStatisticsCore.class)
+                .reset();
 
+        // Reset the statistics logger service
+        MockSolrLoggerServiceImpl loggerService = serviceManager
+                .getServiceByName("solrLoggerService", MockSolrLoggerServiceImpl.class);
+        loggerService.reset();
+
+        // Clear the authority core.
+        MockAuthoritySolrServiceImpl authorityService = serviceManager
+                .getServiceByName(AuthoritySearchService.class.getName(), MockAuthoritySolrServiceImpl.class);
+        authorityService.reset();
+
+        try {
             // Reload our ConfigurationService (to reset configs to defaults again)
             DSpaceServicesFactory.getInstance().getConfigurationService().reloadConfig();
 
