@@ -23,7 +23,9 @@
     "/checks/2/report/subscribers": "Subscribers",
     "/checks/2/report/subscribedCollections": "Subscribed Collections",
     "/checks/2/report/emptyGroups": "Empty Groups",
-    "/checks/3/report/licenses": "Licenses"
+    "/checks/3/report/licenses": "Licenses",
+    "/checks/5/report/errorCount": "Metadata Errors",
+    "/checks/5/report/warningCount": "Metadata Warnings"
   },
   "fieldOrder": [
     "/checks/0/report/directoryStats/0/size_bytes",
@@ -49,6 +51,8 @@
     "/checks/2/report/subscribers",
     "/checks/2/report/subscribedCollections",
     "/checks/2/report/emptyGroups",
-    "/checks/3/report/licenses"
+    "/checks/3/report/licenses",
+    "/checks/5/report/errorCount",
+    "/checks/5/report/warningCount"
   ]
 }

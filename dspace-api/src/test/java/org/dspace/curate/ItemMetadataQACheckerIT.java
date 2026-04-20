@@ -27,6 +27,7 @@ import org.dspace.content.factory.ContentServiceFactory;
 import org.dspace.content.service.CollectionService;
 import org.dspace.content.service.CommunityService;
 import org.dspace.content.service.ItemService;
+import org.dspace.core.factory.CoreServiceFactory;
 import org.dspace.services.ConfigurationService;
 import org.dspace.services.factory.DSpaceServicesFactory;
 import org.dspace.versioning.VersionHistory;
@@ -73,6 +74,7 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
     @Override
     public void setUp() throws Exception {
         super.setUp();
+        CoreServiceFactory.getInstance().getPluginService().clearNamedPluginClasses();
         try {
             context.turnOffAuthorisationSystem();
 
