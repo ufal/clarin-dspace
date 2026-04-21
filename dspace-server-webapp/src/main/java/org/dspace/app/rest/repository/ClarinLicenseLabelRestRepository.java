@@ -112,20 +112,15 @@ public class ClarinLicenseLabelRestRepository extends DSpaceRestRepository<Clari
 
     @Override
     @PreAuthorize("hasAuthority('ADMIN')")
-    public ClarinLicenseLabelRest put(HttpServletRequest request,
+    public ClarinLicenseLabelRest put(Context context,
+                                      HttpServletRequest request,
                                       String apiCategory,
                                       String model,
                                       Integer id,
-                                      JsonNode jsonNode) {
-        Context context = obtainContext();
-        ClarinLicenseLabel clarinLicenseLabel;
-        try {
-            clarinLicenseLabel = clarinLicenseLabelService.find(context, id);
-            if (Objects.isNull(clarinLicenseLabel)) {
-                throw new ClarinLicenseLabelNotFoundException("Clarin License Label with id " + id + " was not found");
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException(e.getMessage(), e);
+                                      JsonNode jsonNode) throws SQLException, AuthorizeException {
+        ClarinLicenseLabel clarinLicenseLabel = clarinLicenseLabelService.find(context, id);
+        if (Objects.isNull(clarinLicenseLabel)) {
+            throw new ClarinLicenseLabelNotFoundException("Clarin License Label with id " + id + " was not found");
         }
 
         // parse request body
@@ -152,12 +147,8 @@ public class ClarinLicenseLabelRestRepository extends DSpaceRestRepository<Clari
         clarinLicenseLabel.setTitle(clarinLicenseLabelRest.getTitle());
         clarinLicenseLabel.setIcon(clarinLicenseLabelRest.getIcon());
         clarinLicenseLabel.setExtended(clarinLicenseLabelRest.isExtended());
-        try {
-            clarinLicenseLabelService.update(context, clarinLicenseLabel);
-            context.commit();
-        } catch (SQLException | AuthorizeException e) {
-            throw new RuntimeException(e.getMessage(), e);
-        }
+
+        clarinLicenseLabelService.update(context, clarinLicenseLabel);
 
         return converter.toRest(clarinLicenseLabel, utils.obtainProjection());
     }
