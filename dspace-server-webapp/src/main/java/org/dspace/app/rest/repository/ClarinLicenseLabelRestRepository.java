@@ -145,6 +145,7 @@ public class ClarinLicenseLabelRestRepository extends DSpaceRestRepository<Clari
         clarinLicenseLabel.setExtended(clarinLicenseLabelRest.isExtended());
         try {
             clarinLicenseLabelService.update(context, clarinLicenseLabel);
+            context.commit();
         } catch (SQLException | AuthorizeException e) {
             throw new RuntimeException(e.getMessage(), e);
         }

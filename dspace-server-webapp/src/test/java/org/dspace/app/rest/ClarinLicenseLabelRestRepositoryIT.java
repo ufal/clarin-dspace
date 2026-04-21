@@ -159,25 +159,40 @@ public class ClarinLicenseLabelRestRepositoryIT extends AbstractControllerIntegr
         try {
             context.turnOffAuthorisationSystem();
             ClarinLicenseLabel clarinLicenseLabel = ClarinLicenseLabelBuilder.createClarinLicenseLabel(context).build();
+            clarinLicenseLabel.setLabel("CLL");
+            clarinLicenseLabel.setExtended(true);
+            clarinLicenseLabel.setTitle("CLL Title4");
+            clarinLicenseLabelService.update(context, clarinLicenseLabel);
+
             clarinLicenseLabelId = Objects.requireNonNull(clarinLicenseLabel.getID());
             context.restoreAuthSystemState();
 
             ClarinLicenseLabelRest clarinLicenseLabelRest = clarinLicenseLabelConverter.convert(clarinLicenseLabel,
                     Projection.DEFAULT);
-            clarinLicenseLabelRest.setLabel("Updated CLL");
+            clarinLicenseLabelRest.setLabel("CLL-X");
             clarinLicenseLabelRest.setTitle("Updated CLL Title");
+            clarinLicenseLabelRest.setExtended(false);
 
             // test if the id from the path is used instead of the id from the body
             clarinLicenseLabelRest.setId(999);
 
-            getClient(authTokenAdmin).perform(put("/api/core/clarinlicenselabels/" + clarinLicenseLabel.getID())
+            getClient(authTokenAdmin).perform(put("/api/core/clarinlicenselabels/" + clarinLicenseLabelId)
                             .content(objectMapper.writeValueAsBytes(clarinLicenseLabelRest))
                             .contentType(org.springframework.http.MediaType.APPLICATION_JSON))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.id", is(clarinLicenseLabelId)))
-                    .andExpect(jsonPath("$.label", is("Updated CLL")))
+                    .andExpect(jsonPath("$.label", is("CLL-X")))
                     .andExpect(jsonPath("$.title", is("Updated CLL Title")))
-                    .andExpect(jsonPath("$.extended", is(clarinLicenseLabel.isExtended())))
+                    .andExpect(jsonPath("$.extended", is(false)))
+                    .andExpect(jsonPath("$.icon", is(clarinLicenseLabel.getIcon())))
+                    .andExpect(jsonPath("$.type", is(ClarinLicenseLabelRest.NAME)));
+
+            getClient(authTokenAdmin).perform(get("/api/core/clarinlicenselabels/" + clarinLicenseLabelId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id", is(clarinLicenseLabelId)))
+                    .andExpect(jsonPath("$.label", is("CLL-X")))
+                    .andExpect(jsonPath("$.title", is("Updated CLL Title")))
+                    .andExpect(jsonPath("$.extended", is(false)))
                     .andExpect(jsonPath("$.icon", is(clarinLicenseLabel.getIcon())))
                     .andExpect(jsonPath("$.type", is(ClarinLicenseLabelRest.NAME)));
         } finally {
