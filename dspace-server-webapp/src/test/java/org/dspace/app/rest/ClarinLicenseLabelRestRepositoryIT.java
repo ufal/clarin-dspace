@@ -169,13 +169,21 @@ public class ClarinLicenseLabelRestRepositoryIT extends AbstractControllerIntegr
 
             ClarinLicenseLabelRest clarinLicenseLabelRest = clarinLicenseLabelConverter.convert(clarinLicenseLabel,
                     Projection.DEFAULT);
-            clarinLicenseLabelRest.setLabel("CLL-X");
+            clarinLicenseLabelRest.setLabel("UPDATED CLL");
             clarinLicenseLabelRest.setTitle("Updated CLL Title");
             clarinLicenseLabelRest.setExtended(false);
 
             // test if the id from the path is used instead of the id from the body
             clarinLicenseLabelRest.setId(999);
 
+            // check if update ends with Bad Request since the label length is grater than 5
+            getClient(authTokenAdmin).perform(put("/api/core/clarinlicenselabels/" + clarinLicenseLabelId)
+                            .content(objectMapper.writeValueAsBytes(clarinLicenseLabelRest))
+                            .contentType(org.springframework.http.MediaType.APPLICATION_JSON))
+                    .andExpect(status().isBadRequest());
+
+            // set the label to valid value and check if the update is successful
+            clarinLicenseLabelRest.setLabel(" CLL-X ");
             getClient(authTokenAdmin).perform(put("/api/core/clarinlicenselabels/" + clarinLicenseLabelId)
                             .content(objectMapper.writeValueAsBytes(clarinLicenseLabelRest))
                             .contentType(org.springframework.http.MediaType.APPLICATION_JSON))

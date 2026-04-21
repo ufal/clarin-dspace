@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import javax.servlet.http.HttpServletRequest;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -38,6 +39,8 @@ import org.springframework.stereotype.Component;
  */
 @Component(ClarinLicenseLabelRest.CATEGORY + "." + ClarinLicenseLabelRest.NAME)
 public class ClarinLicenseLabelRestRepository extends DSpaceRestRepository<ClarinLicenseLabelRest, Integer> {
+
+    private static final int MAX_LABEL_LENGTH = 5;
 
     @Autowired
     ClarinLicenseLabelService clarinLicenseLabelService;
@@ -133,13 +136,19 @@ public class ClarinLicenseLabelRestRepository extends DSpaceRestRepository<Clari
             throw new DSpaceBadRequestException("error parsing request body", excIO);
         }
 
+        String newLabel = Optional.ofNullable(clarinLicenseLabelRest.getLabel()).map(String::trim).orElse(null);
         // validate fields
-        if (isBlank(clarinLicenseLabelRest.getLabel()) || isBlank(clarinLicenseLabelRest.getTitle())) {
+        if (isBlank(newLabel) || isBlank(clarinLicenseLabelRest.getTitle())) {
             throw new DSpaceBadRequestException("CLARIN License Label title and label cannot be null or empty");
         }
 
+        if (newLabel.length() > MAX_LABEL_LENGTH) {
+            throw new DSpaceBadRequestException(
+                    "CLARIN License Label -> label string cannot be longer than " + MAX_LABEL_LENGTH + " characters");
+        }
+
         clarinLicenseLabel.setId(id);
-        clarinLicenseLabel.setLabel(clarinLicenseLabelRest.getLabel());
+        clarinLicenseLabel.setLabel(newLabel);
         clarinLicenseLabel.setTitle(clarinLicenseLabelRest.getTitle());
         clarinLicenseLabel.setIcon(clarinLicenseLabelRest.getIcon());
         clarinLicenseLabel.setExtended(clarinLicenseLabelRest.isExtended());
