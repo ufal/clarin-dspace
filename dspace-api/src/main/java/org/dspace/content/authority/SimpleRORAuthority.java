@@ -288,6 +288,8 @@ public class SimpleRORAuthority implements ChoiceAuthority {
             c.label = label;
             c.value = value;
 
+            c.extras.put("ror-id", authority);
+
             // set other-name, if exists, to show it in the UI as additional information about the institution
             if (aliases.length() > 0) {
                 c.extras.put("other-names", aliases.toString());
