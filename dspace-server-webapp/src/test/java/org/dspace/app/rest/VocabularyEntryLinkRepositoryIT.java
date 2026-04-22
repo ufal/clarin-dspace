@@ -14,12 +14,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.util.Objects;
 
 import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
+import org.dspace.core.factory.CoreServiceFactory;
 import org.dspace.services.ConfigurationService;
+import org.dspace.services.factory.DSpaceServicesFactory;
 import org.hamcrest.Matchers;
 import org.junit.Assert;
-import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.web.servlet.ResultActions;
 
 public class VocabularyEntryLinkRepositoryIT extends AbstractControllerIntegrationTest {
@@ -28,16 +29,14 @@ public class VocabularyEntryLinkRepositoryIT extends AbstractControllerIntegrati
     private static final String ROR_AUTHORITY_ENTRIES_URL = BASE_VOCABULARY_URL + "/SimpleRORAuthority/entries";
     private static final int MOCK_TOTAL_ELEMENTS = 30133;
 
-    @Autowired
-    ConfigurationService configurationService;
-
-    @Before
-    public void setup() throws Exception {
-        super.setUp();
+    @BeforeClass
+    public static void beforeClass() {
+        ConfigurationService configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
         configurationService.setProperty("plugin.named.org.dspace.content.authority.ChoiceAuthority",
                 new String[] {
                         "org.dspace.content.authority.SimpleRORAuthority = SimpleRORAuthority"
                 });
+        CoreServiceFactory.getInstance().getPluginService().clearNamedPluginClasses();
     }
 
     @Test
