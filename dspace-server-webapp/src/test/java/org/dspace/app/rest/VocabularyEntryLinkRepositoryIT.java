@@ -76,7 +76,7 @@ public class VocabularyEntryLinkRepositoryIT extends AbstractControllerIntegrati
     @Test
     public void rorAuthorityRequestWithEntryID() throws Exception {
         checkSingleItemResponse(getClient().perform(get(ROR_AUTHORITY_ENTRIES_URL)
-                .param("entryID", "03ad39j10")));
+                .param("entryID", "03ad39j10")), "University of Pisa", "University of Pisa");
     }
 
     @Test
@@ -95,7 +95,37 @@ public class VocabularyEntryLinkRepositoryIT extends AbstractControllerIntegrati
     public void rorAuthorityRequestWithQueryExact() throws Exception {
         checkSingleItemResponse(getClient().perform(get(ROR_AUTHORITY_ENTRIES_URL)
                 .param("filter", "University of Pisa")
-                .param("exact", "true")));
+                .param("exact", "true")), "University of Pisa", "University of Pisa");
+    }
+
+    @Test
+    public void rorAuthorityRequestWithResponseInLocale() throws Exception {
+        ConfigurationService configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
+        String defaultLocale = configurationService.getProperty("default.locale");
+        configurationService.setProperty("default.locale", "it");
+        configurationService.setProperty("ror.authority.name-selection-type", "locale_label");
+
+        checkSingleItemResponse(getClient().perform(get(ROR_AUTHORITY_ENTRIES_URL)
+                .param("filter", "University of Pisa")
+                .param("exact", "true")), "Università di Pisa", "Università di Pisa");
+
+        configurationService.setProperty("default.locale", defaultLocale);
+        configurationService.setProperty("ror.authority.name-selection-type", "en_label");
+    }
+
+    @Test
+    public void rorAuthorityRequestWithRorDisplaySelectionType() throws Exception {
+        ConfigurationService configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
+        String defaultLocale = configurationService.getProperty("default.locale");
+        configurationService.setProperty("default.locale", "it");
+        configurationService.setProperty("ror.authority.name-selection-type", "ror_display");
+
+        checkSingleItemResponse(getClient().perform(get(ROR_AUTHORITY_ENTRIES_URL)
+                .param("filter", "University of Pisa")
+                .param("exact", "true")), "University of Pisa", "Università di Pisa");
+
+        configurationService.setProperty("default.locale", defaultLocale);
+        configurationService.setProperty("ror.authority.name-selection-type", "en_label");
     }
 
     @Test
@@ -124,7 +154,8 @@ public class VocabularyEntryLinkRepositoryIT extends AbstractControllerIntegrati
                 .andExpect(jsonPath("$.page.totalPages", Matchers.is(MOCK_TOTAL_ELEMENTS / 4 + 1)));
     }
 
-    private void checkSingleItemResponse(ResultActions resultActions) throws Exception {
+    private void checkSingleItemResponse(ResultActions resultActions, String expectedValue, String expectedDisplay)
+            throws Exception {
         resultActions.andExpect(status().isOk())
                 .andExpect(jsonPath("$._embedded.entries", Matchers.hasSize(1)))
                 .andExpect(jsonPath("$.page.size", Matchers.is(20)))
@@ -132,8 +163,8 @@ public class VocabularyEntryLinkRepositoryIT extends AbstractControllerIntegrati
                 .andExpect(jsonPath("$.page.totalElements", Matchers.is(1)))
                 .andExpect(jsonPath("$.page.totalPages", Matchers.is(1)))
                 .andExpect(jsonPath("$._embedded.entries[0].authority", Matchers.is("03ad39j10")))
-                .andExpect(jsonPath("$._embedded.entries[0].display", Matchers.is("University of Pisa")))
-                .andExpect(jsonPath("$._embedded.entries[0].value", Matchers.is("University of Pisa")))
+                .andExpect(jsonPath("$._embedded.entries[0].display", Matchers.is(expectedDisplay)))
+                .andExpect(jsonPath("$._embedded.entries[0].value", Matchers.is(expectedValue)))
                 .andExpect(jsonPath("$._embedded.entries[0].otherInformation.location",
                         Matchers.is("Pisa, Tuscany, Italy, Europe")));
     }

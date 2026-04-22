@@ -22,6 +22,8 @@ import org.dspace.external.RorRestConnector;
 import org.dspace.external.model.ror.Location;
 import org.dspace.external.model.ror.RorItem;
 import org.dspace.external.model.ror.RorItems;
+import org.dspace.services.ConfigurationService;
+import org.dspace.services.factory.DSpaceServicesFactory;
 import org.dspace.utils.DSpace;
 
 /**
@@ -42,6 +44,14 @@ public class SimpleRORAuthority implements ChoiceAuthority {
     private static final int ROR_ITEMS_COUNT = 20;
     // maximum number of pages that can be returned by the ROR API is 500
     private static final int ROR_MAX_PAGES = 500;
+
+    private NameSelectionType nameSelectionType;
+
+    public SimpleRORAuthority() {
+        ConfigurationService configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
+        nameSelectionType = NameSelectionType.fromString(
+                configurationService.getProperty("ror.authority.name-selection-type", "en_label"));
+    }
 
     /**
      * Get all values from the authority that match the preferred value.
@@ -250,15 +260,20 @@ public class SimpleRORAuthority implements ChoiceAuthority {
         List<RorItem.Name> names = rorItem.getNames();
         if (!names.isEmpty()) {
             String label = null;
-            String value = null;
+            String rorDisplay = null;
+            String enLabel = null;
             StringBuilder aliases = new StringBuilder();
-            int labelQuality = 0; // 1 - any label, 2 - english label, 3 - label in the same language as the locale
+            int labelQuality = 0; // 1 - any label, 2 - english label, 3 - label in the locale name
             for (RorItem.Name name : names) {
-                if (value == null && name.getTypes().contains("ror_display")) {
-                    value = name.getValue();
+                if (rorDisplay == null && name.getTypes().contains("ror_display")) {
+                    rorDisplay = name.getValue();
                 }
-                if (labelQuality < 3 && name.getTypes().contains("label")) {
-                    if (localeLanguage.equals(name.getLang())) {
+                // the label in the locale language is most preferred, then the english label and then any other label
+                if (name.getTypes().contains("label")) {
+                    if (enLabel == null && "en".equals(name.getLang())) {
+                        enLabel = name.getValue();
+                    }
+                    if (labelQuality < 3 && localeLanguage.equals(name.getLang())) {
                         labelQuality = 3;
                         label = name.getValue();
                     } else if (labelQuality < 2 && "en".equals(name.getLang())) {
@@ -269,6 +284,7 @@ public class SimpleRORAuthority implements ChoiceAuthority {
                         label = name.getValue();
                     }
                 }
+
                 if (name.getTypes().contains("alias")) {
                     if (aliases.length() > 0) {
                         aliases.append(" | ");
@@ -277,14 +293,27 @@ public class SimpleRORAuthority implements ChoiceAuthority {
                 }
             }
 
+            // fallback for label value if there is no label with type "label" in the ROR response
             if (label == null) {
-                label = names.get(0).getValue();
+                label = (rorDisplay != null) ? rorDisplay : names.get(0).getValue();
             }
-            // set label and value to the same value,
-            // as the ROR API doesn't provide a specific value for the institution, but only the label
-            if (value == null) {
-                value = label;
+
+            String value = null;
+            // set tha value based on the configuration of the name selection type
+            switch (nameSelectionType) {
+                case ROR_DISPLAY : {
+                    value = (rorDisplay != null) ? rorDisplay : label;
+                    break;
+                }
+                case LOCALE_LABEL : {
+                    value = label;
+                    break;
+                }
+                default : {
+                    value = enLabel != null ? enLabel : label;
+                }
             }
+
             c.label = label;
             c.value = value;
 
@@ -308,6 +337,20 @@ public class SimpleRORAuthority implements ChoiceAuthority {
 
         }
         return c;
+    }
+
+    private enum NameSelectionType {
+        ROR_DISPLAY,
+        EN_LABEL,
+        LOCALE_LABEL;
+
+        static NameSelectionType fromString(String text) {
+            try {
+                return NameSelectionType.valueOf(text.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                return EN_LABEL;
+            }
+        }
     }
 
 }
