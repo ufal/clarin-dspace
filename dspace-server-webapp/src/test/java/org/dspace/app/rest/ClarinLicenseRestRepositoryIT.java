@@ -52,6 +52,7 @@ import org.dspace.content.service.clarin.ClarinLicenseLabelService;
 import org.dspace.content.service.clarin.ClarinLicenseResourceMappingService;
 import org.dspace.content.service.clarin.ClarinLicenseService;
 import org.hamcrest.Matchers;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -177,6 +178,18 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
 
         context.restoreAuthSystemState();
 
+    }
+
+    @After
+    public void destroy() throws Exception {
+        context.turnOffAuthorisationSystem();
+        clarinLicenseService.delete(context, firstCLicense);
+        clarinLicenseService.delete(context, secondCLicense);
+        clarinLicenseLabelService.delete(context, firstCLicenseLabel);
+        clarinLicenseLabelService.delete(context, secondCLicenseLabel);
+        clarinLicenseLabelService.delete(context, thirdCLicenseLabel);
+        context.restoreAuthSystemState();
+        super.destroy();
     }
 
     @Test
@@ -378,6 +391,12 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
                 .andExpect(jsonPath("$", Matchers.is(
                         ClarinLicenseMatcher.matchClarinLicenseWithoutId(clarinLicenseUpdated))
                 ));
+
+        // remove created clarin licenses
+        context.turnOffAuthorisationSystem();
+        clarinLicenseService.delete(context, clarinLicense);
+        clarinLicenseService.delete(context, clarinLicenseUpdated);
+        context.restoreAuthSystemState();
     }
 
     // 403
@@ -405,6 +424,11 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
                 .contentType(org.springframework.http.MediaType.APPLICATION_JSON))
                 .andExpect(status().isForbidden())
         ;
+
+        // remove created clarin license
+        context.turnOffAuthorisationSystem();
+        clarinLicenseService.delete(context, clarinLicense);
+        context.restoreAuthSystemState();
     }
 
     // 404
@@ -433,6 +457,11 @@ public class ClarinLicenseRestRepositoryIT extends AbstractControllerIntegration
                 .contentType(org.springframework.http.MediaType.APPLICATION_JSON))
                 .andExpect(status().isNotFound())
         ;
+
+        // remove created clarin license
+        context.turnOffAuthorisationSystem();
+        ClarinLicenseBuilder.deleteClarinLicense(clarinLicense.getID());
+        context.restoreAuthSystemState();
     }
 
     // 204

@@ -18,7 +18,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -27,10 +29,14 @@ import org.dspace.app.rest.matcher.ClarinLicenseLabelMatcher;
 import org.dspace.app.rest.model.ClarinLicenseLabelRest;
 import org.dspace.app.rest.projection.Projection;
 import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
+import org.dspace.builder.ClarinLicenseBuilder;
 import org.dspace.builder.ClarinLicenseLabelBuilder;
+import org.dspace.content.clarin.ClarinLicense;
 import org.dspace.content.clarin.ClarinLicenseLabel;
 import org.dspace.content.service.clarin.ClarinLicenseLabelService;
+import org.dspace.content.service.clarin.ClarinLicenseService;
 import org.hamcrest.Matchers;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -42,6 +48,9 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @author Milan Majchrak (milan.majchrak at dataquest.sk)
  */
 public class ClarinLicenseLabelRestRepositoryIT extends AbstractControllerIntegrationTest {
+
+    @Autowired
+    ClarinLicenseService clarinLicenseService;
 
     @Autowired
     ClarinLicenseLabelService clarinLicenseLabelService;
@@ -83,6 +92,16 @@ public class ClarinLicenseLabelRestRepositoryIT extends AbstractControllerIntegr
         context.restoreAuthSystemState();
     }
 
+    @After
+    public void destroy() throws Exception {
+        context.turnOffAuthorisationSystem();
+        ClarinLicenseLabelBuilder.deleteClarinLicenseLabel(firstCLicenseLabel.getID());
+        ClarinLicenseLabelBuilder.deleteClarinLicenseLabel(secondCLicenseLabel.getID());
+        ClarinLicenseLabelBuilder.deleteClarinLicenseLabel(thirdCLicenseLabel.getID());
+        context.restoreAuthSystemState();
+        super.destroy();
+    }
+
     @Test
     public void clarinLicenseLabelsAreInitialized() throws Exception {
         Assert.assertNotNull(firstCLicenseLabel);
@@ -112,17 +131,14 @@ public class ClarinLicenseLabelRestRepositoryIT extends AbstractControllerIntegr
 
     @Test
     public void create() throws Exception {
-        // create a new clarin license label
-        context.turnOffAuthorisationSystem();
-        ClarinLicenseLabel clarinLicenseLabel = ClarinLicenseLabelBuilder.createClarinLicenseLabel(context).build();
-        clarinLicenseLabel.setLabel("new");
-        clarinLicenseLabel.setExtended(true);
-        clarinLicenseLabel.setTitle("New CLL");
-        clarinLicenseLabel.setIcon(new byte[100]);
+        ClarinLicenseLabelRest clarinLicenseLabelRest  = new ClarinLicenseLabelRest();
+        clarinLicenseLabelRest.setLabel("new");
+        clarinLicenseLabelRest.setExtended(true);
+        clarinLicenseLabelRest.setTitle("New CLL");
+        clarinLicenseLabelRest.setIcon(new byte[100]);
 
-        ClarinLicenseLabelRest clarinLicenseLabelRest = clarinLicenseLabelConverter.convert(clarinLicenseLabel,
-                Projection.DEFAULT);
-        context.restoreAuthSystemState();
+        List<ClarinLicenseLabel> labels = clarinLicenseLabelService.findAll(context);
+        System.out.println(labels);
 
         // id of created clarin license
         AtomicReference<Integer> idRef = new AtomicReference<>();
@@ -261,6 +277,32 @@ public class ClarinLicenseLabelRestRepositoryIT extends AbstractControllerIntegr
         String authTokenAdmin = getAuthToken(admin.getEmail(), password);
         getClient(authTokenAdmin).perform(delete("/api/core/clarinlicenselabels/999"))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    public void deleteForLabelUsed() throws Exception {
+        // create ClarinLicense
+        context.turnOffAuthorisationSystem();
+        ClarinLicense firstCLicense = ClarinLicenseBuilder.createClarinLicense(context).build();
+        firstCLicense.setName("CL Name1");
+        firstCLicense.setConfirmation(ClarinLicense.Confirmation.NOT_REQUIRED);
+        firstCLicense.setDefinition("CL Definition1");
+        firstCLicense.setRequiredInfo("CL Req1");
+        // add ClarinLicenseLabels to the ClarinLicense
+        firstCLicense.setLicenseLabels(Set.of(firstCLicenseLabel, thirdCLicenseLabel));
+        clarinLicenseService.update(context, firstCLicense);
+        context.restoreAuthSystemState();
+
+        String authTokenAdmin = getAuthToken(admin.getEmail(), password);
+
+        getClient(authTokenAdmin).perform(delete("/api/core/clarinlicenselabels/" + firstCLicenseLabel.getID()))
+                .andExpect(status().isBadRequest());
+        getClient(authTokenAdmin).perform(delete("/api/core/clarinlicenselabels/" + thirdCLicenseLabel.getID()))
+                .andExpect(status().isBadRequest());
+
+        context.turnOffAuthorisationSystem();
+        clarinLicenseService.delete(context, firstCLicense);
+        context.restoreAuthSystemState();
     }
 
 }

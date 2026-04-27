@@ -23,8 +23,10 @@ import org.dspace.app.rest.exception.DSpaceBadRequestException;
 import org.dspace.app.rest.exception.UnprocessableEntityException;
 import org.dspace.app.rest.model.ClarinLicenseLabelRest;
 import org.dspace.authorize.AuthorizeException;
+import org.dspace.content.clarin.ClarinLicense;
 import org.dspace.content.clarin.ClarinLicenseLabel;
 import org.dspace.content.service.clarin.ClarinLicenseLabelService;
+import org.dspace.content.service.clarin.ClarinLicenseService;
 import org.dspace.core.Context;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -41,6 +43,9 @@ import org.springframework.stereotype.Component;
 public class ClarinLicenseLabelRestRepository extends DSpaceRestRepository<ClarinLicenseLabelRest, Integer> {
 
     private static final int MAX_LABEL_LENGTH = 5;
+
+    @Autowired
+    ClarinLicenseService clarinLicenseService;
 
     @Autowired
     ClarinLicenseLabelService clarinLicenseLabelService;
@@ -161,6 +166,11 @@ public class ClarinLicenseLabelRestRepository extends DSpaceRestRepository<Clari
             clarinLicenseLabel = clarinLicenseLabelService.find(context, id);
             if (Objects.isNull(clarinLicenseLabel)) {
                 throw new ClarinLicenseLabelNotFoundException("Clarin License Label with id " + id + " was not found");
+            }
+            List<ClarinLicense> licenses = clarinLicenseService.findByLabel(context, clarinLicenseLabel.getLabel());
+            if (!licenses.isEmpty()) {
+                throw new DSpaceBadRequestException("Clarin License Label " + clarinLicenseLabel.getLabel() +
+                        " is in use and cannot be deleted");
             }
             clarinLicenseLabelService.delete(context, clarinLicenseLabel);
         } catch (SQLException e) {
