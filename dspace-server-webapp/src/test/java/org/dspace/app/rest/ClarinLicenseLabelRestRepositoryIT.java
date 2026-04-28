@@ -10,6 +10,7 @@ package org.dspace.app.rest;
 import static com.jayway.jsonpath.JsonPath.read;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -18,7 +19,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
@@ -126,8 +126,6 @@ public class ClarinLicenseLabelRestRepositoryIT extends AbstractControllerIntegr
         clarinLicenseLabelRest.setTitle("New CLL");
         clarinLicenseLabelRest.setIcon(new byte[100]);
 
-        List<ClarinLicenseLabel> labels = clarinLicenseLabelService.findAll(context);
-
         // id of created clarin license
         AtomicReference<Integer> idRef = new AtomicReference<>();
         String authTokenAdmin = getAuthToken(admin.getEmail(), password);
@@ -196,7 +194,7 @@ public class ClarinLicenseLabelRestRepositoryIT extends AbstractControllerIntegr
                     .andExpect(jsonPath("$.label", is("CLL-X")))
                     .andExpect(jsonPath("$.title", is("Updated CLL Title")))
                     .andExpect(jsonPath("$.extended", is(false)))
-                    .andExpect(jsonPath("$.icon", is(clarinLicenseLabel.getIcon())))
+                    .andExpect(jsonPath("$.icon", nullValue()))
                     .andExpect(jsonPath("$.type", is(ClarinLicenseLabelRest.NAME)));
 
             getClient(authTokenAdmin).perform(get("/api/core/clarinlicenselabels/" + clarinLicenseLabelId))
@@ -205,7 +203,7 @@ public class ClarinLicenseLabelRestRepositoryIT extends AbstractControllerIntegr
                     .andExpect(jsonPath("$.label", is("CLL-X")))
                     .andExpect(jsonPath("$.title", is("Updated CLL Title")))
                     .andExpect(jsonPath("$.extended", is(false)))
-                    .andExpect(jsonPath("$.icon", is(clarinLicenseLabel.getIcon())))
+                    .andExpect(jsonPath("$.icon", nullValue()))
                     .andExpect(jsonPath("$.type", is(ClarinLicenseLabelRest.NAME)));
         } finally {
             ClarinLicenseLabelBuilder.deleteClarinLicenseLabel(clarinLicenseLabelId);

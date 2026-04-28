@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
  *
  * @author Milan Kuchtiak
  */
-@ResponseStatus(value = HttpStatus.NOT_FOUND, reason = "Clarin License Label not found")
+@ResponseStatus(HttpStatus.NOT_FOUND)
 public class ClarinLicenseLabelNotFoundException extends NotFoundException {
 
     public ClarinLicenseLabelNotFoundException(String message) {

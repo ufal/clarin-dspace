@@ -131,7 +131,7 @@ public class ClarinLicenseLabelRestRepository extends DSpaceRestRepository<Clari
         // parse request body
         ClarinLicenseLabelRest clarinLicenseLabelRest;
         try {
-            clarinLicenseLabelRest = objectMapper.readValue(jsonNode.toString(), ClarinLicenseLabelRest.class);
+            clarinLicenseLabelRest = objectMapper.treeToValue(jsonNode, ClarinLicenseLabelRest.class);
         } catch (IOException excIO) {
             throw new DSpaceBadRequestException("error parsing request body", excIO);
         }
