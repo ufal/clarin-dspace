@@ -208,7 +208,7 @@ public class ClarinLicenseLabelRestRepositoryIT extends AbstractControllerIntegr
             // test if the id from the path is used instead of the id from the body
             clarinLicenseLabelRest.setId(999);
 
-            // check if update ends with Bad Request since the label length is grater than 5
+            // check if update ends with Bad Request since the label length is greater than 5
             getClient(authTokenAdmin).perform(put("/api/core/clarinlicenselabels/" + clarinLicenseLabelId)
                             .content(objectMapper.writeValueAsBytes(clarinLicenseLabelRest))
                             .contentType(org.springframework.http.MediaType.APPLICATION_JSON))

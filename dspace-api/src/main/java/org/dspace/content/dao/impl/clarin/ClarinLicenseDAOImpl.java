@@ -18,6 +18,7 @@ import javax.persistence.criteria.SetJoin;
 
 import org.dspace.content.clarin.ClarinLicense;
 import org.dspace.content.clarin.ClarinLicenseLabel;
+import org.dspace.content.clarin.ClarinLicenseLabel_;
 import org.dspace.content.clarin.ClarinLicense_;
 import org.dspace.content.dao.clarin.ClarinLicenseDAO;
 import org.dspace.core.AbstractHibernateDAO;
@@ -67,7 +68,7 @@ public class ClarinLicenseDAOImpl extends AbstractHibernateDAO<ClarinLicense> im
         SetJoin<ClarinLicense, ClarinLicenseLabel> labelJoin =
                 clarinLicenseRoot.joinSet(ClarinLicense_.CLARIN_LICENSE_LABELS);
 
-        Predicate labelPredicate = criteriaBuilder.equal(labelJoin.get("label"), label);
+        Predicate labelPredicate = criteriaBuilder.equal(labelJoin.get(ClarinLicenseLabel_.LABEL), label);
 
         criteriaQuery.select(clarinLicenseRoot).where(labelPredicate);
 
