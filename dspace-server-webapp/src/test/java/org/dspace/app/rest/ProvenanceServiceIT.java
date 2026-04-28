@@ -498,10 +498,11 @@ public class ProvenanceServiceIT extends AbstractControllerIntegrationTest {
     }
 
     private void deleteClarinLicense(ClarinLicense license) throws Exception {
+        // first delete license, then labels, because of the foreign key constraint
+        List<ClarinLicenseLabel> clarinLicenseLabels = license.getLicenseLabels();
         ClarinLicenseBuilder.deleteClarinLicense(license.getID());
-        int size = license.getLicenseLabels().size();
-        for (int i = 0; i < size; i++) {
-            deleteClarinLicenseLable(license.getLicenseLabels().get(i).getID());
+        for (ClarinLicenseLabel clarinLicenseLabel : clarinLicenseLabels) {
+            deleteClarinLicenseLable(clarinLicenseLabel.getID());
         }
     }
 

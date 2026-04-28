@@ -36,7 +36,6 @@ import org.dspace.content.clarin.ClarinLicenseLabel;
 import org.dspace.content.service.clarin.ClarinLicenseLabelService;
 import org.dspace.content.service.clarin.ClarinLicenseService;
 import org.hamcrest.Matchers;
-import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -92,16 +91,6 @@ public class ClarinLicenseLabelRestRepositoryIT extends AbstractControllerIntegr
         context.restoreAuthSystemState();
     }
 
-    @After
-    public void destroy() throws Exception {
-        context.turnOffAuthorisationSystem();
-        ClarinLicenseLabelBuilder.deleteClarinLicenseLabel(firstCLicenseLabel.getID());
-        ClarinLicenseLabelBuilder.deleteClarinLicenseLabel(secondCLicenseLabel.getID());
-        ClarinLicenseLabelBuilder.deleteClarinLicenseLabel(thirdCLicenseLabel.getID());
-        context.restoreAuthSystemState();
-        super.destroy();
-    }
-
     @Test
     public void clarinLicenseLabelsAreInitialized() throws Exception {
         Assert.assertNotNull(firstCLicenseLabel);
@@ -138,7 +127,6 @@ public class ClarinLicenseLabelRestRepositoryIT extends AbstractControllerIntegr
         clarinLicenseLabelRest.setIcon(new byte[100]);
 
         List<ClarinLicenseLabel> labels = clarinLicenseLabelService.findAll(context);
-        System.out.println(labels);
 
         // id of created clarin license
         AtomicReference<Integer> idRef = new AtomicReference<>();

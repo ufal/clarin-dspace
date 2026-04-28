@@ -496,11 +496,6 @@ public class BundleUploadBitstreamControllerIT extends AbstractEntityIntegration
                         .param("projection", "full"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.page.totalElements", is(2)));
-
-        context.turnOffAuthorisationSystem();
-        clarinLicenseService.delete(context, firstCLicense);
-        clarinLicenseLabelService.delete(context, firstCLicenseLabel);
-        context.restoreAuthSystemState();
     }
 
     private ResultActions uploadFileToBundle(String token,
