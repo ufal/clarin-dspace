@@ -37,7 +37,7 @@ public class ClarinLicenseLabelDAOImpl extends AbstractHibernateDAO<ClarinLicens
         CriteriaQuery<ClarinLicenseLabel> criteriaQuery = getCriteriaQuery(criteriaBuilder, ClarinLicenseLabel.class);
         Root<ClarinLicenseLabel> cllRoot = criteriaQuery.from(ClarinLicenseLabel.class);
         criteriaQuery.select(cllRoot);
-        criteriaQuery.where(criteriaBuilder.equal(cllRoot.get(ClarinLicenseLabel_.label), label.trim()));
+        criteriaQuery.where(criteriaBuilder.equal(cllRoot.get(ClarinLicenseLabel_.label), label));
         return uniqueResult(context, criteriaQuery, true, ClarinLicenseLabel.class);
     }
 }
