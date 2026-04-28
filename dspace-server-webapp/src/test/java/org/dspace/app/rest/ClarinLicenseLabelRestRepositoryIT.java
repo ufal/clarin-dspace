@@ -155,6 +155,36 @@ public class ClarinLicenseLabelRestRepositoryIT extends AbstractControllerIntegr
     }
 
     @Test
+    public void createWithLongLabel() throws Exception {
+        ClarinLicenseLabelRest clarinLicenseLabelRest  = new ClarinLicenseLabelRest();
+        clarinLicenseLabelRest.setLabel("LONG_LABEL");
+        clarinLicenseLabelRest.setExtended(true);
+        clarinLicenseLabelRest.setTitle("LONG CLL");
+        clarinLicenseLabelRest.setIcon(new byte[100]);
+
+        String authTokenAdmin = getAuthToken(admin.getEmail(), password);
+        getClient(authTokenAdmin).perform(post("/api/core/clarinlicenselabels")
+                        .content(objectMapper.writeValueAsBytes(clarinLicenseLabelRest))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    public void createWithDuplicateLabel() throws Exception {
+        ClarinLicenseLabelRest clarinLicenseLabelRest  = new ClarinLicenseLabelRest();
+        clarinLicenseLabelRest.setLabel(firstCLicenseLabel.getLabel());
+        clarinLicenseLabelRest.setExtended(true);
+        clarinLicenseLabelRest.setTitle("Title 1");
+        clarinLicenseLabelRest.setIcon(new byte[100]);
+
+        String authTokenAdmin = getAuthToken(admin.getEmail(), password);
+        getClient(authTokenAdmin).perform(post("/api/core/clarinlicenselabels")
+                        .content(objectMapper.writeValueAsBytes(clarinLicenseLabelRest))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     public void updateOk() throws Exception {
         String authTokenAdmin = getAuthToken(admin.getEmail(), password);
         Integer clarinLicenseLabelId = null;
@@ -223,7 +253,7 @@ public class ClarinLicenseLabelRestRepositoryIT extends AbstractControllerIntegr
     public void updateInvalidBody() throws Exception {
         String authTokenAdmin = getAuthToken(admin.getEmail(), password);
         getClient(authTokenAdmin).perform(put("/api/core/clarinlicenselabels/" + firstCLicenseLabel.getID())
-                        .content("{\"label\": \"test label\", \"invalid_property\": 0}")
+                        .content("{\"label\": \"lbl\", \"invalid_property\": 0}")
                         .contentType(org.springframework.http.MediaType.APPLICATION_JSON))
                 .andExpect(status().isBadRequest());
     }
@@ -243,6 +273,29 @@ public class ClarinLicenseLabelRestRepositoryIT extends AbstractControllerIntegr
                         .content("{}")
                         .contentType(org.springframework.http.MediaType.APPLICATION_JSON))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    public void updateWithDuplicateLabel() throws Exception {
+        ClarinLicenseLabelRest clarinLicenseLabelRest = new ClarinLicenseLabelRest();
+        clarinLicenseLabelRest.setLabel(firstCLicenseLabel.getLabel());
+        clarinLicenseLabelRest.setExtended(true);
+        clarinLicenseLabelRest.setTitle("Title 1");
+        clarinLicenseLabelRest.setIcon(new byte[100]);
+
+        String authTokenAdmin = getAuthToken(admin.getEmail(), password);
+
+        getClient(authTokenAdmin).perform(put("/api/core/clarinlicenselabels/" + secondCLicenseLabel.getID())
+                        .content(objectMapper.writeValueAsBytes(clarinLicenseLabelRest))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
+
+        // set the label to the same value as the secondCLicenseLabel and check if the update is successful
+        clarinLicenseLabelRest.setLabel(secondCLicenseLabel.getLabel());
+        getClient(authTokenAdmin).perform(put("/api/core/clarinlicenselabels/" + secondCLicenseLabel.getID())
+                        .content(objectMapper.writeValueAsBytes(clarinLicenseLabelRest))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
     }
 
     @Test
