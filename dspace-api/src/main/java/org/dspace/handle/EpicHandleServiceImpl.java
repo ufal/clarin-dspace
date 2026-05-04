@@ -124,6 +124,21 @@ public class EpicHandleServiceImpl implements EpicHandleService {
     }
 
     @Override
+    public String createNewHandleWithSuffix(String prefix, String suffix, String url) throws IOException {
+        initialize();
+        String jsonData = getJsonDataForUrl(objectMapper, url).toString();
+
+        try (Response response = EpicHandleRestHelper.createNewHandleWithSuffix(pidServiceUrl,
+                prefix, suffix, jsonData)) {
+            if (response.getStatus() == Response.Status.CREATED.getStatusCode()) {
+                return objectMapper.readValue(response.readEntity(String.class), EpicPid.class).getHandle();
+            } else  {
+                throw new WebApplicationException(response);
+            }
+        }
+    }
+
+    @Override
     public String createOrUpdateHandle(String prefix, String suffix, String url) throws IOException {
         initialize();
         String jsonData = getJsonDataForUrl(objectMapper, url).toString();
@@ -134,6 +149,18 @@ public class EpicHandleServiceImpl implements EpicHandleService {
             } else if (response.getStatus() == Response.Status.CREATED.getStatusCode()) {
                 return objectMapper.readValue(response.readEntity(String.class), EpicPid.class).getHandle();
             } else  {
+                throw new WebApplicationException(response);
+            }
+        }
+    }
+
+    @Override
+    public void updateHandleIfExists(String prefix, String suffix, String url, Map<EpicHandleField, String> data)
+            throws IOException {
+        initialize();
+        String jsonData = getJsonData(objectMapper, url, data).toString();
+        try (Response response = EpicHandleRestHelper.updateHandleIfExists(pidServiceUrl, prefix, suffix, jsonData)) {
+            if (response.getStatus() != Response.Status.NO_CONTENT.getStatusCode()) {
                 throw new WebApplicationException(response);
             }
         }
@@ -166,10 +193,23 @@ public class EpicHandleServiceImpl implements EpicHandleService {
     }
 
     private static ArrayNode getJsonDataForUrl(ObjectMapper objectMapper, String url) {
+        return getJsonData(objectMapper, url, Map.of());
+    }
+
+    private static ArrayNode getJsonData(ObjectMapper objectMapper,
+                                         String url,
+                                         Map<EpicHandleField, String> additionalData) {
         ObjectNode epicPidDataNode = objectMapper.createObjectNode()
                 .put("type", "URL")
                 .put("parsed_data", url);
-        return objectMapper.createArrayNode().add(epicPidDataNode);
+        ArrayNode arrayNode = objectMapper.createArrayNode().add(epicPidDataNode);
+        additionalData.forEach((key, value) -> {
+            ObjectNode additionalDataNode = objectMapper.createObjectNode()
+                    .put("type", key.name())
+                    .put("parsed_data", value);
+            arrayNode.add(additionalDataNode);
+        });
+        return arrayNode;
     }
 
     private static String getUrlFromEpicDataList(List<EpicPidData> epicPidDataList) {

@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.regex.Matcher;
@@ -25,7 +26,6 @@ import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.dspace.api.DSpaceApi;
 import org.dspace.content.Community;
 import org.dspace.content.DSpaceObject;
 import org.dspace.content.Item;
@@ -35,6 +35,7 @@ import org.dspace.core.Constants;
 import org.dspace.core.Context;
 import org.dspace.event.Event;
 import org.dspace.handle.dao.HandleDAO;
+import org.dspace.handle.service.EpicHandleService;
 import org.dspace.handle.service.HandleService;
 import org.dspace.services.ConfigurationService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -73,6 +74,8 @@ public class HandleServiceImpl implements HandleService {
     @Autowired
     protected ClarinItemService clarinItemService;
 
+    private EpicHandleService epicHandleService;
+
     private static final Pattern[] IDENTIFIER_PATTERNS = {
         Pattern.compile("^hdl:(.*)$"),
         Pattern.compile("^info:hdl/(.*)$"),
@@ -84,6 +87,10 @@ public class HandleServiceImpl implements HandleService {
      * Public Constructor
      */
     protected HandleServiceImpl() {
+    }
+
+    public void setEpicHandleService(EpicHandleService epicHandleService) {
+        this.epicHandleService = epicHandleService;
     }
 
     @Override
@@ -419,14 +426,15 @@ public class HandleServiceImpl implements HandleService {
             suffix.append(handleSuffix);
             String prefix = pidCommunityConfiguration.getPrefix();
             try {
-                handleId = DSpaceApi.handle_HandleManager_createId(log, handleSuffix, prefix, suffix.toString());
+                handleId = createEpicHandle(handleSuffix, prefix, suffix.toString());
+                String resolvedSuffix = handleId.substring(handleId.indexOf("/") + 1);
+
                 // if the handle created successfully register the final handle
-                DSpaceApi
-                        .handle_HandleManager_registerFinalHandleURL(log, handleId, dso);
+                registerFinalHandleURL(prefix, resolvedSuffix, dso);
             } catch (IOException e) {
                 throw new IllegalStateException(
                         "External PID service is not working. Please contact the administrator. "
-                                + "Internal message: [" + e.toString() + "]");
+                                + "Internal message: [" + e.toString() + "]", e);
             }
             return handleId;
         } else if (pidCommunityConfiguration.isLocal()) {
@@ -531,4 +539,91 @@ public class HandleServiceImpl implements HandleService {
         }
         return null;
     }
+
+    private String createEpicHandle(Long id, String prefix, String suffix) throws IOException {
+
+        /* Modified by PP for use pidconsortium.eu at UFAL/CLARIN */
+
+        String base_url = configurationService.getProperty("dspace.server.url") + "?dummy=" + id;
+
+        /* OK check whether this url has not received pid earlier */
+        //This should usually return null (404)
+        String handle = null;
+        try {
+            // handle = PIDService.findHandle(base_url, prefix);
+            handle = epicHandleService.searchHandles(prefix, base_url, 1, 1).stream()
+                    .map(EpicHandleService.Handle::getHandle)
+                    .findFirst()
+                    .orElse(null);
+        } catch (Exception e) {
+            log.error("Error finding handle: " + e);
+        }
+        //if not then log and reuse - this is a dummy url, those should not be seen anywhere
+        if (handle != null) {
+            log.warn("Url [" + base_url + "] already has PID(s) (" + handle + ").");
+            return handle;
+        }
+        /* /OK/ */
+
+        log.debug("Asking for a new PID using a dummy URL " + base_url);
+
+        /* request a new PID, initially pointing to dspace base_uri+id */
+        String pid = null;
+        try {
+            if (suffix != null && !suffix.isEmpty() && epicHandleService.supportsCustomHandleCreation()) {
+                pid = epicHandleService.createNewHandleWithSuffix(prefix, suffix, base_url);
+            } else {
+                pid = epicHandleService.createHandle(prefix, null, null, base_url);
+            }
+        } catch (Exception e) {
+            throw new IOException(e);
+        }
+
+        log.debug("got PID " + pid);
+        return pid;
+    }
+
+    /**
+     * Modify an existing PID to point to the corresponding DSpace handle
+     *
+     * @exception SQLException If a database error occurs
+     */
+    public void registerFinalHandleURL(String prefix, String suffix, DSpaceObject dso) throws IOException {
+        String pid = prefix + "/" + suffix;
+
+        String url = generateItemURLWithHandle(pid, dso);
+
+        /*
+         * request modification of the PID to point to the correct URL, which
+         * itself should contain the PID as a substring
+         */
+        log.debug("Asking for changing the PID '" + pid + "' to " + url);
+
+        try {
+            Map<EpicHandleField, String> fields = HandlePlugin.extractMetadata(dso);
+            epicHandleService.updateHandleIfExists(prefix, suffix, url, fields);
+        } catch (Exception e) {
+            throw new IOException("Failed to map PID " + pid + " to " + url
+                    + " (" + e.toString() + ")");
+        }
+    }
+
+    /**
+     * Generate a URL with the handle for the given DSpaceObject.
+     * The URL consist of the base URL and the handle of the DSpace object.
+     * E.g. `http://localhost:4000/handle/<ITEMS_HANDLE>`
+     * @param pid the pid we are using (obtained e.g. from EPIC)
+     * @param dSpaceObject the DSpace object for which the URL is generated
+     * @return the generated URL
+     */
+    public String generateItemURLWithHandle(String pid, DSpaceObject dSpaceObject) {
+        String url = configurationService.getProperty("dspace.ui.url");
+        if (dSpaceObject == null) {
+            log.error("DSpaceObject is null, cannot generate URL");
+            return url;
+        }
+        return url + (url.endsWith("/") ? "" : "/") + "handle/" + pid;
+    }
+
+
 }

@@ -9,7 +9,10 @@ package org.dspace.handle.service;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+
+import org.dspace.handle.EpicHandleField;
 
 /**
  * Interface to help with <a href="https://docs.pidinst.org/en/latest/epic-cookbook/handles.html" target=_new>
@@ -18,6 +21,8 @@ import java.util.Objects;
  * @author Milan Kuchtiak
  */
 public interface EpicHandleService {
+
+    public static final String EPIC_HANDLE_SERVICE_URL = "epic.handle.service.url";
 
     /**
      * Returns the URL for handle, or null if handle cannot be found.
@@ -43,6 +48,26 @@ public interface EpicHandleService {
     String createHandle(String prefix, String subPrefix, String subSuffix, String url) throws IOException;
 
     /**
+     * Creates new handle with given prefix/suffix. Returns the handle created or throws Exception.
+     *
+     * @param prefix            The handle prefix
+     * @param suffix            The handle suffix
+     * @param url               url associated with the handle (required)
+     * @return                  The full handle String (prefix/suffix)
+     * @throws IOException      If request to ePIC handle server fails
+     */
+    String createNewHandleWithSuffix(String prefix, String suffix, String url) throws IOException;
+
+    /**
+     * Returns true if the handle service supports creating handles with custom suffix (suffix defined by client)
+     *
+     * @return true if the handle service supports creating handles with custom suffix, false otherwise
+     */
+    default boolean supportsCustomHandleCreation() {
+        return true;
+    }
+
+    /**
      * Creates new handle with given prefix/suffix or updates handle when this handle already exists.
      * Returns the handle when handle is created or null when handle is updated, or throws Exception.
      *
@@ -54,6 +79,18 @@ public interface EpicHandleService {
      * @throws IOException      If request to ePIC handle server fails
      */
     String createOrUpdateHandle(String prefix, String suffix, String url) throws IOException;
+
+    /**
+     * Updates handle with given prefix/suffix.
+     *
+     * @param prefix            The handle prefix
+     * @param suffix            The handle suffix
+     * @param url               url associated with the handle (required)
+     * @param data              map with additional fields to update, keys are defined in EpicHandleFields enum
+     * @throws IOException      If request to ePIC handle server fails
+     */
+    void updateHandleIfExists(String prefix, String suffix, String url, Map<EpicHandleField, String> data)
+            throws IOException;
 
     /**
      * Returns no content or throws Exception

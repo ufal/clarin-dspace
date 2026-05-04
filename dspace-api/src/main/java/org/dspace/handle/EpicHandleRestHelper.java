@@ -10,6 +10,7 @@ package org.dspace.handle;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Map;
 import javax.ws.rs.client.Client;
 import javax.ws.rs.client.ClientBuilder;
 import javax.ws.rs.client.Entity;
@@ -56,17 +57,19 @@ public class EpicHandleRestHelper {
                 .post(Entity.json(jsonData));
     }
 
-    public static Response updateHandle(String pidServiceURL, String prefix, String suffix, String jsonData) {
-        URI uri;
-        try {
-            uri = new URI(pidServiceURL);
-        } catch (URISyntaxException e) {
-            return invalidUriResponse();
-        }
+    public static Response createNewHandleWithSuffix(String pidServiceURL,
+                                                     String prefix,
+                                                     String suffix,
+                                                     String jsonData) {
+        return putHandle(pidServiceURL, prefix, suffix, jsonData, Map.of("If-None-Match", "*"));
+    }
 
-        return client.target(uri).path(prefix).path(suffix)
-                .request(MediaType.APPLICATION_JSON)
-                .put(Entity.json(jsonData));
+    public static Response updateHandle(String pidServiceURL, String prefix, String suffix, String jsonData) {
+        return putHandle(pidServiceURL, prefix, suffix, jsonData, null);
+    }
+
+    public static Response updateHandleIfExists(String pidServiceURL, String prefix, String suffix, String jsonData) {
+        return putHandle(pidServiceURL, prefix, suffix, jsonData, Map.of("If-Match", "*"));
     }
 
     public static Response deleteHandle(String pidServiceURL, String prefix, String suffix) {
@@ -135,6 +138,25 @@ public class EpicHandleRestHelper {
                 .request()
                 .accept(MediaType.APPLICATION_JSON)
                 .get();
+    }
+
+    private static Response putHandle(String pidServiceURL,
+                                      String prefix,
+                                      String suffix,
+                                      String jsonData,
+                                      Map<String, String> headers) {
+        URI uri;
+        try {
+            uri = new URI(pidServiceURL);
+        } catch (URISyntaxException e) {
+            return invalidUriResponse();
+        }
+
+        Invocation.Builder req = client.target(uri).path(prefix).path(suffix).request(MediaType.APPLICATION_JSON);
+        if (headers != null) {
+            headers.forEach(req::header);
+        }
+        return req.put(Entity.json(jsonData));
     }
 
     private static Response invalidUriResponse() {
