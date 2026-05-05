@@ -118,6 +118,7 @@ public class InstallItemServiceImpl implements InstallItemService {
         // Finish up / archive the item
         item = finishItem(c, item, is);
 
+        fixRelationMetadata(c, item);
         try {
             handleService.updateHandleMetadata(c, item);
         } catch (IOException e) {

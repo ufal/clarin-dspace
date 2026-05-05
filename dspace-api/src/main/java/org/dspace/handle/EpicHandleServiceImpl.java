@@ -159,7 +159,7 @@ public class EpicHandleServiceImpl implements EpicHandleService {
             throws IOException {
         initialize();
         String jsonData = getJsonData(objectMapper, url, data).toString();
-        try (Response response = EpicHandleRestHelper.updateHandleIfExists(pidServiceUrl, prefix, suffix, jsonData)) {
+        try (Response response = EpicHandleRestHelper.updateExistingHandle(pidServiceUrl, prefix, suffix, jsonData)) {
             if (response.getStatus() != Response.Status.NO_CONTENT.getStatusCode()) {
                 throw new WebApplicationException(response);
             }

@@ -68,7 +68,7 @@ public class EpicHandleRestHelper {
         return putHandle(pidServiceURL, prefix, suffix, jsonData, null);
     }
 
-    public static Response updateHandleIfExists(String pidServiceURL, String prefix, String suffix, String jsonData) {
+    public static Response updateExistingHandle(String pidServiceURL, String prefix, String suffix, String jsonData) {
         return putHandle(pidServiceURL, prefix, suffix, jsonData, Map.of("If-Match", "*"));
     }
 
