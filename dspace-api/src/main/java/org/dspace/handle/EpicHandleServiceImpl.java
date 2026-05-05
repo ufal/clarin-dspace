@@ -128,11 +128,13 @@ public class EpicHandleServiceImpl implements EpicHandleService {
         initialize();
         String jsonData = getJsonDataForUrl(objectMapper, url).toString();
 
+        // Either creates a new handle with the given prefix and suffix,
+        // or fails if the handle with given prefix and suffix already exists (412 Precondition Failed error).
         try (Response response = EpicHandleRestHelper.createNewHandleWithSuffix(pidServiceUrl,
                 prefix, suffix, jsonData)) {
             if (response.getStatus() == Response.Status.CREATED.getStatusCode()) {
                 return objectMapper.readValue(response.readEntity(String.class), EpicPid.class).getHandle();
-            } else  {
+            } else {
                 throw new WebApplicationException(response);
             }
         }
