@@ -35,6 +35,7 @@ import org.dspace.embargo.service.EmbargoService;
 import org.dspace.eperson.EPerson;
 import org.dspace.eperson.service.GroupService;
 import org.dspace.event.Event;
+import org.dspace.handle.service.HandleService;
 import org.dspace.identifier.Identifier;
 import org.dspace.identifier.IdentifierException;
 import org.dspace.identifier.service.IdentifierService;
@@ -78,6 +79,8 @@ public class InstallItemServiceImpl implements InstallItemService {
     protected VersioningService versioningService;
     @Autowired(required = true)
     protected VersionHistoryService versionHistoryService;
+    @Autowired(required = true)
+    protected HandleService handleService;
 
     Logger log = LogManager.getLogger(InstallItemServiceImpl.class);
 
@@ -115,7 +118,11 @@ public class InstallItemServiceImpl implements InstallItemService {
         // Finish up / archive the item
         item = finishItem(c, item, is);
 
-        fixRelationMetadata(c, item);
+        try {
+            handleService.updateHandleMetadata(c, item);
+        } catch (IOException e) {
+            log.error(String.format("Couldn't update handle metadata for item with id %s", item.getID().toString()), e);
+        }
 
         // As this is a BRAND NEW item, as a final step we need to remove the
         // submitter item policies created during deposit and replace them with

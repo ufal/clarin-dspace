@@ -155,7 +155,7 @@ public class EpicHandleServiceImpl implements EpicHandleService {
     }
 
     @Override
-    public void updateHandleIfExists(String prefix, String suffix, String url, Map<EpicHandleField, String> data)
+    public void updateExistingHandle(String prefix, String suffix, String url, Map<EpicHandleField, String> data)
             throws IOException {
         initialize();
         String jsonData = getJsonData(objectMapper, url, data).toString();

@@ -89,7 +89,7 @@ public interface EpicHandleService {
      * @param data              map with additional fields to update, keys are defined in EpicHandleFields enum
      * @throws IOException      If request to ePIC handle server fails
      */
-    void updateHandleIfExists(String prefix, String suffix, String url, Map<EpicHandleField, String> data)
+    void updateExistingHandle(String prefix, String suffix, String url, Map<EpicHandleField, String> data)
             throws IOException;
 
     /**

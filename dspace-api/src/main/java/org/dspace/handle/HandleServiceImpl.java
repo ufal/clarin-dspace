@@ -26,6 +26,7 @@ import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.dspace.content.Collection;
 import org.dspace.content.Community;
 import org.dspace.content.DSpaceObject;
 import org.dspace.content.Item;
@@ -498,6 +499,42 @@ public class HandleServiceImpl implements HandleService {
         return configurationService.getArrayProperty("handle.additional.prefixes");
     }
 
+    @Override
+    public void updateHandleMetadata(Context context, DSpaceObject dso) throws SQLException, IOException {
+        if (!(dso instanceof Item)) {
+            //update handle metadata for another type of dspace objects is not supported
+            return;
+        }
+
+        Item item = (Item) dso;
+        Collection collection = item.getOwningCollection();
+
+        List<Community> communities = collection.getCommunities();
+        if (communities != null && !communities.isEmpty()) {
+            PIDCommunityConfiguration pidCommunityConfiguration = PIDConfiguration
+                    .getPIDCommunityConfiguration(communities.get(0).getID());
+            if (pidCommunityConfiguration != null && pidCommunityConfiguration.isEpic()) {
+                String prefix = pidCommunityConfiguration.getPrefix();
+                String handle = item.getHandles().stream()
+                        .map(Handle::getHandle)
+                        .filter(h -> h.startsWith(prefix + "/"))
+                        .findFirst()
+                        .orElse(null);
+                if (handle != null) {
+                    String suffix = handle.substring(handle.indexOf("/") + 1);
+                    String url = epicHandleService.resolveURLForHandle(prefix, suffix);
+                    if (url != null) {
+                        Map<EpicHandleField, String> fields = HandlePlugin.extractMetadata(dso);
+                        epicHandleService.updateExistingHandle(prefix, suffix, url, fields);
+                    } else {
+                        log.warn("Cannot update handle metadata for ePIC handle {}", prefix + "/" + suffix);
+                    }
+                }
+            }
+        }
+
+    }
+
     /**
      *
      * @param context DSpace context
@@ -550,7 +587,6 @@ public class HandleServiceImpl implements HandleService {
         //This should usually return null (404)
         String handle = null;
         try {
-            // handle = PIDService.findHandle(base_url, prefix);
             handle = epicHandleService.searchHandles(prefix, base_url, 1, 1).stream()
                     .map(EpicHandleService.Handle::getHandle)
                     .findFirst()
@@ -601,7 +637,7 @@ public class HandleServiceImpl implements HandleService {
 
         try {
             Map<EpicHandleField, String> fields = HandlePlugin.extractMetadata(dso);
-            epicHandleService.updateHandleIfExists(prefix, suffix, url, fields);
+            epicHandleService.updateExistingHandle(prefix, suffix, url, fields);
         } catch (Exception e) {
             throw new IOException("Failed to map PID " + pid + " to " + url
                     + " (" + e.toString() + ")");
