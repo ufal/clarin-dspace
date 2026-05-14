@@ -45,6 +45,7 @@ import org.dspace.app.rest.model.patch.AddOperation;
 import org.dspace.app.rest.model.patch.Operation;
 import org.dspace.app.rest.model.patch.RemoveOperation;
 import org.dspace.app.rest.model.patch.ReplaceOperation;
+import org.dspace.app.rest.repository.ClarinLicenseRestRepository;
 import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
 import org.dspace.builder.BitstreamBuilder;
 import org.dspace.builder.ClaimedTaskBuilder;
@@ -2343,6 +2344,48 @@ public class WorkflowItemRestRepositoryIT extends AbstractControllerIntegrationT
         getClient(tokenSubmitter).perform(get("/api/submission/workspaceitems/" + witem.getID()))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.sections.upload-no-required-metadata.files",hasSize(0)));
+    }
+
+    @Test
+    public void patchUpdateClarinLicenseTest() throws Exception {
+        context.turnOffAuthorisationSystem();
+
+        //** GIVEN **
+        //1. A community with one collection.
+        parentCommunity = CommunityBuilder.createCommunity(context)
+                                          .withName("Parent Community")
+                                          .build();
+        Collection col1 = CollectionBuilder.createCollection(context, parentCommunity).withName("Collection 1")
+                .withWorkflowGroup(1, admin).build();
+
+        //2. create a normal user to use as submitter
+        EPerson submitter = EPersonBuilder.createEPerson(context)
+                .withEmail("submitter@example.com")
+                .withPassword("dspace")
+                .build();
+
+        context.setCurrentUser(submitter);
+
+        //3. a workflow item
+        XmlWorkflowItem witem = WorkflowItemBuilder.createWorkflowItem(context, col1)
+                .withTitle("Workflow Item 1")
+                .withIssueDate("2017-10-17")
+                .build();
+
+        context.restoreAuthSystemState();
+
+        String tokenSubmitter = getAuthToken(submitter.getEmail(), "dspace");
+
+        // prepare a patch targeting the clarin license resource path
+        List<Operation> ops = new ArrayList<>();
+        ops.add(new ReplaceOperation("/" + ClarinLicenseRestRepository.OPERATION_PATH_LICENSE_RESOURCE,
+                "some-value"));
+
+        // The submitter shouldn't be allowed to patch clarin license resources for the workflow item
+        getClient(tokenSubmitter).perform(patch("/api/workflow/workflowitems/" + witem.getID())
+                .content(getPatchContent(ops))
+                .contentType(javax.ws.rs.core.MediaType.APPLICATION_JSON))
+                .andExpect(status().isForbidden());
     }
 
 }
