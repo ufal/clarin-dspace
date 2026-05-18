@@ -63,14 +63,12 @@ public class ClarinLicenseUtils {
         // Get item
         Item item = source.getItem();
         if (Objects.isNull(item)) {
-            log.error("The item is null for the submission with id: {} so the clarin license cannot be updated.",
-                    source.getID());
-            return;
+            throw new DSpaceBadRequestException("The item is null for the submission with id: " + source.getID() +
+                    " so the clarin license cannot be updated.");
         }
         // Get value from operation
         if (!(op instanceof ReplaceOperation)) {
-            log.error("The operation is not a replace operation");
-            return;
+            throw new DSpaceBadRequestException("The operation is not a replace operation");
         }
 
         String clarinLicenseName;
