@@ -30,6 +30,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.commons.lang3.StringUtils;
+import org.dspace.app.rest.model.patch.AddOperation;
 import org.dspace.app.rest.model.patch.Operation;
 import org.dspace.app.rest.model.patch.ReplaceOperation;
 import org.dspace.app.rest.repository.ClarinLicenseRestRepository;
@@ -453,11 +454,11 @@ public class ClarinWorkflowItemRestRepositoryIT extends AbstractControllerIntegr
 
         String editorToken = getAuthToken(eperson.getEmail(), password);
 
-        // The bad clarin license value should be rejected with 400 Bad Request
+        // The bad clarin license value should be rejected with 404 Not Found
         getClient(editorToken).perform(patch("/api/workflow/workflowitems/" + wItem.getID())
                         .content(getPatchContent(ops))
                         .contentType(javax.ws.rs.core.MediaType.APPLICATION_JSON_PATCH_JSON))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isNotFound());
 
         // The valid clari license name can be in the form of a simple string or
         // in the form of a map with "value" key, but it should be accepted in both cases
@@ -499,5 +500,16 @@ public class ClarinWorkflowItemRestRepositoryIT extends AbstractControllerIntegr
                         .content(getPatchContent(ops))
                         .contentType(javax.ws.rs.core.MediaType.APPLICATION_JSON_PATCH_JSON))
                 .andExpect(status().isBadRequest());
+
+        // The only accepted operation for clarin license resource is "replace",
+        // "add" operation should be rejected with 400 Bad Request even with the valid value
+        ops.set(0, new AddOperation("/" + ClarinLicenseRestRepository.OPERATION_PATH_LICENSE_RESOURCE,
+                "CL Name"));
+
+        getClient(editorToken).perform(patch("/api/workflow/workflowitems/" + wItem.getID())
+                        .content(getPatchContent(ops))
+                        .contentType(javax.ws.rs.core.MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isBadRequest());
+
     }
 }

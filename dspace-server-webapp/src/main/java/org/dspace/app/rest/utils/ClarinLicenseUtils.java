@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.dspace.app.rest.exception.ClarinLicenseNotFoundException;
 import org.dspace.app.rest.exception.DSpaceBadRequestException;
 import org.dspace.app.rest.model.patch.JsonValueEvaluator;
 import org.dspace.app.rest.model.patch.Operation;
@@ -63,12 +64,12 @@ public class ClarinLicenseUtils {
         // Get item
         Item item = source.getItem();
         if (Objects.isNull(item)) {
-            throw new DSpaceBadRequestException("The item is null for the submission with id: " + source.getID() +
+            throw new IllegalStateException("The item is null for the submission with id: " + source.getID() +
                     " so the clarin license cannot be updated.");
         }
         // Get value from operation
         if (!(op instanceof ReplaceOperation)) {
-            throw new DSpaceBadRequestException("The operation is not a replace operation");
+            throw new DSpaceBadRequestException("The operation to update the license must be the 'replace' operation");
         }
 
         String clarinLicenseName;
@@ -95,9 +96,8 @@ public class ClarinLicenseUtils {
         // Get clarin license by definition
         ClarinLicense clarinLicense = clarinLicenseService.findByName(context, clarinLicenseName);
         if (StringUtils.isNotBlank(clarinLicenseName) && Objects.isNull(clarinLicense)) {
-            throw new DSpaceBadRequestException("Cannot patch submission item with id: " + source.getID() + "," +
-                    " because the clarin license with name: " + clarinLicenseName + " isn't supported in" +
-                    " the CLARIN/DSpace");
+            throw new ClarinLicenseNotFoundException("Cannot patch submission item with id: " + source.getID() + "," +
+                    " because the clarin license with name: " + clarinLicenseName + " doesn't exist");
         }
 
         // Clear the license metadata from the item
