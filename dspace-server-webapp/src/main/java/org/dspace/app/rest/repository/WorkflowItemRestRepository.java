@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.UUID;
 import javax.servlet.http.HttpServletRequest;
 
+import com.google.common.base.Objects;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.dspace.app.rest.Parameter;
@@ -210,7 +211,7 @@ public class WorkflowItemRestRepository extends DSpaceRestRepository<WorkflowIte
 
     @Override
     public WorkflowItemRest upload(HttpServletRequest request, String apiCategory, String model, Integer id,
-                                   MultipartFile file) throws SQLException {
+                                   MultipartFile file) throws SQLException, AuthorizeException {
 
         Context context = obtainContext();
         WorkflowItemRest wsi = findOne(context, id);
@@ -301,14 +302,24 @@ public class WorkflowItemRestRepository extends DSpaceRestRepository<WorkflowIte
      * @param context               Context
      * @param xmlWorkflowItem       WorkflowItem of the task
      */
-    private void checkIfEditMetadataAllowedInCurrentStep(Context context, XmlWorkflowItem xmlWorkflowItem) {
+    private void checkIfEditMetadataAllowedInCurrentStep(Context context, XmlWorkflowItem xmlWorkflowItem)
+            throws AuthorizeException {
         try {
-            ClaimedTask claimedTask = claimedTaskService.findByWorkflowIdAndEPerson(context, xmlWorkflowItem,
-                context.getCurrentUser());
-            if (claimedTask == null) {
+            List<ClaimedTask> claimTasks = claimedTaskService.findByWorkflowItem(context, xmlWorkflowItem);
+            if (claimTasks.isEmpty()) {
                 throw new UnprocessableEntityException("WorkflowItem with id " + xmlWorkflowItem.getID()
-                    + " has not been claimed yet.");
+                        + " has not been claimed yet.");
             }
+
+            ClaimedTask claimedTask = claimTasks.stream()
+                    .filter(ct -> Objects.equal(ct.getOwner(), context.getCurrentUser()))
+                    .findFirst()
+                    .orElse(null);
+            if (claimedTask == null) {
+                throw new AuthorizeException("The current user hasn't claimed the workflow item with id " +
+                        xmlWorkflowItem.getID() + ", so the user cannot patch this item");
+            }
+
             Workflow workflow = workflowFactory.getWorkflow(claimedTask.getWorkflowItem().getCollection());
             Step step = workflow.getStep(claimedTask.getStepID());
             WorkflowActionConfig currentActionConfig = step.getActionConfig(claimedTask.getActionID());

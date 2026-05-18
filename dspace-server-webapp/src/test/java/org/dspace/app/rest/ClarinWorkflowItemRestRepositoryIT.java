@@ -417,15 +417,13 @@ public class ClarinWorkflowItemRestRepositoryIT extends AbstractControllerIntegr
                 .withName("Parent Community")
                 .build();
         Collection col = CollectionBuilder.createCollection(context, parentCommunity).withName("Collection 1")
-                .withWorkflowGroup(1, eperson).build();
+                .withWorkflowGroup("editor", eperson).build();
 
         // create a normal user to use as submitter
         EPerson submitter = EPersonBuilder.createEPerson(context)
                 .withEmail("submitter@example.com")
                 .withPassword("dspace")
                 .build();
-
-        context.setCurrentUser(submitter);
 
         // claimed task with workflow item in edit step
         ClaimedTask claimedTask = ClaimedTaskBuilder.createClaimedTask(context, col, eperson)
@@ -436,36 +434,40 @@ public class ClarinWorkflowItemRestRepositoryIT extends AbstractControllerIntegr
                 .build();
         claimedTask.setStepID("editstep");
         claimedTask.setActionID("editaction");
-        XmlWorkflowItem wItem = claimedTask.getWorkflowItem();
+        XmlWorkflowItem wfItem = claimedTask.getWorkflowItem();
 
         context.restoreAuthSystemState();
 
         // prepare a patch targeting the clarin license resource path
         List<Operation> ops = new ArrayList<>();
-        ops.add(new ReplaceOperation("/" + ClarinLicenseRestRepository.OPERATION_PATH_LICENSE_RESOURCE, "some-value"));
+        ops.add(new ReplaceOperation("/" + ClarinLicenseRestRepository.OPERATION_PATH_LICENSE_RESOURCE, "CL Name"));
 
         String submitterToken = getAuthToken(submitter.getEmail(), "dspace");
 
-        // The submitter shouldn't be allowed to patch clarin license resources for the workflow item
-        getClient(submitterToken).perform(patch("/api/workflow/workflowitems/" + wItem.getID())
+        // The submitter shouldn't be allowed to patch clarin license
+        // because the workflow item was claimed by the other user (eperson),
+        // and the submitter doesn't have permissions to edit it,
+        // so the patch request should be rejected with error 403(Forbidden)
+        getClient(submitterToken).perform(patch("/api/workflow/workflowitems/" + wfItem.getID())
                         .content(getPatchContent(ops))
                         .contentType(javax.ws.rs.core.MediaType.APPLICATION_JSON_PATCH_JSON))
-                .andExpect(status().isUnprocessableEntity());
+                .andExpect(status().isForbidden());
 
         String editorToken = getAuthToken(eperson.getEmail(), password);
 
-        // The bad clarin license value should be rejected with 404 Not Found
-        getClient(editorToken).perform(patch("/api/workflow/workflowitems/" + wItem.getID())
+        ops.set(0, new ReplaceOperation("/" + ClarinLicenseRestRepository.OPERATION_PATH_LICENSE_RESOURCE, "Wrong CL"));
+
+        // The wrong clarin license name value should be rejected with 404 Not Found
+        getClient(editorToken).perform(patch("/api/workflow/workflowitems/" + wfItem.getID())
                         .content(getPatchContent(ops))
                         .contentType(javax.ws.rs.core.MediaType.APPLICATION_JSON_PATCH_JSON))
                 .andExpect(status().isNotFound());
 
-        // The valid clari license name can be in the form of a simple string or
+        // The valid clarin license name can be in the form of a simple string or
         // in the form of a map with "value" key, but it should be accepted in both cases
-        ops.set(0, new ReplaceOperation("/" + ClarinLicenseRestRepository.OPERATION_PATH_LICENSE_RESOURCE,
-                "CL Name"));
+        ops.set(0, new ReplaceOperation("/" + ClarinLicenseRestRepository.OPERATION_PATH_LICENSE_RESOURCE, "CL Name"));
 
-        getClient(editorToken).perform(patch("/api/workflow/workflowitems/" + wItem.getID())
+        getClient(editorToken).perform(patch("/api/workflow/workflowitems/" + wfItem.getID())
                         .content(getPatchContent(ops))
                         .contentType(javax.ws.rs.core.MediaType.APPLICATION_JSON_PATCH_JSON))
                 .andExpect(status().isOk());
@@ -475,7 +477,7 @@ public class ClarinWorkflowItemRestRepositoryIT extends AbstractControllerIntegr
         ops.set(0, new ReplaceOperation("/" + ClarinLicenseRestRepository.OPERATION_PATH_LICENSE_RESOURCE,
                 wrappedValue));
 
-        getClient(editorToken).perform(patch("/api/workflow/workflowitems/" + wItem.getID())
+        getClient(editorToken).perform(patch("/api/workflow/workflowitems/" + wfItem.getID())
                         .content(getPatchContent(ops))
                         .contentType(javax.ws.rs.core.MediaType.APPLICATION_JSON_PATCH_JSON))
                 .andExpect(status().isOk());
@@ -485,7 +487,7 @@ public class ClarinWorkflowItemRestRepositoryIT extends AbstractControllerIntegr
         ops.set(0, new ReplaceOperation("/" + ClarinLicenseRestRepository.OPERATION_PATH_LICENSE_RESOURCE,
                 invalidWrappedValue1));
 
-        getClient(editorToken).perform(patch("/api/workflow/workflowitems/" + wItem.getID())
+        getClient(editorToken).perform(patch("/api/workflow/workflowitems/" + wfItem.getID())
                         .content(getPatchContent(ops))
                         .contentType(javax.ws.rs.core.MediaType.APPLICATION_JSON_PATCH_JSON))
                 .andExpect(status().isBadRequest());
@@ -496,7 +498,7 @@ public class ClarinWorkflowItemRestRepositoryIT extends AbstractControllerIntegr
         ops.set(0, new ReplaceOperation("/" + ClarinLicenseRestRepository.OPERATION_PATH_LICENSE_RESOURCE,
                 invalidWrappedValue2));
 
-        getClient(editorToken).perform(patch("/api/workflow/workflowitems/" + wItem.getID())
+        getClient(editorToken).perform(patch("/api/workflow/workflowitems/" + wfItem.getID())
                         .content(getPatchContent(ops))
                         .contentType(javax.ws.rs.core.MediaType.APPLICATION_JSON_PATCH_JSON))
                 .andExpect(status().isBadRequest());
@@ -506,10 +508,9 @@ public class ClarinWorkflowItemRestRepositoryIT extends AbstractControllerIntegr
         ops.set(0, new AddOperation("/" + ClarinLicenseRestRepository.OPERATION_PATH_LICENSE_RESOURCE,
                 "CL Name"));
 
-        getClient(editorToken).perform(patch("/api/workflow/workflowitems/" + wItem.getID())
+        getClient(editorToken).perform(patch("/api/workflow/workflowitems/" + wfItem.getID())
                         .content(getPatchContent(ops))
                         .contentType(javax.ws.rs.core.MediaType.APPLICATION_JSON_PATCH_JSON))
                 .andExpect(status().isBadRequest());
-
     }
 }
