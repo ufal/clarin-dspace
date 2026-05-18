@@ -11,10 +11,13 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Objects;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.dspace.app.rest.exception.DSpaceBadRequestException;
+import org.dspace.app.rest.model.patch.JsonValueEvaluator;
 import org.dspace.app.rest.model.patch.Operation;
 import org.dspace.app.rest.model.patch.ReplaceOperation;
 import org.dspace.authorize.AuthorizeException;
@@ -71,11 +74,25 @@ public class ClarinLicenseUtils {
         }
 
         String clarinLicenseName;
-        if (!(op.getValue() instanceof String)) {
-            throw new DSpaceBadRequestException("Missing value for operation: " + op.getOp());
-        }
+        if (op.getValue() instanceof String) {
+            clarinLicenseName = (String) op.getValue();
+        } else {
+            if (!(op.getValue() instanceof JsonValueEvaluator)) {
+                throw new DSpaceBadRequestException("Missing value for operation: " + op.getOp());
+            }
+            JsonValueEvaluator jsonValEvaluator = (JsonValueEvaluator) op.getValue();
 
-        clarinLicenseName = (String) op.getValue();
+            // replace operation has value wrapped in the ObjectNode
+            if (!(jsonValEvaluator.getValueNode() instanceof ObjectNode)) {
+                throw new DSpaceBadRequestException("Missing value for operation: " + op.getOp());
+            }
+            JsonNode jsonNodeValue = jsonValEvaluator.getValueNode().get("value");
+            if (jsonNodeValue != null && jsonNodeValue.isTextual()) {
+                clarinLicenseName = jsonNodeValue.asText();
+            } else {
+                throw new DSpaceBadRequestException("Missing value for operation: " + op.getOp());
+            }
+        }
 
         // Get clarin license by definition
         ClarinLicense clarinLicense = clarinLicenseService.findByName(context, clarinLicenseName);
