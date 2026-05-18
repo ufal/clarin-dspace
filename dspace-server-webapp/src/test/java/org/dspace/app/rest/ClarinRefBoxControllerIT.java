@@ -7,10 +7,14 @@
  */
 package org.dspace.app.rest;
 
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.emptyOrNullString;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -33,6 +37,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -399,22 +404,28 @@ public class ClarinRefBoxControllerIT extends AbstractControllerIntegrationTest 
     public void testCitationsEndpointReturnsBibtex() throws Exception {
         // Verifies the /citations endpoint does not return a 500 for a valid handle + bibtex
         // type (regression test for #1366) and that the response is a valid OaiMetadataWrapper.
+        // Content-Type must be application/json (catches reintroduction of the XML preset bug).
+        // $.metadata must contain "@misc{" which is the BibTeX entry marker produced by the XSLT.
         getClient().perform(get("/api/core/refbox/citations")
                         .param("type", "bibtex")
                         .param("handle", item.getHandle()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.metadata").exists());
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.metadata", containsString("@misc{")));
     }
 
     @Test
     public void testCitationsEndpointReturnsCmdi() throws Exception {
         // Verifies the /citations endpoint does not return a 500 for a valid handle + cmdi type
         // (regression test for #1366) and that the response is a valid OaiMetadataWrapper.
+        // Content-Type must be application/json (catches reintroduction of the XML preset bug).
+        // $.metadata must be non-empty (the CMDI crosswalk always produces XML content).
         getClient().perform(get("/api/core/refbox/citations")
                         .param("type", "cmdi")
                         .param("handle", item.getHandle()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.metadata").exists());
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.metadata", not(emptyOrNullString())));
     }
 
     @Test
