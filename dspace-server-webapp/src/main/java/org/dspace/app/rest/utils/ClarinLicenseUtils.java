@@ -50,7 +50,7 @@ public class ClarinLicenseUtils {
      * @param itemService the item service
      * @param clarinLicenseService the clarin license service
      * @param clarinLicenseResourceMappingService the clarin license resource mapping service
-     * @param source InProgressSubmission object which mai contains the item with bitstreams
+     * @param source InProgressSubmission object which may contain the item with bitstreams
      *               to which the clarin license is attached
      * @param op should be ReplaceOperation, if it is not - do nothing
      */
