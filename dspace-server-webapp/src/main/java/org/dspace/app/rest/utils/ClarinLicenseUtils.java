@@ -89,7 +89,8 @@ public class ClarinLicenseUtils {
             if (jsonNodeValue != null && jsonNodeValue.isTextual()) {
                 clarinLicenseName = jsonNodeValue.asText();
             } else {
-                throw new DSpaceBadRequestException("Missing value for operation: " + op.getOp());
+                throw new DSpaceBadRequestException(
+                        "Expected a string or an object with a 'value' field for operation: " + op.getOp());
             }
         }
 

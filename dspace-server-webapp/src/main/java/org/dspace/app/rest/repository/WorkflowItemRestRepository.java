@@ -13,10 +13,10 @@ import static org.dspace.xmlworkflow.state.actions.processingaction.ProcessingAc
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import javax.servlet.http.HttpServletRequest;
 
-import com.google.common.base.Objects;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.dspace.app.rest.Parameter;
@@ -312,7 +312,7 @@ public class WorkflowItemRestRepository extends DSpaceRestRepository<WorkflowIte
             }
 
             ClaimedTask claimedTask = claimTasks.stream()
-                    .filter(ct -> Objects.equal(ct.getOwner(), context.getCurrentUser()))
+                    .filter(ct -> Objects.equals(ct.getOwner(), context.getCurrentUser()))
                     .findFirst()
                     .orElse(null);
             if (claimedTask == null) {
