@@ -77,20 +77,18 @@ public class ClarinLicenseUtils {
             clarinLicenseName = (String) op.getValue();
         } else {
             if (!(op.getValue() instanceof JsonValueEvaluator)) {
-                throw new DSpaceBadRequestException("Missing value for operation: " + op.getOp());
+                throw wrongValueFormatException(op);
             }
             JsonValueEvaluator jsonValEvaluator = (JsonValueEvaluator) op.getValue();
-
-            // replace operation has value wrapped in the ObjectNode
             if (!(jsonValEvaluator.getValueNode() instanceof ObjectNode)) {
-                throw new DSpaceBadRequestException("Missing value for operation: " + op.getOp());
+                throw wrongValueFormatException(op);
             }
+            // replace operation has value wrapped in the ObjectNode
             JsonNode jsonNodeValue = jsonValEvaluator.getValueNode().get("value");
             if (jsonNodeValue != null && jsonNodeValue.isTextual()) {
                 clarinLicenseName = jsonNodeValue.asText();
             } else {
-                throw new DSpaceBadRequestException(
-                        "Expected a string or an object with a 'value' field for operation: " + op.getOp());
+                throw wrongValueFormatException(op);
             }
         }
 
@@ -140,5 +138,10 @@ public class ClarinLicenseUtils {
 
         // Save changes to database
         itemService.update(context, item);
+    }
+
+    private static DSpaceBadRequestException wrongValueFormatException(Operation op) {
+        return new DSpaceBadRequestException("Unsupported value type for operation: " + op.getOp()
+                + ". Expected a string or an object with a textual 'value' field.");
     }
 }
