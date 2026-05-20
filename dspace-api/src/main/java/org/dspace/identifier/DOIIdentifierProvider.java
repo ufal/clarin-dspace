@@ -1067,12 +1067,29 @@ public class DOIIdentifierProvider extends FilteredIdentifierProvider {
         }
         Item item = (Item) dso;
 
-        itemService.addMetadata(context, item, MD_SCHEMA, DOI_ELEMENT, DOI_QUALIFIER, null,
-            doiService.DOIToExternalForm(doi));
-        try {
+        String doiURL = doiService.DOIToExternalForm(doi);
+
+        List<MetadataValue> mv = itemService.getMetadata(item, MD_SCHEMA, DOI_ELEMENT, DOI_QUALIFIER, Item.ANY);
+
+        boolean doiMetadataExists = false;
+        if (!mv.isEmpty()) {
+            if (mv.size() > 1) {
+                log.warn("Item {} has more than one value for dc.identifier.doi. This is not recommended.",
+                        item.getID());
+                itemService.clearMetadata(context, item, MD_SCHEMA, DOI_ELEMENT, DOI_QUALIFIER, Item.ANY);
+            } else if (doiURL.equals(mv.get(0).getValue())) {
+                log.warn("The DOI {} is already part of the metadata of Item {}. Not adding it again.",
+                        doi, item.getID());
+                doiMetadataExists = true;
+            } else {
+                log.warn("Item {} has a different DOI in its metadata than the one we want to add. " +
+                        "Removing old DOI and adding new one.", item.getID());
+                itemService.clearMetadata(context, item, MD_SCHEMA, DOI_ELEMENT, DOI_QUALIFIER, Item.ANY);
+            }
+        }
+        if (!doiMetadataExists) {
+            itemService.addMetadata(context, item, MD_SCHEMA, DOI_ELEMENT, DOI_QUALIFIER, null, doiURL);
             itemService.update(context, item);
-        } catch (SQLException | AuthorizeException ex) {
-            throw ex;
         }
     }
 

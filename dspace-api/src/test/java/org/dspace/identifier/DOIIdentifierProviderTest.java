@@ -333,6 +333,50 @@ public class DOIIdentifierProviderTest
     }
 
     @Test
+    public void testStore_DOI_check_replace_doi_metadata() throws SQLException, AuthorizeException, IOException,
+            IdentifierException, IllegalAccessException, WorkflowException {
+        Item item = newItem();
+
+        // this checks that the method does not fail if there is already a DOI in the metadata,
+        // here we check if the old DOI metadata value is replaced with the new one
+        String oldDoi = DOI.SCHEME + PREFIX + "/" + NAMESPACE_SEPARATOR + "1234";
+        itemService.addMetadata(context, item, DOIIdentifierProvider.MD_SCHEMA,
+                DOIIdentifierProvider.DOI_ELEMENT,
+                DOIIdentifierProvider.DOI_QUALIFIER,
+                null,
+                doiService.DOIToExternalForm(oldDoi));
+        String newDoi = DOI.SCHEME + PREFIX + "/" + NAMESPACE_SEPARATOR + Long.toHexString(new Date().getTime());
+
+        context.turnOffAuthorisationSystem();
+        provider.saveDOIToObject(context, item, newDoi);
+        context.restoreAuthSystemState();
+
+        checkSingleDoiMetadata(item, newDoi);
+    }
+
+    @Test
+    public void testStore_DOI_check_single_doi_metadata() throws SQLException, AuthorizeException, IOException,
+            IdentifierException, IllegalAccessException, WorkflowException {
+        Item item = newItem();
+
+        // this checks that the method does not fail if there is already a DOI in the metadata,
+        // here we check if DOI metadata are not duplicated
+        String doi = DOI.SCHEME + PREFIX + "/" + NAMESPACE_SEPARATOR
+                + Long.toHexString(new Date().getTime());
+        itemService.addMetadata(context, item, DOIIdentifierProvider.MD_SCHEMA,
+                DOIIdentifierProvider.DOI_ELEMENT,
+                DOIIdentifierProvider.DOI_QUALIFIER,
+                null,
+                doiService.DOIToExternalForm(doi));
+
+        context.turnOffAuthorisationSystem();
+        provider.saveDOIToObject(context, item, doi);
+        context.restoreAuthSystemState();
+
+        checkSingleDoiMetadata(item, doi);
+    }
+
+    @Test
     public void testGet_DOI_out_of_item_metadata()
         throws SQLException, AuthorizeException, IOException, IdentifierException, IllegalAccessException,
         WorkflowException {
@@ -867,5 +911,17 @@ public class DOIIdentifierProviderTest
     // updateMetadataOnline
     // registerOnline
     // reserveOnline
+
+    private void checkSingleDoiMetadata(Item item, String doi) throws IdentifierException {
+        List<MetadataValue> metadata = itemService.getMetadata(item, DOIIdentifierProvider.MD_SCHEMA,
+                DOIIdentifierProvider.DOI_ELEMENT,
+                DOIIdentifierProvider.DOI_QUALIFIER,
+                Item.ANY);
+        boolean result = false;
+        if (metadata.size() == 1 && metadata.get(0).getValue().equals(doiService.DOIToExternalForm(doi))) {
+            result = true;
+        }
+        assertTrue("Invalid or duplicate 'dc.identifier.doi' metadata value(s).", result);
+    }
 
 }
