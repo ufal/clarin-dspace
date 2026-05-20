@@ -1078,7 +1078,7 @@ public class DOIIdentifierProvider extends FilteredIdentifierProvider {
                         item.getID());
                 itemService.clearMetadata(context, item, MD_SCHEMA, DOI_ELEMENT, DOI_QUALIFIER, Item.ANY);
             } else if (doiURL.equals(mv.get(0).getValue())) {
-                log.warn("The DOI {} is already part of the metadata of Item {}. Not adding it again.",
+                log.debug("The DOI {} is already part of the metadata of Item {}. Not adding it again.",
                         doi, item.getID());
                 doiMetadataExists = true;
             } else {

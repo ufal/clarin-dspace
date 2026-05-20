@@ -340,14 +340,14 @@ public class DOIIdentifierProviderTest
         // this checks that the method does not fail if there is already a DOI in the metadata,
         // here we check if the old DOI metadata value is replaced with the new one
         String oldDoi = DOI.SCHEME + PREFIX + "/" + NAMESPACE_SEPARATOR + "1234";
+        String newDoi = DOI.SCHEME + PREFIX + "/" + NAMESPACE_SEPARATOR + Long.toHexString(new Date().getTime());
+
+        context.turnOffAuthorisationSystem();
         itemService.addMetadata(context, item, DOIIdentifierProvider.MD_SCHEMA,
                 DOIIdentifierProvider.DOI_ELEMENT,
                 DOIIdentifierProvider.DOI_QUALIFIER,
                 null,
                 doiService.DOIToExternalForm(oldDoi));
-        String newDoi = DOI.SCHEME + PREFIX + "/" + NAMESPACE_SEPARATOR + Long.toHexString(new Date().getTime());
-
-        context.turnOffAuthorisationSystem();
         provider.saveDOIToObject(context, item, newDoi);
         context.restoreAuthSystemState();
 
@@ -361,15 +361,14 @@ public class DOIIdentifierProviderTest
 
         // this checks that the method does not fail if there is already a DOI in the metadata,
         // here we check if DOI metadata are not duplicated
-        String doi = DOI.SCHEME + PREFIX + "/" + NAMESPACE_SEPARATOR
-                + Long.toHexString(new Date().getTime());
+        String doi = DOI.SCHEME + PREFIX + "/" + NAMESPACE_SEPARATOR + Long.toHexString(new Date().getTime());
+
+        context.turnOffAuthorisationSystem();
         itemService.addMetadata(context, item, DOIIdentifierProvider.MD_SCHEMA,
                 DOIIdentifierProvider.DOI_ELEMENT,
                 DOIIdentifierProvider.DOI_QUALIFIER,
                 null,
                 doiService.DOIToExternalForm(doi));
-
-        context.turnOffAuthorisationSystem();
         provider.saveDOIToObject(context, item, doi);
         context.restoreAuthSystemState();
 
