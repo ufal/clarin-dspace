@@ -82,6 +82,42 @@
     </bean>
     -->
 
+    <bean id="org.dspace.identifier.DOIIdentifierProvider1"
+          class="org.dspace.identifier.VersionedDOIIdentifierProvider"
+          scope="singleton">
+        <property name="configurationService" ref="org.dspace.services.ConfigurationService" />
+        <property name="DOIConnector">
+            <bean class="org.dspace.identifier.doi.DataCiteConnector" scope="singleton">
+                <property name="DATACITE_SCHEME" value="https" />
+                <property name="DATACITE_HOST" value="mds.test.datacite.org"/>
+                <property name="DATACITE_DOI_PATH" value="/doi/" />
+                <property name="DATACITE_METADATA_PATH" value="/metadata/" />
+                <property name="disseminationCrosswalkName" value="DataCite" />
+                <property name="doiUsername" value="CUNI.WLXPNO" />
+                <property name="doiPassword" value="6&amp;K^jWp2XQxo2Mmc" />
+                <property name="doiPrefix" value="10.83856" />
+            </bean>
+        </property>
+        <property name="filter">
+            <bean class="org.dspace.content.logic.DefaultFilter" scope="singleton">
+                <property name="statement">
+                    <bean class="org.dspace.content.logic.condition.InCommunityCondition">
+                        <property name="parameters">
+                            <map>
+                                <entry key="communities">
+                                    <list>
+                                        <value>5600/1</value>
+                                        <value>123456789/7396</value>
+                                    </list>
+                                </entry>
+                            </map>
+                        </property>
+                    </bean>
+                </property>
+            </bean>
+        </property>
+    </bean>
+
     <!-- An optional logical item filter can be included in provider configuration based
     on the filters defined in item-filters.xml, eg.
     Of course, you can use a filter on the VersionedDOIIdentifierProvider as well.
