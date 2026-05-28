@@ -16,6 +16,7 @@ import org.dspace.content.Collection;
 import org.dspace.content.Community;
 import org.dspace.content.DSpaceObject;
 import org.dspace.content.Item;
+import org.dspace.content.MetadataValue;
 import org.dspace.content.logic.Filter;
 import org.dspace.core.Context;
 import org.dspace.identifier.doi.DOIConnector;
@@ -56,6 +57,24 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
             ClarinCommunityDOIIdentifierProvider provider = getProviderForItem(context, (Item) dso);
             if (provider != null) {
                 provider.register(context, dso, identifier, filter);
+            } else {
+                log.info("Item {} is not in a configured CLARIN community, skipping DOI reservation", dso.getID());
+                throw new DOIIdentifierNotApplicableException(
+                        "Item " + dso.getHandle() + " is not in a configured CLARIN community");
+            }
+        } else {
+            log.info("DSpaceObject {} is not an Item, skipping DOI reservation", dso.getID());
+            throw new DOIIdentifierNotApplicableException("Currently only Items are supported for DOIs.");
+        }
+    }
+
+    @Override
+    public void reserve(Context context, DSpaceObject dso, String identifier, Filter filter)
+            throws IdentifierException, IllegalArgumentException {
+        if (dso instanceof Item) {
+            ClarinCommunityDOIIdentifierProvider provider = getProviderForItem(context, (Item) dso);
+            if (provider != null) {
+                provider.reserve(context, dso, identifier, filter);
             } else {
                 log.info("Item {} is not in a configured CLARIN community, skipping DOI registration", dso.getID());
                 throw new DOIIdentifierNotApplicableException(
@@ -146,6 +165,27 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
             log.info("DSpaceObject {} is not an Item, skipping DOI minting", dso.getID());
             throw new DOIIdentifierNotApplicableException("Currently only Items are supported for DOIs.");
         }
+    }
+
+    @Override
+    public String getDOIOutOfObject(DSpaceObject dso) throws DOIIdentifierException {
+        if (!(dso instanceof Item)) {
+            throw new IllegalArgumentException("We currently support DOIs for Items only, not for " +
+                    contentServiceFactory.getDSpaceObjectService(dso).getTypeText(dso) + ".");
+        }
+        Item item = (Item) dso;
+
+        List<MetadataValue> metadata = itemService.getMetadata(item, MD_SCHEMA, DOI_ELEMENT, DOI_QUALIFIER, null);
+        for (MetadataValue metadataValue : metadata) {
+            String doiResolver = doiService.getResolver();
+            for (ClarinCommunityDOIIdentifierProvider provider : providers) {
+                String leftPart = doiResolver + "/" + provider.getPrefix() + "/" + provider.getNamespaceSeparator();
+                if (metadataValue.getValue().startsWith(leftPart)) {
+                    return doiService.DOIFromExternalFormat(metadataValue.getValue());
+                }
+            }
+        }
+        return null;
     }
 
     @Override
