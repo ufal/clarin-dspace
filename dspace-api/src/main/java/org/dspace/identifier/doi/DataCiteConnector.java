@@ -122,7 +122,8 @@ public class DataCiteConnector
 
     protected String USERNAME;
     protected String PASSWORD;
-    protected String DOI_PREFIX;
+    protected String doiPrefix;
+
     @Autowired
     protected HandleService handleService;
 
@@ -208,21 +209,6 @@ public class DataCiteConnector
         this.CROSSWALK_NAME = CROSSWALK_NAME;
     }
 
-    @Autowired(required = true)
-    public void setDoiUsername(String doiUsername) {
-        this.USERNAME = doiUsername;
-    }
-
-    @Autowired(required = true)
-    public void setDoiPassword(String doiPassword) {
-        this.PASSWORD = doiPassword;
-    }
-
-    @Autowired(required = true)
-    public void setDoiPrefix(String doiPrefix) {
-        this.DOI_PREFIX = doiPrefix;
-    }
-
     protected void prepareXwalk() {
         if (null != this.xwalk) {
             return;
@@ -264,14 +250,10 @@ public class DataCiteConnector
     }
 
     protected String getDoiPrefix() {
-        if (null == this.DOI_PREFIX) {
-            this.DOI_PREFIX = configurationService.getProperty(CFG_PREFIX);
-            if (null == this.DOI_PREFIX) {
-                throw new RuntimeException("Unable to load DOI prefix from configuration. Cannot find property " +
-                        CFG_PREFIX + ".");
-            }
+        if (this.doiPrefix == null) {
+            this.doiPrefix = configurationService.getProperty(CFG_PREFIX);
         }
-        return this.DOI_PREFIX;
+        return this.doiPrefix;
     }
 
     @Override
@@ -401,9 +383,8 @@ public class DataCiteConnector
         // Set the transform's parameters.
         // XXX Should the actual list be configurable?
         Map<String, String> parameters = new HashMap<>();
-        if (configurationService.hasProperty(CFG_PREFIX)) {
-//            parameters.put("prefix",
-//                           configurationService.getProperty(CFG_PREFIX));
+        String doiPrefix = getDoiPrefix();
+        if (doiPrefix != null) {
             parameters.put("prefix", getDoiPrefix());
         }
         if (configurationService.hasProperty(CFG_PUBLISHER)) {
