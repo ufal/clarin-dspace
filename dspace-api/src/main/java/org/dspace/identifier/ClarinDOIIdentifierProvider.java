@@ -64,42 +64,10 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
             if (provider != null) {
                 provider.register(context, dso, identifier, filter);
             } else {
-                log.info("Item {} is not in a configured CLARIN community, skipping DOI reservation", dso.getID());
+                logInfoNonConfigurableEntity(dso, "registration");
             }
         } else {
-            log.info("DSpaceObject {} is not an Item, skipping DOI reservation", dso.getID());
-        }
-    }
-
-    @Override
-    public void reserve(Context context, DSpaceObject dso, String identifier, Filter filter)
-            throws IdentifierException, IllegalArgumentException {
-        if (dso instanceof Item) {
-            ClarinCommunityDOIIdentifierProvider provider = getProviderForItem(context, (Item) dso);
-            if (provider != null) {
-                provider.reserve(context, dso, identifier, filter);
-            } else {
-                log.info("Item {} is not in a configured CLARIN community, skipping DOI reservation", dso.getID());
-            }
-        } else {
-            log.info("DSpaceObject {} is not an Item, skipping DOI reservation", dso.getID());
-        }
-    }
-
-    @Override
-    public void checkMintable(Context context, Filter filter, DSpaceObject dso)
-            throws DOIIdentifierNotApplicableException {
-        if (dso instanceof Item) {
-            ClarinCommunityDOIIdentifierProvider provider = getProviderForItem(context, (Item) dso);
-            if (provider != null) {
-                provider.checkMintable(context, filter, dso);
-            } else {
-                log.info("Item {} is not in a configured CLARIN community, skipping DOI minting check", dso.getID());
-                throw new DOIIdentifierNotApplicableException("Item " + dso.getID() +
-                        " is not applicable by DOI identifier provider as it is not in a configured CLARIN community");
-            }
-        } else {
-            log.info("DSpaceObject {} is not an Item, skipping DOI minting check", dso.getID());
+            logInfoNoItem(dso, "registration");
         }
     }
 
@@ -111,10 +79,25 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
             if (provider != null) {
                 provider.registerOnline(context, dso, identifier, filter);
             } else {
-                log.info("Item {} is not in a configured CLARIN community, skipping DOI registration", dso.getID());
+                logInfoNonConfigurableEntity(dso, "registration");
             }
         } else {
-            log.info("DSpaceObject {} is not an Item, skipping DOI registration", dso.getID());
+            logInfoNoItem(dso, "registration");
+        }
+    }
+
+    @Override
+    public void reserve(Context context, DSpaceObject dso, String identifier, Filter filter)
+            throws IdentifierException, IllegalArgumentException {
+        if (dso instanceof Item) {
+            ClarinCommunityDOIIdentifierProvider provider = getProviderForItem(context, (Item) dso);
+            if (provider != null) {
+                provider.reserve(context, dso, identifier, filter);
+            } else {
+                logInfoNonConfigurableEntity(dso, "reservation");
+            }
+        } else {
+            logInfoNoItem(dso, "reservation");
         }
     }
 
@@ -126,10 +109,29 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
             if (provider != null) {
                 provider.reserveOnline(context, dso, identifier, filter);
             } else {
-                log.info("Item {} is not in a configured CLARIN community, skipping DOI reservation", dso.getID());
+                logInfoNonConfigurableEntity(dso, "reservation");
             }
         } else {
-            log.info("DSpaceObject {} is not an Item, skipping DOI reservation", dso.getID());
+            logInfoNoItem(dso, "reservation");
+        }
+    }
+
+    @Override
+    public void checkMintable(Context context, Filter filter, DSpaceObject dso)
+            throws DOIIdentifierNotApplicableException {
+        if (dso instanceof Item) {
+            ClarinCommunityDOIIdentifierProvider provider = getProviderForItem(context, (Item) dso);
+            if (provider != null) {
+                provider.checkMintable(context, filter, dso);
+            } else {
+                log.warn("Item {} is not in a configured CLARIN community", dso.getID());
+                throw new DOIIdentifierNotApplicableException("Item " + dso.getID() +
+                        " is not applicable by DOI identifier provider as it is not in a configured CLARIN community");
+            }
+        } else {
+            log.warn("DSpaceObject {} is not an Item", dso.getID());
+            throw new DOIIdentifierNotApplicableException("DSpaceObject " + dso.getID() +
+                    " is not applicable by DOI identifier provider as it is not an Item");
         }
     }
 
@@ -150,10 +152,10 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
             if (provider != null) {
                 return provider.mint(context, dso, filter);
             } else {
-                log.info("Item {} is not in a configured CLARIN community, skipping DOI minting", dso.getID());
+                logInfoNonConfigurableEntity(dso, "minting");
             }
         } else {
-            log.info("DSpaceObject {} is not an Item, skipping DOI minting", dso.getID());
+            logInfoNoItem(dso, "minting");
         }
         return null;
     }
@@ -165,10 +167,10 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
             if (provider != null) {
                 return provider.getDOIByObject(context, dso);
             } else {
-                log.info("Item {} is not in a configured CLARIN community, skipping DOI searching", dso.getID());
+                logInfoNonConfigurableEntity(dso, "searching");
             }
         } else {
-            log.info("DSpaceObject {} is not an Item, skipping DOI searching", dso.getID());
+            logInfoNoItem(dso, "searching");
         }
         return null;
     }
@@ -181,7 +183,7 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
         }
         Item item = (Item) dso;
 
-        List<MetadataValue> metadata = itemService.getMetadata(item, MD_SCHEMA, DOI_ELEMENT, DOI_QUALIFIER, null);
+        List<MetadataValue> metadata = itemService.getMetadata(item, MD_SCHEMA, DOI_ELEMENT, DOI_QUALIFIER, Item.ANY);
         for (MetadataValue metadataValue : metadata) {
             String doiResolver = doiService.getResolver();
             for (ClarinCommunityDOIIdentifierProvider provider : providers) {
@@ -202,10 +204,10 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
             if (provider != null) {
                 provider.updateMetadata(context, dso, identifier);
             } else {
-                log.info("Item {} is not in a configured CLARIN community, skipping DOI metadata update", dso.getID());
+                logInfoNonConfigurableEntity(dso, "metadata update");
             }
         } else {
-            log.info("DSpaceObject {} is not an Item, skipping DOI update", dso.getID());
+            logInfoNoItem(dso, "metadata update");
         }
     }
 
@@ -217,10 +219,10 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
             if (provider != null) {
                 provider.updateMetadataOnline(context, dso, identifier);
             } else {
-                log.info("Item {} is not in a configured CLARIN community, skipping DOI metadata update", dso.getID());
+                logInfoNonConfigurableEntity(dso, "metadata update");
             }
         } else {
-            log.info("DSpaceObject {} is not an Item, skipping DOI update", dso.getID());
+            logInfoNoItem(dso, "metadata update");
         }
     }
 
@@ -296,6 +298,14 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
                 .filter(provider -> provider.getPrefix().equals(prefix))
                 .findFirst()
                 .orElseThrow(() -> new DOIIdentifierException("No provider found for DOI prefix: " + prefix));
+    }
+
+    private void logInfoNoItem(DSpaceObject dso, String actionName) {
+        log.info("DSpaceObject {} is not an Item, skipping DOI {}", dso.getID(), actionName);
+    }
+
+    private void logInfoNonConfigurableEntity(DSpaceObject dso, String actionName) {
+        log.info("Item {} is not in a configured CLARIN community, skipping DOI {}", dso.getID(), actionName);
     }
 
     protected static class SimpleCache<K, V> {
