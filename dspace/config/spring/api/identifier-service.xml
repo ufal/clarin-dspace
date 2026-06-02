@@ -122,6 +122,13 @@
     <!-- Optionally, you can use the ClarinDOIIdentifierProvider,
          that allows you to configure multiple community specific DOI providers.
          Each provider will only mint DOIs for items in the configured communities.
+
+         Credentials, for DOI connectors need to be configured, per each DOI prefix, in local.cfg, e.g.:
+
+         identifier.doi.10.83111.user = <username>
+         identifier.doi.10.83111.password = <password>
+         identifier.doi.10.83222.user = <username>
+         identifier.doi.10.83222.password = <password>
     -->
     <!-- Uncomment to enable community specific DOI providers
     <bean id="org.dspace.identifier.DOIIdentifierProvider" class="org.dspace.identifier.ClarinDOIIdentifierProvider">
@@ -141,7 +148,7 @@
         <property name="DOIConnector">
             <bean parent = "org.dspace.identifier.doi.DOIConnector" />
         </property>
-        <property name="doiPrefix" value="10.83954" />
+        <property name="doiPrefix" value="10.83111" />
         <property name="namespaceSeparator" value="sep1-" />
         <property name="communities">
             <set>
@@ -159,7 +166,7 @@
         <property name="DOIConnector">
             <bean parent = "org.dspace.identifier.doi.DOIConnector" />
         </property>
-        <property name="doiPrefix" value="10.83856" />
+        <property name="doiPrefix" value="10.83222" />
         <property name="namespaceSeparator" value="sep2-" />
         <property name="communities">
             <set>
