@@ -40,7 +40,7 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
 
     private List<ClarinCommunityDOIIdentifierProvider> providers;
 
-    private final SimpleCache<UUID, ClarinCommunityDOIIdentifierProvider> simpleCache = new SimpleCache<>(5);
+    protected final SimpleCache<UUID, ClarinCommunityDOIIdentifierProvider> simpleCache = new SimpleCache<>(5);
 
     public void setProviders(List<ClarinCommunityDOIIdentifierProvider> providers) {
         this.providers = providers;
@@ -79,10 +79,10 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
             if (provider != null) {
                 provider.reserve(context, dso, identifier, filter);
             } else {
-                log.info("Item {} is not in a configured CLARIN community, skipping DOI registration", dso.getID());
+                log.info("Item {} is not in a configured CLARIN community, skipping DOI reservation", dso.getID());
             }
         } else {
-            log.info("DSpaceObject {} is not an Item, skipping DOI registration", dso.getID());
+            log.info("DSpaceObject {} is not an Item, skipping DOI reservation", dso.getID());
         }
     }
 
@@ -95,6 +95,8 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
                 provider.checkMintable(context, filter, dso);
             } else {
                 log.info("Item {} is not in a configured CLARIN community, skipping DOI minting check", dso.getID());
+                throw new DOIIdentifierNotApplicableException("Item " + dso.getID() +
+                        " is not applicable by DOI identifier provider as it is not in a configured CLARIN community");
             }
         } else {
             log.info("DSpaceObject {} is not an Item, skipping DOI minting check", dso.getID());
@@ -151,6 +153,21 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
             }
         } else {
             log.info("DSpaceObject {} is not an Item, skipping DOI minting", dso.getID());
+        }
+        return null;
+    }
+
+    @Override
+    public String getDOIByObject(Context context, DSpaceObject dso) throws SQLException {
+        if (dso instanceof Item) {
+            ClarinCommunityDOIIdentifierProvider provider = getProviderForItem(context, (Item) dso);
+            if (provider != null) {
+                return provider.getDOIByObject(context, dso);
+            } else {
+                log.info("Item {} is not in a configured CLARIN community, skipping DOI searching", dso.getID());
+            }
+        } else {
+            log.info("DSpaceObject {} is not an Item, skipping DOI searching", dso.getID());
         }
         return null;
     }
@@ -268,7 +285,7 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
                 .orElseThrow(() -> new DOIIdentifierException("No provider found for DOI prefix: " + prefix));
     }
 
-    private static class SimpleCache<K, V> {
+    protected static class SimpleCache<K, V> {
         private final Map<K, V> cache;
 
         public SimpleCache(int maxCapacity) {
@@ -290,6 +307,10 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
 
         public boolean containsKey(K key) {
             return cache.containsKey(key);
+        }
+
+        public void clear() {
+            cache.clear();
         }
     }
 
