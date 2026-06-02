@@ -12,6 +12,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.mock;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -25,6 +26,7 @@ import org.dspace.builder.ItemBuilder;
 import org.dspace.content.Collection;
 import org.dspace.content.Community;
 import org.dspace.content.Item;
+import org.dspace.content.MetadataValue;
 import org.dspace.content.factory.ContentServiceFactory;
 import org.dspace.content.service.ItemService;
 import org.dspace.identifier.doi.ClarinDataCiteConnector;
@@ -118,6 +120,7 @@ public class ClarinDOIIdentifierProviderIT extends AbstractIntegrationTestWithDa
         provider.setProviders(List.of(communityProvider1, communityProvider2));
 
         provider.itemService = itemService;
+        provider.doiService = doiService;
         provider.contentServiceFactory = ContentServiceFactory.getInstance();
     }
 
@@ -178,13 +181,71 @@ public class ClarinDOIIdentifierProviderIT extends AbstractIntegrationTestWithDa
         assertNull(doiService.findByDoi(context, doi2.substring(DOI.SCHEME.length())));
     }
 
+    @Test
+    public void tesUpdateMetadata() throws IdentifierException, SQLException {
+        String doi1 = "doi:10.1/res-1";
+        provider.reserve(context, item1, doi1);
+        checkDoi(doi1, DOIIdentifierProvider.MINTED);
+
+        provider.updateMetadata(context, item1, doi1);
+        checkDoi(doi1, DOIIdentifierProvider.MINTED);
+
+        provider.register(context, item1, doi1);
+        checkDoi(doi1, DOIIdentifierProvider.TO_BE_REGISTERED);
+        provider.updateMetadata(context, item1, doi1);
+        checkDoi(doi1, DOIIdentifierProvider.UPDATE_BEFORE_REGISTRATION);
+    }
+
+    @Test
+    public void testOnlineOperations() throws IdentifierException, SQLException {
+        context.setCurrentUser(admin);
+        String doi1 = "doi:10.1/res-1";
+        String resolver = configurationService.getProperty("identifier.doi.resolver", "https://doi.org");
+
+        provider.reserve(context, item1, doi1);
+        checkDoi(doi1, DOIIdentifierProvider.MINTED);
+        provider.reserveOnline(context, item1, doi1);
+        checkDoi(doi1, DOIIdentifierProvider.IS_RESERVED);
+
+        assertEquals(0, getDoiMetadata(item1).size());
+
+        provider.updateMetadata(context, item1, doi1);
+        checkDoi(doi1, DOIIdentifierProvider.UPDATE_RESERVED);
+        provider.updateMetadataOnline(context, item1, doi1);
+        checkDoi(doi1, DOIIdentifierProvider.IS_RESERVED);
+
+        provider.register(context, item1, doi1);
+        checkDoi(doi1, DOIIdentifierProvider.TO_BE_REGISTERED);
+        provider.registerOnline(context, item1, doi1);
+        checkDoi(doi1, DOIIdentifierProvider.IS_REGISTERED);
+
+        List<MetadataValue> doiMetadata = getDoiMetadata(item1);
+        assertEquals(1, doiMetadata.size());
+        assertEquals(resolver + "/" + doi1.substring(DOI.SCHEME.length()), doiMetadata.get(0).getValue());
+
+        provider.updateMetadata(context, item1, doi1);
+        checkDoi(doi1, DOIIdentifierProvider.UPDATE_REGISTERED);
+        provider.updateMetadataOnline(context, item1, doi1);
+        checkDoi(doi1, DOIIdentifierProvider.IS_REGISTERED);
+
+        // trying to delete a DOI for item2 that belongs to another community should fail
+        assertThrows(DOIIdentifierException.class, () -> provider.delete(context, item2, doi1));
+
+        provider.delete(context, item1, doi1);
+        checkDoi(doi1, DOIIdentifierProvider.TO_BE_DELETED);
+        provider.deleteOnline(context, doi1);
+        checkDoi(doi1, DOIIdentifierProvider.DELETED);
+
+        assertEquals(0, getDoiMetadata(item1).size());
+    }
+
     private ClarinCommunityDOIIdentifierProvider createCommunityProvider(String doiPrefix,
                                                                          String namespaceSeparator,
                                                                          Set<String> communityIds) {
         configurationService.setProperty("identifier.doi." + doiPrefix + ".user", "test_user");
         configurationService.setProperty("identifier.doi." + doiPrefix + ".password", "password");
 
-        ClarinDataCiteConnector connector = new ClarinDataCiteConnector();
+        ClarinDataCiteConnector connector = mock(ClarinDataCiteConnector.class);
 
         ClarinCommunityDOIIdentifierProvider communityProvider = new ClarinCommunityDOIIdentifierProvider();
         communityProvider.setCommunities(communityIds);
@@ -206,6 +267,14 @@ public class ClarinDOIIdentifierProviderIT extends AbstractIntegrationTestWithDa
         DOI doiRow2 = doiService.findByDoi(context, doi.substring(DOI.SCHEME.length()));
         assertNotNull(doiRow2);
         assertEquals(expectedStatus, doiRow2.getStatus());
+    }
+
+    private List<MetadataValue> getDoiMetadata(Item item) throws SQLException {
+        return itemService.getMetadata(item,
+                DOIIdentifierProvider.MD_SCHEMA,
+                DOIIdentifierProvider.DOI_ELEMENT,
+                DOIIdentifierProvider.DOI_QUALIFIER,
+                Item.ANY);
     }
 
 }

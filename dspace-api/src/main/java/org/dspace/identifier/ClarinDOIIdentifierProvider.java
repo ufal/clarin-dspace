@@ -132,6 +132,7 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
             log.info("DSpaceObject {} is not an Item, skipping DOI reservation", dso.getID());
         }
     }
+
     @Override
     public void deleteOnline(Context context, String identifier) throws DOIIdentifierException {
         ClarinCommunityDOIIdentifierProvider provider = getProviderForIdentifier(identifier);
@@ -194,6 +195,21 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
     }
 
     @Override
+    public void updateMetadata(Context context, DSpaceObject dso, String identifier)
+            throws IdentifierException, SQLException {
+        if (dso instanceof Item) {
+            ClarinCommunityDOIIdentifierProvider provider = getProviderForItem(context, (Item) dso);
+            if (provider != null) {
+                provider.updateMetadata(context, dso, identifier);
+            } else {
+                log.info("Item {} is not in a configured CLARIN community, skipping DOI metadata update", dso.getID());
+            }
+        } else {
+            log.info("DSpaceObject {} is not an Item, skipping DOI update", dso.getID());
+        }
+    }
+
+    @Override
     public void updateMetadataOnline(Context context, DSpaceObject dso, String identifier)
             throws IdentifierException, SQLException {
         if (dso instanceof Item) {
@@ -202,12 +218,9 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
                 provider.updateMetadataOnline(context, dso, identifier);
             } else {
                 log.info("Item {} is not in a configured CLARIN community, skipping DOI metadata update", dso.getID());
-                throw new DOIIdentifierNotApplicableException("Item " + dso.getHandle() +
-                        " is not applicable by DOI identifier provider as it is not in a configured CLARIN community");
             }
         } else {
             log.info("DSpaceObject {} is not an Item, skipping DOI update", dso.getID());
-            throw new DOIIdentifierNotApplicableException("Currently only Items are supported for DOIs.");
         }
     }
 
