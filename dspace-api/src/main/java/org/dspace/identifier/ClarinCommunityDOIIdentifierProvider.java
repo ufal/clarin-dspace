@@ -32,14 +32,16 @@ public class ClarinCommunityDOIIdentifierProvider extends VersionedDOIIdentifier
     private Set<String> communities = new HashSet<>();
 
     public void init() {
-        if (this.connector instanceof ClarinDataCiteConnector) {
-            log.info("Initializing ClarinCommunityDOIIdentifierProvider with DOI prefix '{}'", doiPrefix);
-        } else {
-            log.error("The connector for ClarinCommunityDOIIdentifierProvider is not an instance of" +
-                    " ClarinDataCiteConnector");
-            throw new IllegalStateException("The connector for ClarinCommunityDOIIdentifierProvider " +
-                    "is not an instance of ClarinDataCiteConnector");
+        if (!(this.connector instanceof ClarinDataCiteConnector)) {
+            throw new IllegalStateException("ClarinCommunityDOIIdentifierProvider requires ClarinDataCiteConnector");
         }
+        if (doiPrefix == null) {
+            throw new IllegalStateException("No DOI prefix configured for ClarinCommunityDOIIdentifierProvider");
+        }
+        if (namespaceSeparator == null) {
+            namespaceSeparator = "";
+        }
+
         ClarinDataCiteConnector dataCiteConnector = (ClarinDataCiteConnector) this.connector;
 
         dataCiteConnector.setDoiPrefix(doiPrefix);
