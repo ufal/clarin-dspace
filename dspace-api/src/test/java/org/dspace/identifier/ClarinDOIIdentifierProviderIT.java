@@ -54,7 +54,7 @@ public class ClarinDOIIdentifierProviderIT extends AbstractIntegrationTestWithDa
     private DOIService doiService;
     private ItemService itemService;
 
-    ClarinDOIIdentifierProvider provider;
+    private ClarinDOIIdentifierProvider provider;
 
     private Item item1;
     private Item item2;
@@ -162,7 +162,7 @@ public class ClarinDOIIdentifierProviderIT extends AbstractIntegrationTestWithDa
     }
 
     @Test
-    public void tesReserve() throws IdentifierException, SQLException {
+    public void testReserve() throws IdentifierException, SQLException {
         String doi1 = "doi:10.1/res-1";
         String doi2 = "doi:10.1/res-2";
         provider.reserve(context, item1, doi1);
@@ -182,7 +182,7 @@ public class ClarinDOIIdentifierProviderIT extends AbstractIntegrationTestWithDa
     }
 
     @Test
-    public void tesUpdateMetadata() throws IdentifierException, SQLException {
+    public void testUpdateMetadata() throws IdentifierException, SQLException {
         String doi1 = "doi:10.1/res-1";
         provider.reserve(context, item1, doi1);
         checkDoi(doi1, DOIIdentifierProvider.MINTED);
