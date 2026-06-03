@@ -385,7 +385,7 @@ public class DataCiteConnector
         Map<String, String> parameters = new HashMap<>();
         String doiPrefix = getDoiPrefix();
         if (doiPrefix != null) {
-            parameters.put("prefix", getDoiPrefix());
+            parameters.put("prefix", doiPrefix);
         }
         if (configurationService.hasProperty(CFG_PUBLISHER)) {
             parameters.put("publisher",

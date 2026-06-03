@@ -137,12 +137,7 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
 
     @Override
     public void deleteOnline(Context context, String identifier) throws DOIIdentifierException {
-        ClarinCommunityDOIIdentifierProvider provider = getProviderForIdentifier(identifier);
-        if (provider != null) {
-            provider.deleteOnline(context, identifier);
-        } else {
-            log.info("No provider found for DOI {}, skipping DOI deletion", identifier);
-        }
+        getProviderForIdentifier(identifier).deleteOnline(context, identifier);
     }
 
     @Override
@@ -242,7 +237,7 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
                     }
                 }
             } catch (SQLException e) {
-                log.error(e.getMessage());
+                log.error("Error while determining DOI provider for item {}", item.getID(), e);
             }
         }
 
@@ -262,7 +257,8 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
                         }
                     }
                 } catch (SQLException e) {
-                    log.error(e.getMessage());
+                    log.error("Error while determining DOI provider for item {} from the parent collection",
+                            item.getID(), e);
                 }
             } else {
                 log.debug("Parent DSO is null or is not a Collection...");
