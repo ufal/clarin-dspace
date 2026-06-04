@@ -155,7 +155,7 @@
             <!--
                 DataCite (10)
                 Template call for ResourceType
-                DataCite allows the ResourceType to ouccre not more than once.
+                DataCite allows the ResourceType to occure not more than once.
             -->
             <xsl:call-template name="resourceType" />
 
@@ -234,24 +234,6 @@
                 Format: IETF BCP 47 or ISO 639-1
             -->
             <xsl:apply-templates select="(//dspace:field[@mdschema='dc' and @element='language' and (@qualifier='iso' or @qualifier='rfc3066')])[1]" />
-
-            <!--
-                DataCite (10)
-                Template call for ResourceType
-                DataCite allows the ResourceType to ouccre not more than once.
-            -->
-            <!--<xsl:apply-templates select="(//dspace:field[@mdschema='dc' and @element='type'])[1]" />-->
-            <xsl:choose>
-                <xsl:when test="(//dspace:field[@mdschema='dc' and @element='type'])[1]">
-                    <xsl:apply-templates select="(//dspace:field[@mdschema='dc' and @element='type'])[1]" />
-                </xsl:when>
-                <xsl:otherwise>
-                    <xsl:element name="resourceType">
-                        <xsl:attribute name="resourceTypeGeneral">Other</xsl:attribute>
-                        <xsl:value-of>Other</xsl:value-of>
-                    </xsl:element>
-                </xsl:otherwise>
-            </xsl:choose>
 
             <!-- 
                 DataCite (11)
