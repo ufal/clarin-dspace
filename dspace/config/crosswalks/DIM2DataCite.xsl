@@ -59,7 +59,7 @@
             The classe named above respects this.
         -->
         <resource xmlns="http://datacite.org/schema/kernel-4"
-                xsi:schemaLocation="http://datacite.org/schema/kernel-4 http://schema.datacite.org/meta/kernel-4/metadata.xsd"
+                xsi:schemaLocation="http://datacite.org/schema/kernel-4 http://schema.datacite.org/meta/kernel-4.5/metadata.xsd"
                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
 
             <!--
