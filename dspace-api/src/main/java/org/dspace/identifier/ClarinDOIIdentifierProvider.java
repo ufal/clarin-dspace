@@ -156,21 +156,6 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
     }
 
     @Override
-    public String getDOIByObject(Context context, DSpaceObject dso) throws SQLException {
-        if (dso instanceof Item) {
-            ClarinCommunityDOIIdentifierProvider provider = getProviderForItem(context, (Item) dso);
-            if (provider != null) {
-                return provider.getDOIByObject(context, dso);
-            } else {
-                logInfoNonConfigurableEntity(dso, "searching");
-            }
-        } else {
-            logInfoNoItem(dso, "searching");
-        }
-        return null;
-    }
-
-    @Override
     public String getDOIOutOfObject(DSpaceObject dso) throws DOIIdentifierException {
         if (!(dso instanceof Item)) {
             throw new IllegalArgumentException("We currently support DOIs for Items only, not for " +
@@ -256,6 +241,9 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
                             return provider;
                         }
                     }
+                    // parent collection is not in any of the configured communities,
+                    // cache this fact to avoid future lookups
+                    simpleCache.put(item.getID(), null);
                 } catch (SQLException e) {
                     log.error("Error while determining DOI provider for item {} from the parent collection",
                             item.getID(), e);
@@ -267,7 +255,6 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
             log.error("Error obtaining parent DSO", e);
         }
 
-        simpleCache.put(item.getID(), null);
         return null;
     }
 
