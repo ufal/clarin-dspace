@@ -15,16 +15,29 @@ import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 import static org.junit.Assert.assertFalse;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.commons.lang3.StringUtils;
+import org.dspace.app.rest.model.patch.AddOperation;
+import org.dspace.app.rest.model.patch.Operation;
+import org.dspace.app.rest.model.patch.ReplaceOperation;
+import org.dspace.app.rest.repository.ClarinLicenseRestRepository;
 import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
+import org.dspace.builder.ClaimedTaskBuilder;
+import org.dspace.builder.ClarinLicenseBuilder;
+import org.dspace.builder.ClarinLicenseLabelBuilder;
 import org.dspace.builder.CollectionBuilder;
 import org.dspace.builder.CommunityBuilder;
 import org.dspace.builder.EPersonBuilder;
@@ -35,12 +48,18 @@ import org.dspace.content.Collection;
 import org.dspace.content.Item;
 import org.dspace.content.MetadataValue;
 import org.dspace.content.WorkspaceItem;
+import org.dspace.content.clarin.ClarinLicense;
+import org.dspace.content.clarin.ClarinLicenseLabel;
 import org.dspace.content.service.ItemService;
 import org.dspace.content.service.WorkspaceItemService;
+import org.dspace.content.service.clarin.ClarinLicenseLabelService;
+import org.dspace.content.service.clarin.ClarinLicenseService;
 import org.dspace.eperson.EPerson;
 import org.dspace.license.service.CreativeCommonsService;
 import org.dspace.services.ConfigurationService;
 import org.dspace.xmlworkflow.factory.XmlWorkflowFactory;
+import org.dspace.xmlworkflow.storedcomponents.ClaimedTask;
+import org.dspace.xmlworkflow.storedcomponents.XmlWorkflowItem;
 import org.dspace.xmlworkflow.storedcomponents.service.CollectionRoleService;
 import org.dspace.xmlworkflow.storedcomponents.service.XmlWorkflowItemService;
 import org.hamcrest.Matchers;
@@ -77,6 +96,11 @@ public class ClarinWorkflowItemRestRepositoryIT extends AbstractControllerIntegr
 
     @Autowired
     private ItemService itemService;
+
+    @Autowired
+    private ClarinLicenseService clarinLicenseService;
+    @Autowired
+    private ClarinLicenseLabelService clarinLicenseLabelService;
 
     Item item;
 
@@ -363,5 +387,130 @@ public class ClarinWorkflowItemRestRepositoryIT extends AbstractControllerIntegr
                 "citation", Item.ANY);
         assertFalse(mvList.isEmpty());
         assertThat(mvList.get(0).getValue(), is(CITATION_VALUE));
+    }
+
+    @Test
+    public void patchUpdateClarinLicense() throws Exception {
+        context.turnOffAuthorisationSystem();
+
+        // create Clarin License Label
+        ClarinLicenseLabel clarinLicenseLabel = ClarinLicenseLabelBuilder.createClarinLicenseLabel(context).build();
+        clarinLicenseLabel.setLabel("CC");
+        clarinLicenseLabel.setExtended(false);
+        clarinLicenseLabel.setTitle("CLL Title1");
+        clarinLicenseLabelService.update(context, clarinLicenseLabel);
+
+        // create Clarin License
+        ClarinLicense clarinLicense = ClarinLicenseBuilder.createClarinLicense(context).build();
+        clarinLicense.setName("CL Name");
+        clarinLicense.setConfirmation(ClarinLicense.Confirmation.NOT_REQUIRED);
+        clarinLicense.setDefinition("CL Definition");
+        clarinLicense.setRequiredInfo("CL Req");
+        // add clarinLicenseLabel to  clarinLicense
+        Set<ClarinLicenseLabel> clarinLicenseLabels = new HashSet<>();
+        clarinLicenseLabels.add(clarinLicenseLabel);
+        clarinLicense.setLicenseLabels(clarinLicenseLabels);
+        clarinLicenseService.update(context, clarinLicense);
+
+        // community with one collection.
+        parentCommunity = CommunityBuilder.createCommunity(context)
+                .withName("Parent Community")
+                .build();
+        Collection col = CollectionBuilder.createCollection(context, parentCommunity).withName("Collection 1")
+                .withWorkflowGroup("editor", eperson).build();
+
+        // create a normal user to use as submitter
+        EPerson submitter = EPersonBuilder.createEPerson(context)
+                .withEmail("submitter@example.com")
+                .withPassword("dspace")
+                .build();
+
+        // claimed task with workflow item in edit step
+        ClaimedTask claimedTask = ClaimedTaskBuilder.createClaimedTask(context, col, eperson)
+                .withTitle("Workflow Item")
+                .withIssueDate("2026-05-18")
+                .withSubject("Extra Entry")
+                .grantLicense()
+                .build();
+        claimedTask.setStepID("editstep");
+        claimedTask.setActionID("editaction");
+        XmlWorkflowItem wfItem = claimedTask.getWorkflowItem();
+
+        context.restoreAuthSystemState();
+
+        // prepare a patch targeting the clarin license resource path
+        List<Operation> ops = new ArrayList<>();
+        ops.add(new ReplaceOperation("/" + ClarinLicenseRestRepository.OPERATION_PATH_LICENSE_RESOURCE, "CL Name"));
+
+        String submitterToken = getAuthToken(submitter.getEmail(), "dspace");
+
+        // The submitter shouldn't be allowed to patch clarin license
+        // because the workflow item was claimed by the other user (eperson),
+        // and the submitter doesn't have permissions to edit it,
+        // so the patch request should be rejected with error 403(Forbidden)
+        getClient(submitterToken).perform(patch("/api/workflow/workflowitems/" + wfItem.getID())
+                        .content(getPatchContent(ops))
+                        .contentType(javax.ws.rs.core.MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isForbidden());
+
+        String editorToken = getAuthToken(eperson.getEmail(), password);
+
+        ops.set(0, new ReplaceOperation("/" + ClarinLicenseRestRepository.OPERATION_PATH_LICENSE_RESOURCE, "Wrong CL"));
+
+        // The wrong clarin license name value should be rejected with 404 Not Found
+        getClient(editorToken).perform(patch("/api/workflow/workflowitems/" + wfItem.getID())
+                        .content(getPatchContent(ops))
+                        .contentType(javax.ws.rs.core.MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isNotFound());
+
+        // The valid clarin license name can be in the form of a simple string or
+        // in the form of a map with "value" key, but it should be accepted in both cases
+        ops.set(0, new ReplaceOperation("/" + ClarinLicenseRestRepository.OPERATION_PATH_LICENSE_RESOURCE, "CL Name"));
+
+        getClient(editorToken).perform(patch("/api/workflow/workflowitems/" + wfItem.getID())
+                        .content(getPatchContent(ops))
+                        .contentType(javax.ws.rs.core.MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk());
+
+        Map<String, String> wrappedValue = new HashMap<String, String>();
+        wrappedValue.put("value", "CL Name");
+        ops.set(0, new ReplaceOperation("/" + ClarinLicenseRestRepository.OPERATION_PATH_LICENSE_RESOURCE,
+                wrappedValue));
+
+        getClient(editorToken).perform(patch("/api/workflow/workflowitems/" + wfItem.getID())
+                        .content(getPatchContent(ops))
+                        .contentType(javax.ws.rs.core.MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk());
+
+        // The wrapped value should contain the "value" key, otherwise it is invalid
+        Map<String, String> invalidWrappedValue1 = new HashMap<String, String>();
+        ops.set(0, new ReplaceOperation("/" + ClarinLicenseRestRepository.OPERATION_PATH_LICENSE_RESOURCE,
+                invalidWrappedValue1));
+
+        getClient(editorToken).perform(patch("/api/workflow/workflowitems/" + wfItem.getID())
+                        .content(getPatchContent(ops))
+                        .contentType(javax.ws.rs.core.MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isBadRequest());
+
+        // The wrapped value should be in a map, not in a list
+        List<String> invalidWrappedValue2 = new ArrayList<>();
+        invalidWrappedValue2.add("CL Name");
+        ops.set(0, new ReplaceOperation("/" + ClarinLicenseRestRepository.OPERATION_PATH_LICENSE_RESOURCE,
+                invalidWrappedValue2));
+
+        getClient(editorToken).perform(patch("/api/workflow/workflowitems/" + wfItem.getID())
+                        .content(getPatchContent(ops))
+                        .contentType(javax.ws.rs.core.MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isBadRequest());
+
+        // The only accepted operation for clarin license resource is "replace",
+        // "add" operation should be rejected with 400 Bad Request even with the valid value
+        ops.set(0, new AddOperation("/" + ClarinLicenseRestRepository.OPERATION_PATH_LICENSE_RESOURCE,
+                "CL Name"));
+
+        getClient(editorToken).perform(patch("/api/workflow/workflowitems/" + wfItem.getID())
+                        .content(getPatchContent(ops))
+                        .contentType(javax.ws.rs.core.MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isBadRequest());
     }
 }
