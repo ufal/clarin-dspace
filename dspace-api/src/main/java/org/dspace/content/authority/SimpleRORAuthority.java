@@ -45,8 +45,6 @@ public class SimpleRORAuthority implements ChoiceAuthority {
     // maximum number of pages that can be returned by the ROR API is 500
     private static final int ROR_MAX_PAGES = 500;
 
-    private StoredNameType storedNameType;
-
     /**
      * Get all values from the authority that match the preferred value.
      * Note that the offering was entered by the user and may contain
@@ -69,7 +67,6 @@ public class SimpleRORAuthority implements ChoiceAuthority {
      */
     @Override
     public Choices getMatches(String text, int start, int limit, String locale) {
-        initStoredNameType();
 
         if (text == null || text.trim().isEmpty()) {
             return new Choices(true);
@@ -105,8 +102,9 @@ public class SimpleRORAuthority implements ChoiceAuthority {
 
                     String localeLanguage = getLocaleLanguage(locale);
 
+                    StoredNameType storedNameType = resolveStoredNameType();
                     List<Choice> choices = items.stream()
-                            .map(item -> toChoice(item, localeLanguage))
+                            .map(item -> toChoice(item, localeLanguage, storedNameType))
                             .collect(Collectors.toList());
 
                     // select sublist of results to return based on the start and limit parameters
@@ -150,7 +148,6 @@ public class SimpleRORAuthority implements ChoiceAuthority {
      */
     @Override
     public Choices getBestMatch(String text, String locale) {
-        initStoredNameType();
         try (Response response = rorRestConnector.getByQuery(sanitizeQuery(text))) {
             if (response.getStatus() == Response.Status.OK.getStatusCode()) {
                 try (InputStream is = response.readEntity(InputStream.class)) {
@@ -159,7 +156,7 @@ public class SimpleRORAuthority implements ChoiceAuthority {
                     if (items.isEmpty()) {
                         return new Choices(false);
                     }
-                    Choice[] choices = {toChoice(items.get(0), getLocaleLanguage(locale))};
+                    Choice[] choices = {toChoice(items.get(0), getLocaleLanguage(locale), resolveStoredNameType())};
                     return new Choices(choices, 0, 1, Choices.CF_UNCERTAIN, false);
                 } catch (Exception e) {
                     log.error("Error during search", e);
@@ -172,12 +169,11 @@ public class SimpleRORAuthority implements ChoiceAuthority {
 
     @Override
     public Choice getChoice(String authKey, String locale) {
-        initStoredNameType();
         try (Response response = rorRestConnector.getByID(authKey)) {
             if (response.getStatus() == Response.Status.OK.getStatusCode()) {
                 try (InputStream is = response.readEntity(InputStream.class)) {
                     RorItem rorItem = new ObjectMapper().readValue(is, RorItem.class);
-                    return toChoice(rorItem, getLocaleLanguage(locale));
+                    return toChoice(rorItem, getLocaleLanguage(locale), resolveStoredNameType());
                 } catch (Exception e) {
                     log.error("Error during search", e);
                 }
@@ -200,7 +196,8 @@ public class SimpleRORAuthority implements ChoiceAuthority {
      */
     @Override
     public String getLabel(String key, String locale) {
-        return key;
+        Choice choice = getChoice(key, locale);
+        return choice != null ? choice.label : key;
     }
 
     /**
@@ -244,7 +241,7 @@ public class SimpleRORAuthority implements ChoiceAuthority {
         return Optional.ofNullable(LocaleUtils.toLocale(locale)).map(Locale::getLanguage).orElse("en");
     }
 
-    private Choice toChoice(RorItem rorItem, String localeLanguage) {
+    private Choice toChoice(RorItem rorItem, String localeLanguage, StoredNameType storedNameType) {
         String authority = rorItem.getId();
         int slashIndex = authority.lastIndexOf("/");
         if (slashIndex != -1) {
@@ -313,7 +310,7 @@ public class SimpleRORAuthority implements ChoiceAuthority {
                 label = (rorDisplay != null) ? rorDisplay : names.get(0).getValue();
             }
 
-            String value = null;
+            String value;
             // set tha value based on the configuration of the name selection type
             switch (storedNameType) {
                 case ROR_DISPLAY : {
@@ -354,9 +351,9 @@ public class SimpleRORAuthority implements ChoiceAuthority {
         return c;
     }
 
-    private void initStoredNameType() {
+    private StoredNameType resolveStoredNameType() {
         ConfigurationService configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
-        storedNameType =  StoredNameType.fromString(
+        return StoredNameType.fromString(
                 configurationService.getProperty("ror.authority.stored-name-type", "en_label"));
     }
 

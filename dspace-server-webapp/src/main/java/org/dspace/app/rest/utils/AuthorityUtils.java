@@ -32,8 +32,6 @@ public class AuthorityUtils {
 
     public static final String PRESENTATION_TYPE_AUTHORLOOKUP = "authorLookup";
 
-    public static final String PRESENTATION_TYPE_PUBLISHER_LOOKUP = "publisherLookup";
-
     public static final String PRESENTATION_TYPE_SUGGEST = "suggest";
 
     public static final String RESERVED_KEYMAP_PARENT = "parent";
@@ -88,7 +86,7 @@ public class AuthorityUtils {
      * This utility method is currently a workaround to enrich the REST object with
      * information from the parent vocabulary that is not referenced by the Choice
      * model
-     *
+     * 
      * @param choice         the dspace-api choice to expose as vocabulary entry
      * @param authorityName  the name of the vocabulary
      * @param storeAuthority <code>true</code> if the entry id should be exposed as
