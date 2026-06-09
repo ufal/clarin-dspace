@@ -66,6 +66,7 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
     Bitstream gzFile;
     Bitstream tarXzFile;
     Bitstream xzFile;
+    Bitstream tgzFileWithGzipMimeType;
     Bitstream tarGzFileWithWrongExtension;
     Bitstream tarXzFileWithIncorrectMimeType;
 
@@ -130,6 +131,15 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
                     .withName("logos.tar.gz")
                     .withDescription("tar.gz compressed file")
                     .withCustomMimeType("application/x-gzip")
+                    .build();
+        }
+
+        try (InputStream is = getClass().getResourceAsStream("assetstore/logos.tgz")) {
+            tgzFileWithGzipMimeType = BitstreamBuilder.
+                    createBitstream(context, bundle1, is)
+                    .withName("logos.tgz")
+                    .withDescription("tar.gz compressed file with tgz extension")
+                    .withMimeType("application/x-gzip")
                     .build();
         }
 
@@ -336,6 +346,11 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
     @Test
     public void testXzContent() throws Exception {
         assertFileInfo(xzFile, "logos", 24);
+    }
+
+    @Test
+    public void testTgzContentWithGzipMimetype() throws Exception {
+        assertFileInfos(tgzFileWithGzipMimeType);
     }
 
     @Test

@@ -22,6 +22,7 @@ import org.dspace.authenticate.service.AuthenticationService;
 import org.dspace.content.Bitstream;
 import org.dspace.content.Bundle;
 import org.dspace.content.Item;
+import org.dspace.content.PreviewContent;
 import org.dspace.content.factory.ContentServiceFactory;
 import org.dspace.content.service.ItemService;
 import org.dspace.content.service.PreviewContentService;
@@ -53,6 +54,7 @@ public class FilePreview extends DSpaceRunnable<FilePreviewConfiguration> {
      * `-i`: Info, show help information.
      */
     private boolean info = false;
+    private boolean force = false;
 
     /**
      * `-u`: UUID of the Item for which to create a preview of its bitstreams.
@@ -82,6 +84,10 @@ public class FilePreview extends DSpaceRunnable<FilePreviewConfiguration> {
             // Generate the file previews for the specified item with the given UUID.
             handler.logInfo("\nGenerate the file previews for the specified item with the given UUID: " +
                     specificItemUUID);
+        }
+
+        if (commandLine.hasOption('f')) {
+            force = true;
         }
 
         epersonMail = commandLine.getOptionValue('e');
@@ -152,7 +158,16 @@ public class FilePreview extends DSpaceRunnable<FilePreviewConfiguration> {
                 }
                 // Generate new content if we didn't find any
                 if (previewContentService.hasPreview(context, bitstream)) {
-                    continue;
+                    if (force) {
+                        List<PreviewContent> previewContents = previewContentService.getPreview(context, bitstream);
+                        for (PreviewContent content : previewContents) {
+                            handler.logInfo("Deleting existing preview content: " + content.getName() +
+                                    " for bitstream: " + bitstream.getName());
+                            previewContentService.delete(context, content);
+                        }
+                    } else {
+                        continue;
+                    }
                 }
 
                 List<FileInfo> fileInfos = previewContentService.getFilePreviewContent(context, bitstream);
@@ -162,6 +177,7 @@ public class FilePreview extends DSpaceRunnable<FilePreviewConfiguration> {
                     continue;
                 }
 
+                handler.logInfo("Generating file preview for bitstream: " + bitstream.getName());
                 for (FileInfo fi : fileInfos) {
                     previewContentService.createPreviewContent(context, bitstream, fi);
                 }
@@ -176,6 +192,7 @@ public class FilePreview extends DSpaceRunnable<FilePreviewConfiguration> {
                 "You can choose from these available options:\n" +
                 "  -i, --info            Show help information\n" +
                 "  -u, --uuid            The UUID of the ITEM for which to create a preview of its bitstreams\n" +
+                "  -f, --force           force to create preview, even when exists\n" +
                 "  -e, --email           Email for authentication\n" +
                 "  -p, --password        Password for authentication\n");
 
