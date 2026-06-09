@@ -15,7 +15,7 @@ import java.util.stream.Collectors;
 import javax.ws.rs.core.Response;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.commons.lang.LocaleUtils;
+import org.apache.commons.lang3.LocaleUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.dspace.external.RorRestConnector;
@@ -34,6 +34,8 @@ import org.dspace.utils.DSpace;
 public class SimpleRORAuthority implements ChoiceAuthority {
 
     private static final Logger log = LogManager.getLogger(SimpleRORAuthority.class);
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private String pluginInstanceName;
 
@@ -93,7 +95,7 @@ public class SimpleRORAuthority implements ChoiceAuthority {
         try (Response response = rorRestConnector.getByQuery(text, offset + 1)) {
             if (response.getStatus() == Response.Status.OK.getStatusCode()) {
                 try (InputStream is = response.readEntity(InputStream.class)) {
-                    RorItems rorItems = new ObjectMapper().readValue(is, RorItems.class);
+                    RorItems rorItems = OBJECT_MAPPER.readValue(is, RorItems.class);
                     int total = rorItems.getNoOfResults();
                     List<RorItem> items = rorItems.getItems();
                     if (items.isEmpty()) {
@@ -151,7 +153,7 @@ public class SimpleRORAuthority implements ChoiceAuthority {
         try (Response response = rorRestConnector.getByQuery(sanitizeQuery(text))) {
             if (response.getStatus() == Response.Status.OK.getStatusCode()) {
                 try (InputStream is = response.readEntity(InputStream.class)) {
-                    RorItems rorItems = new ObjectMapper().readValue(is, RorItems.class);
+                    RorItems rorItems = OBJECT_MAPPER.readValue(is, RorItems.class);
                     List<RorItem> items = rorItems.getItems();
                     if (items.isEmpty()) {
                         return new Choices(false);
@@ -172,7 +174,7 @@ public class SimpleRORAuthority implements ChoiceAuthority {
         try (Response response = rorRestConnector.getByID(authKey)) {
             if (response.getStatus() == Response.Status.OK.getStatusCode()) {
                 try (InputStream is = response.readEntity(InputStream.class)) {
-                    RorItem rorItem = new ObjectMapper().readValue(is, RorItem.class);
+                    RorItem rorItem = OBJECT_MAPPER.readValue(is, RorItem.class);
                     return toChoice(rorItem, getLocaleLanguage(locale), resolveStoredNameType());
                 } catch (Exception e) {
                     log.error("Error during search", e);

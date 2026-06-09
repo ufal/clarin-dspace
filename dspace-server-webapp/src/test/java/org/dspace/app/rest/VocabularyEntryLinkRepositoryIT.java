@@ -18,6 +18,7 @@ import org.dspace.core.factory.CoreServiceFactory;
 import org.dspace.services.ConfigurationService;
 import org.dspace.services.factory.DSpaceServicesFactory;
 import org.hamcrest.Matchers;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -28,14 +29,28 @@ public class VocabularyEntryLinkRepositoryIT extends AbstractControllerIntegrati
     private static final String BASE_VOCABULARY_URL = "/api/submission/vocabularies";
     private static final String ROR_AUTHORITY_ENTRIES_URL = BASE_VOCABULARY_URL + "/SimpleRORAuthority/entries";
     private static final int MOCK_TOTAL_ELEMENTS = 30133;
+    private static final String CHOICE_AUTHORITY_PLUGIN_KEY =
+            "plugin.named.org.dspace.content.authority.ChoiceAuthority";
+
+    private static String[] originalChoiceAuthorities;
 
     @BeforeClass
     public static void beforeClass() {
         ConfigurationService configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
-        configurationService.setProperty("plugin.named.org.dspace.content.authority.ChoiceAuthority",
+        originalChoiceAuthorities = configurationService.getArrayProperty(CHOICE_AUTHORITY_PLUGIN_KEY);
+        configurationService.setProperty(CHOICE_AUTHORITY_PLUGIN_KEY,
                 new String[] {
                         "org.dspace.content.authority.SimpleRORAuthority = SimpleRORAuthority"
                 });
+        CoreServiceFactory.getInstance().getPluginService().clearNamedPluginClasses();
+    }
+
+    @AfterClass
+    public static void afterClass() {
+        // restore the original ChoiceAuthority plugin configuration so this class does not
+        // leak the SimpleRORAuthority registration into other integration tests
+        ConfigurationService configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
+        configurationService.setProperty(CHOICE_AUTHORITY_PLUGIN_KEY, originalChoiceAuthorities);
         CoreServiceFactory.getInstance().getPluginService().clearNamedPluginClasses();
     }
 
