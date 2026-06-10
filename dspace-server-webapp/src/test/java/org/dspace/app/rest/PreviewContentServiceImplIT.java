@@ -254,6 +254,7 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
         BitstreamBuilder.deleteBitstream(gzFile.getID());
         BitstreamBuilder.deleteBitstream(tarXzFile.getID());
         BitstreamBuilder.deleteBitstream(xzFile.getID());
+        BitstreamBuilder.deleteBitstream(tgzFileWithGzipMimeType.getID());
         BitstreamBuilder.deleteBitstream(tarGzFileWithWrongExtension.getID());
         BitstreamBuilder.deleteBitstream(tarXzFileWithIncorrectMimeType.getID());
 
