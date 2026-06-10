@@ -159,10 +159,11 @@ public class FilePreview extends DSpaceRunnable<FilePreviewConfiguration> {
                 // Generate new content if we didn't find any
                 if (previewContentService.hasPreview(context, bitstream)) {
                     if (force) {
-                        List<PreviewContent> previewContents = previewContentService.getPreview(context, bitstream);
+                        List<PreviewContent> previewContents = previewContentService
+                                .findByBitstream(context, bitstream.getID());
                         for (PreviewContent content : previewContents) {
-                            handler.logInfo("Deleting existing preview content: " + content.getName() +
-                                    " for bitstream: " + bitstream.getName());
+                            handler.logInfo("Deleting existing preview content: '" + content.getName() +
+                                    "', for bitstream: '" + bitstream.getName() + "'");
                             previewContentService.delete(context, content);
                         }
                     } else {
