@@ -1069,28 +1069,23 @@ public class DOIIdentifierProvider extends FilteredIdentifierProvider {
 
         String doiURL = doiService.DOIToExternalForm(doi);
 
-        List<MetadataValue> mv = itemService.getMetadata(item, MD_SCHEMA, DOI_ELEMENT, DOI_QUALIFIER, Item.ANY);
+        // Add the DOI to the metadata only if this exact value is not present yet. This keeps the operation
+        // idempotent (re-registration does not create duplicate values) without ever deleting metadata: a
+        // pre-existing, different DOI is left untouched. This method is called after the DOI has already been
+        // registered with the external agency, so destroying metadata here would be lossy and irreversible.
+        // Items that end up with more than one dc.identifier.doi value are surfaced by the ItemMetadataQAChecker
+        // curation task for manual review.
+        List<MetadataValue> existing = itemService.getMetadata(item, MD_SCHEMA, DOI_ELEMENT, DOI_QUALIFIER, Item.ANY);
+        boolean alreadyPresent = existing.stream().anyMatch(value -> doiURL.equals(value.getValue()));
 
-        boolean doiMetadataExists = false;
-        if (!mv.isEmpty()) {
-            if (mv.size() > 1) {
-                log.warn("Item {} has more than one value for dc.identifier.doi. This is not recommended.",
-                        item.getID());
-                itemService.clearMetadata(context, item, MD_SCHEMA, DOI_ELEMENT, DOI_QUALIFIER, Item.ANY);
-            } else if (doiURL.equals(mv.get(0).getValue())) {
-                log.debug("The DOI {} is already part of the metadata of Item {}. Not adding it again.",
-                        doi, item.getID());
-                doiMetadataExists = true;
-            } else {
-                log.warn("Item {} has a different DOI in its metadata than the one we want to add. " +
-                        "Removing old DOI and adding new one.", item.getID());
-                itemService.clearMetadata(context, item, MD_SCHEMA, DOI_ELEMENT, DOI_QUALIFIER, Item.ANY);
-            }
+        if (alreadyPresent) {
+            log.debug("The DOI {} is already part of the metadata of Item {}. Not adding it again.",
+                    doi, item.getID());
+            return;
         }
-        if (!doiMetadataExists) {
-            itemService.addMetadata(context, item, MD_SCHEMA, DOI_ELEMENT, DOI_QUALIFIER, null, doiURL);
-            itemService.update(context, item);
-        }
+
+        itemService.addMetadata(context, item, MD_SCHEMA, DOI_ELEMENT, DOI_QUALIFIER, null, doiURL);
+        itemService.update(context, item);
     }
 
     /**
