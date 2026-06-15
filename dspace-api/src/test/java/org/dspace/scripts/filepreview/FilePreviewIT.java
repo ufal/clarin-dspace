@@ -105,20 +105,10 @@ public class FilePreviewIT extends AbstractIntegrationTestWithDatabase {
     }
 
     @Test
-    public void testUnauthorizedPassword() throws Exception {
-        // Run the script
-        TestDSpaceRunnableHandler testDSpaceRunnableHandler = new TestDSpaceRunnableHandler();
-        String[] args = new String[] { "file-preview", "-e", ePerson.getEmail()};
-        int run = ScriptLauncher.handleScript(args, ScriptLauncher.getConfig(kernelImpl),
-                testDSpaceRunnableHandler, kernelImpl);
-        assertEquals(1, run); // Since a ParseException was caught, expect return code 1
-    }
-
-    @Test
     public void testWhenNoFilesRun() throws Exception {
         TestDSpaceRunnableHandler testDSpaceRunnableHandler = new TestDSpaceRunnableHandler();
 
-        String[] args = new String[] { "file-preview", "-e", ePerson.getEmail(), "-p",  PASSWORD };
+        String[] args = new String[] { "file-preview", "-e", ePerson.getEmail() };
         int run = ScriptLauncher.handleScript(args, ScriptLauncher.getConfig(kernelImpl),
                 testDSpaceRunnableHandler, kernelImpl);
         assertEquals(0, run);
@@ -129,7 +119,8 @@ public class FilePreviewIT extends AbstractIntegrationTestWithDatabase {
     public void testForSpecificItem() throws Exception {
         Item item2 = createOtherWorkspaceItemWithBitstream(ePerson, 0);
         // Run the script
-        runScriptForItemWithBitstreams(item2, ePerson, PASSWORD);
+        TestDSpaceRunnableHandler testHandler = runScriptForItemWithBitstreams(item2, ePerson);
+        checkHandlerMessages(testHandler, ePerson, item2, "logos.tgz", true);
 
         Bitstream b = bitstreamService.findAll(context).stream()
                 .filter(bitstream -> bitstream.getName().equals("logos.tgz"))
@@ -147,7 +138,8 @@ public class FilePreviewIT extends AbstractIntegrationTestWithDatabase {
     public void testWhenScriptCannotCreateFilePreview() throws Exception {
         Item item2 = createOtherWorkspaceItemWithBitstream(eperson, 0);
         // Run the script as another user, without admin rights
-        runScriptForItemWithBitstreams(item2, ePerson, PASSWORD);
+        TestDSpaceRunnableHandler testHandler = runScriptForItemWithBitstreams(item2, ePerson);
+        checkHandlerMessages(testHandler, ePerson, item2, null, false);
 
         Bitstream b = bitstreamService.findAll(context).stream()
                 .filter(bitstream -> bitstream.getName().equals("logos.tgz"))
@@ -161,7 +153,8 @@ public class FilePreviewIT extends AbstractIntegrationTestWithDatabase {
         assertFalse("Expects preview content not created.", previewContentService.hasPreview(context, b));
 
         // Run the script as admin user
-        runScriptForItemWithBitstreams(item2, admin, password);
+        testHandler = runScriptForItemWithBitstreams(item2, admin);
+        checkHandlerMessages(testHandler, admin, item2, "logos.tgz", true);
 
         // now the preview content was created since the script was run by admin user
         assertTrue("Expects preview content created.", previewContentService.hasPreview(context, b));
@@ -173,7 +166,8 @@ public class FilePreviewIT extends AbstractIntegrationTestWithDatabase {
         configurationService.setProperty("sync.storage.service.enabled", true);
         Item item2 = createOtherWorkspaceItemWithBitstream(ePerson, SYNC_STORE_NUMBER);
         // Run the script
-        runScriptForItemWithBitstreams(item2, ePerson, PASSWORD);
+        TestDSpaceRunnableHandler testHandler = runScriptForItemWithBitstreams(item2, ePerson);
+        checkHandlerMessages(testHandler, ePerson, item2, "logos.tgz", true);
 
         Bitstream b = bitstreamService.findAll(context).stream()
                 .filter(bitstream -> bitstream.getStoreNumber() == SYNC_STORE_NUMBER)
@@ -188,12 +182,40 @@ public class FilePreviewIT extends AbstractIntegrationTestWithDatabase {
     public void testForAllItem() throws Exception {
         // Run the script
         TestDSpaceRunnableHandler testDSpaceRunnableHandler = new TestDSpaceRunnableHandler();
-        String[] args = new String[] { "file-preview", "-e", ePerson.getEmail(), "-p",  PASSWORD};
+        String[] args = new String[] { "file-preview", "-e", ePerson.getEmail()};
         int run = ScriptLauncher.handleScript(args, ScriptLauncher.getConfig(kernelImpl),
                 testDSpaceRunnableHandler, kernelImpl);
         assertEquals(0, run);
         // There should be no errors or warnings
         checkNoError(testDSpaceRunnableHandler);
+    }
+
+    @Test
+    public void testPreviewWithForce() throws Exception {
+        Item item2 = createOtherWorkspaceItemWithBitstream(ePerson, 0);
+        // Run the script
+        TestDSpaceRunnableHandler testHandler1 = runScriptForItemWithBitstreams(item2, ePerson);
+        checkHandlerMessages(testHandler1, ePerson, item2, "logos.tgz", true);
+
+        // run again with force option, the existing preview content should be deleted and new one created
+        TestDSpaceRunnableHandler testHandler2 = new TestDSpaceRunnableHandler();
+        String[] args = new String[] { "file-preview", "-u", item2.getID().toString(),
+                "-e", admin.getEmail(), "-f"};
+        int run = ScriptLauncher.handleScript(args, ScriptLauncher.getConfig(kernelImpl), testHandler2, kernelImpl);
+        assertEquals(0, run);
+        checkNoError(testHandler2);
+
+        List<String> messages = testHandler2.getInfoMessages();
+        assertThat(messages, hasSize(7));
+
+        assertThat(messages, hasItem(containsString("Deleting existing preview content:")));
+
+        Bitstream b = bitstreamService.findAll(context).stream()
+                .filter(bitstream -> bitstream.getName().equals("logos.tgz"))
+                .findFirst().orElse(null);
+
+        assertTrue("Expects preview content created.", previewContentService.hasPreview(context, b));
+        assertEquals(2, previewContentService.getPreview(context, b).size());
     }
 
     private void checkNoError(TestDSpaceRunnableHandler testDSpaceRunnableHandler) {
@@ -201,24 +223,35 @@ public class FilePreviewIT extends AbstractIntegrationTestWithDatabase {
         assertThat(testDSpaceRunnableHandler.getWarningMessages(), empty());
     }
 
-    private void runScriptForItemWithBitstreams(Item item, EPerson user, String password) throws Exception {
+    private TestDSpaceRunnableHandler runScriptForItemWithBitstreams(Item item, EPerson user)
+            throws Exception {
         // Run the script
         TestDSpaceRunnableHandler testDSpaceRunnableHandler = new TestDSpaceRunnableHandler();
         String[] args = new String[] { "file-preview", "-u", item.getID().toString(),
-                "-e", user.getEmail(), "-p",  password};
+                "-e", user.getEmail()};
         int run = ScriptLauncher.handleScript(args, ScriptLauncher.getConfig(kernelImpl),
                 testDSpaceRunnableHandler, kernelImpl);
         assertEquals(0, run);
         // There should be no errors or warnings
         checkNoError(testDSpaceRunnableHandler);
 
-        // There should be an info message about generating the file previews for the specified item
+        return testDSpaceRunnableHandler;
+    }
+
+    private void checkHandlerMessages(TestDSpaceRunnableHandler testDSpaceRunnableHandler,
+                                      EPerson user,
+                                      Item item,
+                                      String fileName,
+                                      boolean previewGenerationExpected) {
         List<String> messages = testDSpaceRunnableHandler.getInfoMessages();
-        assertThat(messages, hasSize(2));
+        assertThat(messages, hasSize(previewGenerationExpected ? 3 : 2));
         assertThat(messages, hasItem(containsString("Generate the file previews for the specified item with " +
                 "the given UUID: " + item.getID())));
-        assertThat(messages,
-                hasItem(containsString("Authentication by user: " + user.getEmail())));
+        assertThat(messages, hasItem(containsString("Authentication by user: " + user.getEmail())));
+        if (previewGenerationExpected) {
+            // There should be an info message about generating the file previews for the specified bitstream
+            assertThat(messages, hasItem(containsString("Generating file preview for bitstream: " + fileName)));
+        }
     }
 
     private Item createOtherWorkspaceItemWithBitstream(EPerson user, int storageNumber) throws Exception {
