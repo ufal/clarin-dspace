@@ -142,10 +142,15 @@ public class EPersonServiceImpl extends DSpaceObjectServiceImpl<EPerson> impleme
 
     @Override
     public EPerson findByIdOrLegacyId(Context context, String id) throws SQLException {
-        if (StringUtils.isNumeric(id)) {
-            return findByLegacyId(context, Integer.parseInt(id));
-        } else {
-            return find(context, UUID.fromString(id));
+        try {
+            if (StringUtils.isNumeric(id)) {
+                return findByLegacyId(context, Integer.parseInt(id));
+            } else {
+                return find(context, UUID.fromString(id));
+            }
+        } catch (IllegalArgumentException e) {
+            // Not a valid legacy ID or valid UUID
+            return null;
         }
     }
 
@@ -370,6 +375,14 @@ public class EPersonServiceImpl extends DSpaceObjectServiceImpl<EPerson> impleme
         if (!authorizeService.isAdmin(context)) {
             throw new AuthorizeException(
                     "You must be an admin to delete an EPerson");
+        }
+        // Admin cannot delete himself/herself
+        if (!context.ignoreAuthorization()) {
+            EPerson currentUser = context.getCurrentUser();
+            if (currentUser != null && ePerson.getID().equals(currentUser.getID())) {
+                throw new IllegalStateException(
+                        "You, as admin user, cannot delete yourself");
+            }
         }
         // Get all workflow-related groups that the current EPerson belongs to
         Set<Group> workFlowGroups = getAllWorkFlowGroups(context, ePerson);

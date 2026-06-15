@@ -23,7 +23,7 @@
   -     <extension>thingdoc</extension>
   -     <extension>thd</extension>
   -   </bitstream-type>
-  -  
+  -
   -    ...
   - </dspace-bitstream-types>
   -->
@@ -75,7 +75,6 @@
     <support_level>1</support_level>
     <internal>false</internal>
     <extension>xml</extension>
-    <extension>trs</extension>
   </bitstream-type>
 
   <bitstream-type>
@@ -199,7 +198,7 @@
     <extension>jpg</extension>
     <extension>jfif</extension>
   </bitstream-type>
-  
+
   <bitstream-type>
     <mimetype>image/gif</mimetype>
     <short_description>GIF</short_description>
@@ -217,7 +216,7 @@
     <internal>false</internal>
     <extension>png</extension>
   </bitstream-type>
-     
+
   <bitstream-type>
     <mimetype>image/tiff</mimetype>
     <short_description>TIFF</short_description>
@@ -476,7 +475,7 @@
 	  <internal>false</internal>
 	  <extension>odt</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.oasis.opendocument.text-template</mimetype>
 	  <short_description>OpenDocument Text Template</short_description>
@@ -485,7 +484,7 @@
 	  <internal>false</internal>
 	  <extension>ott</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.oasis.opendocument.text-web</mimetype>
 	  <short_description>OpenDocument HTML Template</short_description>
@@ -494,7 +493,7 @@
 	  <internal>false</internal>
 	  <extension>oth</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.oasis.opendocument.text-master</mimetype>
 	  <short_description>OpenDocument Master Document</short_description>
@@ -503,7 +502,7 @@
 	  <internal>false</internal>
 	  <extension>odm</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.oasis.opendocument.graphics</mimetype>
 	  <short_description>OpenDocument Drawing</short_description>
@@ -512,7 +511,7 @@
 	  <internal>false</internal>
 	  <extension>odg</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.oasis.opendocument.graphics-template</mimetype>
 	  <short_description>OpenDocument Drawing Template</short_description>
@@ -521,7 +520,7 @@
 	  <internal>false</internal>
 	  <extension>otg</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.oasis.opendocument.presentation</mimetype>
 	  <short_description>OpenDocument Presentation</short_description>
@@ -530,7 +529,7 @@
 	  <internal>false</internal>
 	  <extension>odp</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.oasis.opendocument.presentation-template</mimetype>
 	  <short_description>OpenDocument Presentation Template</short_description>
@@ -539,7 +538,7 @@
 	  <internal>false</internal>
 	  <extension>otp</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.oasis.opendocument.spreadsheet</mimetype>
 	  <short_description>OpenDocument Spreadsheet</short_description>
@@ -548,7 +547,7 @@
 	  <internal>false</internal>
 	  <extension>ods</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.oasis.opendocument.spreadsheet-template</mimetype>
 	  <short_description>OpenDocument Spreadsheet Template</short_description>
@@ -557,7 +556,7 @@
 	  <internal>false</internal>
 	  <extension>ots</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.oasis.opendocument.chart</mimetype>
 	  <short_description>OpenDocument Chart</short_description>
@@ -566,7 +565,7 @@
 	  <internal>false</internal>
 	  <extension>odc</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.oasis.opendocument.formula</mimetype>
 	  <short_description>OpenDocument Formula</short_description>
@@ -575,7 +574,7 @@
 	  <internal>false</internal>
 	  <extension>odf</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.oasis.opendocument.database</mimetype>
 	  <short_description>OpenDocument Database</short_description>
@@ -584,7 +583,7 @@
 	  <internal>false</internal>
 	  <extension>odb</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.oasis.opendocument.image</mimetype>
 	  <short_description>OpenDocument Image</short_description>
@@ -593,7 +592,7 @@
 	  <internal>false</internal>
 	  <extension>odi</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.openofficeorg.extension</mimetype>
 	  <short_description>OpenOffice.org extension</short_description>
@@ -602,7 +601,7 @@
 	  <internal>false</internal>
 	  <extension>oxt</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.sun.xml.writer</mimetype>
 	  <short_description>Writer 6.0 documents</short_description>
@@ -611,7 +610,7 @@
 	  <internal>false</internal>
 	  <extension>sxw</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.sun.xml.writer.template</mimetype>
 	  <short_description>Writer 6.0 templates</short_description>
@@ -620,7 +619,7 @@
 	  <internal>false</internal>
 	  <extension>stw</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.sun.xml.calc</mimetype>
 	  <short_description>Calc 6.0 spreadsheets</short_description>
@@ -629,7 +628,7 @@
 	  <internal>false</internal>
 	  <extension>sxc</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.sun.xml.calc.template</mimetype>
 	  <short_description>Calc 6.0 templates</short_description>
@@ -638,7 +637,7 @@
 	  <internal>false</internal>
 	  <extension>stc</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.sun.xml.draw</mimetype>
 	  <short_description>Draw 6.0 documents</short_description>
@@ -647,7 +646,7 @@
 	  <internal>false</internal>
 	  <extension>sxd</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.sun.xml.draw.template</mimetype>
 	  <short_description>Draw 6.0 templates</short_description>
@@ -656,7 +655,7 @@
 	  <internal>false</internal>
 	  <extension>std</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.sun.xml.impress</mimetype>
 	  <short_description>Impress 6.0 presentations</short_description>
@@ -665,7 +664,7 @@
 	  <internal>false</internal>
 	  <extension>sxi</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.sun.xml.impress.template</mimetype>
 	  <short_description>Impress 6.0 templates</short_description>
@@ -674,7 +673,7 @@
 	  <internal>false</internal>
 	  <extension>sti</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.sun.xml.writer.global</mimetype>
 	  <short_description>Writer 6.0 global documents</short_description>
@@ -683,7 +682,7 @@
 	  <internal>false</internal>
 	  <extension>sxg</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.sun.xml.math</mimetype>
 	  <short_description>Math 6.0 documents</short_description>
@@ -692,7 +691,7 @@
 	  <internal>false</internal>
 	  <extension>sxm</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.stardivision.writer</mimetype>
 	  <short_description>StarWriter 5.x documents</short_description>
@@ -701,7 +700,7 @@
 	  <internal>false</internal>
 	  <extension>sdw</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.stardivision.writer-global</mimetype>
 	  <short_description>StarWriter 5.x global documents</short_description>
@@ -710,7 +709,7 @@
 	  <internal>false</internal>
 	  <extension>sgl</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.stardivision.calc</mimetype>
 	  <short_description>StarCalc 5.x spreadsheets</short_description>
@@ -719,7 +718,7 @@
 	  <internal>false</internal>
 	  <extension>sdc</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.stardivision.draw</mimetype>
 	  <short_description>StarDraw 5.x documents</short_description>
@@ -728,7 +727,7 @@
 	  <internal>false</internal>
 	  <extension>sda</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.stardivision.impress</mimetype>
 	  <short_description>StarImpress 5.x presentations</short_description>
@@ -737,7 +736,7 @@
 	  <internal>false</internal>
 	  <extension>sdd</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.stardivision.impress-packed</mimetype>
 	  <short_description>StarImpress Packed 5.x files</short_description>
@@ -746,7 +745,7 @@
 	  <internal>false</internal>
 	  <extension>sdp</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.stardivision.math</mimetype>
 	  <short_description>StarMath 5.x documents</short_description>
@@ -755,7 +754,7 @@
 	  <internal>false</internal>
 	  <extension>smf</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.stardivision.chart</mimetype>
 	  <short_description>StarChart 5.x documents</short_description>
@@ -764,7 +763,7 @@
 	  <internal>false</internal>
 	  <extension>sds</extension>
 	</bitstream-type>
-	
+
 	<bitstream-type>
 	  <mimetype>application/vnd.stardivision.mail</mimetype>
 	  <short_description>StarMail 5.x mail files</short_description>
@@ -826,6 +825,15 @@
         <support_level>1</support_level>
         <internal>false</internal>
         <extension>avif</extension>
+    </bitstream-type>
+
+    <bitstream-type>
+        <mimetype>text/javascript</mimetype>
+        <short_description>JavaScript</short_description>
+        <description>JavaScript</description>
+        <support_level>1</support_level>
+        <internal>false</internal>
+        <extension>js</extension>
     </bitstream-type>
 
     <!-- CLARIN UPDATE Start -->
@@ -901,6 +909,15 @@
         <support_level>1</support_level>
         <internal>false</internal>
         <extension>gz</extension>
+    </bitstream-type>
+
+    <bitstream-type>
+        <mimetype>application/x-7z-compressed</mimetype>
+        <short_description>7z</short_description>
+        <description>7-Zip Archive</description>
+        <support_level>1</support_level>
+        <internal>false</internal>
+        <extension>7z</extension>
     </bitstream-type>
 
     <!-- CLARIN UPDATE End -->

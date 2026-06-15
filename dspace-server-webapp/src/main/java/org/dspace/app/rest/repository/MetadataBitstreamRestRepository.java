@@ -22,6 +22,7 @@ import org.dspace.app.rest.exception.DSpaceBadRequestException;
 import org.dspace.app.rest.exception.UnprocessableEntityException;
 import org.dspace.app.rest.model.MetadataBitstreamWrapperRest;
 import org.dspace.app.rest.model.wrapper.MetadataBitstreamWrapper;
+import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.Bitstream;
 import org.dspace.content.Bundle;
 import org.dspace.content.DSpaceObject;
@@ -66,8 +67,7 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
     @SearchRestMethod(name = "byHandle")
     public Page<MetadataBitstreamWrapperRest> findByHandle(@Parameter(value = "handle", required = true) String handle,
                                                            @Parameter(value = "fileGrpType") String fileGrpType,
-                                                           Pageable pageable)
-            throws Exception {
+                                                           Pageable pageable) throws Exception {
         if (StringUtils.isBlank(handle)) {
             throw new DSpaceBadRequestException("handle cannot be null!");
         }
@@ -79,6 +79,8 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
         String contextPath = request.getContextPath();
         List<MetadataBitstreamWrapperRest> rs = new ArrayList<>();
         DSpaceObject dso;
+
+        boolean previewContentCreated = false;
 
         try {
             dso = handleService.resolveToObject(context, handle);
@@ -107,7 +109,7 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
             for (Bitstream bitstream : bitstreams) {
                 String url = previewContentService.composePreviewURL(context, item, bitstream, contextPath);
                 List<FileInfo> fileInfos = new ArrayList<>();
-                boolean canPreview = previewContentService.canPreview(context, bitstream, false);
+                boolean canPreview = previewContentService.canPreview(context, bitstream, true);
                 String mimeType = bitstream.getFormat(context).getMIMEType();
                 // HTML content could be longer than the limit, so we do not store it in the DB.
                 // It has to be generated even if property is false.
@@ -118,7 +120,12 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
                             boolean allowComposePreviewContent = configurationService.getBooleanProperty
                                     ("create.file-preview.on-item-page-load", false);
                             if (allowComposePreviewContent) {
-                                fileInfos.addAll(previewContentService.getFilePreviewContent(context, bitstream));
+                                try {
+                                    fileInfos.addAll(previewContentService.getFilePreviewContent(context, bitstream));
+                                } catch (AuthorizeException e) {
+                                    log.warn("Cannot create preview content for bitstream: {} because: {}",
+                                            bitstream.getID(), e.getMessage());
+                                }
                                 // Do not store HTML content in the database because it could be longer than the limit
                                 // of the database column
                                 if (!fileInfos.isEmpty() &&
@@ -127,6 +134,7 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
                                     for (FileInfo fi : fileInfos) {
                                         previewContentService.createPreviewContent(context, bitstream, fi);
                                     }
+                                    previewContentCreated = true;
                                 }
                             }
                         } else {
@@ -142,9 +150,14 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
                 }
                 MetadataBitstreamWrapper bts = new MetadataBitstreamWrapper(bitstream, fileInfos,
                         bitstream.getFormat(context).getMIMEType(),
-                        bitstream.getFormatDescription(context), url, canPreview);
+                        bitstream.getDescription(), url, canPreview);
                 rs.add(metadataBitstreamWrapperConverter.convert(bts, utils.obtainProjection()));
             }
+        }
+
+        // commit changes if any preview content was generated
+        if (previewContentCreated) {
+            context.commit();
         }
 
         return new PageImpl<>(rs, pageable, rs.size());

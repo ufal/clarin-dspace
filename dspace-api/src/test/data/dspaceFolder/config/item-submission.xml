@@ -24,6 +24,9 @@
         <name-map collection-handle="123456789/typebind-test" submission-name="typebindtest"/>
         <name-map collection-handle="123456789/accessCondition-not-discoverable" submission-name="accessConditionNotDiscoverable"/>
         <name-map collection-handle="123456789/test-hidden" submission-name="test-hidden"/>
+        <name-map collection-handle="123456789/collection-test" submission-name="collectiontest"/>
+        <name-map collection-entity-type="CustomEntityType" submission-name="entitytypetest"/>
+        <name-map collection-handle="123456789/collection-test-patch" submission-name="publicationTestPatch"/>
     </submission-map>
 
 
@@ -109,10 +112,16 @@
         <!--Step will be to select a Creative Commons License -->
         <step-definition id="cclicense"> <heading>submit.progressbar.CClicense</heading>
             <processing-class>org.dspace.app.rest.submit.step.CCLicenseStep</processing-class>
-            <type>cclicense</type> 
+            <type>cclicense</type>
         </step-definition>
 
-        <step-definition id="extractionstep"> 
+        <step-definition id="clarin-license">
+            <heading>submit.progressbar.clarin-license</heading>
+            <processing-class>org.dspace.app.rest.submit.step.ClarinLicenseResourceStep</processing-class>
+            <type>clarin-license</type>
+        </step-definition>
+
+        <step-definition id="extractionstep">
             <heading>submit.progressbar.ExtractMetadataStep</heading>
             <processing-class>org.dspace.app.rest.submit.step.ExtractMetadataStep</processing-class>
             <type>extract</type>
@@ -177,6 +186,11 @@
             <scope visibility="hidden" visibilityOutside="hidden">submission</scope>
         </step-definition>
 
+        <step-definition id="upload-no-required-metadata" mandatory="true">
+            <heading>submit.progressbar.upload-no-required-metadata</heading>
+            <processing-class>org.dspace.app.rest.submit.step.UploadStep</processing-class>
+            <type>upload</type>
+        </step-definition>
     </step-definitions>
 
     <!-- The submission-definitions map lays out the detailed definition of -->
@@ -219,6 +233,8 @@
             <!--Step will be to Sign off on the License -->
             <step id="license"/>
             <step id="cclicense"/>
+
+            <step id="clarin-license"/>
         </submission-process>
 
         <submission-process name="languagetestprocess">
@@ -257,6 +273,20 @@
             <step id="test-always-hidden"/>
         </submission-process>
 
+        <submission-process name="collectiontest">
+            <step id="collection"/>
+        </submission-process>
+
+        <submission-process name="entitytypetest">
+            <step id="collection"/>
+        </submission-process>
+
+        <submission-process name="publicationTestPatch">
+            <step id="collection" />
+            <step id="traditionalpageone" />
+            <step id="upload-no-required-metadata" />
+            <step id="license" />
+        </submission-process>
     </submission-definitions>
 
 </item-submission>

@@ -29,6 +29,7 @@ import org.dspace.content.service.CollectionService;
 import org.dspace.content.service.CommunityService;
 import org.dspace.content.service.ItemService;
 import org.dspace.content.service.WorkspaceItemService;
+import org.dspace.core.factory.CoreServiceFactory;
 import org.dspace.identifier.factory.IdentifierServiceFactory;
 import org.dspace.identifier.service.IdentifierService;
 import org.junit.After;
@@ -96,6 +97,8 @@ public class RequiredMetadataIT extends AbstractIntegrationTestWithDatabase {
 
     @Test
     public void testPerform() throws IOException {
+        CoreServiceFactory.getInstance().getPluginService().clearNamedPluginClasses();
+
         Curator curator = new Curator();
         curator.addTask(TASK_NAME);
         CuratorReportTest.ListReporter reporter = new CuratorReportTest.ListReporter();
@@ -130,6 +133,7 @@ public class RequiredMetadataIT extends AbstractIntegrationTestWithDatabase {
     }
 
     @After
+    @Override
     public void destroy() throws Exception {
         // remove all registered handles properly
         identifierService.delete(context, item1, HANDLE_ITEM1);

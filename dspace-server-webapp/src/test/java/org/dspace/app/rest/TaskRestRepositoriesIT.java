@@ -2893,7 +2893,7 @@ public class TaskRestRepositoriesIT extends AbstractControllerIntegrationTest {
         getClient(authToken).perform(patch("/api/workflow/workflowitems/" + witem.getID())
             .content(patchBody)
             .contentType(javax.ws.rs.core.MediaType.APPLICATION_JSON_PATCH_JSON))
-            .andExpect(status().isUnprocessableEntity());
+            .andExpect(status().isForbidden());
     }
 
     @Test

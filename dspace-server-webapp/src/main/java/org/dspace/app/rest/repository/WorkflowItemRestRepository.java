@@ -7,11 +7,13 @@
  */
 package org.dspace.app.rest.repository;
 
+import static org.dspace.app.rest.repository.ClarinLicenseRestRepository.OPERATION_PATH_LICENSE_RESOURCE;
 import static org.dspace.xmlworkflow.state.actions.processingaction.ProcessingAction.SUBMIT_EDIT_METADATA;
 
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import javax.servlet.http.HttpServletRequest;
 
@@ -27,6 +29,7 @@ import org.dspace.app.rest.model.WorkflowItemRest;
 import org.dspace.app.rest.model.patch.Operation;
 import org.dspace.app.rest.model.patch.Patch;
 import org.dspace.app.rest.submit.SubmissionService;
+import org.dspace.app.rest.utils.ClarinLicenseUtils;
 import org.dspace.app.rest.utils.SolrOAIReindexer;
 import org.dspace.app.util.SubmissionConfigReaderException;
 import org.dspace.authorize.AuthorizeException;
@@ -35,6 +38,8 @@ import org.dspace.content.Item;
 import org.dspace.content.service.BitstreamFormatService;
 import org.dspace.content.service.BitstreamService;
 import org.dspace.content.service.ItemService;
+import org.dspace.content.service.clarin.ClarinLicenseResourceMappingService;
+import org.dspace.content.service.clarin.ClarinLicenseService;
 import org.dspace.core.Constants;
 import org.dspace.core.Context;
 import org.dspace.eperson.EPerson;
@@ -72,6 +77,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class WorkflowItemRestRepository extends DSpaceRestRepository<WorkflowItemRest, Integer> {
 
     public static final String OPERATION_PATH_SECTIONS = "sections";
+    public static final String REQUESTPARAMETER_EXPUNGE = "expunge";
 
     private static final Logger log = LogManager.getLogger();
 
@@ -113,6 +119,12 @@ public class WorkflowItemRestRepository extends DSpaceRestRepository<WorkflowIte
 
     @Autowired
     private SolrOAIReindexer solrOAIReindexer;
+
+    @Autowired
+    ClarinLicenseService clarinLicenseService;
+
+    @Autowired
+    ClarinLicenseResourceMappingService clarinLicenseResourceMappingService;
 
     private SubmissionConfigService submissionConfigService;
 
@@ -181,6 +193,9 @@ public class WorkflowItemRestRepository extends DSpaceRestRepository<WorkflowIte
             throw new RuntimeException("SQLException in " + this.getClass() + "#findBySubmitter trying to create " +
                 "a workflow and adding it to db.", e);
         }
+
+        // Reindex after successful workflow creation to ensure OAI-PMH reflects the new state
+        // Only reindex once after the state change is complete
         solrOAIReindexer.reindexItem(source.getItem());
         //if the item go directly in published status we have to manage a status code 204 with no content
         if (source.getItem().isArchived()) {
@@ -196,7 +211,7 @@ public class WorkflowItemRestRepository extends DSpaceRestRepository<WorkflowIte
 
     @Override
     public WorkflowItemRest upload(HttpServletRequest request, String apiCategory, String model, Integer id,
-                                   MultipartFile file) throws SQLException {
+                                   MultipartFile file) throws SQLException, AuthorizeException {
 
         Context context = obtainContext();
         WorkflowItemRest wsi = findOne(context, id);
@@ -222,12 +237,19 @@ public class WorkflowItemRestRepository extends DSpaceRestRepository<WorkflowIte
         WorkflowItemRest wsi = findOne(context, id);
         XmlWorkflowItem source = wis.find(context, id);
 
+        if (source == null) {
+            throw new ResourceNotFoundException("WorkflowItem with id " + id + " not found");
+        }
+
         this.checkIfEditMetadataAllowedInCurrentStep(context, source);
 
         for (Operation op : operations) {
             //the value in the position 0 is a null value
             String[] path = op.getPath().substring(1).split("/", 3);
-            if (OPERATION_PATH_SECTIONS.equals(path[0])) {
+            if (OPERATION_PATH_LICENSE_RESOURCE.equals(path[0])) {
+                ClarinLicenseUtils.updateLicenseForItem(context,
+                        itemService, clarinLicenseService, clarinLicenseResourceMappingService, source, op);
+            } else if (OPERATION_PATH_SECTIONS.equals(path[0])) {
                 String section = path[1];
                 submissionService.evaluatePatchToInprogressSubmission(context, request, source, wsi, section, op);
             } else {
@@ -244,13 +266,25 @@ public class WorkflowItemRestRepository extends DSpaceRestRepository<WorkflowIte
      * move the workflowitem back to the submitter workspace regardless to how the workflow is designed
      */
     protected void delete(Context context, Integer id) {
+        String expungeParam = getRequestService()
+            .getCurrentRequest()
+            .getServletRequest()
+            .getParameter(REQUESTPARAMETER_EXPUNGE);
+        boolean expunge = false;
+        if (expungeParam != null) {
+            expunge = Boolean.parseBoolean(expungeParam);
+        }
         XmlWorkflowItem witem = null;
         try {
             witem = wis.find(context, id);
             if (witem == null) {
                 throw new ResourceNotFoundException("WorkflowItem ID " + id + " not found");
             }
-            wfs.abort(context, witem, context.getCurrentUser());
+            if (expunge) {
+                wis.delete(context, witem);
+            } else {
+                wfs.abort(context, witem, context.getCurrentUser());
+            }
         } catch (AuthorizeException e) {
             throw new RESTAuthorizationException(e);
         } catch (SQLException e) {
@@ -268,14 +302,24 @@ public class WorkflowItemRestRepository extends DSpaceRestRepository<WorkflowIte
      * @param context               Context
      * @param xmlWorkflowItem       WorkflowItem of the task
      */
-    private void checkIfEditMetadataAllowedInCurrentStep(Context context, XmlWorkflowItem xmlWorkflowItem) {
+    private void checkIfEditMetadataAllowedInCurrentStep(Context context, XmlWorkflowItem xmlWorkflowItem)
+            throws AuthorizeException {
         try {
-            ClaimedTask claimedTask = claimedTaskService.findByWorkflowIdAndEPerson(context, xmlWorkflowItem,
-                context.getCurrentUser());
-            if (claimedTask == null) {
+            List<ClaimedTask> claimTasks = claimedTaskService.findByWorkflowItem(context, xmlWorkflowItem);
+            if (claimTasks.isEmpty()) {
                 throw new UnprocessableEntityException("WorkflowItem with id " + xmlWorkflowItem.getID()
-                    + " has not been claimed yet.");
+                        + " has not been claimed yet.");
             }
+
+            ClaimedTask claimedTask = claimTasks.stream()
+                    .filter(ct -> Objects.equals(ct.getOwner(), context.getCurrentUser()))
+                    .findFirst()
+                    .orElse(null);
+            if (claimedTask == null) {
+                throw new AuthorizeException("The current user hasn't claimed the workflow item with id " +
+                        xmlWorkflowItem.getID() + ", so the user cannot patch this item");
+            }
+
             Workflow workflow = workflowFactory.getWorkflow(claimedTask.getWorkflowItem().getCollection());
             Step step = workflow.getStep(claimedTask.getStepID());
             WorkflowActionConfig currentActionConfig = step.getActionConfig(claimedTask.getActionID());

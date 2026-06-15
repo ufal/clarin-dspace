@@ -18,13 +18,13 @@ import org.dspace.app.rest.RestResourceController;
  * @author Milan Majchrak (milan.majchrak at dataquest.sk)
  */
 @LinksRest(links = {
-        @LinkRest(
-                name = ClarinUserRegistrationRest.CLARIN_LICENSES,
-                method = "getClarinLicenses"
+    @LinkRest(
+        name = ClarinUserRegistrationRest.CLARIN_LICENSES,
+        method = "getClarinLicenses"
         ),
-        @LinkRest(
-                name = ClarinUserRegistrationRest.USER_METADATA,
-                method = "getUserMetadata"
+    @LinkRest(
+        name = ClarinUserRegistrationRest.USER_METADATA,
+        method = "getUserMetadata"
         )
 })
 public class ClarinUserRegistrationRest extends BaseObjectRest<Integer> {

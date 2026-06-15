@@ -1,0 +1,12 @@
+--
+-- The contents of this file are subject to the license and copyright
+-- detailed in the LICENSE and NOTICE files at the root of the source
+-- tree and available online at
+--
+-- http://www.dspace.org/license/
+--
+
+-----------------------------------------------------------------------------------
+-- Do nothing, but force migration to load /dspace/config/registries/bitstream-format.xml file
+-- to register new application/x-7z-compressed mime-type
+-----------------------------------------------------------------------------------

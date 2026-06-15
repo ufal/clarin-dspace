@@ -14,6 +14,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
+import org.apache.commons.collections4.CollectionUtils;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.DSpaceObject;
 import org.dspace.content.Item;
@@ -1104,8 +1105,13 @@ public class DOIIdentifierProvider extends FilteredIdentifierProvider {
         }
 
         itemService.clearMetadata(context, item, MD_SCHEMA, DOI_ELEMENT, DOI_QUALIFIER, null);
-        itemService.addMetadata(context, item, MD_SCHEMA, DOI_ELEMENT, DOI_QUALIFIER, null,
-                remainder);
+        // There could be scenario when the `dc.identifier.doi` metadata field is empty, so do not try to remove it
+        if (CollectionUtils.isNotEmpty(remainder)) {
+            log.warn("The DOI {} was not found in the metadata of Item {}. Nothing to remove.", doi, item.getHandle());
+            itemService.addMetadata(context, item, MD_SCHEMA, DOI_ELEMENT, DOI_QUALIFIER, null,
+                    remainder);
+        }
+
         itemService.update(context, item);
     }
 

@@ -35,6 +35,20 @@ import org.dspace.eperson.EPerson;
 import org.dspace.eperson.factory.EPersonServiceFactory;
 import org.dspace.eperson.service.EPersonService;
 
+/**
+ * This admin script is used to manage(create or invalidate) clarin tokens, for the user specified by ID or e-mail.
+ * <p>
+ * For the token creation, the user and the expiration time must be set in script options.
+ * Created token string is then printed on the console, and admin can send it to the user (e.g. via the e-mail).
+ * <p>
+ * For the token invalidation, either the token string or the user need to be set in script options.
+ * When neither token nor user is set, all tokens are deleted.
+ * <p>
+ * Admin user can also use this script to generate encryption/decryption secret key and store it into
+ * "clarin.token.encryption.secret" config property.
+ *
+ * @author Milan Kuchtiak
+ */
 public class ClarinTokenAdministrator {
 
     private static final Logger log = LogManager.getLogger(ClarinTokenAdministrator.class);

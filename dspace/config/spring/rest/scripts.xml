@@ -88,5 +88,15 @@
         <property name="description" value="Create or delete clarin token. Created token is sent to e-mail address."/>
         <property name="dspaceRunnableClass" value="org.dspace.administer.ClarinTokenCreator"/>
     </bean>
+  
+    <bean id="report-diff" class="org.dspace.app.reportdiff.ReportDiffScriptConfiguration" primary="true">
+        <property name="description" value="Compares two health reports and shows the differences between them."/>
+        <property name="dspaceRunnableClass" value="org.dspace.app.reportdiff.ReportDiff"/>
+    </bean>
+
+    <bean id="item-version-linker" class="org.dspace.administer.ItemVersionLinkerConfiguration" primary="true">
+        <property name="description" value="Link items into versioning relationship."/>
+        <property name="dspaceRunnableClass" value="org.dspace.administer.ItemVersionLinker"/>
+    </bean>
 
 </beans>

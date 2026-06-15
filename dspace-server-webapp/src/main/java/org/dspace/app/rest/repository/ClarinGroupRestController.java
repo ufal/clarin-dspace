@@ -24,8 +24,6 @@ import java.util.regex.Pattern;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
 import org.dspace.app.rest.exception.UnprocessableEntityException;
 import org.dspace.app.rest.model.GroupRest;
@@ -37,8 +35,6 @@ import org.dspace.eperson.EPerson;
 import org.dspace.eperson.Group;
 import org.dspace.eperson.service.EPersonService;
 import org.dspace.eperson.service.GroupService;
-import org.dspace.xmlworkflow.storedcomponents.PoolTask;
-import org.dspace.xmlworkflow.storedcomponents.XmlWorkflowItem;
 import org.dspace.xmlworkflow.storedcomponents.service.PoolTaskService;
 import org.dspace.xmlworkflow.storedcomponents.service.XmlWorkflowItemService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -171,82 +167,6 @@ public class ClarinGroupRestController {
         response.setStatus(SC_OK);
     }
 
-    /**
-     * Method to add eperson to group based on workflowitem.
-     * This method exists because in dspace7 the epersons don't have rights to manipulate with workflowitems.
-     * Only groups have these rights, so we add epersons into correcponding groups.
-     * In dspace5, the epersons with these rights were in table tasklistitem.
-     * <pre>
-     * {@code
-     * https://<dspace.server.url>/api/clarin/eperson/groups/takslistitem
-     * }
-     * </pre>
-     * @param response response
-     * @param request  request
-     * @throws SQLException       if database error
-     * @throws AuthorizeException if authorization error
-     */
-    @PreAuthorize("hasAuthority('AUTHENTICATED')")
-    @RequestMapping(method = POST, path = "/tasklistitem")
-    public void addTasklistitemMembers(HttpServletResponse response, HttpServletRequest request)
-            throws SQLException, AuthorizeException {
-
-        Context context = obtainContext(request);
-        if (Objects.isNull(context)) {
-            throw new RuntimeException("Context is null!");
-        }
-
-        //get workflowitem from request based on its id
-        String wfString = request.getParameter("workflowitem_id");
-        if (StringUtils.isBlank(wfString)) {
-            log.error("Cannot add eperson to group based on workflowitem, " +
-                    "because the workflowitem is entered incorrectly!");
-            throw new RuntimeException("Cannot add eperson to group based on workflowitem, " +
-                    "because the workflowitem is incorrectly entered!");
-        }
-        Integer wfId = getIntegerFromString(wfString);
-        XmlWorkflowItem wf = workflowItemService.find(context, wfId);
-        if (Objects.isNull(wf)) {
-            log.error("Workflowitem with id: " + wfId + " doesn't exist!");
-            throw new UnprocessableEntityException("Workflowitem with id: " + wfId + " doesn't exist!");
-        }
-
-        //find all created pooltasks for workflowitem
-        List<PoolTask> poolTasks = poolTaskService.find(context, wf);
-        if (CollectionUtils.isEmpty(poolTasks)) {
-            log.error("Workflowitem with id: " + wfId + " doesn't exist any pooltask!");
-            throw new UnprocessableEntityException("Workflowitem with id: " + wfId + " doesn't exist any pooltask!");
-        }
-
-        //get eperson from request
-        String epersonUUIDString = request.getParameter("epersonUUID");
-        if (StringUtils.isBlank(epersonUUIDString)) {
-            log.error("Eperson UUID is entered incorrectly!");
-            throw new RuntimeException("Eperson UUID is entered incorrectly!");
-        }
-        UUID epersonUUID = UUID.fromString(epersonUUIDString);
-        EPerson ePerson = ePersonService.find(context, epersonUUID);
-        if (Objects.isNull(ePerson)) {
-            log.error("Eperson with id: " + epersonUUID + " is null!");
-            throw new UnprocessableEntityException("Eperson with id: " + epersonUUID + " is null!");
-        }
-
-        //add eperson to group connecting with pooltask
-        for (PoolTask poolTask: poolTasks) {
-            Group group = poolTask.getGroup();
-            if (Objects.isNull(group)) {
-                continue;
-            }
-            if (!ePerson.getGroups().contains(group)) {
-                groupService.addMember(context, group, ePerson);
-                groupService.update(context, group);
-            }
-        }
-
-        context.complete();
-        response.setStatus(SC_OK);
-    }
-
     private Optional<Group> findGroup(Context context, String groupLink) throws SQLException {
 
         Group group = null;
@@ -275,13 +195,5 @@ public class ClarinGroupRestController {
 
     private boolean canAddGroup(Context context, Group parentGroup, Group childGroup) throws SQLException {
         return !groupService.isParentOf(context, childGroup, parentGroup);
-    }
-
-    private Integer getIntegerFromString(String value) {
-        Integer output = null;
-        if (StringUtils.isNotBlank(value)) {
-            output = Integer.parseInt(value);
-        }
-        return output;
     }
 }

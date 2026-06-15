@@ -181,6 +181,11 @@ public class ClarinLicenseResourceMappingServiceImpl implements ClarinLicenseRes
         return clarinLicenseResourceMappingDAO.findByBitstreamUUID(context, bitstreamID);
     }
 
+    public List<ClarinLicenseResourceMapping> findByBitstreamUUIDs(Context context, List<UUID> bitstreamIDs)
+        throws SQLException {
+        return clarinLicenseResourceMappingDAO.findByBitstreamUUIDs(context, bitstreamIDs);
+    }
+
     @Override
     public ClarinLicense getLicenseToAgree(Context context, UUID userId, UUID resourceID) throws SQLException {
         // Load Clarin License for current bitstream.

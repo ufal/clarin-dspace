@@ -13,20 +13,16 @@ import static org.springframework.http.MediaType.parseMediaType;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
 import org.dspace.builder.CollectionBuilder;
 import org.dspace.builder.CommunityBuilder;
 import org.dspace.builder.EPersonBuilder;
 import org.dspace.builder.GroupBuilder;
-import org.dspace.builder.PoolTaskBuilder;
 import org.dspace.content.Collection;
 import org.dspace.eperson.EPerson;
 import org.dspace.eperson.Group;
 import org.dspace.eperson.factory.EPersonServiceFactory;
 import org.dspace.eperson.service.GroupService;
-import org.dspace.xmlworkflow.storedcomponents.PoolTask;
-import org.dspace.xmlworkflow.storedcomponents.XmlWorkflowItem;
 import org.dspace.xmlworkflow.storedcomponents.service.PoolTaskService;
 import org.junit.Before;
 import org.junit.Test;
@@ -114,42 +110,5 @@ public class ClarinGroupRestControllerIT extends AbstractControllerIntegrationTe
         assertTrue(
                 groupService.isMember(context, eperson, parentGroupWithPreviousSubgroup)
         );
-    }
-
-    @Test
-    public void addTasklistitemMembersTest() throws Exception {
-        context.turnOffAuthorisationSystem();
-        //create eperson, which will be added to the group
-        EPerson ePerson = EPersonBuilder.createEPerson(context)
-                .withEmail("eperson@example.com")
-                .withPassword("dspace")
-                .build();
-        //create pooltask with workflowitem
-        EPerson reviewer1 = EPersonBuilder.createEPerson(context)
-                .withEmail("reviewer1@example.com")
-                .withPassword(password).build();
-        Collection col1 = CollectionBuilder.createCollection(context, parentCommunity)
-                .withName("Collection 1")
-                .withWorkflowGroup(1, reviewer1, admin).build();
-        PoolTask poolTask = PoolTaskBuilder.createPoolTask(context, col1, reviewer1)
-                .withTitle("Test Metaphysics")
-                .withIssueDate("2017-10-17")
-                .withAuthor("Smith, Donald")
-                .withSubject("ExtraEntry").build();
-        XmlWorkflowItem wf = poolTask.getWorkflowItem();
-        context.restoreAuthSystemState();
-
-        //add eperson to group connected with workflowitem
-        ObjectMapper mapper = new ObjectMapper();
-        String token = getAuthToken(admin.getEmail(), password);
-        getClient(token).perform(post("/api/clarin/eperson/groups/tasklistitem")
-                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                        .param("workflowitem_id", wf.getID().toString())
-                        .param("epersonUUID", ePerson.getID().toString()))
-                .andExpect(status().isOk());
-
-        //control if eperson is added to correct group
-        poolTask = poolTaskService.find(context, poolTask.getID());
-        assertTrue(poolTask.getGroup().getMembers().contains(ePerson));
     }
 }

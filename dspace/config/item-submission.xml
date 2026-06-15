@@ -430,6 +430,10 @@
 
             <!--Step will be to Sign off on the License -->
             <step id="license"/>
+
+            <!-- Step allows the user to select a Creative Commons License -->
+            <!-- Required for OpenAIREv4 support -->
+            <step id="cclicense"/>
         </submission-process>
         <submission-process name="openAIREPersonSubmission">
             <step id="collection"/>
@@ -442,17 +446,6 @@
         <submission-process name="openAIREOrganizationSubmission">
             <step id="collection"/>
             <step id="openAIREOrganizationForm"/>
-        </submission-process>
-
-        <submission-process name="clariah">
-            <step id="collection"/>
-            <step id="clarin-notice"/>
-            <step id="traditionalpageone"/>
-            <step id="traditionalpagetwo"/>
-            <step id="upload"/>
-            <step id="license"/>
-            <step id="clarin-license"/>
-            <step id="specialFields"/>
         </submission-process>
 
         <submission-process name="clariahSubmissions">

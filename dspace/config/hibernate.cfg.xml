@@ -81,6 +81,7 @@
         <mapping class="org.dspace.content.clarin.ClarinVerificationToken"/>
         <mapping class="org.dspace.content.clarin.MatomoReportSubscription"/>
         <mapping class="org.dspace.content.clarin.ClarinToken"/>
+        <mapping class="org.dspace.content.ReportResult"/>
 
         <mapping class="org.dspace.harvest.HarvestedCollection"/>
         <mapping class="org.dspace.harvest.HarvestedItem"/>

@@ -26,6 +26,7 @@ import org.dspace.app.rest.exception.UnprocessableEntityException;
 import org.dspace.app.rest.model.ResourcePolicyRest;
 import org.dspace.app.rest.model.patch.Patch;
 import org.dspace.app.rest.repository.patch.ResourcePatch;
+import org.dspace.app.rest.security.DSpacePermissionEvaluator;
 import org.dspace.app.rest.utils.DSpaceObjectUtils;
 import org.dspace.app.rest.utils.SolrOAIReindexer;
 import org.dspace.app.rest.utils.Utils;
@@ -36,6 +37,7 @@ import org.dspace.content.DSpaceObject;
 import org.dspace.content.Item;
 import org.dspace.core.Constants;
 import org.dspace.core.Context;
+import org.dspace.core.ProvenanceService;
 import org.dspace.eperson.EPerson;
 import org.dspace.eperson.Group;
 import org.dspace.eperson.service.EPersonService;
@@ -47,6 +49,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.rest.webmvc.ResourceNotFoundException;
 import org.springframework.hateoas.Link;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
 /**
@@ -77,10 +81,16 @@ public class ResourcePolicyRestRepository extends DSpaceRestRepository<ResourceP
     ResourcePatch<ResourcePolicy> resourcePatch;
 
     @Autowired
+    private DSpacePermissionEvaluator permissionEvaluator;
+
+    @Autowired
     DiscoverableEndpointsService discoverableEndpointsService;
 
     @Autowired
     private SolrOAIReindexer solrOAIReindexer;
+
+    @Autowired
+    private ProvenanceService provenanceService;
 
     @Override
     @PreAuthorize("hasPermission(#id, 'resourcepolicy', 'READ')")
@@ -227,14 +237,44 @@ public class ResourcePolicyRestRepository extends DSpaceRestRepository<ResourceP
         return converter.toRestPage(resourcePolisies, pageable, total, utils.obtainProjection());
     }
 
-    @Override
+    /**
+     * Find the resource policies matching embargo date presence criteria
+     *
+     * @param hasStartDate optional, filter for start date presence
+     * @param hasEndDate   optional, filter for end date presence
+     * @param pageable     contains the pagination information
+     * @return a Page of ResourcePolicyRest instances matching the embargo criteria
+     */
     @PreAuthorize("hasAuthority('ADMIN')")
+    @SearchRestMethod(name = "embargo")
+    public Page<ResourcePolicyRest> findByDate(
+            @Parameter(value = "hasStartDate", required = false) Boolean hasStartDate,
+            @Parameter(value = "hasEndDate", required = false) Boolean hasEndDate,
+            Pageable pageable) {
+
+        try {
+            Context context = obtainContext();
+
+            List<ResourcePolicy> policies;
+            int total;
+
+            policies = resourcePolicyService.findByDate(context, hasStartDate, hasEndDate,
+                        Math.toIntExact(pageable.getOffset()),
+                        Math.toIntExact(pageable.getPageSize()));
+            total = resourcePolicyService.countByDate(context, hasStartDate, hasEndDate);
+            return converter.toRestPage(policies, pageable, total, utils.obtainProjection());
+        } catch (SQLException e) {
+            throw new RuntimeException("Database error while searching embargo policies: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    @PreAuthorize("isAuthenticated()")
     protected ResourcePolicyRest createAndReturn(Context context) throws AuthorizeException, SQLException {
 
         String resourceUuidStr = getRequestService().getCurrentRequest().getServletRequest().getParameter("resource");
         String epersonUuidStr = getRequestService().getCurrentRequest().getServletRequest().getParameter("eperson");
         String groupUuidStr = getRequestService().getCurrentRequest().getServletRequest().getParameter("group");
-
 
         if (resourceUuidStr == null) {
             throw new MissingParameterException("Missing resource (uuid) parameter");
@@ -249,6 +289,11 @@ public class ResourcePolicyRestRepository extends DSpaceRestRepository<ResourceP
         ResourcePolicy resourcePolicy = null;
 
         UUID resourceUuid = UUID.fromString(resourceUuidStr);
+
+        if (isNotAuthorized(resourceUuid, "WRITE")) {
+            throw new AuthorizeException(
+                    "User unauthorized to create a new ResourcePolicy for resource: " + resourceUuid);
+        }
 
         try {
             resourcePolicyRest = mapper.readValue(req.getInputStream(), ResourcePolicyRest.class);
@@ -298,6 +343,7 @@ public class ResourcePolicyRestRepository extends DSpaceRestRepository<ResourceP
             resourcePolicy.setStartDate(resourcePolicyRest.getStartDate());
             resourcePolicy.setEndDate(resourcePolicyRest.getEndDate());
             resourcePolicyService.update(context, resourcePolicy);
+            provenanceService.createResourcePolicy(context, resourcePolicy);
             return converter.toRest(resourcePolicy, utils.obtainProjection());
         } else {
             throw new UnprocessableEntityException("A resource policy must contain a valid eperson or group");
@@ -306,7 +352,7 @@ public class ResourcePolicyRestRepository extends DSpaceRestRepository<ResourceP
     }
 
     @Override
-    @PreAuthorize("hasAuthority('ADMIN')")
+    @PreAuthorize("hasPermission(#id, 'resourcepolicy', 'ADMIN')")
     protected void delete(Context context, Integer id) throws AuthorizeException {
         ResourcePolicy resourcePolicy = null;
         DSpaceObject dso = null;
@@ -317,6 +363,7 @@ public class ResourcePolicyRestRepository extends DSpaceRestRepository<ResourceP
                     ResourcePolicyRest.CATEGORY + "." + ResourcePolicyRest.NAME + " with id: " + id + " not found");
             }
             dso = resourcePolicy.getdSpaceObject();
+            provenanceService.deleteResourcePolicy(context, resourcePolicy);
             resourcePolicyService.delete(context, resourcePolicy);
         } catch (SQLException e) {
             throw new RuntimeException("Unable to delete ResourcePolicy with id = " + id, e);
@@ -337,6 +384,7 @@ public class ResourcePolicyRestRepository extends DSpaceRestRepository<ResourceP
         }
         resourcePatch.patch(obtainContext(), resourcePolicy, patch.getOperations());
         resourcePolicyService.update(context, resourcePolicy);
+        provenanceService.updateResourcePolicy(context, resourcePolicy);
         reindexSolrOAI(resourcePolicy.getdSpaceObject());
     }
 
@@ -345,6 +393,11 @@ public class ResourcePolicyRestRepository extends DSpaceRestRepository<ResourceP
         discoverableEndpointsService.register(this, Arrays.asList(
                       Link.of("/api/" + ResourcePolicyRest.CATEGORY + "/" + ResourcePolicyRest.PLURAL_NAME + "/search",
                                          ResourcePolicyRest.PLURAL_NAME + "-search")));
+    }
+
+    private boolean isNotAuthorized(UUID id, String permission) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return !permissionEvaluator.hasPermission(authentication, id, "resourcepolicy", permission);
     }
 
     private void reindexSolrOAI(DSpaceObject dso) {

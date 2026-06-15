@@ -266,4 +266,8 @@ public class VersioningServiceImpl implements VersioningService {
         return versionDAO.countVersionsByHistoryWithItem(context, versionHistory);
     }
 
+    @Override
+    public void deleteVersion(Context c, Version version) throws SQLException {
+        versionDAO.delete(c, version);
+    }
 }

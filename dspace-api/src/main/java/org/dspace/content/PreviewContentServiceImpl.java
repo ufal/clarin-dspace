@@ -14,6 +14,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
@@ -35,8 +36,12 @@ import java.util.zip.ZipFile;
 import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamWriter;
 
+import org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry;
+import org.apache.commons.compress.archivers.sevenz.SevenZFile;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
+import org.apache.commons.compress.compressors.xz.XZCompressorInputStream;
 import org.dspace.app.util.Util;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.authorize.MissingLicenseAgreementException;
@@ -68,6 +73,11 @@ public class PreviewContentServiceImpl implements PreviewContentService {
 
     private final String ARCHIVE_TYPE_ZIP = "zip";
     private final String ARCHIVE_TYPE_TAR = "tar";
+    private final String ARCHIVE_TYPE_GZ = "gz";
+    private final String ARCHIVE_TYPE_TGZ = "tgz";
+    private final String ARCHIVE_TYPE_XZ = "xz";
+    private final String ARCHIVE_TYPE_7Z = "7z";
+
     // This constant is used to limit the length of the preview content stored in the database to prevent
     // the database from being overloaded with large amounts of data.
     private static final int MAX_PREVIEW_COUNT_LENGTH = 2000;
@@ -145,21 +155,26 @@ public class PreviewContentServiceImpl implements PreviewContentService {
     @Override
     public boolean canPreview(Context context, Bitstream bitstream, boolean authorization)
             throws SQLException, AuthorizeException {
-        try {
-            // Check it is allowed by configuration
-            boolean isAllowedByCfg = configurationService.getBooleanProperty("file.preview.enabled", true);
-            if (!isAllowedByCfg) {
-                return false;
-            }
-
-            // Check it is allowed by license
-            if (authorization) {
-                authorizeService.authorizeAction(context, bitstream, Constants.READ);
-            }
-            return true;
-        } catch (MissingLicenseAgreementException e) {
+        // Check it is allowed by configuration
+        boolean isAllowedByCfg = configurationService.getBooleanProperty("file.preview.enabled", true);
+        if (!isAllowedByCfg) {
             return false;
         }
+        if (authorization) {
+            // Verify that bitstream policy allows user to READ the bitstream.
+            // If not, the preview content is disabled.
+            try {
+                authorizeService.authorizeAction(context, bitstream, Constants.READ);
+            } catch (AuthorizeException e) {
+                // In case the license agreement(for bitstream downloading) is needed,
+                // the MissingLicenseAgreementException, that extends AuthorizeException, is thrown.
+                // For this case we also disable the content preview.
+                // Otherwise, user could see the content of some files without accepting the agreement,
+                // which could cause a security issue.
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override
@@ -168,13 +183,16 @@ public class PreviewContentServiceImpl implements PreviewContentService {
         File file = null;
 
         try {
-            file = bitstreamService.retrieveFile(context, bitstream, false); // Retrieve the file
+            file = bitstreamService.retrieveFile(context, bitstream, true); // Retrieve the file
 
             if (Objects.nonNull(file)) {
                 fileInfos = processFileToFilePreview(context, bitstream, file);
             }
         } catch (MissingLicenseAgreementException e) {
-            log.error("Missing license agreement: ", e);
+            log.warn("File Preview disabled: Missing license agreement!");
+            throw e;
+        } catch (AuthorizeException e) {
+            log.warn("File Preview disabled: Authorization error!");
             throw e;
         } catch (IOException e) {
             log.error("IOException during file processing: ", e);
@@ -205,13 +223,11 @@ public class PreviewContentServiceImpl implements PreviewContentService {
     }
 
     @Override
-    public List<FileInfo> processFileToFilePreview(Context context, Bitstream bitstream,
-                                                          File file)
-            throws Exception {
+    public List<FileInfo> processFileToFilePreview(Context context, Bitstream bitstream, File file) throws Exception {
         List<FileInfo> fileInfos = new ArrayList<>();
         String bitstreamMimeType = bitstream.getFormat(context).getMIMEType();
         if (bitstreamMimeType.equals("text/plain")) {
-            if (!validateBitstreamNameWithType(bitstream, "zip,tar,gz,tar.gz,tar.bz2")) {
+            if (!validateBitstreamNameWithType(bitstream, "zip,tar,gz,tar.gz,tar.bz2,tar.xz,xz,7z")) {
                 throw new IOException("The file has an incorrect type according to the MIME type stored in the " +
                         "database. This could cause the ZIP file to be previewed as a text file, potentially leading" +
                         " to a database error.");
@@ -225,10 +241,15 @@ public class PreviewContentServiceImpl implements PreviewContentService {
             String data = "";
             Map<String, String> archiveTypes = Map.of(
                     "application/zip", ARCHIVE_TYPE_ZIP,
-                    "application/x-tar", ARCHIVE_TYPE_TAR
+                    "application/x-tar", ARCHIVE_TYPE_TAR,
+                    "application/gzip", ARCHIVE_TYPE_GZ,
+                    "application/x-gzip", ARCHIVE_TYPE_GZ,
+                    "application/x-gtar", ARCHIVE_TYPE_TGZ,
+                    "application/x-xz", ARCHIVE_TYPE_XZ,
+                    "application/x-7z-compressed", ARCHIVE_TYPE_7Z
             );
             if (archiveTypes.containsKey(bitstreamMimeType)) {
-                data = extractFile(file, archiveTypes.get(bitstreamMimeType));
+                data = extractFile(file, archiveTypes.get(bitstreamMimeType), bitstream);
                 fileInfos = FileTreeViewGenerator.parse(data);
             }
         }
@@ -324,20 +345,81 @@ public class PreviewContentServiceImpl implements PreviewContentService {
     }
 
     /**
-     * Processes a TAR file, extracting its entries and adding their paths to the provided list.
+     * Processes tar.gz file, extracting its entries and adding their paths to the provided list.
      * @param filePaths the list to populate with the extracted file paths
-     * @param file the TAR file data
-     * @throws IOException if an I/O error occurs while reading the TAR file
+     * @param file the tar.gz file data
+     * @param bitstream Bitstream object
      */
-    private void processTarFile(List<String> filePaths, File file) throws IOException {
-        try (InputStream fis = new FileInputStream(file);
-             BufferedInputStream bis = new BufferedInputStream(fis);
-             // Use the constructor that accepts LongFileMode
-             TarArchiveInputStream tarInput = new TarArchiveInputStream(bis)) {
+    private void processTarGzipFile(List<String> filePaths, File file, Bitstream bitstream) {
+        try (TarArchiveInputStream tarInput = getTarGzipInputStream(file)) {
+            processTarFile(filePaths, tarInput);
+        } catch (IOException ex) {
+            log.warn("Error while processing file {}", bitstream.getName(), ex);
+        }
+    }
 
+    /**
+     * Processes gzip file, extracting its entries and adding their paths to the provided list.
+     * @param filePaths the list to populate with the extracted file paths
+     * @param file the gzip file data
+     * @param bitstream Bitstream object
+     */
+    private void processGzipFile(List<String> filePaths, File file, Bitstream bitstream) {
+        String fileName = bitstream.getName();
+        if (fileName == null) {
+            logBitstreamNameIsNull();
+        } else {
+            if (fileName.toLowerCase().endsWith("tar.gz")) {
+                processTarGzipFile(filePaths, file, bitstream);
+            } else {
+                try (InputStream is = new GzipCompressorInputStream(new FileInputStream(file))) {
+                    long fileSize = getUncompressedFileSize(is);
+                    addFilePath(filePaths, getFileNameFromBitstream(fileName, ".gz"), fileSize);
+                } catch (IOException ex) {
+                    log.warn("Error while processing file {}", fileName, ex);
+                }
+            }
+        }
+    }
 
-            TarArchiveEntry entry;
-            while ((entry = tarInput.getNextTarEntry()) != null) {
+    /**
+     * Processes xz file, extracting its entries and adding their paths to the provided list.
+     * @param filePaths the list to populate with the extracted file paths
+     * @param file the xz file data
+     * @param bitstream Bitstream object
+     */
+    private void processXzFile(List<String> filePaths, File file, Bitstream bitstream) {
+        String fileName = bitstream.getName();
+        if (fileName == null) {
+            logBitstreamNameIsNull();
+        } else {
+            if (fileName.toLowerCase().endsWith("tar.xz")) {
+                try (TarArchiveInputStream tarInput = getTarXzInputStream(file)) {
+                    processTarFile(filePaths, tarInput);
+                } catch (IOException ex) {
+                    log.warn("Error while processing file {}", fileName, ex);
+                }
+            } else {
+                try (InputStream is = new XZCompressorInputStream(new FileInputStream(file))) {
+                    long fileSize = getUncompressedFileSize(is);
+                    addFilePath(filePaths, getFileNameFromBitstream(fileName, ".xz"), fileSize);
+                } catch (IOException ex) {
+                    log.warn("Error while processing file {}", fileName, ex);
+                }
+            }
+        }
+    }
+
+    /**
+     * Processes 7z file, extracting its entries and adding their paths to the provided list.
+     * @param filePaths the list to populate with the extracted file paths
+     * @param file the 7z file data
+     * @param bitstream Bitstream object
+     */
+    private void process7zFile(List<String> filePaths, File file, Bitstream bitstream) {
+        try (SevenZFile sevenZFile = new SevenZFile(file)) {
+            SevenZArchiveEntry entry;
+            while ((entry = sevenZFile.getNextEntry()) != null) {
                 if (filePaths.size() >= maxPreviewCount) {
                     filePaths.add("... (too many files)");
                     break;
@@ -347,32 +429,23 @@ public class PreviewContentServiceImpl implements PreviewContentService {
                     long size = entry.getSize();
                     addFilePath(filePaths, name, size);
                 }
-                // Fully skip entry content to handle large files correctly
-                skipFully(tarInput, entry.getSize());
             }
+        } catch (IOException ex) {
+            log.warn("Error while processing file {}", bitstream.getName(), ex);
         }
     }
 
     /**
-     * Fully skips the specified number of bytes from the input stream,
-     * ensuring that all bytes are skipped even if InputStream.skip() skips less.
-     *
-     * @param in the input stream to skip bytes from
-     * @param bytesToSkip the number of bytes to skip
-     * @throws IOException if an I/O error occurs or the end of stream is reached before skipping all bytes
+     * Processes a TAR file, extracting its entries and adding their paths to the provided list.
+     * @param filePaths the list to populate with the extracted file paths
+     * @param file the TAR file data
+     * @param bitstream Bitstream object
      */
-    private void skipFully(InputStream in, long bytesToSkip) throws IOException {
-        long remaining = bytesToSkip;
-        while (remaining > 0) {
-            long skipped = in.skip(remaining);
-            if (skipped <= 0) {
-                // If skip returns 0 or less, try to read a byte to move forward
-                if (in.read() == -1) {
-                    throw new IOException("Unexpected end of stream while skipping");
-                }
-                skipped = 1;
-            }
-            remaining -= skipped;
+    private void processTarFile(List<String> filePaths, File file, Bitstream bitstream) {
+        try (TarArchiveInputStream tarInput = getTarInputStream(file)) {
+            processTarFile(filePaths, tarInput);
+        } catch (IOException ex) {
+            log.warn("Error while processing file {}", bitstream.getName(), ex);
         }
     }
 
@@ -381,9 +454,9 @@ public class PreviewContentServiceImpl implements PreviewContentService {
      *
      * @param filePaths the list to populate with entry names
      * @param file      the ZIP file to read
-     * @throws IOException if the file is invalid or cannot be read
+     * @param bitstream Bitstream object
      */
-    private void processZipFile(List<String> filePaths, File file) throws IOException {
+    private void processZipFile(List<String> filePaths, File file, Bitstream bitstream) {
         try (ZipFile zipFile = new ZipFile(file)) {
             Enumeration<? extends ZipEntry> entries = zipFile.entries();
             while (entries.hasMoreElements()) {
@@ -396,6 +469,8 @@ public class PreviewContentServiceImpl implements PreviewContentService {
                     addFilePath(filePaths, entry.getName(), entry.getSize());
                 }
             }
+        } catch (IOException ex) {
+            log.warn("Error while processing file {}", bitstream.getName(), ex);
         }
     }
 
@@ -445,16 +520,34 @@ public class PreviewContentServiceImpl implements PreviewContentService {
      * Processes  file data based on the specified file type (tar or zip),
      * and returns an XML representation of the file paths.
      * @param file the file data
-     * @param fileType    the type of file to extract ("tar" or "zip")
+     * @param fileType the type of file to extract ("tar" or "zip")
+     * @param bitstream the bitstream object
      * @return an XML string representing the extracted file paths
      */
-    private String extractFile(File file, String fileType) throws Exception {
+    private String extractFile(File file, String fileType, Bitstream bitstream) {
         List<String> filePaths = new ArrayList<>(ESTIMATED_FILE_COUNT);
         // Process the file based on its type
-        if (ARCHIVE_TYPE_TAR.equals(fileType)) {
-            processTarFile(filePaths, file);
-        } else {
-            processZipFile(filePaths, file);
+        switch (fileType) {
+            case ARCHIVE_TYPE_TGZ:
+                processTarGzipFile(filePaths, file, bitstream);
+                break;
+            case ARCHIVE_TYPE_GZ:
+                processGzipFile(filePaths, file, bitstream);
+                break;
+            case ARCHIVE_TYPE_XZ:
+                processXzFile(filePaths, file, bitstream);
+                break;
+            case ARCHIVE_TYPE_7Z:
+                process7zFile(filePaths, file, bitstream);
+                break;
+            case ARCHIVE_TYPE_TAR:
+                processTarFile(filePaths, file, bitstream);
+                break;
+            case ARCHIVE_TYPE_ZIP:
+                processZipFile(filePaths, file, bitstream);
+                break;
+            default:
+            // No default case required here
         }
         return buildXmlResponse(filePaths);
     }
@@ -507,5 +600,52 @@ public class PreviewContentServiceImpl implements PreviewContentService {
             // Return the input string as is if it's within the preview length
             return input;
         }
+    }
+
+    private static TarArchiveInputStream getTarInputStream(File file) throws IOException {
+        return getTarInputStream(new FileInputStream(file));
+    }
+
+    private static TarArchiveInputStream getTarGzipInputStream(File file) throws IOException {
+        return getTarInputStream(new GzipCompressorInputStream(new FileInputStream(file)));
+    }
+
+    private static TarArchiveInputStream getTarXzInputStream(File file) throws IOException {
+        return getTarInputStream(new XZCompressorInputStream(new FileInputStream(file)));
+    }
+
+    private static TarArchiveInputStream getTarInputStream(InputStream fis) {
+        return new TarArchiveInputStream(new BufferedInputStream(fis));
+    }
+
+    private void processTarFile(List<String> filePaths, TarArchiveInputStream tarInput) throws IOException {
+        TarArchiveEntry entry;
+        while ((entry = tarInput.getNextTarEntry()) != null) {
+            if (filePaths.size() >= maxPreviewCount) {
+                filePaths.add("... (too many files)");
+                break;
+            }
+            if (!entry.isDirectory()) {
+                String name = entry.getName();
+                long size = entry.getSize();
+                addFilePath(filePaths, name, size);
+            }
+        }
+    }
+
+    private static long getUncompressedFileSize(InputStream is) throws IOException {
+        return is.transferTo(OutputStream.nullOutputStream());
+    }
+
+    private static String getFileNameFromBitstream(String fileName, String extension) {
+        if (fileName.toLowerCase().endsWith(extension)) {
+            return fileName.substring(0, fileName.length() - extension.length());
+        } else {
+            return fileName;
+        }
+    }
+
+    private static void logBitstreamNameIsNull() {
+        log.warn("Error while processing file: Bitstream name is null");
     }
 }

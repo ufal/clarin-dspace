@@ -17,6 +17,7 @@ import org.dspace.builder.BitstreamBuilder;
 import org.dspace.builder.BitstreamFormatBuilder;
 import org.dspace.builder.BundleBuilder;
 import org.dspace.builder.ClaimedTaskBuilder;
+import org.dspace.builder.ClarinLicenseBuilder;
 import org.dspace.builder.CollectionBuilder;
 import org.dspace.builder.CommunityBuilder;
 import org.dspace.builder.EPersonBuilder;
@@ -85,6 +86,7 @@ public class AbstractBuilderCleanupUtil {
         map.put(SiteBuilder.class.getName(), new ArrayList<>());
         map.put(ProcessBuilder.class.getName(), new ArrayList<>());
         map.put(PreviewContentBuilder.class.getName(), new ArrayList<>());
+        map.put(ClarinLicenseBuilder.class.getName(), new ArrayList<>());
     }
 
     /**

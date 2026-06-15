@@ -84,6 +84,18 @@ public interface ItemService
     public Item createTemplateItem(Context context, Collection collection) throws SQLException, AuthorizeException;
 
     /**
+     * Populate the given item with all template item specified metadata.
+     *
+     * @param context    DSpace context object
+     * @param collection Collection (parent)
+     * @param template   if <code>true</code>, the item inherits all collection's template item metadata
+     * @param item    item to populate with template item specified metadata
+     * @throws SQLException       if database error
+     */
+    public void populateWithTemplateItemMetadata (Context context, Collection collection, boolean template, Item item)
+        throws SQLException;
+
+    /**
      * Get all the items in the archive. Only items with the "in archive" flag
      * set are included. The order of the list is indeterminate.
      *
@@ -972,4 +984,14 @@ public interface ItemService
      */
     public EntityType getEntityType(Context context, Item item) throws SQLException;
 
+
+    /**
+     * Check whether the given item is the latest version. If the latest item cannot
+     * be determined, because either the version history or the latest version is
+     * not present, assume the item is latest.
+     * @param  context the DSpace context.
+     * @param  item    the item that should be checked.
+     * @return         true if the item is the latest version, false otherwise.
+     */
+    public boolean isLatestVersion(Context context, Item item) throws SQLException;
 }

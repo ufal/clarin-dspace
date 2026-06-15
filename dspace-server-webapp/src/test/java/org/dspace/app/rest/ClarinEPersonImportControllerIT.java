@@ -49,6 +49,67 @@ public class ClarinEPersonImportControllerIT  extends AbstractControllerIntegrat
     @Autowired
     private ClarinUserRegistrationService clarinUserRegistrationService;
 
+    /**
+     * Helper method to find a ClarinUserRegistration as admin, preserving current user context.
+     */
+    private ClarinUserRegistration findAsAdmin(Integer id) throws Exception {
+        EPerson currentUser = context.getCurrentUser();
+        try {
+            context.setCurrentUser(admin);
+            return clarinUserRegistrationService.find(context, id);
+        } finally {
+            context.setCurrentUser(currentUser);
+        }
+    }
+
+    /**
+     * Helper method to create a test EPerson with given email suffix and password.
+     */
+    private EPerson createTestEPerson(String emailSuffix, String password) throws Exception {
+        return EPersonBuilder.createEPerson(context)
+                .withEmail("eperson" + emailSuffix + "@mail.com")
+                .withPassword(password)
+                .build();
+    }
+
+    /**
+     * Helper method to create an initial ClarinUserRegistration for testing.
+     */
+    private ClarinUserRegistration createInitialRegistration(EPerson ePerson, String email, String org)
+            throws Exception {
+        return ClarinUserRegistrationBuilder
+                .createClarinUserRegistration(context)
+                .withEmail(email)
+                .withEPersonID(ePerson.getID())
+                .withOrganization(org)
+                .withConfirmation(false)
+                .build();
+    }
+
+    /**
+     * Helper method to build a ClarinUserRegistrationRest import request.
+     */
+    private ClarinUserRegistrationRest buildImportRequest(String email, UUID ePersonID, String org,
+            boolean confirmation) {
+        ClarinUserRegistrationRest request = new ClarinUserRegistrationRest();
+        request.setEmail(email);
+        request.setePersonID(ePersonID);
+        request.setOrganization(org);
+        request.setConfirmation(confirmation);
+        return request;
+    }
+
+    /**
+     * Helper method to perform the user registration import request.
+     */
+    private void performImportRequest(String authToken, ClarinUserRegistrationRest request) throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        getClient(authToken).perform(post("/api/clarin/import/userregistration")
+                        .content(mapper.writeValueAsBytes(request))
+                        .contentType(contentType))
+                .andExpect(status().isOk());
+    }
+
     @Test
     public void createEpersonTest() throws Exception {
         ObjectMapper mapper = new ObjectMapper();
@@ -180,6 +241,84 @@ public class ClarinEPersonImportControllerIT  extends AbstractControllerIntegrat
             assertEquals(clarinUserRegistration.getOrganization(), "Test");
         } finally {
             ClarinUserRegistrationBuilder.deleteClarinUserRegistration(idRef.get());
+        }
+    }
+
+    @Test
+    public void updatesExistingRegistrationWhenMatchedByEmail() throws Exception {
+        context.turnOffAuthorisationSystem();
+        EPerson ePerson = createTestEPerson("4", "qwerty04");
+        ClarinUserRegistration initialRegistration = createInitialRegistration(ePerson, "user@test.edu",
+                "Original Org");
+        context.restoreAuthSystemState();
+
+        // Import with same email to match by email
+        ClarinUserRegistrationRest request = buildImportRequest("user@test.edu", ePerson.getID(),
+                "Updated Org", true);
+        String authToken = getAuthToken(admin.getEmail(), password);
+
+        try {
+            performImportRequest(authToken, request);
+
+            // Verify updates were applied
+            ClarinUserRegistration updated = findAsAdmin(initialRegistration.getID());
+            assertEquals("user@test.edu", updated.getEmail());
+            assertEquals("Updated Org", updated.getOrganization());
+            assertTrue(updated.isConfirmation());
+        } finally {
+            ClarinUserRegistrationBuilder.deleteClarinUserRegistration(initialRegistration.getID());
+        }
+    }
+
+    @Test
+    public void preventsEmailUpdateWhenMatchedByEPersonID() throws Exception {
+        context.turnOffAuthorisationSystem();
+        EPerson ePerson = createTestEPerson("5", "qwerty05");
+        ClarinUserRegistration initialRegistration = createInitialRegistration(ePerson, "existing@test.edu",
+                "Original Org");
+        context.restoreAuthSystemState();
+
+        // Import with different email - will match by ePersonID instead
+        ClarinUserRegistrationRest request = buildImportRequest("different@test.edu", ePerson.getID(),
+                "Updated Org", true);
+        String authToken = getAuthToken(admin.getEmail(), password);
+
+        try {
+            performImportRequest(authToken, request);
+
+            // Verify email was NOT updated but other fields were
+            ClarinUserRegistration updated = findAsAdmin(initialRegistration.getID());
+            assertEquals("existing@test.edu", updated.getEmail()); // Email unchanged
+            assertEquals("Updated Org", updated.getOrganization()); // Organization updated
+            assertTrue(updated.isConfirmation()); // Confirmation updated
+        } finally {
+            ClarinUserRegistrationBuilder.deleteClarinUserRegistration(initialRegistration.getID());
+        }
+    }
+
+    @Test
+    public void updatesRegistrationWhenBothEmailAndEPersonIDMatch() throws Exception {
+        context.turnOffAuthorisationSystem();
+        EPerson ePerson = createTestEPerson("6", "qwerty06");
+        ClarinUserRegistration initialRegistration = createInitialRegistration(ePerson, "consistent@test.edu",
+                "Original Org");
+        context.restoreAuthSystemState();
+
+        // Import with same email and ePersonID - both match the same record
+        ClarinUserRegistrationRest request = buildImportRequest("consistent@test.edu", ePerson.getID(),
+                "Updated Org", true);
+        String authToken = getAuthToken(admin.getEmail(), password);
+
+        try {
+            performImportRequest(authToken, request);
+
+            // Verify all fields were updated (happy path)
+            ClarinUserRegistration updated = findAsAdmin(initialRegistration.getID());
+            assertEquals("consistent@test.edu", updated.getEmail());
+            assertEquals("Updated Org", updated.getOrganization());
+            assertTrue(updated.isConfirmation());
+        } finally {
+            ClarinUserRegistrationBuilder.deleteClarinUserRegistration(initialRegistration.getID());
         }
     }
 

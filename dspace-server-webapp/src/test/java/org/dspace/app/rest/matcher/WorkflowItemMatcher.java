@@ -81,6 +81,17 @@ public class WorkflowItemMatcher {
                 matchLinks(witem));
     }
 
+    public static Matcher matchItemWithTitle(XmlWorkflowItem witem, String title) {
+        return allOf(
+                // Check workspaceitem properties
+                matchProperties(witem),
+                // Check core metadata all appear in the first describe panel "traditionalpageone"
+                title != null ?
+                        hasJsonPath("$.sections.traditionalpageone['dc.title'][0].value", is(title)) :
+                        hasNoJsonPath("$.sections.traditionalpageone['dc.title']"),
+                matchLinks(witem));
+    }
+
     /**
      * Check that the id and type are exposed
      * 

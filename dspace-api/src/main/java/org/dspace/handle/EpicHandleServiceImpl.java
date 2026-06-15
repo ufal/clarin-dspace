@@ -28,6 +28,12 @@ import org.dspace.handle.service.EpicHandleService;
 import org.dspace.services.ConfigurationService;
 import org.springframework.beans.factory.annotation.Autowired;
 
+/**
+ * Service implementation for ePIC handles.
+ * This class is autowired by spring and should never be accessed directly.
+ *
+ * @author Milan Kuchtiak
+ */
 public class EpicHandleServiceImpl implements EpicHandleService {
     private String pidServiceUrl;
     private String pidServiceUser;
@@ -174,6 +180,8 @@ public class EpicHandleServiceImpl implements EpicHandleService {
     }
 
     class EpicHandleServiceAuthenticator extends Authenticator {
+
+        @Override
         public PasswordAuthentication getPasswordAuthentication() {
             return new PasswordAuthentication(pidServiceUser, pidServicePassword.toCharArray());
         }
