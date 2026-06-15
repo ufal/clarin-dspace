@@ -42,14 +42,9 @@ public class FilePreviewConfiguration<T extends FilePreview> extends ScriptConfi
             options.addOption("f", "force", false, "Force to create preview, even when the preview exists.");
 
             options.addOption("e", "email", true,
-                    "Email for authentication.");
+                    "Email of the eperson to run the script as.");
             options.getOption("e").setType(String.class);
             options.getOption("e").setRequired(true);
-
-            options.addOption("p", "password", true,
-                    "Password for authentication.");
-            options.getOption("p").setType(String.class);
-            options.getOption("p").setRequired(true);
 
             super.options = options;
         }
