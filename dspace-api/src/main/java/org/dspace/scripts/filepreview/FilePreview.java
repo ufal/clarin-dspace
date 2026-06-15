@@ -193,7 +193,7 @@ public class FilePreview extends DSpaceRunnable<FilePreviewConfiguration> {
                 "You can choose from these available options:\n" +
                 "  -i, --info            Show help information\n" +
                 "  -u, --uuid            The UUID of the ITEM for which to create a preview of its bitstreams\n" +
-                "  -f, --force           force to create preview, even when exists\n" +
+                "  -f, --force           Force to create preview, even when the preview exists\n" +
                 "  -e, --email           Email for authentication\n" +
                 "  -p, --password        Password for authentication\n");
 
