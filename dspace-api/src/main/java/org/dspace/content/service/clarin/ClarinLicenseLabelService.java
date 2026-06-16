@@ -53,6 +53,16 @@ public interface ClarinLicenseLabelService {
     ClarinLicenseLabel find(Context context, int valueId) throws SQLException;
 
     /**
+     * Find the clarin license label object by label name
+     *
+     * @param context DSpace context object
+     * @param label label name of the searching clarin license label object
+     * @return found clarin license label object or null
+     * @throws SQLException if database error
+     */
+    ClarinLicenseLabel findByLabel(Context context, String label) throws SQLException;
+
+    /**
      * Find all clarin license label objects
      * @param context DSpace context object
      * @return list of all clarin license label objects

@@ -638,7 +638,7 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
         String clarinLicenseName = "Test Clarin License";
 
         // 2. Create clarin license with clarin license label
-        ClarinLicense clarinLicense = createClarinLicense(clarinLicenseName, "Test Def", "Test R Info",
+        ClarinLicense clarinLicense = createClarinLicense(clarinLicenseName, "Test Def", "Test R Info", "lbl",
                 Confirmation.NOT_REQUIRED);
 
         // creating replace operation
@@ -688,7 +688,7 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
         List<Operation> replaceOperations = new ArrayList<Operation>();
         // 2. Create Clarin License
         String clarinLicenseName = "Test Clarin License";
-        ClarinLicense clarinLicense = createClarinLicense(clarinLicenseName, "Test Def", "Test R Info",
+        ClarinLicense clarinLicense = createClarinLicense(clarinLicenseName, "Test Def", "Test R Info", "lbl",
                 Confirmation.NOT_REQUIRED);
         context.restoreAuthSystemState();
 
@@ -763,10 +763,11 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
         String updateClarinLicenseName = "Updated Clarin License";
 
         // 2. Create Clarin Licenses
-        ClarinLicense clarinLicense = createClarinLicense(clarinLicenseName, "Test Def", "Test R Info",
+        ClarinLicense clarinLicense = createClarinLicense(clarinLicenseName, "Test Def", "Test R Info", "lbl1",
                 Confirmation.NOT_REQUIRED);
         ClarinLicense updatedClarinLicense =
-                createClarinLicense(updateClarinLicenseName, "Test Def2", "Test R Info2", Confirmation.NOT_REQUIRED);
+                createClarinLicense(updateClarinLicenseName, "Test Def2", "Test R Info2", "lbl2",
+                        Confirmation.NOT_REQUIRED);
         context.restoreAuthSystemState();
 
         // Creating replace operation
@@ -1022,7 +1023,7 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
     /**
      * Create ClarinLicense object with ClarinLicenseLabel object for testing purposes.
      */
-    private ClarinLicense createClarinLicense(String name, String definition, String requiredInfo,
+    private ClarinLicense createClarinLicense(String name, String definition, String requiredInfo, String label,
                                               Confirmation confirmation) throws SQLException, AuthorizeException {
         ClarinLicense clarinLicense = ClarinLicenseBuilder.createClarinLicense(context).build();
         clarinLicense.setConfirmation(confirmation);
@@ -1032,7 +1033,7 @@ public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerInteg
 
         // add ClarinLicenseLabels to the ClarinLicense
         HashSet<ClarinLicenseLabel> clarinLicenseLabels = new HashSet<>();
-        ClarinLicenseLabel clarinLicenseLabel = createClarinLicenseLabel("lbl", false, "Test Title");
+        ClarinLicenseLabel clarinLicenseLabel = createClarinLicenseLabel(label, false, label + " Title");
         clarinLicenseLabels.add(clarinLicenseLabel);
         clarinLicense.setLicenseLabels(clarinLicenseLabels);
 
