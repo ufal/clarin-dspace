@@ -8,6 +8,7 @@
 package org.dspace.identifier;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
@@ -20,9 +21,11 @@ import java.util.List;
 import java.util.Set;
 
 import org.dspace.AbstractIntegrationTestWithDatabase;
+import org.dspace.authorize.AuthorizeException;
 import org.dspace.builder.CollectionBuilder;
 import org.dspace.builder.CommunityBuilder;
 import org.dspace.builder.ItemBuilder;
+import org.dspace.builder.VersionBuilder;
 import org.dspace.content.Collection;
 import org.dspace.content.Community;
 import org.dspace.content.Item;
@@ -37,8 +40,6 @@ import org.dspace.identifier.service.DOIService;
 import org.dspace.kernel.ServiceManager;
 import org.dspace.services.ConfigurationService;
 import org.dspace.services.factory.DSpaceServicesFactory;
-import org.dspace.versioning.factory.VersionServiceFactory;
-import org.dspace.versioning.service.VersionHistoryService;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -49,7 +50,7 @@ import org.junit.Test;
  */
 public class ClarinDOIIdentifierProviderIT extends AbstractIntegrationTestWithDatabase {
 
-    private VersionHistoryService versionHistoryService;
+    // private VersionHistoryService versionHistoryService;
     private ConfigurationService configurationService;
     private DOIService doiService;
     private ItemService itemService;
@@ -59,6 +60,7 @@ public class ClarinDOIIdentifierProviderIT extends AbstractIntegrationTestWithDa
     private Item item1;
     private Item item2;
     private Item item3;
+    private Item itemV2;
 
     @Before
     @Override
@@ -67,7 +69,7 @@ public class ClarinDOIIdentifierProviderIT extends AbstractIntegrationTestWithDa
         context.turnOffAuthorisationSystem();
 
         configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
-        versionHistoryService = VersionServiceFactory.getInstance().getVersionHistoryService();
+        // versionHistoryService = VersionServiceFactory.getInstance().getVersionHistoryService();
         doiService = IdentifierServiceFactory.getInstance().getDOIService();
         itemService = ContentServiceFactory.getInstance().getItemService();
 
@@ -108,6 +110,8 @@ public class ClarinDOIIdentifierProviderIT extends AbstractIntegrationTestWithDa
                 .withTitle("Third Item")
                 .build();
 
+        // itemV2 = VersionBuilder.createVersion(context, item1, "Second version").build().getItem();
+
         context.restoreAuthSystemState();
 
         ClarinCommunityDOIIdentifierProvider communityProvider1 =
@@ -125,7 +129,7 @@ public class ClarinDOIIdentifierProviderIT extends AbstractIntegrationTestWithDa
     }
 
     @Test
-    public void testMint() throws IdentifierException, SQLException {
+    public void testMint() throws IdentifierException, SQLException, AuthorizeException {
         String doi1 = provider.mint(context, item1);
         assertTrue(doi1.startsWith("doi:10.1/1-"));
 
@@ -139,6 +143,22 @@ public class ClarinDOIIdentifierProviderIT extends AbstractIntegrationTestWithDa
         // item3 is not mintable
         String doi3 = provider.mint(context, item3);
         assertNull(doi3);
+
+        context.turnOffAuthorisationSystem();
+        itemV2 = VersionBuilder.createVersion(context, item1, "Second version").build().getItem();
+        // simulate itemV2 having a DOI identifier assigned (from previous version)
+        itemService.addMetadata(context, itemV2, "dc", "identifier", "doi", null, "https://doi.org/10.1/1-1");
+        context.restoreAuthSystemState();
+
+        // mint new DOI for itemV2, which is a new version of item1, should result in entirely new DOI
+        // (DOI not based on item's history)
+        String doi4 = provider.mint(context, itemV2);
+        assertTrue(doi4.startsWith("doi:10.1/1-"));
+        // check if the DOI for itemV2 is different from the one for item1
+        assertFalse(doi4.startsWith(doi1));
+        checkDoi(doi2, DOIIdentifierProvider.MINTED);
+        // check that the old DOI identifier was removed from itemV2
+        assertEquals(0, getDoiMetadata(itemV2).size());
     }
 
     @Test
@@ -150,7 +170,7 @@ public class ClarinDOIIdentifierProviderIT extends AbstractIntegrationTestWithDa
     }
 
     @Test
-    public void testRegister() throws IdentifierException, SQLException {
+    public void testRegister() throws IdentifierException, SQLException, AuthorizeException {
         String doi1 = provider.register(context, item1);
         assertTrue(doi1.startsWith("doi:10.1/1-"));
 
@@ -159,6 +179,16 @@ public class ClarinDOIIdentifierProviderIT extends AbstractIntegrationTestWithDa
         // item3 is not mintable
         String doi3 = provider.register(context, item3);
         assertNull(doi3);
+
+        context.turnOffAuthorisationSystem();
+        itemV2 = VersionBuilder.createVersion(context, item1, "Second version").build().getItem();
+        context.restoreAuthSystemState();
+
+        String doi4 = provider.register(context, itemV2);
+        assertTrue(doi4.startsWith("doi:10.1/1-"));
+        // check if the DOI for itemV2 is different from the one for item1
+        assertFalse(doi4.startsWith(doi1));
+        checkDoi(doi4, DOIIdentifierProvider.TO_BE_REGISTERED);
     }
 
     @Test
@@ -253,7 +283,7 @@ public class ClarinDOIIdentifierProviderIT extends AbstractIntegrationTestWithDa
         communityProvider.setNamespaceSeparator(namespaceSeparator);
         communityProvider.setConfigurationService(configurationService);
         communityProvider.setDOIConnector(connector);
-        communityProvider.versionHistoryService = versionHistoryService;
+        // communityProvider.versionHistoryService = versionHistoryService;
         communityProvider.doiService = doiService;
         communityProvider.itemService = itemService;
         communityProvider.contentServiceFactory = ContentServiceFactory.getInstance();
