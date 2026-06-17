@@ -120,12 +120,14 @@ public class VocabularyEntryLinkRepositoryIT extends AbstractControllerIntegrati
         configurationService.setProperty("default.locale", "it");
         configurationService.setProperty("ror.authority.stored-name-type", "locale_label");
 
-        checkSingleItemResponse(getClient().perform(get(ROR_AUTHORITY_ENTRIES_URL)
-                .param("filter", "University of Pisa")
-                .param("exact", "true")), "Università di Pisa", "Università di Pisa");
-
-        configurationService.setProperty("default.locale", defaultLocale);
-        configurationService.setProperty("ror.authority.stored-name-type", "en_label");
+        try {
+            checkSingleItemResponse(getClient().perform(get(ROR_AUTHORITY_ENTRIES_URL)
+                    .param("filter", "University of Pisa")
+                    .param("exact", "true")), "Università di Pisa", "Università di Pisa");
+        } finally {
+            configurationService.setProperty("default.locale", defaultLocale);
+            configurationService.setProperty("ror.authority.stored-name-type", "en_label");
+        }
     }
 
     @Test
@@ -135,12 +137,14 @@ public class VocabularyEntryLinkRepositoryIT extends AbstractControllerIntegrati
         configurationService.setProperty("default.locale", "it");
         configurationService.setProperty("ror.authority.stored-name-type", "ror_display");
 
-        checkSingleItemResponse(getClient().perform(get(ROR_AUTHORITY_ENTRIES_URL)
-                .param("filter", "University of Pisa")
-                .param("exact", "true")), "University of Pisa", "Università di Pisa");
-
-        configurationService.setProperty("default.locale", defaultLocale);
-        configurationService.setProperty("ror.authority.stored-name-type", "en_label");
+        try {
+            checkSingleItemResponse(getClient().perform(get(ROR_AUTHORITY_ENTRIES_URL)
+                    .param("filter", "University of Pisa")
+                    .param("exact", "true")), "University of Pisa", "Università di Pisa");
+        } finally {
+            configurationService.setProperty("default.locale", defaultLocale);
+            configurationService.setProperty("ror.authority.stored-name-type", "en_label");
+        }
     }
 
     @Test

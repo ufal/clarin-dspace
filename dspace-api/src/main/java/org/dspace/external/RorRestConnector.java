@@ -193,7 +193,12 @@ public class RorRestConnector {
     }
 
     private static String getLocaleLanguage(String locale) {
-        return Optional.ofNullable(LocaleUtils.toLocale(locale)).map(Locale::getLanguage).orElse("en");
+        try {
+            return Optional.ofNullable(LocaleUtils.toLocale(locale)).map(Locale::getLanguage).orElse("en");
+        } catch (IllegalArgumentException e) {
+            log.warn("Invalid locale format: " + locale + ", using default 'en' locale.");
+            return "en";
+        }
     }
 
     private static Choice toChoice(RorItem rorItem, String localeLanguage, StoredNameType storedNameType) {

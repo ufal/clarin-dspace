@@ -13,6 +13,11 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+/**
+ * ROR items model representing the ROR API response.
+ *
+ * @author Milan Kuchtiak
+ */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class RorItems {
 

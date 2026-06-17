@@ -10,6 +10,11 @@ package org.dspace.external.model.ror;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+/**
+ * Location model representing the single location element from ROR API response.
+ *
+ * @author Milan Kuchtiak
+ */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class Location {
     private final int geonamesId;
