@@ -149,7 +149,7 @@
             <bean parent = "org.dspace.identifier.doi.DOIConnector" />
         </property>
         <property name="doiPrefix" value="10.83111" />
-        <property name="namespaceSeparator" value="sep1-" />
+        <property name="namespaceSeparator" value="clarin.1." />
         <property name="communities">
             <set>
                 <value>c23166ee-8807-43f0-acbe-ea2fc68f5ebd</value>
@@ -167,7 +167,7 @@
             <bean parent = "org.dspace.identifier.doi.DOIConnector" />
         </property>
         <property name="doiPrefix" value="10.83222" />
-        <property name="namespaceSeparator" value="sep2-" />
+        <property name="namespaceSeparator" value="clarin.2." />
         <property name="communities">
             <set>
                 <value>1779c8e1-db54-46a6-9804-0e7fe2583c39</value>
