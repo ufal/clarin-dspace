@@ -40,7 +40,9 @@ import org.dspace.identifier.service.DOIService;
 import org.dspace.kernel.ServiceManager;
 import org.dspace.services.ConfigurationService;
 import org.dspace.services.factory.DSpaceServicesFactory;
+import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 /**
@@ -50,17 +52,34 @@ import org.junit.Test;
  */
 public class ClarinDOIIdentifierProviderIT extends AbstractIntegrationTestWithDatabase {
 
-    // private VersionHistoryService versionHistoryService;
     private ConfigurationService configurationService;
     private DOIService doiService;
     private ItemService itemService;
 
     private ClarinDOIIdentifierProvider provider;
 
+    private static IdentifierServiceImpl identifierService;
+    private static List<IdentifierProvider> existingIdentifierProviders;
+
     private Item item1;
     private Item item2;
     private Item item3;
     private Item itemV2;
+
+    @BeforeClass
+    public static void setUpClass() throws Exception {
+        ServiceManager serviceManager = DSpaceServicesFactory.getInstance().getServiceManager();
+        identifierService = serviceManager.getServicesByType(IdentifierServiceImpl.class).get(0);
+
+        // Clean out providers to avoid any being used for creation of community and collection
+        existingIdentifierProviders = identifierService.getProviders();
+        identifierService.setProviders(new ArrayList<>());
+    }
+
+    @AfterClass
+    public static void tearDownClass() {
+        identifierService.setProviders(existingIdentifierProviders);
+    }
 
     @Before
     @Override
@@ -69,16 +88,8 @@ public class ClarinDOIIdentifierProviderIT extends AbstractIntegrationTestWithDa
         context.turnOffAuthorisationSystem();
 
         configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
-        // versionHistoryService = VersionServiceFactory.getInstance().getVersionHistoryService();
         doiService = IdentifierServiceFactory.getInstance().getDOIService();
         itemService = ContentServiceFactory.getInstance().getItemService();
-
-        ServiceManager serviceManager = DSpaceServicesFactory.getInstance().getServiceManager();
-
-        IdentifierServiceImpl identifierService = serviceManager.getServicesByType(IdentifierServiceImpl.class).get(0);
-
-        // Clean out providers to avoid any being used for creation of community and collection
-        identifierService.setProviders(new ArrayList<>());
 
         parentCommunity = CommunityBuilder.createCommunity(context)
                 .withName("Parent Community 1")
@@ -109,8 +120,6 @@ public class ClarinDOIIdentifierProviderIT extends AbstractIntegrationTestWithDa
         item3 = ItemBuilder.createItem(context, collection3)
                 .withTitle("Third Item")
                 .build();
-
-        // itemV2 = VersionBuilder.createVersion(context, item1, "Second version").build().getItem();
 
         context.restoreAuthSystemState();
 
