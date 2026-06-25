@@ -352,7 +352,7 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
             }
             return groups;
         } catch (Throwable t) {
-            log.error("Unable to validate any sepcial groups this user may belong too because of an exception.", t);
+            log.error("Unable to validate any special groups this user may belong to because of an exception.", t);
             return Collections.emptyList();
         }
     }
