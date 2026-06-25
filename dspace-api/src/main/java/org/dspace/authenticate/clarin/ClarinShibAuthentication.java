@@ -341,6 +341,11 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
                 return specialGroups;
             }
 
+            if (request.getSession().getAttribute("shib.authenticated") == null) {
+                log.debug("User has not been authenticated via shibboleth, returning empty list of special groups.");
+                return Collections.emptyList();
+            }
+
             List<UUID> groupIds = new ShibGroup(new ShibHeaders(request), context).get();
 
             List<Group> groups = new ArrayList<>();
