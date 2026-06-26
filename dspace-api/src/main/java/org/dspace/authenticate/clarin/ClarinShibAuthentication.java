@@ -277,7 +277,7 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
 
             // Step 4: Log the user in.
             context.setCurrentUser(eperson);
-            request.getSession().setAttribute("shib.authenticated", true);
+            request.setAttribute("shib.authenticated", true);
             AuthenticateServiceFactory.getInstance().getAuthenticationService().initEPerson(context, request, eperson);
 
             log.info(eperson.getEmail() + " has been authenticated via shibboleth.");
@@ -341,7 +341,7 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
                 return specialGroups;
             }
 
-            if (request.getSession().getAttribute("shib.authenticated") == null) {
+            if (request.getAttribute("shib.authenticated") == null) {
                 log.debug("User has not been authenticated via shibboleth, returning empty list of special groups.");
                 return Collections.emptyList();
             }
@@ -1284,7 +1284,7 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
     public boolean isUsed(final Context context, final HttpServletRequest request) {
         if (request != null &&
                 context.getCurrentUser() != null &&
-                request.getSession().getAttribute("shib.authenticated") != null) {
+                request.getAttribute("shib.authenticated") != null) {
             return true;
         }
         return false;
