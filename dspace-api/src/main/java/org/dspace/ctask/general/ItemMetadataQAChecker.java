@@ -452,6 +452,7 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
             "dc.rights.label",
             "dc.date.available",
             "dc.source.uri",
+            "dc.identifier.doi",
             "metashare.ResourceInfo#DistributionInfo#LicenseInfo.license"
         }) {
             List<MetadataValue> vals = itemService.getMetadataByMetadataString(item, noDuplicate);
