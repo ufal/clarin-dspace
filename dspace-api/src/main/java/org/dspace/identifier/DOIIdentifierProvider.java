@@ -1076,7 +1076,8 @@ public class DOIIdentifierProvider extends FilteredIdentifierProvider {
         // Items that end up with more than one dc.identifier.doi value are surfaced by the ItemMetadataQAChecker
         // curation task for manual review.
         List<MetadataValue> existing = itemService.getMetadata(item, MD_SCHEMA, DOI_ELEMENT, DOI_QUALIFIER, Item.ANY);
-        boolean alreadyPresent = existing.stream().anyMatch(value -> doiURL.equals(value.getValue()));
+        boolean alreadyPresent = existing.stream()
+                .anyMatch(metadataValue -> doiURL.equals(metadataValue.getValue()));
 
         if (alreadyPresent) {
             log.debug("The DOI {} is already part of the metadata of Item {}. Not adding it again.",
