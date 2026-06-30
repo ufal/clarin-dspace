@@ -30,7 +30,6 @@ import javax.ws.rs.NotFoundException;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.gson.JsonParseException;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.dspace.app.rest.exception.DSpaceBadRequestException;
@@ -616,12 +615,11 @@ public class ClarinUserMetadataRestController {
         try {
             clarinUserMetadataRestArray = objectMapper.readValue(
                     request.getInputStream(), ClarinUserMetadataRest[].class);
-        } catch (JsonProcessingException | JsonParseException ex) {
+        } catch (JsonProcessingException ex) {
             throw new DSpaceBadRequestException("Missing or Invalid User Data", ex);
         }
         if (Objects.isNull(clarinUserMetadataRestArray)) {
-            throw new RuntimeException("The clarinUserMetadataRestArray cannot be null. It could be empty, but" +
-                    " not null");
+            throw new DSpaceBadRequestException("Missing or Invalid User Data");
         }
         return clarinUserMetadataRestArray;
     }
