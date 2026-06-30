@@ -226,6 +226,15 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
     }
 
     @Test
+    public void notAuthorizedUser_manageUserMetadata_withEmptyMetadata_shouldReturn_400() throws Exception {
+        this.prepareEnvironment(null, Confirmation.ALLOW_ANONYMOUS);
+        getClient().perform(post("/api/core/clarinusermetadata/manage?bitstreamUUID=" + bitstream.getID())
+                        .content(new byte[0])
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     public void authorizedUserWithoutMetadata_shouldReturnToken() throws Exception {
         this.prepareEnvironment("NAME", Confirmation.NOT_REQUIRED);
         context.turnOffAuthorisationSystem();

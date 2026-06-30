@@ -28,6 +28,7 @@ import javax.mail.MessagingException;
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.NotFoundException;
 
+import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -93,6 +94,9 @@ public class ClarinUserMetadataRestController {
     @Autowired
     ConfigurationService configurationService;
 
+    @Autowired
+    ObjectMapper objectMapper;
+
     // Enum to distinguish between the two types of the email
     enum MailType { ALLZIP, BITSTREAM }
 
@@ -129,7 +133,7 @@ public class ClarinUserMetadataRestController {
         ClarinLicense clarinLicense = null;
         // Get ClarinUserMetadataRest Array from the request body
         ClarinUserMetadataRest[] clarinUserMetadataRestArray =
-                new ObjectMapper().readValue(request.getInputStream(), ClarinUserMetadataRest[].class);
+                objectMapper.readValue(request.getInputStream(), ClarinUserMetadataRest[].class);
         if (Objects.isNull(clarinUserMetadataRestArray)) {
             throw new RuntimeException("The clarinUserMetadataRestArray cannot be null. It could be empty, but" +
                     " not null");
@@ -228,12 +232,16 @@ public class ClarinUserMetadataRestController {
             throw new AuthorizeException("Anonymous user is not allowed to get access token");
         }
 
-        // Get ClarinUserMetadataRest Array from the request body
-        ClarinUserMetadataRest[] clarinUserMetadataRestArray =
-                new ObjectMapper().readValue(request.getInputStream(), ClarinUserMetadataRest[].class);
-        if (Objects.isNull(clarinUserMetadataRestArray)) {
-            throw new RuntimeException("The clarinUserMetadataRestArray cannot be null. It could be empty, but" +
-                    " not null");
+        ClarinUserMetadataRest[]  clarinUserMetadataRestArray;
+        try {
+            clarinUserMetadataRestArray =
+                    objectMapper.readValue(request.getInputStream(), ClarinUserMetadataRest[].class);
+            if (Objects.isNull(clarinUserMetadataRestArray)) {
+                throw new RuntimeException("The clarinUserMetadataRestArray cannot be null. It could be empty, but" +
+                        " not null");
+            }
+        } catch (JsonMappingException ex) {
+            throw new DSpaceBadRequestException("Missing or Invalid User Data", ex);
         }
 
         // Convert Array to the List
