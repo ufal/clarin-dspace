@@ -28,8 +28,9 @@ import javax.mail.MessagingException;
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.NotFoundException;
 
-import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.gson.JsonParseException;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.dspace.app.rest.exception.DSpaceBadRequestException;
@@ -58,7 +59,6 @@ import org.dspace.core.Email;
 import org.dspace.core.I18nUtil;
 import org.dspace.eperson.EPerson;
 import org.dspace.services.ConfigurationService;
-import org.json.simple.parser.ParseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -103,8 +103,8 @@ public class ClarinUserMetadataRestController {
     @RequestMapping(value = "/zip", method = POST, consumes = APPLICATION_JSON)
     @PreAuthorize("permitAll()")
     public ResponseEntity manageUserMetadataForZIP(@RequestParam("itemUUID") UUID itemUUID,
-                                             HttpServletRequest request)
-            throws SQLException, ParseException, IOException, AuthorizeException, MessagingException {
+                                                   HttpServletRequest request)
+            throws SQLException, IOException, AuthorizeException {
 
         // Get context from the request
         Context context = obtainContext(request);
@@ -131,13 +131,8 @@ public class ClarinUserMetadataRestController {
 
         boolean shouldEmailToken = false;
         ClarinLicense clarinLicense = null;
-        // Get ClarinUserMetadataRest Array from the request body
-        ClarinUserMetadataRest[] clarinUserMetadataRestArray =
-                objectMapper.readValue(request.getInputStream(), ClarinUserMetadataRest[].class);
-        if (Objects.isNull(clarinUserMetadataRestArray)) {
-            throw new RuntimeException("The clarinUserMetadataRestArray cannot be null. It could be empty, but" +
-                    " not null");
-        }
+
+        ClarinUserMetadataRest[] clarinUserMetadataRestArray = getClarinUserMetadata(request);
 
         // Convert Array to the List
         List<ClarinUserMetadataRest> clarinUserMetadataRestList = Arrays.asList(clarinUserMetadataRestArray);
@@ -195,8 +190,8 @@ public class ClarinUserMetadataRestController {
     @RequestMapping(method = POST, consumes = APPLICATION_JSON)
     @PreAuthorize("permitAll()")
     public ResponseEntity manageUserMetadata(@RequestParam("bitstreamUUID") UUID bitstreamUUID,
-                                                     HttpServletRequest request)
-            throws SQLException, ParseException, IOException, AuthorizeException, MessagingException {
+                                             HttpServletRequest request)
+            throws SQLException, IOException, AuthorizeException {
 
         // Get context from the request
         Context context = obtainContext(request);
@@ -232,17 +227,7 @@ public class ClarinUserMetadataRestController {
             throw new AuthorizeException("Anonymous user is not allowed to get access token");
         }
 
-        ClarinUserMetadataRest[]  clarinUserMetadataRestArray;
-        try {
-            clarinUserMetadataRestArray =
-                    objectMapper.readValue(request.getInputStream(), ClarinUserMetadataRest[].class);
-            if (Objects.isNull(clarinUserMetadataRestArray)) {
-                throw new RuntimeException("The clarinUserMetadataRestArray cannot be null. It could be empty, but" +
-                        " not null");
-            }
-        } catch (JsonMappingException ex) {
-            throw new DSpaceBadRequestException("Missing or Invalid User Data", ex);
-        }
+        ClarinUserMetadataRest[] clarinUserMetadataRestArray = getClarinUserMetadata(request);
 
         // Convert Array to the List
         List<ClarinUserMetadataRest> clarinUserMetadataRestList = Arrays.asList(clarinUserMetadataRestArray);
@@ -292,7 +277,7 @@ public class ClarinUserMetadataRestController {
                                            MailType mailType,
                                            List<ClarinUserMetadataRest> clarinUserMetadataRestList,
                                            String itemHandle)
-            throws IOException, SQLException, MessagingException {
+            throws IOException, MessagingException {
         if (StringUtils.isBlank(email)) {
             log.error("Cannot send email with download link because the email is empty.");
             throw new DSpaceBadRequestException("Cannot send email with download link because the email is empty.");
@@ -618,5 +603,26 @@ public class ClarinUserMetadataRestController {
             clarinUserMetadataList.add(clarinUserMetadata);
         }
         return clarinUserMetadataList;
+    }
+
+    /**
+     * Get ClarinUserMetadataRest array from the request body. Throws exception if the request body is empty or invalid.
+     *
+     * @param request request
+     * @return ClarinUserMetadataRest array
+     */
+    private ClarinUserMetadataRest[] getClarinUserMetadata(HttpServletRequest request) throws IOException {
+        ClarinUserMetadataRest[] clarinUserMetadataRestArray;
+        try {
+            clarinUserMetadataRestArray = objectMapper.readValue(
+                    request.getInputStream(), ClarinUserMetadataRest[].class);
+        } catch (JsonProcessingException | JsonParseException ex) {
+            throw new DSpaceBadRequestException("Missing or Invalid User Data", ex);
+        }
+        if (Objects.isNull(clarinUserMetadataRestArray)) {
+            throw new RuntimeException("The clarinUserMetadataRestArray cannot be null. It could be empty, but" +
+                    " not null");
+        }
+        return clarinUserMetadataRestArray;
     }
 }
