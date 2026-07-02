@@ -134,6 +134,7 @@ public class ClarinUserMetadataRestController {
 
         boolean shouldEmailToken = false;
         ClarinLicense clarinLicense = null;
+        Set<String> requiredInfoKeys = new HashSet<>();
 
         List<Bundle> bundles = item.getBundles("ORIGINAL");
         if (!bundles.isEmpty()) {
@@ -143,13 +144,15 @@ public class ClarinUserMetadataRestController {
                         this.getLicenseResourceMapping(context, bitstreams.get(0).getID());
                 clarinLicense = getClarinLicense(clarinLicenseResourceMapping);
                 shouldEmailToken = this.shouldEmailToken(clarinLicenseResourceMapping);
+                requiredInfoKeys.addAll(getRequiredInfoKeys(clarinLicense));
             }
         }
 
         ClarinUserMetadataRest[] clarinUserMetadataRestArray = getClarinUserMetadata(request);
+        checkForRequiredInfoKeys(clarinUserMetadataRestArray, requiredInfoKeys);
         List<ClarinUserMetadataRest> clarinUserMetadataRestList = (clarinLicense == null)
                 ? Arrays.asList(clarinUserMetadataRestArray)
-                : getFilteredUserMetadataForClarinLicense(clarinUserMetadataRestArray, clarinLicense);
+                : getFilteredUserMetadataForClarinLicense(clarinUserMetadataRestArray, requiredInfoKeys);
 
         for (Bundle original : bundles) {
             List<Bitstream> bss = original.getBitstreams();
@@ -234,8 +237,11 @@ public class ClarinUserMetadataRestController {
         }
 
         ClarinUserMetadataRest[] clarinUserMetadataRestArray = getClarinUserMetadata(request);
+
+        Set<String> requiredInfoKeys = getRequiredInfoKeys(clarinLicense);
+        checkForRequiredInfoKeys(clarinUserMetadataRestArray, requiredInfoKeys);
         List<ClarinUserMetadataRest> clarinUserMetadataRestList = getFilteredUserMetadataForClarinLicense(
-                clarinUserMetadataRestArray, clarinLicense);
+                clarinUserMetadataRestArray, requiredInfoKeys);
 
         if (Objects.isNull(currentUser)) {
             // The user is not signed in
@@ -632,25 +638,50 @@ public class ClarinUserMetadataRestController {
     }
 
     /**
-     * Filters the given array of ClarinUserMetadataRest objects to include only those with the key "IP" or those
-     * required by the given ClarinLicense.
+     * Gets the required info keys for the given ClarinLicense.
      *
-     * @param clarinUserMetadataRestArray the array of ClarinUserMetadataRest objects to filter
-     * @param clarinLicense the ClarinLicense object containing the required info keys
-     * @return a list of filtered ClarinUserMetadataRest objects
+     * @param clarinLicense the ClarinLicense object to get required info keys from
+     * @return Set of required info keys for the given ClarinLicense
      */
-    private static List<ClarinUserMetadataRest> getFilteredUserMetadataForClarinLicense(
-            ClarinUserMetadataRest[] clarinUserMetadataRestArray, ClarinLicense clarinLicense) {
-        Set<String> requiredInfoKeys = Optional.ofNullable(clarinLicense.getRequiredInfo())
+    private static Set<String> getRequiredInfoKeys(ClarinLicense clarinLicense) {
+        return Optional.ofNullable(clarinLicense.getRequiredInfo())
                 .map(requiredInfo -> Arrays.stream(requiredInfo.split(","))
                         .filter(StringUtils::isNotBlank)
                         .map(String::trim)
                         .collect(Collectors.toSet()))
-                .orElse(new HashSet<>());
-        requiredInfoKeys.add("IP");
+                .orElse(Set.of());
+    }
 
+    /**
+     * Checks if the given array of ClarinUserMetadataRest objects contains all required info keys.
+     *
+     * @param clarinUserMetadataRestArray the array of ClarinUserMetadataRest objects to check
+     * @param requiredInfoKeys the set of required info keys to check against
+     */
+    private static void checkForRequiredInfoKeys(ClarinUserMetadataRest[] clarinUserMetadataRestArray,
+                                                 Set<String> requiredInfoKeys) {
+        if (!requiredInfoKeys.stream().allMatch(requiredInfoKey ->
+                Arrays.stream(clarinUserMetadataRestArray)
+                        .anyMatch(clarinUserMetadataRest ->
+                                requiredInfoKey.equals(clarinUserMetadataRest.getMetadataKey())))) {
+            throw new DSpaceBadRequestException("Missing required user metadata keys for the license.");
+        }
+    }
+
+    /**
+     * Filters the given array of ClarinUserMetadataRest objects to include only those with the key "IP" or those
+     * required by the given ClarinLicense.
+     *
+     * @param clarinUserMetadataRestArray the array of ClarinUserMetadataRest objects to filter
+     * @param requiredInfoKeys the set of required keys for the given ClarinLicense
+     * @return a list of filtered ClarinUserMetadataRest objects
+     */
+    private static List<ClarinUserMetadataRest> getFilteredUserMetadataForClarinLicense(
+            ClarinUserMetadataRest[] clarinUserMetadataRestArray,
+            Set<String> requiredInfoKeys) {
         return Arrays.stream(clarinUserMetadataRestArray)
                 .filter(clarinUserMetadataRest ->
+                        "IP".equals(clarinUserMetadataRest.getMetadataKey()) ||
                         requiredInfoKeys.contains(clarinUserMetadataRest.getMetadataKey()))
                 .collect(Collectors.toList());
     }

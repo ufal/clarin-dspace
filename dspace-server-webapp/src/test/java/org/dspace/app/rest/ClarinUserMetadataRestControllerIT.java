@@ -283,6 +283,28 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
     }
 
     @Test
+    public void authorizedUser_withMissingRequiredKeys_shouldFail() throws Exception {
+        this.prepareEnvironment("SEND_TOKEN,EXTRA_EMAIL,ADDRESS", Confirmation.ALLOW_ANONYMOUS);
+        ObjectMapper mapper = new ObjectMapper();
+
+        ClarinUserMetadataRest carinUserMetadata1 = new ClarinUserMetadataRest();
+        carinUserMetadata1.setMetadataKey("SEND_TOKEN");
+
+        ClarinUserMetadataRest clarinUserMetadata2 = new ClarinUserMetadataRest();
+        clarinUserMetadata2.setMetadataKey("EXTRA_EMAIL");
+        clarinUserMetadata2.setMetadataValue("test@test.edu");
+
+        List<ClarinUserMetadataRest> clarinUserMetadataRestList = new ArrayList<>();
+        clarinUserMetadataRestList.add(carinUserMetadata1);
+        clarinUserMetadataRestList.add(clarinUserMetadata2);
+
+        getClient().perform(post("/api/core/clarinusermetadata/manage?bitstreamUUID=" + bitstream.getID())
+                        .content(mapper.writeValueAsBytes(clarinUserMetadataRestList.toArray()))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     public void authorizedUserWithoutMetadata_shouldReturnToken() throws Exception {
         this.prepareEnvironment("NAME", Confirmation.NOT_REQUIRED);
         context.turnOffAuthorisationSystem();
