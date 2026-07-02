@@ -1,0 +1,2172 @@
+{
+  "number_of_results": 30133,
+  "time_taken": 59,
+  "items": [
+    {
+      "admin": {
+        "created": {
+          "date": "2018-11-14",
+          "schema_version": "1.0"
+        },
+        "last_modified": {
+          "date": "2025-01-22",
+          "schema_version": "2.1"
+        }
+      },
+      "domains": [
+        "unipi.it"
+      ],
+      "established": 1343,
+      "external_ids": [
+        {
+          "all": [
+            "501100007514"
+          ],
+          "preferred": null,
+          "type": "fundref"
+        },
+        {
+          "all": [
+            "grid.5395.a"
+          ],
+          "preferred": "grid.5395.a",
+          "type": "grid"
+        },
+        {
+          "all": [
+            "0000 0004 1757 3729"
+          ],
+          "preferred": null,
+          "type": "isni"
+        },
+        {
+          "all": [
+            "Q645663"
+          ],
+          "preferred": null,
+          "type": "wikidata"
+        }
+      ],
+      "id": "https://ror.org/03ad39j10",
+      "links": [
+        {
+          "type": "website",
+          "value": "https://www.unipi.it"
+        },
+        {
+          "type": "wikipedia",
+          "value": "http://en.wikipedia.org/wiki/University_of_Pisa"
+        }
+      ],
+      "locations": [
+        {
+          "geonames_details": {
+            "continent_code": "EU",
+            "continent_name": "Europe",
+            "country_code": "IT",
+            "country_name": "Italy",
+            "country_subdivision_code": "52",
+            "country_subdivision_name": "Tuscany",
+            "lat": 43.70853,
+            "lng": 10.4036,
+            "name": "Pisa"
+          },
+          "geonames_id": 3170647
+        }
+      ],
+      "names": [
+        {
+          "lang": null,
+          "types": [
+            "acronym"
+          ],
+          "value": "UniPi"
+        },
+        {
+          "lang": "en",
+          "types": [
+            "ror_display",
+            "label"
+          ],
+          "value": "University of Pisa"
+        },
+        {
+          "lang": "it",
+          "types": [
+            "label"
+          ],
+          "value": "Università di Pisa"
+        },
+        {
+          "lang": "de",
+          "types": [
+            "label"
+          ],
+          "value": "Universität Pisa"
+        },
+        {
+          "lang": "fr",
+          "types": [
+            "label"
+          ],
+          "value": "Université de Pise"
+        }
+      ],
+      "relationships": [
+        {
+          "label": "Ospedale Cisanello",
+          "type": "related",
+          "id": "https://ror.org/00mc91w09"
+        },
+        {
+          "label": "Istituto Nazionale di Fisica Nucleare, Sezione di Pisa",
+          "type": "related",
+          "id": "https://ror.org/05symbg58"
+        }
+      ],
+      "status": "active",
+      "types": [
+        "education",
+        "funder"
+      ]
+    },
+    {
+      "admin": {
+        "created": {
+          "date": "2018-11-14",
+          "schema_version": "1.0"
+        },
+        "last_modified": {
+          "date": "2024-12-11",
+          "schema_version": "2.1"
+        }
+      },
+      "domains": [],
+      "established": null,
+      "external_ids": [
+        {
+          "all": [
+            "grid.144189.1"
+          ],
+          "preferred": "grid.144189.1",
+          "type": "grid"
+        },
+        {
+          "all": [
+            "0000 0004 1756 8209"
+          ],
+          "preferred": null,
+          "type": "isni"
+        }
+      ],
+      "id": "https://ror.org/05xrcj819",
+      "links": [
+        {
+          "type": "website",
+          "value": "http://www.ao-pisa.toscana.it/"
+        }
+      ],
+      "locations": [
+        {
+          "geonames_details": {
+            "continent_code": "EU",
+            "continent_name": "Europe",
+            "country_code": "IT",
+            "country_name": "Italy",
+            "country_subdivision_code": "52",
+            "country_subdivision_name": "Tuscany",
+            "lat": 43.70853,
+            "lng": 10.4036,
+            "name": "Pisa"
+          },
+          "geonames_id": 3170647
+        }
+      ],
+      "names": [
+        {
+          "lang": "it",
+          "types": [
+            "ror_display",
+            "label"
+          ],
+          "value": "Azienda Ospedaliera Universitaria Pisana"
+        },
+        {
+          "lang": "en",
+          "types": [
+            "label"
+          ],
+          "value": "University Hospital of Pisa"
+        }
+      ],
+      "relationships": [
+        {
+          "label": "Ospedale Cisanello",
+          "type": "child",
+          "id": "https://ror.org/00mc91w09"
+        },
+        {
+          "label": "ERN ReCONNET",
+          "type": "related",
+          "id": "https://ror.org/04069k268"
+        }
+      ],
+      "status": "active",
+      "types": [
+        "healthcare"
+      ]
+    },
+    {
+      "admin": {
+        "created": {
+          "date": "2018-11-14",
+          "schema_version": "1.0"
+        },
+        "last_modified": {
+          "date": "2024-12-11",
+          "schema_version": "2.1"
+        }
+      },
+      "domains": [],
+      "established": 1992,
+      "external_ids": [
+        {
+          "all": [
+            "100007362",
+            "100007368"
+          ],
+          "preferred": null,
+          "type": "fundref"
+        },
+        {
+          "all": [
+            "grid.479041.f"
+          ],
+          "preferred": "grid.479041.f",
+          "type": "grid"
+        },
+        {
+          "all": [
+            "0000 0000 9587 6793"
+          ],
+          "preferred": null,
+          "type": "isni"
+        }
+      ],
+      "id": "https://ror.org/05jhnab13",
+      "links": [
+        {
+          "type": "website",
+          "value": "http://www.fondazionepisa.it/"
+        },
+        {
+          "type": "wikipedia",
+          "value": "https://en.wikipedia.org/wiki/Fondazione_Pisa"
+        }
+      ],
+      "locations": [
+        {
+          "geonames_details": {
+            "continent_code": "EU",
+            "continent_name": "Europe",
+            "country_code": "IT",
+            "country_name": "Italy",
+            "country_subdivision_code": "52",
+            "country_subdivision_name": "Tuscany",
+            "lat": 43.70853,
+            "lng": 10.4036,
+            "name": "Pisa"
+          },
+          "geonames_id": 3170647
+        }
+      ],
+      "names": [
+        {
+          "lang": "it",
+          "types": [
+            "alias"
+          ],
+          "value": "Fondazione Cassa di Risparmio di Pisa"
+        },
+        {
+          "lang": "it",
+          "types": [
+            "ror_display",
+            "label"
+          ],
+          "value": "Fondazione Pisa"
+        }
+      ],
+      "relationships": [],
+      "status": "active",
+      "types": [
+        "funder",
+        "nonprofit"
+      ]
+    },
+    {
+      "admin": {
+        "created": {
+          "date": "2018-11-14",
+          "schema_version": "1.0"
+        },
+        "last_modified": {
+          "date": "2025-01-22",
+          "schema_version": "2.1"
+        }
+      },
+      "domains": [
+        "pi.infn.it"
+      ],
+      "established": null,
+      "external_ids": [
+        {
+          "all": [
+            "grid.470216.6"
+          ],
+          "preferred": "grid.470216.6",
+          "type": "grid"
+        },
+        {
+          "all": [
+            "Q30265297"
+          ],
+          "preferred": null,
+          "type": "wikidata"
+        }
+      ],
+      "id": "https://ror.org/05symbg58",
+      "links": [
+        {
+          "type": "website",
+          "value": "https://www.pi.infn.it"
+        }
+      ],
+      "locations": [
+        {
+          "geonames_details": {
+            "continent_code": "EU",
+            "continent_name": "Europe",
+            "country_code": "IT",
+            "country_name": "Italy",
+            "country_subdivision_code": "52",
+            "country_subdivision_name": "Tuscany",
+            "lat": 43.70853,
+            "lng": 10.4036,
+            "name": "Pisa"
+          },
+          "geonames_id": 3170647
+        }
+      ],
+      "names": [
+        {
+          "lang": "it",
+          "types": [
+            "alias"
+          ],
+          "value": "INFN Pisa"
+        },
+        {
+          "lang": "en",
+          "types": [
+            "alias"
+          ],
+          "value": "INFN Pisa Division"
+        },
+        {
+          "lang": "en",
+          "types": [
+            "alias"
+          ],
+          "value": "INFN Pisa Unit"
+        },
+        {
+          "lang": "it",
+          "types": [
+            "alias"
+          ],
+          "value": "INFN Sezione di Pisa"
+        },
+        {
+          "lang": "it",
+          "types": [
+            "acronym"
+          ],
+          "value": "INFN-PI"
+        },
+        {
+          "lang": "it",
+          "types": [
+            "label",
+            "ror_display"
+          ],
+          "value": "Istituto Nazionale di Fisica Nucleare, Sezione di Pisa"
+        },
+        {
+          "lang": "en",
+          "types": [
+            "label"
+          ],
+          "value": "National Institute for Nuclear Physics, Pisa Division"
+        }
+      ],
+      "relationships": [
+        {
+          "label": "Istituto Nazionale di Fisica Nucleare",
+          "type": "parent",
+          "id": "https://ror.org/005ta0471"
+        },
+        {
+          "label": "MAGIC Telescopes",
+          "type": "related",
+          "id": "https://ror.org/02w0r2764"
+        },
+        {
+          "label": "University of Pisa",
+          "type": "related",
+          "id": "https://ror.org/03ad39j10"
+        }
+      ],
+      "status": "active",
+      "types": [
+        "facility"
+      ]
+    },
+    {
+      "admin": {
+        "created": {
+          "date": "2018-11-14",
+          "schema_version": "1.0"
+        },
+        "last_modified": {
+          "date": "2024-12-11",
+          "schema_version": "2.1"
+        }
+      },
+      "domains": [],
+      "established": 1987,
+      "external_ids": [
+        {
+          "all": [
+            "grid.5740.6"
+          ],
+          "preferred": "grid.5740.6",
+          "type": "grid"
+        },
+        {
+          "all": [
+            "0000 0000 9120 5458"
+          ],
+          "preferred": null,
+          "type": "isni"
+        },
+        {
+          "all": [
+            "Q30252673"
+          ],
+          "preferred": null,
+          "type": "wikidata"
+        }
+      ],
+      "id": "https://ror.org/01t0n3b84",
+      "links": [
+        {
+          "type": "website",
+          "value": "http://www.cpr.it/"
+        }
+      ],
+      "locations": [
+        {
+          "geonames_details": {
+            "continent_code": "EU",
+            "continent_name": "Europe",
+            "country_code": "IT",
+            "country_name": "Italy",
+            "country_subdivision_code": "52",
+            "country_subdivision_name": "Tuscany",
+            "lat": 43.70853,
+            "lng": 10.4036,
+            "name": "Pisa"
+          },
+          "geonames_id": 3170647
+        }
+      ],
+      "names": [
+        {
+          "lang": "it",
+          "types": [
+            "ror_display",
+            "label"
+          ],
+          "value": "Consorzio Pisa Ricerche"
+        }
+      ],
+      "relationships": [],
+      "status": "active",
+      "types": [
+        "facility"
+      ]
+    },
+    {
+      "admin": {
+        "created": {
+          "date": "2023-09-14",
+          "schema_version": "1.0"
+        },
+        "last_modified": {
+          "date": "2024-12-11",
+          "schema_version": "2.1"
+        }
+      },
+      "domains": [],
+      "established": null,
+      "external_ids": [
+        {
+          "all": [
+            "0000 0004 1758 7813"
+          ],
+          "preferred": "0000 0004 1758 7813",
+          "type": "isni"
+        }
+      ],
+      "id": "https://ror.org/00vfm5970",
+      "links": [
+        {
+          "type": "website",
+          "value": "https://www.pi.ingv.it"
+        }
+      ],
+      "locations": [
+        {
+          "geonames_details": {
+            "continent_code": "EU",
+            "continent_name": "Europe",
+            "country_code": "IT",
+            "country_name": "Italy",
+            "country_subdivision_code": "52",
+            "country_subdivision_name": "Tuscany",
+            "lat": 43.70853,
+            "lng": 10.4036,
+            "name": "Pisa"
+          },
+          "geonames_id": 3170647
+        }
+      ],
+      "names": [
+        {
+          "lang": "it",
+          "types": [
+            "ror_display",
+            "label"
+          ],
+          "value": "INGV Sezione di Pisa"
+        },
+        {
+          "lang": null,
+          "types": [
+            "acronym"
+          ],
+          "value": "INGV-PI"
+        },
+        {
+          "lang": "it",
+          "types": [
+            "alias"
+          ],
+          "value": "Istituto Nazionale di Geofisica e Vulcanologia Sezione di Pisa"
+        },
+        {
+          "lang": "en",
+          "types": [
+            "alias"
+          ],
+          "value": "National Institute of Geophysics and Volcanology, Pisa Section"
+        }
+      ],
+      "relationships": [
+        {
+          "label": "Istituto Nazionale di Geofisica e Vulcanologia",
+          "type": "parent",
+          "id": "https://ror.org/00qps9a02"
+        }
+      ],
+      "status": "active",
+      "types": [
+        "facility"
+      ]
+    },
+    {
+      "admin": {
+        "created": {
+          "date": "2024-09-14",
+          "schema_version": "2.0"
+        },
+        "last_modified": {
+          "date": "2024-12-11",
+          "schema_version": "2.1"
+        }
+      },
+      "domains": [
+        "liceodini.it"
+      ],
+      "established": 1924,
+      "external_ids": [
+        {
+          "all": [
+            "Q30889474"
+          ],
+          "preferred": "Q30889474",
+          "type": "wikidata"
+        }
+      ],
+      "id": "https://ror.org/006xg2x43",
+      "links": [
+        {
+          "type": "website",
+          "value": "https://www.liceodini.it"
+        },
+        {
+          "type": "wikipedia",
+          "value": "https://it.wikipedia.org/wiki/Liceo_scientifico_statale_Ulisse_Dini"
+        }
+      ],
+      "locations": [
+        {
+          "geonames_details": {
+            "continent_code": "EU",
+            "continent_name": "Europe",
+            "country_code": "IT",
+            "country_name": "Italy",
+            "country_subdivision_code": "52",
+            "country_subdivision_name": "Tuscany",
+            "lat": 43.70853,
+            "lng": 10.4036,
+            "name": "Pisa"
+          },
+          "geonames_id": 3170647
+        }
+      ],
+      "names": [
+        {
+          "lang": "it",
+          "types": [
+            "alias"
+          ],
+          "value": "Liceo Dini"
+        },
+        {
+          "lang": "it",
+          "types": [
+            "alias"
+          ],
+          "value": "Liceo Scientifico \"Ulisse Dini\""
+        },
+        {
+          "lang": "it",
+          "types": [
+            "alias"
+          ],
+          "value": "Liceo Scientifico 'Ulisse Dini' - Pisa"
+        },
+        {
+          "lang": "it",
+          "types": [
+            "alias"
+          ],
+          "value": "Liceo Scientifico Ulisse Dini"
+        },
+        {
+          "lang": "it",
+          "types": [
+            "label",
+            "ror_display"
+          ],
+          "value": "Liceo scientifico statale Ulisse Dini"
+        },
+        {
+          "lang": "it",
+          "types": [
+            "alias"
+          ],
+          "value": "U. Dini"
+        },
+        {
+          "lang": "en",
+          "types": [
+            "label"
+          ],
+          "value": "Ulisse Dini Scientific High School"
+        }
+      ],
+      "relationships": [],
+      "status": "active",
+      "types": [
+        "education"
+      ]
+    },
+    {
+      "admin": {
+        "created": {
+          "date": "2018-11-14",
+          "schema_version": "1.0"
+        },
+        "last_modified": {
+          "date": "2024-12-11",
+          "schema_version": "2.1"
+        }
+      },
+      "domains": [
+        "sns.it"
+      ],
+      "established": 1810,
+      "external_ids": [
+        {
+          "all": [
+            "100009093"
+          ],
+          "preferred": null,
+          "type": "fundref"
+        },
+        {
+          "all": [
+            "grid.6093.c"
+          ],
+          "preferred": "grid.6093.c",
+          "type": "grid"
+        },
+        {
+          "all": [
+            "Q672416"
+          ],
+          "preferred": null,
+          "type": "wikidata"
+        }
+      ],
+      "id": "https://ror.org/03aydme10",
+      "links": [
+        {
+          "type": "website",
+          "value": "https://www.sns.it"
+        },
+        {
+          "type": "wikipedia",
+          "value": "http://en.wikipedia.org/wiki/Scuola_Normale_Superiore_di_Pisa"
+        }
+      ],
+      "locations": [
+        {
+          "geonames_details": {
+            "continent_code": "EU",
+            "continent_name": "Europe",
+            "country_code": "IT",
+            "country_name": "Italy",
+            "country_subdivision_code": "52",
+            "country_subdivision_name": "Tuscany",
+            "lat": 43.70853,
+            "lng": 10.4036,
+            "name": "Pisa"
+          },
+          "geonames_id": 3170647
+        }
+      ],
+      "names": [
+        {
+          "lang": null,
+          "types": [
+            "acronym"
+          ],
+          "value": "SNS"
+        },
+        {
+          "lang": "it",
+          "types": [
+            "ror_display",
+            "label"
+          ],
+          "value": "Scuola Normale Superiore"
+        },
+        {
+          "lang": "it",
+          "types": [
+            "alias"
+          ],
+          "value": "Scuola Normale Superiore di Pisa"
+        },
+        {
+          "lang": "fr",
+          "types": [
+            "alias"
+          ],
+          "value": "École Normale Supérieure de Pise"
+        }
+      ],
+      "relationships": [
+        {
+          "label": "National Enterprise for NanoScience and NanoTechnology",
+          "type": "child",
+          "id": "https://ror.org/01sgfhb12"
+        }
+      ],
+      "status": "active",
+      "types": [
+        "education",
+        "funder"
+      ]
+    },
+    {
+      "admin": {
+        "created": {
+          "date": "2024-10-29",
+          "schema_version": "2.0"
+        },
+        "last_modified": {
+          "date": "2024-12-11",
+          "schema_version": "2.1"
+        }
+      },
+      "domains": [],
+      "established": null,
+      "external_ids": [],
+      "id": "https://ror.org/05etrbr47",
+      "links": [
+        {
+          "type": "website",
+          "value": "https://web.infn.it/GC-Siena"
+        }
+      ],
+      "locations": [
+        {
+          "geonames_details": {
+            "continent_code": "EU",
+            "continent_name": "Europe",
+            "country_code": "IT",
+            "country_name": "Italy",
+            "country_subdivision_code": "52",
+            "country_subdivision_name": "Tuscany",
+            "lat": 43.31822,
+            "lng": 11.33064,
+            "name": "Siena"
+          },
+          "geonames_id": 3166548
+        }
+      ],
+      "names": [
+        {
+          "lang": "it",
+          "types": [
+            "alias"
+          ],
+          "value": "INFN Gruppo Collegato di Siena"
+        },
+        {
+          "lang": "it",
+          "types": [
+            "alias"
+          ],
+          "value": "INFN Gruppo Collegato di Siena a INFN-Pisa"
+        },
+        {
+          "lang": "it",
+          "types": [
+            "acronym"
+          ],
+          "value": "INFN-GCSI"
+        },
+        {
+          "lang": "it",
+          "types": [
+            "label",
+            "ror_display"
+          ],
+          "value": "Istituto Nazionale di Fisica Nucleare, Gruppo Collegato di Siena"
+        }
+      ],
+      "relationships": [
+        {
+          "label": "Istituto Nazionale di Fisica Nucleare, Sezione di Firenze",
+          "type": "parent",
+          "id": "https://ror.org/02vv5y108"
+        },
+        {
+          "label": "University of Siena",
+          "type": "related",
+          "id": "https://ror.org/01tevnk56"
+        }
+      ],
+      "status": "active",
+      "types": [
+        "education",
+        "facility"
+      ]
+    },
+    {
+      "admin": {
+        "created": {
+          "date": "2018-11-14",
+          "schema_version": "1.0"
+        },
+        "last_modified": {
+          "date": "2024-12-11",
+          "schema_version": "2.1"
+        }
+      },
+      "domains": [],
+      "established": 1599,
+      "external_ids": [
+        {
+          "all": [
+            "grid.440820.a"
+          ],
+          "preferred": "grid.440820.a",
+          "type": "grid"
+        },
+        {
+          "all": [
+            "Q935460"
+          ],
+          "preferred": null,
+          "type": "wikidata"
+        }
+      ],
+      "id": "https://ror.org/006zjws59",
+      "links": [
+        {
+          "type": "website",
+          "value": "http://www.uvic-ucc.cat/en"
+        },
+        {
+          "type": "wikipedia",
+          "value": "https://en.wikipedia.org/wiki/University_of_Vic_-_Central_University_of_Catalonia"
+        }
+      ],
+      "locations": [
+        {
+          "geonames_details": {
+            "continent_code": "EU",
+            "continent_name": "Europe",
+            "country_code": "ES",
+            "country_name": "Spain",
+            "country_subdivision_code": "CT",
+            "country_subdivision_name": "Catalonia",
+            "lat": 41.93012,
+            "lng": 2.25486,
+            "name": "Vic"
+          },
+          "geonames_id": 3106050
+        }
+      ],
+      "names": [
+        {
+          "lang": null,
+          "types": [
+            "acronym"
+          ],
+          "value": "UVic-UCC"
+        },
+        {
+          "lang": "es",
+          "types": [
+            "alias"
+          ],
+          "value": "Universidad de Vic"
+        },
+        {
+          "lang": "es",
+          "types": [
+            "label"
+          ],
+          "value": "Universidad de Vic - Universidad Central de Catalunya"
+        },
+        {
+          "lang": "es",
+          "types": [
+            "alias"
+          ],
+          "value": "Universitat de Vic"
+        },
+        {
+          "lang": "ca",
+          "types": [
+            "ror_display",
+            "label"
+          ],
+          "value": "Universitat de Vic - Universitat Central de Catalunya"
+        },
+        {
+          "lang": "en",
+          "types": [
+            "alias"
+          ],
+          "value": "University of Vic"
+        },
+        {
+          "lang": "en",
+          "types": [
+            "label"
+          ],
+          "value": "University of Vic - Central University of Catalonia"
+        }
+      ],
+      "relationships": [],
+      "status": "active",
+      "types": [
+        "education"
+      ]
+    },
+    {
+      "admin": {
+        "created": {
+          "date": "2019-02-17",
+          "schema_version": "1.0"
+        },
+        "last_modified": {
+          "date": "2024-12-11",
+          "schema_version": "2.1"
+        }
+      },
+      "domains": [],
+      "established": 1957,
+      "external_ids": [
+        {
+          "all": [
+            "grid.501720.1"
+          ],
+          "preferred": "grid.501720.1",
+          "type": "grid"
+        },
+        {
+          "all": [
+            "Q10829127"
+          ],
+          "preferred": null,
+          "type": "wikidata"
+        }
+      ],
+      "id": "https://ror.org/04bm3wy68",
+      "links": [
+        {
+          "type": "website",
+          "value": "http://www.dhsphue.edu.vn"
+        }
+      ],
+      "locations": [
+        {
+          "geonames_details": {
+            "continent_code": "AS",
+            "continent_name": "Asia",
+            "country_code": "VN",
+            "country_name": "Vietnam",
+            "country_subdivision_code": "26",
+            "country_subdivision_name": "Thừa Thiên Huế Province",
+            "lat": 16.4619,
+            "lng": 107.59546,
+            "name": "Huế"
+          },
+          "geonames_id": 1580240
+        }
+      ],
+      "names": [
+        {
+          "lang": "en",
+          "types": [
+            "alias"
+          ],
+          "value": "Hue University"
+        },
+        {
+          "lang": "en",
+          "types": [
+            "label",
+            "ror_display"
+          ],
+          "value": "Hue University of Education"
+        },
+        {
+          "lang": "en",
+          "types": [
+            "alias"
+          ],
+          "value": "Hue University's College of Education"
+        },
+        {
+          "lang": "vi",
+          "types": [
+            "label"
+          ],
+          "value": "Trường Đại học Sư phạm Huế"
+        },
+        {
+          "lang": "en",
+          "types": [
+            "label"
+          ],
+          "value": "University of Education, Hue University"
+        }
+      ],
+      "relationships": [],
+      "status": "active",
+      "types": [
+        "education"
+      ]
+    },
+    {
+      "admin": {
+        "created": {
+          "date": "2025-10-27",
+          "schema_version": "2.1"
+        },
+        "last_modified": {
+          "date": "2025-10-28",
+          "schema_version": "2.1"
+        }
+      },
+      "domains": [
+        "pnc.edu.ph"
+      ],
+      "established": 2003,
+      "external_ids": [
+        {
+          "all": [
+            "0000 0005 0599 0581"
+          ],
+          "preferred": "0000 0005 0599 0581",
+          "type": "isni"
+        },
+        {
+          "all": [
+            "Q7129041"
+          ],
+          "preferred": "Q7129041",
+          "type": "wikidata"
+        }
+      ],
+      "id": "https://ror.org/05h0cmr57",
+      "links": [
+        {
+          "type": "wikipedia",
+          "value": "https://en.wikipedia.org/wiki/University_of_Cabuyao"
+        }
+      ],
+      "locations": [
+        {
+          "geonames_details": {
+            "continent_code": "AS",
+            "continent_name": "Asia",
+            "country_code": "PH",
+            "country_name": "Philippines",
+            "country_subdivision_code": "40",
+            "country_subdivision_name": "Calabarzon",
+            "lat": 14.2726,
+            "lng": 121.1262,
+            "name": "Cabuyao"
+          },
+          "geonames_id": 1721281
+        }
+      ],
+      "names": [
+        {
+          "lang": "tl",
+          "types": [
+            "label",
+            "ror_display"
+          ],
+          "value": "Pamantasan ng Cabuyao"
+        },
+        {
+          "lang": "tl",
+          "types": [
+            "acronym"
+          ],
+          "value": "PnC"
+        },
+        {
+          "lang": "en",
+          "types": [
+            "label"
+          ],
+          "value": "University of Cabuyao"
+        }
+      ],
+      "relationships": [],
+      "status": "active",
+      "types": [
+        "education"
+      ]
+    },
+    {
+      "admin": {
+        "created": {
+          "date": "2018-11-14",
+          "schema_version": "1.0"
+        },
+        "last_modified": {
+          "date": "2025-10-28",
+          "schema_version": "2.1"
+        }
+      },
+      "domains": [
+        "luguniv.edu.ua"
+      ],
+      "established": 1921,
+      "external_ids": [
+        {
+          "all": [
+            "grid.445812.e"
+          ],
+          "preferred": "grid.445812.e",
+          "type": "grid"
+        },
+        {
+          "all": [
+            "0000 0004 0489 542X"
+          ],
+          "preferred": null,
+          "type": "isni"
+        },
+        {
+          "all": [
+            "Q4267928"
+          ],
+          "preferred": null,
+          "type": "wikidata"
+        }
+      ],
+      "id": "https://ror.org/040wb2y55",
+      "links": [
+        {
+          "type": "website",
+          "value": "https://luguniv.edu.ua"
+        },
+        {
+          "type": "wikipedia",
+          "value": "https://en.wikipedia.org/wiki/University_of_Luhansk"
+        }
+      ],
+      "locations": [
+        {
+          "geonames_details": {
+            "continent_code": "EU",
+            "continent_name": "Europe",
+            "country_code": "UA",
+            "country_name": "Ukraine",
+            "country_subdivision_code": "09",
+            "country_subdivision_name": "Luhansk",
+            "lat": 48.56814,
+            "lng": 39.30553,
+            "name": "Luhansk"
+          },
+          "geonames_id": 702658
+        }
+      ],
+      "names": [
+        {
+          "lang": null,
+          "types": [
+            "acronym"
+          ],
+          "value": "LNU"
+        },
+        {
+          "lang": "en",
+          "types": [
+            "alias"
+          ],
+          "value": "Taras Shevchenko National University of Luhansk"
+        },
+        {
+          "lang": null,
+          "types": [
+            "ror_display",
+            "label"
+          ],
+          "value": "University of Luhansk"
+        },
+        {
+          "lang": "pl",
+          "types": [
+            "label"
+          ],
+          "value": "Ługański Uniwersytet Narodowy im. Tarasa Szewczenki"
+        },
+        {
+          "lang": "ru",
+          "types": [
+            "label"
+          ],
+          "value": "Луганский национальный университет имени Тараса Шевченко"
+        },
+        {
+          "lang": "uk",
+          "types": [
+            "label"
+          ],
+          "value": "Луганський національний університет імені Тараса Шевченка"
+        }
+      ],
+      "relationships": [],
+      "status": "active",
+      "types": [
+        "education"
+      ]
+    },
+    {
+      "admin": {
+        "created": {
+          "date": "2018-11-14",
+          "schema_version": "1.0"
+        },
+        "last_modified": {
+          "date": "2025-10-28",
+          "schema_version": "2.1"
+        }
+      },
+      "domains": [
+        "univ-parakou.bj"
+      ],
+      "established": 2001,
+      "external_ids": [
+        {
+          "all": [
+            "grid.440525.2"
+          ],
+          "preferred": "grid.440525.2",
+          "type": "grid"
+        },
+        {
+          "all": [
+            "0000 0004 0457 5047"
+          ],
+          "preferred": null,
+          "type": "isni"
+        },
+        {
+          "all": [
+            "Q3551659"
+          ],
+          "preferred": null,
+          "type": "wikidata"
+        }
+      ],
+      "id": "https://ror.org/025wndx93",
+      "links": [
+        {
+          "type": "website",
+          "value": "https://www.univ-parakou.bj"
+        }
+      ],
+      "locations": [
+        {
+          "geonames_details": {
+            "continent_code": "AF",
+            "continent_name": "Africa",
+            "country_code": "BJ",
+            "country_name": "Benin",
+            "country_subdivision_code": "BO",
+            "country_subdivision_name": "Borgou",
+            "lat": 9.33716,
+            "lng": 2.63031,
+            "name": "Parakou"
+          },
+          "geonames_id": 2392204
+        }
+      ],
+      "names": [
+        {
+          "lang": null,
+          "types": [
+            "acronym"
+          ],
+          "value": "UP"
+        },
+        {
+          "lang": "en",
+          "types": [
+            "label"
+          ],
+          "value": "University of Parakou"
+        },
+        {
+          "lang": "fr",
+          "types": [
+            "ror_display",
+            "label"
+          ],
+          "value": "Université de Parakou"
+        }
+      ],
+      "relationships": [],
+      "status": "active",
+      "types": [
+        "education"
+      ]
+    },
+    {
+      "admin": {
+        "created": {
+          "date": "2018-11-14",
+          "schema_version": "1.0"
+        },
+        "last_modified": {
+          "date": "2025-10-28",
+          "schema_version": "2.1"
+        }
+      },
+      "domains": [
+        "univ-bangui.org"
+      ],
+      "established": 1969,
+      "external_ids": [
+        {
+          "all": [
+            "grid.25077.37"
+          ],
+          "preferred": "grid.25077.37",
+          "type": "grid"
+        },
+        {
+          "all": [
+            "0000 0000 9737 7808"
+          ],
+          "preferred": null,
+          "type": "isni"
+        },
+        {
+          "all": [
+            "Q1638914"
+          ],
+          "preferred": null,
+          "type": "wikidata"
+        }
+      ],
+      "id": "https://ror.org/020q46z35",
+      "links": [
+        {
+          "type": "website",
+          "value": "https://www.univ-bangui.org/"
+        },
+        {
+          "type": "wikipedia",
+          "value": "https://en.wikipedia.org/wiki/University_of_Bangui"
+        }
+      ],
+      "locations": [
+        {
+          "geonames_details": {
+            "continent_code": "AF",
+            "continent_name": "Africa",
+            "country_code": "CF",
+            "country_name": "Central African Republic",
+            "country_subdivision_code": "BGF",
+            "country_subdivision_name": "Bangui",
+            "lat": 4.36122,
+            "lng": 18.55496,
+            "name": "Bangui"
+          },
+          "geonames_id": 2389853
+        }
+      ],
+      "names": [
+        {
+          "lang": "en",
+          "types": [
+            "ror_display",
+            "label"
+          ],
+          "value": "University of Bangui"
+        },
+        {
+          "lang": "fr",
+          "types": [
+            "label"
+          ],
+          "value": "Université de Bangui"
+        }
+      ],
+      "relationships": [],
+      "status": "active",
+      "types": [
+        "education"
+      ]
+    },
+    {
+      "admin": {
+        "created": {
+          "date": "2025-06-24",
+          "schema_version": "2.1"
+        },
+        "last_modified": {
+          "date": "2025-10-28",
+          "schema_version": "2.1"
+        }
+      },
+      "domains": [
+        "uomanara.edu.iq"
+      ],
+      "established": 2017,
+      "external_ids": [],
+      "id": "https://ror.org/04k20kq32",
+      "links": [
+        {
+          "type": "website",
+          "value": "https://uomanara.edu.iq"
+        }
+      ],
+      "locations": [
+        {
+          "geonames_details": {
+            "continent_code": "AS",
+            "continent_name": "Asia",
+            "country_code": "IQ",
+            "country_name": "Iraq",
+            "country_subdivision_code": "MA",
+            "country_subdivision_name": "Maysan",
+            "lat": 31.9,
+            "lng": 47.06667,
+            "name": "Maysan"
+          },
+          "geonames_id": 93540
+        }
+      ],
+      "names": [
+        {
+          "lang": "en",
+          "types": [
+            "alias"
+          ],
+          "value": "Al-Manara College for Medical Sciences"
+        },
+        {
+          "lang": "en",
+          "types": [
+            "alias"
+          ],
+          "value": "Al-Manara University"
+        },
+        {
+          "lang": "en",
+          "types": [
+            "label",
+            "ror_display"
+          ],
+          "value": "University of Manara"
+        },
+        {
+          "lang": "ar",
+          "types": [
+            "label"
+          ],
+          "value": "جامعة المنارة"
+        },
+        {
+          "lang": "ar",
+          "types": [
+            "alias"
+          ],
+          "value": "لكلية المنارة للعلوم الطبية"
+        }
+      ],
+      "relationships": [],
+      "status": "active",
+      "types": [
+        "education"
+      ]
+    },
+    {
+      "admin": {
+        "created": {
+          "date": "2020-03-15",
+          "schema_version": "1.0"
+        },
+        "last_modified": {
+          "date": "2025-10-28",
+          "schema_version": "2.1"
+        }
+      },
+      "domains": [
+        "uok.ac.rw"
+      ],
+      "established": 2013,
+      "external_ids": [
+        {
+          "all": [
+            "grid.507637.0"
+          ],
+          "preferred": "grid.507637.0",
+          "type": "grid"
+        },
+        {
+          "all": [
+            "0000 0004 4676 8461"
+          ],
+          "preferred": null,
+          "type": "isni"
+        },
+        {
+          "all": [
+            "Q48773691"
+          ],
+          "preferred": null,
+          "type": "wikidata"
+        }
+      ],
+      "id": "https://ror.org/03v842g47",
+      "links": [
+        {
+          "type": "website",
+          "value": "https://uok.ac.rw"
+        },
+        {
+          "type": "wikipedia",
+          "value": "https://en.wikipedia.org/wiki/University_of_Kigali"
+        }
+      ],
+      "locations": [
+        {
+          "geonames_details": {
+            "continent_code": "AF",
+            "continent_name": "Africa",
+            "country_code": "RW",
+            "country_name": "Rwanda",
+            "country_subdivision_code": "01",
+            "country_subdivision_name": "Kigali",
+            "lat": -1.94995,
+            "lng": 30.05885,
+            "name": "Kigali"
+          },
+          "geonames_id": 202061
+        }
+      ],
+      "names": [
+        {
+          "lang": "en",
+          "types": [
+            "ror_display",
+            "label"
+          ],
+          "value": "University of Kigali"
+        },
+        {
+          "lang": null,
+          "types": [
+            "acronym"
+          ],
+          "value": "UoK"
+        }
+      ],
+      "relationships": [],
+      "status": "active",
+      "types": [
+        "education"
+      ]
+    },
+    {
+      "admin": {
+        "created": {
+          "date": "2018-11-14",
+          "schema_version": "1.0"
+        },
+        "last_modified": {
+          "date": "2025-10-28",
+          "schema_version": "2.1"
+        }
+      },
+      "domains": [
+        "unifa.ac.id"
+      ],
+      "established": 2008,
+      "external_ids": [
+        {
+          "all": [
+            "grid.443675.7"
+          ],
+          "preferred": "grid.443675.7",
+          "type": "grid"
+        },
+        {
+          "all": [
+            "0000 0004 0386 0305"
+          ],
+          "preferred": null,
+          "type": "isni"
+        },
+        {
+          "all": [
+            "Q23807190"
+          ],
+          "preferred": null,
+          "type": "wikidata"
+        }
+      ],
+      "id": "https://ror.org/05whqt140",
+      "links": [
+        {
+          "type": "website",
+          "value": "https://unifa.ac.id"
+        }
+      ],
+      "locations": [
+        {
+          "geonames_details": {
+            "continent_code": "AS",
+            "continent_name": "Asia",
+            "country_code": "ID",
+            "country_name": "Indonesia",
+            "country_subdivision_code": "SN",
+            "country_subdivision_name": "South Sulawesi",
+            "lat": -5.14861,
+            "lng": 119.43194,
+            "name": "Makassar"
+          },
+          "geonames_id": 1622786
+        }
+      ],
+      "names": [
+        {
+          "lang": null,
+          "types": [
+            "acronym"
+          ],
+          "value": "UNIFA"
+        },
+        {
+          "lang": "id",
+          "types": [
+            "ror_display",
+            "label"
+          ],
+          "value": "Universitas Fajar"
+        },
+        {
+          "lang": "en",
+          "types": [
+            "alias"
+          ],
+          "value": "University of Dawn"
+        }
+      ],
+      "relationships": [],
+      "status": "active",
+      "types": [
+        "education"
+      ]
+    },
+    {
+      "admin": {
+        "created": {
+          "date": "2018-11-14",
+          "schema_version": "1.0"
+        },
+        "last_modified": {
+          "date": "2025-10-28",
+          "schema_version": "2.1"
+        }
+      },
+      "domains": [
+        "uni.lu"
+      ],
+      "established": 2003,
+      "external_ids": [
+        {
+          "all": [
+            "100008665"
+          ],
+          "preferred": null,
+          "type": "fundref"
+        },
+        {
+          "all": [
+            "grid.16008.3f"
+          ],
+          "preferred": "grid.16008.3f",
+          "type": "grid"
+        },
+        {
+          "all": [
+            "0000 0001 2295 9843"
+          ],
+          "preferred": null,
+          "type": "isni"
+        },
+        {
+          "all": [
+            "Q59668"
+          ],
+          "preferred": null,
+          "type": "wikidata"
+        }
+      ],
+      "id": "https://ror.org/036x5ad56",
+      "links": [
+        {
+          "type": "website",
+          "value": "https://www.uni.lu"
+        },
+        {
+          "type": "wikipedia",
+          "value": "http://en.wikipedia.org/wiki/University_of_Luxembourg"
+        }
+      ],
+      "locations": [
+        {
+          "geonames_details": {
+            "continent_code": "EU",
+            "continent_name": "Europe",
+            "country_code": "LU",
+            "country_name": "Luxembourg",
+            "country_subdivision_code": "LU",
+            "country_subdivision_name": "Luxembourg",
+            "lat": 49.60982,
+            "lng": 6.13268,
+            "name": "Luxembourg"
+          },
+          "geonames_id": 2960316
+        }
+      ],
+      "names": [
+        {
+          "lang": "en",
+          "types": [
+            "ror_display",
+            "label"
+          ],
+          "value": "University of Luxembourg"
+        },
+        {
+          "lang": "de",
+          "types": [
+            "label"
+          ],
+          "value": "Universität Luxemburg"
+        },
+        {
+          "lang": "fr",
+          "types": [
+            "label"
+          ],
+          "value": "Université du Luxembourg"
+        }
+      ],
+      "relationships": [
+        {
+          "label": "Luxembourg Centre for Contemporary and Digital History",
+          "type": "child",
+          "id": "https://ror.org/054b6pr16"
+        },
+        {
+          "label": "Luxembourg Centre for Systems Biomedicine",
+          "type": "child",
+          "id": "https://ror.org/051tr1y59"
+        },
+        {
+          "label": "Interdisciplinary Centre for Security, Reliability and Trust",
+          "type": "child",
+          "id": "https://ror.org/02qav7c04"
+        },
+        {
+          "label": "Luxembourg Centre for Socio-Environmental Systems",
+          "type": "child",
+          "id": "https://ror.org/04c6fdf96"
+        },
+        {
+          "label": "Luxembourg Centre for European Law",
+          "type": "child",
+          "id": "https://ror.org/04cqhc152"
+        },
+        {
+          "label": "Centre Hospitalier de Luxembourg",
+          "type": "related",
+          "id": "https://ror.org/03xq7w797"
+        }
+      ],
+      "status": "active",
+      "types": [
+        "education",
+        "funder"
+      ]
+    },
+    {
+      "admin": {
+        "created": {
+          "date": "2018-11-14",
+          "schema_version": "1.0"
+        },
+        "last_modified": {
+          "date": "2025-10-28",
+          "schema_version": "2.1"
+        }
+      },
+      "domains": [
+        "uma.pt"
+      ],
+      "established": 1988,
+      "external_ids": [
+        {
+          "all": [
+            "501100013990"
+          ],
+          "preferred": "501100013990",
+          "type": "fundref"
+        },
+        {
+          "all": [
+            "grid.26793.39"
+          ],
+          "preferred": "grid.26793.39",
+          "type": "grid"
+        },
+        {
+          "all": [
+            "0000 0001 2155 1272"
+          ],
+          "preferred": null,
+          "type": "isni"
+        },
+        {
+          "all": [
+            "Q1434847"
+          ],
+          "preferred": null,
+          "type": "wikidata"
+        }
+      ],
+      "id": "https://ror.org/0442zbe52",
+      "links": [
+        {
+          "type": "website",
+          "value": "https://www.uma.pt/"
+        },
+        {
+          "type": "wikipedia",
+          "value": "http://en.wikipedia.org/wiki/University_of_Madeira"
+        }
+      ],
+      "locations": [
+        {
+          "geonames_details": {
+            "continent_code": "EU",
+            "continent_name": "Europe",
+            "country_code": "PT",
+            "country_name": "Portugal",
+            "country_subdivision_code": "30",
+            "country_subdivision_name": "Madeira",
+            "lat": 32.66568,
+            "lng": -16.92547,
+            "name": "Funchal"
+          },
+          "geonames_id": 2267827
+        }
+      ],
+      "names": [
+        {
+          "lang": null,
+          "types": [
+            "acronym"
+          ],
+          "value": "UMa"
+        },
+        {
+          "lang": "pt",
+          "types": [
+            "ror_display",
+            "label"
+          ],
+          "value": "Universidade da Madeira"
+        },
+        {
+          "lang": "en",
+          "types": [
+            "label"
+          ],
+          "value": "University of Madeira"
+        }
+      ],
+      "relationships": [
+        {
+          "label": "Centro de Investigação de Matemática e Aplicações",
+          "type": "child",
+          "id": "https://ror.org/058k6gb21"
+        },
+        {
+          "label": "Centro de Investigação em Educação",
+          "type": "child",
+          "id": "https://ror.org/00wdyvz26"
+        },
+        {
+          "label": "Madeira N-Lincs",
+          "type": "child",
+          "id": "https://ror.org/04kt8mw18"
+        },
+        {
+          "label": "Centro de Ciências Matemáticas",
+          "type": "child",
+          "id": "https://ror.org/04ycf0k71"
+        },
+        {
+          "label": "Centro de Investigação em Estudos Regionais e Locais",
+          "type": "child",
+          "id": "https://ror.org/01551d523"
+        },
+        {
+          "label": "Centro de Química da Madeira",
+          "type": "child",
+          "id": "https://ror.org/01tgdcv71"
+        },
+        {
+          "label": "Grupo de Astronomia",
+          "type": "child",
+          "id": "https://ror.org/01hbpef95"
+        },
+        {
+          "label": "ISOPlexis Banco de Germoplasma",
+          "type": "child",
+          "id": "https://ror.org/02c4ps936"
+        }
+      ],
+      "status": "active",
+      "types": [
+        "education",
+        "funder"
+      ]
+    }
+  ],
+  "meta": {
+    "types": [
+      {
+        "id": "education",
+        "title": "education",
+        "count": 15003
+      },
+      {
+        "id": "funder",
+        "title": "funder",
+        "count": 7064
+      },
+      {
+        "id": "facility",
+        "title": "facility",
+        "count": 4233
+      },
+      {
+        "id": "government",
+        "title": "government",
+        "count": 3315
+      },
+      {
+        "id": "nonprofit",
+        "title": "nonprofit",
+        "count": 2599
+      },
+      {
+        "id": "healthcare",
+        "title": "healthcare",
+        "count": 2088
+      },
+      {
+        "id": "other",
+        "title": "other",
+        "count": 1847
+      },
+      {
+        "id": "archive",
+        "title": "archive",
+        "count": 733
+      },
+      {
+        "id": "company",
+        "title": "company",
+        "count": 362
+      }
+    ],
+    "countries": [
+      {
+        "id": "us",
+        "title": "United States",
+        "count": 5564
+      },
+      {
+        "id": "cn",
+        "title": "China",
+        "count": 2749
+      },
+      {
+        "id": "jp",
+        "title": "Japan",
+        "count": 1872
+      },
+      {
+        "id": "in",
+        "title": "India",
+        "count": 1763
+      },
+      {
+        "id": "ru",
+        "title": "Russia",
+        "count": 1559
+      },
+      {
+        "id": "gb",
+        "title": "United Kingdom",
+        "count": 871
+      },
+      {
+        "id": "kr",
+        "title": "South Korea",
+        "count": 829
+      },
+      {
+        "id": "de",
+        "title": "Germany",
+        "count": 702
+      },
+      {
+        "id": "fr",
+        "title": "France",
+        "count": 702
+      },
+      {
+        "id": "ca",
+        "title": "Canada",
+        "count": 608
+      }
+    ],
+    "continents": [
+      {
+        "id": "as",
+        "title": "Asia",
+        "count": 11352
+      },
+      {
+        "id": "eu",
+        "title": "Europe",
+        "count": 9012
+      },
+      {
+        "id": "na",
+        "title": "North America",
+        "count": 6649
+      },
+      {
+        "id": "af",
+        "title": "Africa",
+        "count": 1816
+      },
+      {
+        "id": "sa",
+        "title": "South America",
+        "count": 826
+      },
+      {
+        "id": "oc",
+        "title": "Oceania",
+        "count": 479
+      }
+    ],
+    "statuses": [
+      {
+        "id": "active",
+        "title": "active",
+        "count": 30133
+      }
+    ]
+  }
+}
