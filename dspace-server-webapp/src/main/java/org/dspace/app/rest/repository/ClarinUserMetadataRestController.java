@@ -669,7 +669,8 @@ public class ClarinUserMetadataRestController {
                 OPTIONAL_METADATA_KEYS.contains(requiredInfoKey) ||
                 Arrays.stream(clarinUserMetadataRestArray)
                         .anyMatch(clarinUserMetadataRest ->
-                                requiredInfoKey.equals(clarinUserMetadataRest.getMetadataKey())))) {
+                                requiredInfoKey.equals(clarinUserMetadataRest.getMetadataKey())
+                                        && StringUtils.isNotBlank(clarinUserMetadataRest.getMetadataValue())))) {
             throw new DSpaceBadRequestException("Missing required user metadata keys for the license.");
         }
     }
@@ -688,8 +689,9 @@ public class ClarinUserMetadataRestController {
             Set<String> requiredInfoKeys) {
         return Arrays.stream(clarinUserMetadataRestArray)
                 .filter(clarinUserMetadataRest ->
-                        "IP".equals(clarinUserMetadataRest.getMetadataKey())
-                                || requiredInfoKeys.contains(clarinUserMetadataRest.getMetadataKey()))
+                        StringUtils.isNotBlank(clarinUserMetadataRest.getMetadataValue())
+                                && ("IP".equals(clarinUserMetadataRest.getMetadataKey())
+                                    || requiredInfoKeys.contains(clarinUserMetadataRest.getMetadataKey())))
                 .collect(Collectors.toList());
     }
 }
