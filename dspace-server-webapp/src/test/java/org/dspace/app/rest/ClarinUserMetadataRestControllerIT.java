@@ -280,7 +280,7 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
                 .andExpect(jsonPath("$.page.totalElements", is(1)));
 
         // Get created User Metadata - there should be 2 records,
-        // because only 2 metadata fields are required by the license (EXTRA_EMAIL and ADDRESS)
+        // because only 2 metadata fields are required by the license (EXTRA_EMAIL and NAME)
         getClient(adminToken).perform(get("/api/core/clarinusermetadata")
                         .contentType(contentType))
                 .andExpect(status().isOk())
@@ -355,8 +355,7 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.page.totalElements", is(1)));
 
-        // Get created User Metadata - only NAME metadata is stored,
-        // because ORGANIZATION metadata is empty and should not be stored
+        // Get created User Metadata - there should be 2 records (ORGANIZATION and IP)
         getClient(adminToken).perform(get("/api/core/clarinusermetadata")
                         .contentType(contentType))
                 .andExpect(status().isOk())
@@ -368,15 +367,15 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
         this.prepareEnvironment("SEND_TOKEN,EXTRA_EMAIL,REQUIRED_ORGANIZATION", Confirmation.ALLOW_ANONYMOUS);
         ObjectMapper mapper = new ObjectMapper();
 
-        ClarinUserMetadataRest carinUserMetadata1 = new ClarinUserMetadataRest();
-        carinUserMetadata1.setMetadataKey("SEND_TOKEN");
+        ClarinUserMetadataRest clarinUserMetadata1 = new ClarinUserMetadataRest();
+        clarinUserMetadata1.setMetadataKey("SEND_TOKEN");
 
         ClarinUserMetadataRest clarinUserMetadata2 = new ClarinUserMetadataRest();
         clarinUserMetadata2.setMetadataKey("EXTRA_EMAIL");
         clarinUserMetadata2.setMetadataValue("test@test.edu");
 
         List<ClarinUserMetadataRest> clarinUserMetadataRestList = new ArrayList<>();
-        clarinUserMetadataRestList.add(carinUserMetadata1);
+        clarinUserMetadataRestList.add(clarinUserMetadata1);
         clarinUserMetadataRestList.add(clarinUserMetadata2);
 
         getClient().perform(post("/api/core/clarinusermetadata/manage?bitstreamUUID=" + bitstream.getID())

@@ -649,9 +649,8 @@ public class ClarinUserMetadataRestController {
     private static Set<String> getRequiredInfoKeys(ClarinLicense clarinLicense) {
         return Optional.ofNullable(clarinLicense.getRequiredInfo())
                 .map(requiredInfo -> Arrays.stream(requiredInfo.split(","))
-                        .filter(s -> StringUtils.isNotBlank(s)
-                                && !"SEND_TOKEN".equals(s))
                         .map(String::trim)
+                        .filter(s -> StringUtils.isNotBlank(s) && !"SEND_TOKEN".equals(s))
                         .collect(Collectors.toSet()))
                 .orElse(Set.of());
     }
