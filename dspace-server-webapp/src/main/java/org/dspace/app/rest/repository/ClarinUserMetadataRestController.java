@@ -78,6 +78,8 @@ public class ClarinUserMetadataRestController {
 
     public static final String CHECK_EMAIL_RESPONSE_CONTENT = "checkEmail";
 
+    private static final List<String> OPTIONAL_METADATA_KEYS = List.of("ORGANIZATION");
+
     @Autowired
     ClarinUserMetadataService clarinUserMetadataService;
     @Autowired
@@ -639,6 +641,7 @@ public class ClarinUserMetadataRestController {
 
     /**
      * Gets the required info keys for the given ClarinLicense.
+     * Note that "SEND_TOKEN" is not considered required.
      *
      * @param clarinLicense the ClarinLicense object to get required info keys from
      * @return Set of required info keys for the given ClarinLicense
@@ -646,7 +649,8 @@ public class ClarinUserMetadataRestController {
     private static Set<String> getRequiredInfoKeys(ClarinLicense clarinLicense) {
         return Optional.ofNullable(clarinLicense.getRequiredInfo())
                 .map(requiredInfo -> Arrays.stream(requiredInfo.split(","))
-                        .filter(StringUtils::isNotBlank)
+                        .filter(s -> StringUtils.isNotBlank(s)
+                                && !"SEND_TOKEN".equals(s))
                         .map(String::trim)
                         .collect(Collectors.toSet()))
                 .orElse(Set.of());
@@ -654,6 +658,7 @@ public class ClarinUserMetadataRestController {
 
     /**
      * Checks if the given array of ClarinUserMetadataRest objects contains all required info keys.
+     * Note that the OPTIONAL_METADATA_KEYS are not required.
      *
      * @param clarinUserMetadataRestArray the array of ClarinUserMetadataRest objects to check
      * @param requiredInfoKeys the set of required info keys to check against
@@ -661,6 +666,7 @@ public class ClarinUserMetadataRestController {
     private static void checkForRequiredInfoKeys(ClarinUserMetadataRest[] clarinUserMetadataRestArray,
                                                  Set<String> requiredInfoKeys) {
         if (!requiredInfoKeys.stream().allMatch(requiredInfoKey ->
+                OPTIONAL_METADATA_KEYS.contains(requiredInfoKey) ||
                 Arrays.stream(clarinUserMetadataRestArray)
                         .anyMatch(clarinUserMetadataRest ->
                                 requiredInfoKey.equals(clarinUserMetadataRest.getMetadataKey())))) {
@@ -669,8 +675,9 @@ public class ClarinUserMetadataRestController {
     }
 
     /**
-     * Filters the given array of ClarinUserMetadataRest objects to include only those with the key "IP" or those
+     * Filters the given array of ClarinUserMetadataRest objects to include only those
      * required by the given ClarinLicense.
+     * Note that the "IP" should be included if present.
      *
      * @param clarinUserMetadataRestArray the array of ClarinUserMetadataRest objects to filter
      * @param requiredInfoKeys the set of required keys for the given ClarinLicense
@@ -681,8 +688,8 @@ public class ClarinUserMetadataRestController {
             Set<String> requiredInfoKeys) {
         return Arrays.stream(clarinUserMetadataRestArray)
                 .filter(clarinUserMetadataRest ->
-                        "IP".equals(clarinUserMetadataRest.getMetadataKey()) ||
-                        requiredInfoKeys.contains(clarinUserMetadataRest.getMetadataKey()))
+                        "IP".equals(clarinUserMetadataRest.getMetadataKey())
+                                || requiredInfoKeys.contains(clarinUserMetadataRest.getMetadataKey()))
                 .collect(Collectors.toList());
     }
 }
