@@ -206,10 +206,12 @@ public class ClarinHuggingFaceController {
     /**
      * List exposed Items ("models"), HuggingFace-Hub {@code GET /api/models} style.
      *
-     * <p>This is a metadata-only listing of publicly exposed items: unlike the model-info/tree/resolve
-     * endpoints, no per-item {@code READ} authorization check is performed, since only items that already
-     * pass {@link ClarinHuggingFaceService#isExposed(Context, Item)} (fail-closed, public-by-configuration)
-     * are ever returned.</p>
+     * <p>This is a metadata-only listing of exposed items: only items that pass
+     * {@link ClarinHuggingFaceService#isExposed(Context, Item)} (fail-closed, public-by-configuration) AND
+     * that the current context user is authorized to {@code READ} are ever returned -- the {@code READ}
+     * check is performed by {@link ClarinHuggingFaceService#findExposedItems(Context, String, int)} itself,
+     * before pagination, so that embargoed/private items never count towards {@code limit} and are never
+     * leaked to a user who could not otherwise read them.</p>
      *
      * @param search an optional, case-insensitive substring to match against the item title
      * @param limit  the maximum number of items to return (default 20, capped at 100)

@@ -25,6 +25,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.dspace.authorize.AuthorizeException;
+import org.dspace.authorize.service.AuthorizeService;
 import org.dspace.content.Bitstream;
 import org.dspace.content.Bundle;
 import org.dspace.content.Collection;
@@ -92,6 +93,9 @@ public class ClarinHuggingFaceService {
 
     @Autowired
     private HandleService handleService;
+
+    @Autowired
+    private AuthorizeService authorizeService;
 
     /**
      * Master switch for the HuggingFace-Hub-compatible facade.
@@ -201,15 +205,20 @@ public class ClarinHuggingFaceService {
      * </ul>
      *
      * <p>Every candidate is (re-)checked against {@link #isExposed(Context, Item)}, fail-closed, which also
-     * filters out withdrawn/non-archived items that may still be reachable through the collection path.</p>
+     * filters out withdrawn/non-archived items that may still be reachable through the collection path. Each
+     * exposed candidate is additionally checked for {@code READ} authorization for the current context user
+     * ({@link AuthorizeService#authorizeActionBoolean(Context, DSpaceObject, int)}) before it counts towards
+     * {@code limit}, so that embargoed/private items are filtered out before pagination rather than after,
+     * and are never returned to a user who could not otherwise read them.</p>
      *
      * @param context the DSpace context
      * @param search  an optional, case-insensitive substring to match against the item title (or name, if
      *                the item has no title); {@code null} or blank to not filter by title
      * @param limit   the maximum number of items to return; a non-positive value defaults to 20, and any
      *                value is capped at 100
-     * @return the list of exposed items matching {@code search}, capped at the effective limit; empty if
-     *     neither exposure mechanism is configured, or no item is exposed and matches
+     * @return the list of exposed, READ-authorized items matching {@code search}, capped at the effective
+     *     limit; empty if neither exposure mechanism is configured, or no item is exposed, readable and
+     *     matches
      * @throws SQLException if a database error occurs
      */
     public List<Item> findExposedItems(Context context, String search, int limit) throws SQLException {
@@ -263,6 +272,9 @@ public class ClarinHuggingFaceService {
                 continue;
             }
             if (searchLower != null && !matchesSearch(item, searchLower)) {
+                continue;
+            }
+            if (!authorizeService.authorizeActionBoolean(context, item, Constants.READ)) {
                 continue;
             }
             result.add(item);

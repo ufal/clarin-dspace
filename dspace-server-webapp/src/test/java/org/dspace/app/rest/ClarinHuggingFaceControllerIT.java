@@ -218,6 +218,36 @@ public class ClarinHuggingFaceControllerIT extends AbstractControllerIntegration
     }
 
     @Test
+    public void listModelsExcludesItemsWithoutReadAccess() throws Exception {
+        context.turnOffAuthorisationSystem();
+        Collection collection = exposedItem.getOwningCollection();
+        Item restrictedExposedItem = ItemBuilder.createItem(context, collection)
+                .withTitle("Restricted Machine Learning Model")
+                .withType("machineLearningModel")
+                .build();
+        // Remove all read policies from the item and grant READ to admin only, so the item is still
+        // "exposed" (passes the HuggingFace filter) but not readable by an anonymous user.
+        authorizeService.removeAllPolicies(context, restrictedExposedItem);
+        ResourcePolicyBuilder.createResourcePolicy(context, admin, null)
+                .withDspaceObject(restrictedExposedItem)
+                .withAction(Constants.READ)
+                .build();
+        context.restoreAuthSystemState();
+
+        // Anonymous user cannot read the restricted item, so it must not appear in the listing.
+        getClient().perform(get(ENDPOINT_BASE))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].id", hasItem(exposedItem.getHandle())))
+                .andExpect(jsonPath("$[*].id", not(hasItem(restrictedExposedItem.getHandle()))));
+
+        // The admin can read it, so it must appear in the listing.
+        String adminToken = getAuthToken(admin.getEmail(), password);
+        getClient(adminToken).perform(get(ENDPOINT_BASE))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].id", hasItem(restrictedExposedItem.getHandle())));
+    }
+
+    @Test
     public void listModelsSupportsSearchAndLimit() throws Exception {
         context.turnOffAuthorisationSystem();
         Collection collection = exposedItem.getOwningCollection();
