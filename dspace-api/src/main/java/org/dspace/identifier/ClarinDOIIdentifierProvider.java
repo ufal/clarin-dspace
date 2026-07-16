@@ -8,11 +8,11 @@
 package org.dspace.identifier;
 
 import java.sql.SQLException;
-import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -40,7 +40,16 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
 
     private List<ClarinCommunityDOIIdentifierProvider> providers;
 
-    protected final SimpleCache<UUID, ClarinCommunityDOIIdentifierProvider> simpleCache = new SimpleCache<>(5);
+    /**
+     * Cache of the matched provider per collection, keyed by collection UUID. The matched provider is
+     * a function of the collection's community ancestry (not of the item), so the cache is shared by all
+     * items of a collection and is naturally bounded by the number of collections. An empty Optional
+     * records that the collection is in no configured community, so negative lookups are cached too.
+     * Entries live for the JVM lifetime: a collection moved to another community keeps its old provider
+     * until restart.
+     */
+    protected final Map<UUID, Optional<ClarinCommunityDOIIdentifierProvider>> collectionProviderCache =
+            new ConcurrentHashMap<>();
 
     public void setProviders(List<ClarinCommunityDOIIdentifierProvider> providers) {
         this.providers = providers;
@@ -228,21 +237,11 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
 
     private ClarinCommunityDOIIdentifierProvider getProviderForItem(Context context, Item item) {
 
-        if (simpleCache.containsKey(item.getID())) {
-            return simpleCache.get(item.getID());
-        }
-
         // Check communities of item.getCollections() - this will only see collections if the item is archived
         for (Collection collection : item.getCollections()) {
-            try {
-                for (ClarinCommunityDOIIdentifierProvider provider : providers) {
-                    if (isCollectionInProvider(provider, collection)) {
-                        simpleCache.put(item.getID(), provider);
-                        return provider;
-                    }
-                }
-            } catch (SQLException e) {
-                log.error("Error while determining DOI provider for item {}", item.getID(), e);
+            ClarinCommunityDOIIdentifierProvider provider = getProviderForCollection(context, collection);
+            if (provider != null) {
+                return provider;
             }
         }
 
@@ -253,21 +252,7 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
             if (parent instanceof Collection) {
                 log.debug("Got parent DSO for item: " + parent.getID().toString());
                 log.debug("Parent DSO handle: " + parent.getHandle());
-                try {
-                    // Now iterate communities of this parent collection
-                    for (ClarinCommunityDOIIdentifierProvider provider : providers) {
-                        if (isCollectionInProvider(provider, (Collection) parent)) {
-                            simpleCache.put(item.getID(), provider);
-                            return provider;
-                        }
-                    }
-                    // parent collection is not in any of the configured communities,
-                    // cache this fact to avoid future lookups
-                    simpleCache.put(item.getID(), null);
-                } catch (SQLException e) {
-                    log.error("Error while determining DOI provider for item {} from the parent collection",
-                            item.getID(), e);
-                }
+                return getProviderForCollection(context, (Collection) parent);
             } else {
                 log.debug("Parent DSO is null or is not a Collection...");
             }
@@ -276,6 +261,28 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
         }
 
         return null;
+    }
+
+    private ClarinCommunityDOIIdentifierProvider getProviderForCollection(Context context, Collection collection) {
+        Optional<ClarinCommunityDOIIdentifierProvider> cached = collectionProviderCache.get(collection.getID());
+        if (cached != null) {
+            return cached.orElse(null);
+        }
+        ClarinCommunityDOIIdentifierProvider match = null;
+        try {
+            for (ClarinCommunityDOIIdentifierProvider provider : providers) {
+                if (isCollectionInProvider(provider, collection)) {
+                    match = provider;
+                    break;
+                }
+            }
+        } catch (SQLException e) {
+            // don't cache on error, so a transient DB problem doesn't pin a wrong (negative) result
+            log.error("Error while determining DOI provider for collection {}", collection.getID(), e);
+            return null;
+        }
+        collectionProviderCache.put(collection.getID(), Optional.ofNullable(match));
+        return match;
     }
 
     private boolean isCollectionInProvider(ClarinCommunityDOIIdentifierProvider provider,
@@ -309,35 +316,6 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
 
     private void logInfoNonConfigurableEntity(DSpaceObject dso, String actionName) {
         log.info("Item {} is not in a configured CLARIN community, skipping DOI {}", dso.getID(), actionName);
-    }
-
-    protected static class SimpleCache<K, V> {
-        private final Map<K, V> cache;
-
-        public SimpleCache(int maxCapacity) {
-            this.cache = Collections.synchronizedMap(new LinkedHashMap<K, V>(maxCapacity, 0.75f, true) {
-                @Override
-                protected boolean removeEldestEntry(Map.Entry<K, V> eldest) {
-                    return size() > maxCapacity;
-                }
-            });
-        }
-
-        public V get(K key) {
-            return cache.get(key);
-        }
-
-        public void put(K key, V value) {
-            cache.put(key, value);
-        }
-
-        public boolean containsKey(K key) {
-            return cache.containsKey(key);
-        }
-
-        public void clear() {
-            cache.clear();
-        }
     }
 
 }
