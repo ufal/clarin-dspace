@@ -191,6 +191,37 @@ public class EPersonMergeServiceTest extends AbstractIntegrationTestWithDatabase
     }
 
     @Test
+    public void mergeMovesOnlyOneOfIdenticalDuplicatePoliciesFromSource() throws Exception {
+        context.turnOffAuthorisationSystem();
+        ResourcePolicyBuilder.createResourcePolicy(context, from, null)
+            .withAction(Constants.READ)
+            .withDspaceObject(collection)
+            .withPolicyType(ResourcePolicy.TYPE_CUSTOM)
+            .build();
+        // A second policy on `from`, identical in every field the signature considers - `to`
+        // holds none for this object/action, so both would previously have been moved onto it.
+        ResourcePolicyBuilder.createResourcePolicy(context, from, null)
+            .withAction(Constants.READ)
+            .withDspaceObject(collection)
+            .withPolicyType(ResourcePolicy.TYPE_CUSTOM)
+            .build();
+        context.restoreAuthSystemState();
+
+        ResourcePolicyService resourcePolicyService = org.dspace.authorize.factory.AuthorizeServiceFactory
+            .getInstance().getResourcePolicyService();
+
+        context.turnOffAuthorisationSystem();
+        ePersonMergeService.merge(context, from, to, admin);
+        context.restoreAuthSystemState();
+
+        long toPoliciesForCollection = resourcePolicyService.findByEPerson(context, to, -1, -1).stream()
+            .filter(rp -> collection.equals(rp.getdSpaceObject()) && rp.getAction() == Constants.READ)
+            .count();
+        assertEquals("only one of the two identical `from` policies should have been moved onto `to`",
+            1, toPoliciesForCollection);
+    }
+
+    @Test
     public void mergeTombstonesFromAndWritesAudit() throws Exception {
         context.turnOffAuthorisationSystem();
         identityService.attach(context, from, "novak@cuni.cz[https://cas.cuni.cz/idp/shibboleth]",

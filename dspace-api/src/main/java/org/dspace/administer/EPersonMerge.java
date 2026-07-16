@@ -7,9 +7,11 @@
  */
 package org.dspace.administer;
 
+import java.sql.SQLException;
 import java.util.UUID;
 
 import org.apache.commons.cli.ParseException;
+import org.apache.commons.lang3.StringUtils;
 import org.dspace.core.Context;
 import org.dspace.eperson.EPerson;
 import org.dspace.eperson.clarin.EPersonMergeAudit;
@@ -34,6 +36,7 @@ public class EPersonMerge extends DSpaceRunnable<EPersonMergeConfiguration<EPers
 
     private UUID fromUuid;
     private UUID toUuid;
+    private String epersonEmail;
     private boolean help = false;
 
     @Override
@@ -52,6 +55,8 @@ public class EPersonMerge extends DSpaceRunnable<EPersonMergeConfiguration<EPers
         } catch (IllegalArgumentException e) {
             throw new ParseException("--from and --to must both be valid EPerson UUIDs");
         }
+
+        this.epersonEmail = commandLine.getOptionValue('e');
     }
 
     @Override
@@ -62,7 +67,7 @@ public class EPersonMerge extends DSpaceRunnable<EPersonMergeConfiguration<EPers
         }
 
         Context context = new Context();
-        context.setCurrentUser(ePersonService.find(context, getEpersonIdentifier()));
+        context.setCurrentUser(getPerformingEPerson(context));
 
         try {
             context.turnOffAuthorisationSystem();
@@ -89,5 +94,24 @@ public class EPersonMerge extends DSpaceRunnable<EPersonMergeConfiguration<EPers
     public EPersonMergeConfiguration<EPersonMerge> getScriptConfiguration() {
         return new DSpace().getServiceManager()
             .getServiceByName("eperson-merge", EPersonMergeConfiguration.class);
+    }
+
+    /**
+     * Resolve the admin EPerson performing this merge, for the audit trail: the REST-invoked
+     * current user if there is one, otherwise the CLI {@code -e/--eperson} email if provided,
+     * otherwise null (unattributed run).
+     */
+    private EPerson getPerformingEPerson(Context context) throws SQLException {
+        if (getEpersonIdentifier() != null) {
+            return ePersonService.find(context, getEpersonIdentifier());
+        }
+        if (StringUtils.isNotBlank(epersonEmail)) {
+            EPerson eperson = ePersonService.findByEmail(context, epersonEmail);
+            if (eperson == null) {
+                throw new IllegalArgumentException("No EPerson found for --eperson " + epersonEmail);
+            }
+            return eperson;
+        }
+        return null;
     }
 }

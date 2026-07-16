@@ -175,7 +175,10 @@ public class EPersonMergeServiceImpl implements EPersonMergeService {
 
     /**
      * Re-points resourcepolicy rows, skipping (leaving attached to the tombstoned `from`) any
-     * that would duplicate a policy `to` already holds for the same resource/action/type.
+     * that would duplicate a policy `to` already holds. Duplicate means the full policy
+     * signature matches - resource, action, type, start/end dates, rpName and rpDescription,
+     * i.e. the fields {@link ResourcePolicy#equals} treats as significant - so if `from` itself
+     * holds two policies with an identical signature, only the first of them is moved.
      */
     private int reassignResourcePolicies(Context context, EPerson from, EPerson to) throws SQLException {
         List<ResourcePolicy> toPolicies = resourcePolicyService.findByEPerson(context, to, -1, -1);
@@ -186,7 +189,8 @@ public class EPersonMergeServiceImpl implements EPersonMergeService {
 
         int count = 0;
         for (ResourcePolicy rp : resourcePolicyService.findByEPerson(context, from, -1, -1)) {
-            if (toSignatures.contains(resourcePolicySignature(rp))) {
+            String sig = resourcePolicySignature(rp);
+            if (toSignatures.contains(sig)) {
                 continue;
             }
             rp.setEPerson(to);
@@ -195,6 +199,7 @@ public class EPersonMergeServiceImpl implements EPersonMergeService {
             } catch (AuthorizeException e) {
                 throw new IllegalStateException(e);
             }
+            toSignatures.add(sig);
             count++;
         }
         return count;
