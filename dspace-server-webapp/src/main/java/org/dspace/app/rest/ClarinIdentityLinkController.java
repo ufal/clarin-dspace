@@ -18,11 +18,11 @@ import org.dspace.app.rest.exception.DSpaceBadRequestException;
 import org.dspace.app.util.Util;
 import org.dspace.core.Context;
 import org.dspace.eperson.EPerson;
-import org.dspace.eperson.clarin.ClarinIdentityServiceImpl;
 import org.dspace.eperson.service.EPersonService;
 import org.dspace.eperson.service.clarin.ClarinIdentityService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.rest.webmvc.ControllerUtils;
+import org.springframework.data.rest.webmvc.ResourceNotFoundException;
 import org.springframework.hateoas.RepresentationModel;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -62,12 +62,12 @@ public class ClarinIdentityLinkController {
 
         EPerson ePerson = ePersonService.find(context, epersonUuid);
         if (ePerson == null) {
-            throw new DSpaceBadRequestException("No EPerson found for eperson=" + epersonUuid);
+            throw new ResourceNotFoundException("No EPerson found for eperson=" + epersonUuid);
         }
 
         String netid = Util.formatNetId(value, authority);
         try {
-            identityService.attach(context, ePerson, netid, ClarinIdentityServiceImpl.SOURCE_ADMIN,
+            identityService.attach(context, ePerson, netid, ClarinIdentityService.SOURCE_ADMIN,
                     context.getCurrentUser());
         } catch (IllegalStateException e) {
             throw new DSpaceBadRequestException(e.getMessage(), e);

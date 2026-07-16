@@ -35,10 +35,6 @@ public class ClarinIdentityServiceImpl implements ClarinIdentityService {
 
     private static final Logger log = LogManager.getLogger(ClarinIdentityServiceImpl.class);
 
-    public static final String SOURCE_MIGRATION = "migration";
-    public static final String SOURCE_AUTO_VOPERSON = "auto-voperson";
-    public static final String SOURCE_ADMIN = "admin";
-
     @Autowired
     private EPersonNetidAliasDAO ePersonNetidAliasDAO;
 

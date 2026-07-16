@@ -29,6 +29,24 @@ import org.dspace.eperson.clarin.EPersonNetidAlias;
 public interface ClarinIdentityService {
 
     /**
+     * Value persisted in {@code eperson_netid_alias.source} for aliases created by the
+     * one-off migration backfill of pre-existing legacy netids.
+     */
+    String SOURCE_MIGRATION = "migration";
+
+    /**
+     * Value persisted in {@code eperson_netid_alias.source} for aliases created by
+     * {@link #autoLink} matching an allowlisted proxy's {@code voperson_external_id}.
+     */
+    String SOURCE_AUTO_VOPERSON = "auto-voperson";
+
+    /**
+     * Value persisted in {@code eperson_netid_alias.source} for aliases created manually by
+     * an admin via the identity-link endpoint.
+     */
+    String SOURCE_ADMIN = "admin";
+
+    /**
      * Resolve a formatted "value[authority]" netid to the EPerson it is aliased
      * to. Falls back to a legacy {@code EPerson.netid} column match when no
      * alias exists. Returns null if neither matches.

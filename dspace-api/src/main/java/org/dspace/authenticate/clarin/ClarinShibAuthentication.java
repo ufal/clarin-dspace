@@ -1354,8 +1354,9 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
 
     /**
      * Find an EPerson by a NetID header. The method will go through all the netid headers and try to find a user.
-     * Resolution goes through {@link ClarinIdentityService}'s alias table only - {@code EPerson.netid} is a
-     * denormalized display field that nothing at login reads.
+     * Resolution goes through {@link ClarinIdentityService#resolve}, which checks the {@code eperson_netid_alias}
+     * table first and falls back to the legacy {@code EPerson.netid} column for accounts that have no alias row
+     * (netids written directly at login are not backfilled into the alias table).
      */
     public static EPerson findEpersonByNetId(String[] netidHeaders, ShibHeaders shibheaders,
                                              ClarinIdentityService identityService, Context context,
