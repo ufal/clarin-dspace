@@ -165,9 +165,44 @@ public class ClarinDOIIdentifierProviderIT extends AbstractIntegrationTestWithDa
         assertTrue(doi4.startsWith("doi:10.1/1-"));
         // check if the DOI for itemV2 is different from the one for item1
         assertFalse(doi4.startsWith(doi1));
-        checkDoi(doi2, DOIIdentifierProvider.MINTED);
+        checkDoi(doi4, DOIIdentifierProvider.MINTED);
         // check that the old DOI identifier was removed from itemV2
         assertEquals(0, getDoiMetadata(itemV2).size());
+    }
+
+    @Test
+    public void testMintInSubCommunity() throws IdentifierException, SQLException {
+        context.turnOffAuthorisationSystem();
+        // parentCommunity is configured for provider 10.1; the sub-community itself is not configured
+        Community subCommunity = CommunityBuilder.createSubCommunity(context, parentCommunity)
+                .withName("Sub Community 1")
+                .build();
+        Collection subCollection = CollectionBuilder.createCollection(context, subCommunity)
+                .withName("Sub Collection")
+                .build();
+        Item subItem = ItemBuilder.createItem(context, subCollection)
+                .withTitle("Sub Item")
+                .build();
+        context.restoreAuthSystemState();
+
+        // matching mirrors the per-community handle prefixes (lr.pid.community.configurations): only the
+        // direct parent communities of the owning collection count, so the top-level community's provider
+        // does not cover the sub-community and the item gets no DOI
+        assertNull(provider.mint(context, subItem));
+
+        // listing the sub-community explicitly in a provider's communities is the supported configuration
+        ClarinCommunityDOIIdentifierProvider subCommunityProvider =
+                createCommunityProvider("10.3", "3-", Set.of(subCommunity.getID().toString()));
+        ClarinDOIIdentifierProvider subCommunityDispatcher = new ClarinDOIIdentifierProvider();
+        subCommunityDispatcher.setProviders(List.of(subCommunityProvider));
+        subCommunityDispatcher.itemService = itemService;
+        subCommunityDispatcher.doiService = doiService;
+        subCommunityDispatcher.contentServiceFactory = ContentServiceFactory.getInstance();
+
+        String doi = subCommunityDispatcher.mint(context, subItem);
+        assertNotNull(doi);
+        assertTrue(doi.startsWith("doi:10.3/3-"));
+        checkDoi(doi, DOIIdentifierProvider.MINTED);
     }
 
     @Test
@@ -281,9 +316,6 @@ public class ClarinDOIIdentifierProviderIT extends AbstractIntegrationTestWithDa
     private ClarinCommunityDOIIdentifierProvider createCommunityProvider(String doiPrefix,
                                                                          String namespaceSeparator,
                                                                          Set<String> communityIds) {
-        configurationService.setProperty("identifier.doi." + doiPrefix + ".user", "test_user");
-        configurationService.setProperty("identifier.doi." + doiPrefix + ".password", "password");
-
         ClarinDataCiteConnector connector = mock(ClarinDataCiteConnector.class);
 
         ClarinCommunityDOIIdentifierProvider communityProvider = new ClarinCommunityDOIIdentifierProvider();

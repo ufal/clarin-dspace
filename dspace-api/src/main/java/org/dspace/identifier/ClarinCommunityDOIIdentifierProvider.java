@@ -21,22 +21,18 @@ import org.dspace.content.Item;
 import org.dspace.content.MetadataValue;
 import org.dspace.content.logic.Filter;
 import org.dspace.core.Context;
-import org.dspace.identifier.doi.ClarinDataCiteConnector;
-import org.dspace.identifier.doi.DOIConnector;
-import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * DOI identifier provider for CLARIN communities.
- * It uses the ClarinDataCiteConnector to connect to DataCite and requires the DOI prefix
- * and the list of CLARIN community IDs to be configured.
+ * It requires the DOI prefix and the list of CLARIN community IDs to be configured.
+ * The DOI connector (a ClarinDataCiteConnector) is configured per provider in Spring, including its
+ * credentials and DOI prefix — the connector's prefix must match this provider's prefix.
  *
  * @author Milan Kuchtiak (kuchtiak@ufal.mff.cuni.cz)
  */
 public class ClarinCommunityDOIIdentifierProvider extends DOIIdentifierProvider {
 
     private static final Logger log = LogManager.getLogger(ClarinCommunityDOIIdentifierProvider.class);
-
-    protected DOIConnector connector;
 
     private String doiPrefix;
 
@@ -45,40 +41,12 @@ public class ClarinCommunityDOIIdentifierProvider extends DOIIdentifierProvider 
     private Set<String> communities = new HashSet<>();
 
     public void init() {
-        if (!(this.connector instanceof ClarinDataCiteConnector)) {
-            throw new IllegalStateException("ClarinCommunityDOIIdentifierProvider requires ClarinDataCiteConnector");
-        }
         if (doiPrefix == null) {
             throw new IllegalStateException("No DOI prefix configured for ClarinCommunityDOIIdentifierProvider");
         }
         if (namespaceSeparator == null) {
             namespaceSeparator = "";
         }
-
-        ClarinDataCiteConnector dataCiteConnector = (ClarinDataCiteConnector) this.connector;
-
-        dataCiteConnector.setDoiPrefix(doiPrefix);
-
-        String username = this.configurationService.getProperty("identifier.doi." + doiPrefix + ".user");
-        if (username == null) {
-            log.error("No username configured for DOI prefix '{}'", doiPrefix);
-            throw new IllegalStateException("No username configured for DOI prefix '" + doiPrefix + "'");
-        }
-        dataCiteConnector.setUsername(username);
-
-        String password = this.configurationService.getProperty("identifier.doi." + doiPrefix + ".password");
-        if (password == null) {
-            log.error("No password configured for DOI prefix '{}'", doiPrefix);
-            throw new IllegalStateException("No password configured for DOI prefix '" + doiPrefix + "'");
-        }
-        dataCiteConnector.setPassword(password);
-    }
-
-    @Override
-    @Autowired(required = true)
-    public void setDOIConnector(DOIConnector connector) {
-        super.setDOIConnector(connector);
-        this.connector = connector;
     }
 
     /**

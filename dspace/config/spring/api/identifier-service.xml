@@ -123,12 +123,21 @@
          that allows you to configure multiple community specific DOI providers.
          Each provider will only mint DOIs for items in the configured communities.
 
+         An item belongs to a community when that community is a direct parent of the item's owning
+         collection - the same semantics as the per-community handle prefixes
+         (lr.pid.community.configurations). A provider configured with a top-level community does not
+         cover its sub-communities; list each sub-community explicitly in the "communities" property.
+
          Credentials, for DOI connectors need to be configured, per each DOI prefix, in local.cfg, e.g.:
 
          identifier.doi.10.83111.user = <username>
          identifier.doi.10.83111.password = <password>
          identifier.doi.10.83222.user = <username>
          identifier.doi.10.83222.password = <password>
+
+         The ${...} placeholders on the connector beans below resolve against the DSpace configuration,
+         so the credentials stay in local.cfg. Each connector's doiPrefix must match the doiPrefix of the
+         provider it is wired into.
     -->
     <!-- Uncomment to enable community specific DOI providers
     <bean id="org.dspace.identifier.DOIIdentifierProvider" class="org.dspace.identifier.ClarinDOIIdentifierProvider">
@@ -146,7 +155,11 @@
           abstract="true">
         <property name="configurationService" ref="org.dspace.services.ConfigurationService" />
         <property name="DOIConnector">
-            <bean parent = "org.dspace.identifier.doi.DOIConnector" />
+            <bean parent = "org.dspace.identifier.doi.DOIConnector">
+                <property name="username" value="${identifier.doi.10.83111.user}" />
+                <property name="password" value="${identifier.doi.10.83111.password}" />
+                <property name="doiPrefix" value="10.83111" />
+            </bean>
         </property>
         <property name="doiPrefix" value="10.83111" />
         <property name="namespaceSeparator" value="clarin.1." />
@@ -164,7 +177,11 @@
           abstract="true">
         <property name="configurationService" ref="org.dspace.services.ConfigurationService" />
         <property name="DOIConnector">
-            <bean parent = "org.dspace.identifier.doi.DOIConnector" />
+            <bean parent = "org.dspace.identifier.doi.DOIConnector">
+                <property name="username" value="${identifier.doi.10.83222.user}" />
+                <property name="password" value="${identifier.doi.10.83222.password}" />
+                <property name="doiPrefix" value="10.83222" />
+            </bean>
         </property>
         <property name="doiPrefix" value="10.83222" />
         <property name="namespaceSeparator" value="clarin.2." />
