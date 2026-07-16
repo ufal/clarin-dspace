@@ -250,10 +250,7 @@ public class DataCiteConnector
     }
 
     protected String getDoiPrefix() {
-        if (this.doiPrefix == null) {
-            this.doiPrefix = configurationService.getProperty(CFG_PREFIX);
-        }
-        return this.doiPrefix;
+        return this.doiPrefix != null ? this.doiPrefix : configurationService.getProperty(CFG_PREFIX);
     }
 
     @Override
