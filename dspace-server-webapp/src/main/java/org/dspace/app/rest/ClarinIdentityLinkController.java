@@ -99,7 +99,7 @@ public class ClarinIdentityLinkController {
     private static Context getContext(HttpServletRequest request) {
         Context context = obtainContext(request);
         if (Objects.isNull(context)) {
-            throw new RuntimeException("Context is null!");
+            throw new IllegalStateException("Cannot obtain the DSpace context from the current request");
         }
         return context;
     }

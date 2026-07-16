@@ -54,13 +54,13 @@ public class EPersonNetidAlias implements ReloadableEntity<Integer> {
     /**
      * Formatted "value[authority]" identity, e.g. "novak@cuni.cz[https://cas.cuni.cz/idp/shibboleth]".
      */
-    @Column(name = "netid", nullable = false, unique = true)
+    @Column(name = "netid", nullable = false, unique = true, length = 256)
     private String netid;
 
     /**
      * How this alias was created: 'migration' | 'auto-voperson' | 'admin' | 'merge'.
      */
-    @Column(name = "source", nullable = false)
+    @Column(name = "source", nullable = false, length = 64)
     private String source;
 
     @ManyToOne(fetch = FetchType.LAZY)

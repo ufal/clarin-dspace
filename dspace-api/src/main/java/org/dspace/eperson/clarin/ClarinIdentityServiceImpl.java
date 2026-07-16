@@ -64,6 +64,10 @@ public class ClarinIdentityServiceImpl implements ClarinIdentityService {
     @Override
     public EPersonNetidAlias attach(Context context, EPerson ePerson, String netid, String source, EPerson createdBy)
             throws SQLException {
+        // Check-then-insert is racy under concurrent first logins with the same new netid; this is
+        // accepted: the unique constraint on netid preserves integrity, the losing request fails
+        // once and succeeds on retry. Recovering in-session (catching the constraint violation)
+        // is unreliable after a failed flush, so we deliberately don't attempt it.
         EPersonNetidAlias existing = ePersonNetidAliasDAO.findByNetid(context, netid);
         if (existing != null) {
             if (!existing.getEPerson().getID().equals(ePerson.getID())) {

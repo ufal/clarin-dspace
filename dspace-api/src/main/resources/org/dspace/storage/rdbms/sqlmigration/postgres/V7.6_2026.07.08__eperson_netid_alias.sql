@@ -11,7 +11,7 @@
 
 CREATE TABLE eperson_netid_alias (
     eperson_netid_alias_id integer NOT NULL PRIMARY KEY,
-    eperson_id   UUID NOT NULL REFERENCES eperson(uuid),
+    eperson_id   UUID NOT NULL REFERENCES eperson(uuid) ON DELETE CASCADE,
     netid        VARCHAR(256) NOT NULL UNIQUE,
     source       VARCHAR(64)  NOT NULL,
     created_by   UUID REFERENCES eperson(uuid) ON DELETE SET NULL,

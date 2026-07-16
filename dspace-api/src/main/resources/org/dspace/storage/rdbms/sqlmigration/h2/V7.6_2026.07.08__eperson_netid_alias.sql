@@ -18,7 +18,7 @@ CREATE TABLE eperson_netid_alias (
     source       VARCHAR(64)  NOT NULL,
     created_by   UUID,
     created_date TIMESTAMP NOT NULL,
-    FOREIGN KEY (eperson_id) REFERENCES eperson(uuid),
+    FOREIGN KEY (eperson_id) REFERENCES eperson(uuid) ON DELETE CASCADE,
     FOREIGN KEY (created_by) REFERENCES eperson(uuid) ON DELETE SET NULL
 );
 
