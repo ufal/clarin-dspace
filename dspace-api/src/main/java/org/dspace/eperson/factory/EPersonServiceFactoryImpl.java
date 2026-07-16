@@ -13,6 +13,7 @@ import org.dspace.eperson.service.GroupService;
 import org.dspace.eperson.service.RegistrationDataService;
 import org.dspace.eperson.service.SubscribeService;
 import org.dspace.eperson.service.clarin.ClarinIdentityService;
+import org.dspace.eperson.service.clarin.EPersonMergeService;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -35,6 +36,8 @@ public class EPersonServiceFactoryImpl extends EPersonServiceFactory {
     private SubscribeService subscribeService;
     @Autowired(required = true)
     private ClarinIdentityService clarinIdentityService;
+    @Autowired(required = true)
+    private EPersonMergeService ePersonMergeService;
 
     @Override
     public EPersonService getEPersonService() {
@@ -64,6 +67,11 @@ public class EPersonServiceFactoryImpl extends EPersonServiceFactory {
     @Override
     public ClarinIdentityService getClarinIdentityService() {
         return clarinIdentityService;
+    }
+
+    @Override
+    public EPersonMergeService getEPersonMergeService() {
+        return ePersonMergeService;
     }
 
 }

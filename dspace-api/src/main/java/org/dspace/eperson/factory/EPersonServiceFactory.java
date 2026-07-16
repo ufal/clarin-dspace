@@ -13,6 +13,7 @@ import org.dspace.eperson.service.GroupService;
 import org.dspace.eperson.service.RegistrationDataService;
 import org.dspace.eperson.service.SubscribeService;
 import org.dspace.eperson.service.clarin.ClarinIdentityService;
+import org.dspace.eperson.service.clarin.EPersonMergeService;
 import org.dspace.services.factory.DSpaceServicesFactory;
 
 /**
@@ -34,6 +35,8 @@ public abstract class EPersonServiceFactory {
     public abstract SubscribeService getSubscribeService();
 
     public abstract ClarinIdentityService getClarinIdentityService();
+
+    public abstract EPersonMergeService getEPersonMergeService();
 
     public static EPersonServiceFactory getInstance() {
         return DSpaceServicesFactory.getInstance().getServiceManager()

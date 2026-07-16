@@ -18,6 +18,7 @@ import org.dspace.content.dao.ItemDAO;
 import org.dspace.content.dao.clarin.MatomoReportSubscriptionDAO;
 import org.dspace.content.service.clarin.MatomoReportSubscriptionService;
 import org.dspace.core.Context;
+import org.dspace.eperson.EPerson;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -108,5 +109,23 @@ public class MatomoReportSubscriptionServiceImpl implements MatomoReportSubscrip
             throw new AuthorizeException("You must be authenticated user");
         }
         return (matomoReportSubscriptionDAO.findByItemIdAndCurrentUser(context, item.getID()) != null);
+    }
+
+    @Override
+    public int reassignEPerson(Context context, EPerson from, EPerson to) throws SQLException {
+        int count = 0;
+        for (MatomoReportSubscription subscription : matomoReportSubscriptionDAO.findByEPersonId(context,
+                from.getID())) {
+            if (matomoReportSubscriptionDAO.findByEPersonIdAndItemId(context, to.getID(),
+                    subscription.getItem().getID()) != null) {
+                // `to` is already subscribed to this item - drop the duplicate.
+                matomoReportSubscriptionDAO.delete(context, subscription);
+            } else {
+                subscription.setEPerson(to);
+                matomoReportSubscriptionDAO.save(context, subscription);
+                count++;
+            }
+        }
+        return count;
     }
 }

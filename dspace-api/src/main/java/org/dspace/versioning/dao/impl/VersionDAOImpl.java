@@ -18,6 +18,7 @@ import javax.persistence.criteria.Root;
 import org.dspace.content.Item;
 import org.dspace.core.AbstractHibernateDAO;
 import org.dspace.core.Context;
+import org.dspace.eperson.EPerson;
 import org.dspace.versioning.Version;
 import org.dspace.versioning.VersionHistory;
 import org.dspace.versioning.Version_;
@@ -47,6 +48,16 @@ public class VersionDAOImpl extends AbstractHibernateDAO<Version> implements Ver
         criteriaQuery.select(versionRoot);
         criteriaQuery.where(criteriaBuilder.equal(versionRoot.get(Version_.item), item));
         return singleResult(context, criteriaQuery);
+    }
+
+    @Override
+    public List<Version> findByEPerson(Context context, EPerson ePerson) throws SQLException {
+        CriteriaBuilder criteriaBuilder = getCriteriaBuilder(context);
+        CriteriaQuery criteriaQuery = getCriteriaQuery(criteriaBuilder, Version.class);
+        Root<Version> versionRoot = criteriaQuery.from(Version.class);
+        criteriaQuery.select(versionRoot);
+        criteriaQuery.where(criteriaBuilder.equal(versionRoot.get(Version_.ePerson), ePerson));
+        return list(context, criteriaQuery, false, Version.class, -1, -1);
     }
 
     @Override

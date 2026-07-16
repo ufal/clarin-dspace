@@ -59,6 +59,7 @@
     <bean class="org.dspace.content.dao.impl.clarin.ClarinTokenDAOImpl"/>
     <bean class="org.dspace.content.dao.impl.ReportResultDAOImpl"/>
     <bean class="org.dspace.eperson.dao.impl.clarin.EPersonNetidAliasDAOImpl"/>
+    <bean class="org.dspace.eperson.dao.impl.clarin.EPersonMergeAuditDAOImpl"/>
 
     <bean class="org.dspace.harvest.dao.impl.HarvestedItemDAOImpl"/>
     <bean class="org.dspace.harvest.dao.impl.HarvestedCollectionDAOImpl"/>
