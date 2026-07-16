@@ -135,6 +135,26 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
         }
     }
 
+    /**
+     * Delete the given DOI online (at the registration agency) using the community provider whose
+     * configured prefix matches the DOI.
+     * <p>
+     * Unlike the item-based operations above (register/reserve/mint/...), this method deliberately fails
+     * loud when no provider matches the DOI's prefix: the lookup here is by DOI prefix alone, there is no
+     * DSpaceObject available at delete time, so there is no item context in which "not in a configured
+     * community" would be an expected, skippable state.
+     * <p>
+     * The only caller is DOIOrganiser's {@code --delete-doi} CLI path, which catches
+     * {@link DOIIdentifierException} and reports the failure to the operator. The delegated
+     * {@code deleteOnline} already throws {@link DOIIdentifierException} for other failure modes;
+     * silently skipping an unknown prefix would leave the DOI row stuck in {@code TO_BE_DELETED}
+     * with no visible error.
+     *
+     * @param context    the DSpace context
+     * @param identifier the DOI to delete online
+     * @throws DOIIdentifierException if no configured provider matches the DOI's prefix, or if the
+     *                                 delegated online deletion fails
+     */
     @Override
     public void deleteOnline(Context context, String identifier) throws DOIIdentifierException {
         getProviderForIdentifier(identifier).deleteOnline(context, identifier);
