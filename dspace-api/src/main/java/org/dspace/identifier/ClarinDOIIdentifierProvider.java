@@ -287,6 +287,10 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
 
     private boolean isCollectionInProvider(ClarinCommunityDOIIdentifierProvider provider,
                                            Collection collection) throws SQLException {
+        // Only the direct parent communities of the collection are considered, mirroring the semantics of
+        // the per-community handle prefixes (lr.pid.community.configurations): a provider configured with a
+        // top-level community does NOT cover its sub-communities — list each sub-community explicitly in the
+        // provider's "communities" property if items under it should get DOIs
         List<Community> parentCommunities = collection.getCommunities();
         for (Community parentCommunity : parentCommunities) {
             if (provider.getCommunities().contains(parentCommunity.getID().toString())) {

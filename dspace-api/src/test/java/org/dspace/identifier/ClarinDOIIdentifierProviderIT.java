@@ -171,6 +171,41 @@ public class ClarinDOIIdentifierProviderIT extends AbstractIntegrationTestWithDa
     }
 
     @Test
+    public void testMintInSubCommunity() throws IdentifierException, SQLException {
+        context.turnOffAuthorisationSystem();
+        // parentCommunity is configured for provider 10.1; the sub-community itself is not configured
+        Community subCommunity = CommunityBuilder.createSubCommunity(context, parentCommunity)
+                .withName("Sub Community 1")
+                .build();
+        Collection subCollection = CollectionBuilder.createCollection(context, subCommunity)
+                .withName("Sub Collection")
+                .build();
+        Item subItem = ItemBuilder.createItem(context, subCollection)
+                .withTitle("Sub Item")
+                .build();
+        context.restoreAuthSystemState();
+
+        // matching mirrors the per-community handle prefixes (lr.pid.community.configurations): only the
+        // direct parent communities of the owning collection count, so the top-level community's provider
+        // does not cover the sub-community and the item gets no DOI
+        assertNull(provider.mint(context, subItem));
+
+        // listing the sub-community explicitly in a provider's communities is the supported configuration
+        ClarinCommunityDOIIdentifierProvider subCommunityProvider =
+                createCommunityProvider("10.3", "3-", Set.of(subCommunity.getID().toString()));
+        ClarinDOIIdentifierProvider subCommunityDispatcher = new ClarinDOIIdentifierProvider();
+        subCommunityDispatcher.setProviders(List.of(subCommunityProvider));
+        subCommunityDispatcher.itemService = itemService;
+        subCommunityDispatcher.doiService = doiService;
+        subCommunityDispatcher.contentServiceFactory = ContentServiceFactory.getInstance();
+
+        String doi = subCommunityDispatcher.mint(context, subItem);
+        assertNotNull(doi);
+        assertTrue(doi.startsWith("doi:10.3/3-"));
+        checkDoi(doi, DOIIdentifierProvider.MINTED);
+    }
+
+    @Test
     public void testCheckMintable() throws IdentifierException {
         provider.checkMintable(context, item1);
         provider.checkMintable(context, item2);
