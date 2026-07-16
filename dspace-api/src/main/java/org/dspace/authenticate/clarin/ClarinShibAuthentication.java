@@ -50,6 +50,7 @@ import org.dspace.eperson.Group;
 import org.dspace.eperson.factory.EPersonServiceFactory;
 import org.dspace.eperson.service.EPersonService;
 import org.dspace.eperson.service.GroupService;
+import org.dspace.eperson.service.clarin.ClarinIdentityService;
 import org.dspace.services.ConfigurationService;
 import org.dspace.services.factory.DSpaceServicesFactory;
 
@@ -124,6 +125,7 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
             ClarinServiceFactory.getInstance().getClarinUserRegistration();
     protected ClarinVerificationTokenService clarinVerificationTokenService = ClarinServiceFactory.getInstance()
             .getClarinVerificationTokenService();
+    protected ClarinIdentityService identityService = EPersonServiceFactory.getInstance().getClarinIdentityService();
 
     /**
      * Authenticate the given or implicit credentials. This is the heart of the
@@ -558,7 +560,18 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
 
         // 1) First, look for a netid header.
         if (netidHeaders != null) {
-            eperson = findEpersonByNetId(netidHeaders, shibheaders, ePersonService, context, true);
+            eperson = findEpersonByNetId(netidHeaders, shibheaders, identityService, context, true);
+            if (eperson != null) {
+                foundNetID = true;
+            }
+        }
+
+        // 1b) CLARIN: an allowlisted identity proxy (e.g. e-INFRA CZ/Perun) may release
+        // voperson_external_id, listing this user's other registered external identities.
+        // If exactly one existing EPerson already holds one of them, auto-link this login
+        // to it instead of falling through to email matching / auto-registration.
+        if (eperson == null && netidHeaders != null) {
+            eperson = tryAutoLink(context, netidHeaders);
             if (eperson != null) {
                 foundNetID = true;
             }
@@ -641,6 +654,37 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
 
 
         return eperson;
+    }
+
+    /**
+     * Try to auto-link this login to an existing EPerson via the allowlisted proxy's
+     * {@code voperson_external_id} attribute (Perun's "merging by all registered external
+     * identities"). See {@link ClarinIdentityService#autoLink}.
+     *
+     * @return the EPerson to log into, or null if auto-linking does not apply/match.
+     */
+    protected EPerson tryAutoLink(Context context, String[] netidHeaders) throws SQLException {
+        String idp = shibheaders.get_idp();
+        if (!identityService.isAllowlistedProxy(idp)) {
+            return null;
+        }
+
+        String vopersonExternalIdHeader = configurationService
+                .getProperty("authentication-shibboleth.voperson-external-id-header");
+        if (vopersonExternalIdHeader == null) {
+            return null;
+        }
+        List<String> releasedEppns = shibheaders.get(vopersonExternalIdHeader);
+        if (releasedEppns == null || releasedEppns.isEmpty()) {
+            return null;
+        }
+
+        String proxyNetid = getFirstNetId(netidHeaders);
+        if (proxyNetid == null) {
+            return null;
+        }
+
+        return identityService.autoLink(context, releasedEppns, idp, proxyNetid);
     }
 
     /**
@@ -1310,9 +1354,12 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
 
     /**
      * Find an EPerson by a NetID header. The method will go through all the netid headers and try to find a user.
+     * Resolution goes through {@link ClarinIdentityService}'s alias table only - {@code EPerson.netid} is a
+     * denormalized display field that nothing at login reads.
      */
     public static EPerson findEpersonByNetId(String[] netidHeaders, ShibHeaders shibheaders,
-                                             EPersonService ePersonService, Context context, boolean logAllowed)
+                                             ClarinIdentityService identityService, Context context,
+                                             boolean logAllowed)
             throws SQLException {
         // Go through all the netid headers and try to find a user. It could be e.g., `eppn`, `persistent-id`,..
         for (String netidHeader : netidHeaders) {
@@ -1322,7 +1369,7 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
                 continue;
             }
 
-            EPerson eperson = ePersonService.findByNetid(context, netid);
+            EPerson eperson = identityService.resolve(context, netid);
 
             if (eperson == null && logAllowed) {
                 log.info(
