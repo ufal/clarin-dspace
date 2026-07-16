@@ -165,7 +165,7 @@ public class ClarinDOIIdentifierProviderIT extends AbstractIntegrationTestWithDa
         assertTrue(doi4.startsWith("doi:10.1/1-"));
         // check if the DOI for itemV2 is different from the one for item1
         assertFalse(doi4.startsWith(doi1));
-        checkDoi(doi2, DOIIdentifierProvider.MINTED);
+        checkDoi(doi4, DOIIdentifierProvider.MINTED);
         // check that the old DOI identifier was removed from itemV2
         assertEquals(0, getDoiMetadata(itemV2).size());
     }
