@@ -316,9 +316,6 @@ public class ClarinDOIIdentifierProviderIT extends AbstractIntegrationTestWithDa
     private ClarinCommunityDOIIdentifierProvider createCommunityProvider(String doiPrefix,
                                                                          String namespaceSeparator,
                                                                          Set<String> communityIds) {
-        configurationService.setProperty("identifier.doi." + doiPrefix + ".user", "test_user");
-        configurationService.setProperty("identifier.doi." + doiPrefix + ".password", "password");
-
         ClarinDataCiteConnector connector = mock(ClarinDataCiteConnector.class);
 
         ClarinCommunityDOIIdentifierProvider communityProvider = new ClarinCommunityDOIIdentifierProvider();
