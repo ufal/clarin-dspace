@@ -123,6 +123,11 @@
          that allows you to configure multiple community specific DOI providers.
          Each provider will only mint DOIs for items in the configured communities.
 
+         An item belongs to a community when that community is a direct parent of the item's owning
+         collection - the same semantics as the per-community handle prefixes
+         (lr.pid.community.configurations). A provider configured with a top-level community does not
+         cover its sub-communities; list each sub-community explicitly in the "communities" property.
+
          Credentials, for DOI connectors need to be configured, per each DOI prefix, in local.cfg, e.g.:
 
          identifier.doi.10.83111.user = <username>
