@@ -83,9 +83,11 @@ public class EPersonMerge extends DSpaceRunnable<EPersonMergeConfiguration<EPers
 
             EPersonMergeAudit audit = ePersonMergeService.merge(context, from, to, context.getCurrentUser());
             handler.logInfo("Merged EPerson " + fromUuid + " into " + toUuid + ": " + audit.getDetail());
-        } finally {
             context.restoreAuthSystemState();
             context.complete();
+        } catch (Exception e) {
+            context.abort();
+            throw e;
         }
     }
 
