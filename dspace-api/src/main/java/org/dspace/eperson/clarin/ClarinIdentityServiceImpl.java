@@ -53,11 +53,9 @@ public class ClarinIdentityServiceImpl implements ClarinIdentityService {
         if (alias != null) {
             return alias.getEPerson();
         }
-        // Fall back to the legacy denormalized eperson.netid column: EPersons whose netid was
-        // set directly (e.g. ClarinShibAuthentication#updateEPerson locking a legacy account to
-        // its first-seen netid) never get an alias row of their own, only pre-existing netids
-        // captured by the migration backfill do. Without this fallback such accounts would
-        // silently stop resolving by netid once login moved to alias-only lookup.
+        // Alias rows exist only for netids that went through attach() or the migration backfill.
+        // A netid written straight to eperson.netid after the migration (ClarinShibAuthentication#updateEPerson
+        // locking a first login to its netid) has no alias row yet, so check the legacy column too.
         return ePersonService.findByNetid(context, netid);
     }
 
@@ -107,9 +105,9 @@ public class ClarinIdentityServiceImpl implements ClarinIdentityService {
     }
 
     @Override
-    public EPerson autoLink(Context context, List<String> releasedEppns, String proxyAuthority, String proxyNetid)
+    public EPerson autoLink(Context context, List<String> upstreamEppns, String proxyAuthority, String proxyNetid)
             throws SQLException {
-        if (releasedEppns == null || releasedEppns.isEmpty() || StringUtils.isBlank(proxyNetid)) {
+        if (upstreamEppns == null || upstreamEppns.isEmpty() || StringUtils.isBlank(proxyNetid)) {
             return null;
         }
         if (!isAllowlistedProxy(proxyAuthority)) {
@@ -126,11 +124,11 @@ public class ClarinIdentityServiceImpl implements ClarinIdentityService {
 
         Set<EPerson> matches = new LinkedHashSet<>();
         List<String> matchedOn = new ArrayList<>();
-        for (String eppn : releasedEppns) {
+        for (String eppn : upstreamEppns) {
             if (StringUtils.isBlank(eppn)) {
                 continue;
             }
-            for (EPersonNetidAlias alias : ePersonNetidAliasDAO.findByValuePrefix(context, eppn)) {
+            for (EPersonNetidAlias alias : ePersonNetidAliasDAO.findByValueAnyAuthority(context, eppn)) {
                 if (matches.add(alias.getEPerson())) {
                     matchedOn.add(eppn);
                 }
@@ -141,10 +139,11 @@ public class ClarinIdentityServiceImpl implements ClarinIdentityService {
             return null;
         }
         if (matches.size() > 1) {
-            log.warn("Auto-link via proxy '{}' matched {} different EPersons for released identities {} - " +
-                    "refusing to guess, flag for admin merge (proxy netid '{}').",
-                    proxyAuthority, matches.size(), matchedOn, proxyNetid);
-            return null;
+            throw new AmbiguousIdentityException(
+                    "Auto-link via proxy '" + proxyAuthority + "' matched " + matches.size()
+                            + " different EPersons for released identities " + matchedOn
+                            + " (proxy netid '" + proxyNetid + "') - refusing to guess, "
+                            + "the accounts need an admin merge/link first.");
         }
 
         EPerson matched = matches.iterator().next();

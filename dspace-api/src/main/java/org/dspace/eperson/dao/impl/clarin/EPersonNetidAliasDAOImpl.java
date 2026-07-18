@@ -27,6 +27,12 @@ public class EPersonNetidAliasDAOImpl extends AbstractHibernateDAO<EPersonNetidA
 
     private static final char LIKE_ESCAPE = '\\';
 
+    /**
+     * Marks the start of the authority suffix in a formatted netid, i.e. the "[" in
+     * {@code value[authority]} produced by {@code Util#formatNetId(value, authority)}.
+     */
+    private static final String NETID_AUTHORITY_START = "[";
+
     @Override
     public EPersonNetidAlias findByNetid(Context context, String netid) throws SQLException {
         Query query = createQuery(context, "SELECT a FROM EPersonNetidAlias a WHERE a.netid = :netid");
@@ -36,10 +42,10 @@ public class EPersonNetidAliasDAOImpl extends AbstractHibernateDAO<EPersonNetidA
     }
 
     @Override
-    public List<EPersonNetidAlias> findByValuePrefix(Context context, String valuePrefix) throws SQLException {
+    public List<EPersonNetidAlias> findByValueAnyAuthority(Context context, String value) throws SQLException {
         Query query = createQuery(context,
                 "SELECT a FROM EPersonNetidAlias a WHERE a.netid LIKE :pattern ESCAPE '\\'");
-        query.setParameter("pattern", escapeLike(valuePrefix) + "[%");
+        query.setParameter("pattern", escapeLike(value) + NETID_AUTHORITY_START + "%");
         return findMany(context, query);
     }
 

@@ -47,6 +47,7 @@ import org.dspace.core.Context;
 import org.dspace.core.Utils;
 import org.dspace.eperson.EPerson;
 import org.dspace.eperson.Group;
+import org.dspace.eperson.clarin.AmbiguousIdentityException;
 import org.dspace.eperson.factory.EPersonServiceFactory;
 import org.dspace.eperson.service.EPersonService;
 import org.dspace.eperson.service.GroupService;
@@ -661,6 +662,11 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
      * {@code voperson_external_id} attribute (Perun's "merging by all registered external
      * identities"). See {@link ClarinIdentityService#autoLink}.
      *
+     * The alias is attached under the netid from the first matching netid header
+     * ({@link #getFirstNetId}) - the same one {@code registerNewEPerson}/{@code updateEPerson}
+     * would lock the account to, so the alias always records the netid the rest of the login
+     * flow actually uses.
+     *
      * @return the EPerson to log into, or null if auto-linking does not apply/match.
      */
     protected EPerson tryAutoLink(Context context, String[] netidHeaders) throws SQLException {
@@ -674,8 +680,8 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
         if (vopersonExternalIdHeader == null) {
             return null;
         }
-        List<String> releasedEppns = shibheaders.get(vopersonExternalIdHeader);
-        if (releasedEppns == null || releasedEppns.isEmpty()) {
+        List<String> upstreamEppns = shibheaders.get(vopersonExternalIdHeader);
+        if (upstreamEppns == null || upstreamEppns.isEmpty()) {
             return null;
         }
 
@@ -684,7 +690,16 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
             return null;
         }
 
-        return identityService.autoLink(context, releasedEppns, idp, proxyNetid);
+        try {
+            return identityService.autoLink(context, upstreamEppns, idp, proxyNetid);
+        } catch (AmbiguousIdentityException e) {
+            // Several existing accounts could own this login; auto-registering yet another
+            // would deepen the duplication. Email matching may still identify an existing
+            // account, but registration stays blocked until an admin merges/links.
+            log.warn("Blocking auto-registration for this login: {}", e.getMessage());
+            this.isDuplicateUser = true;
+            return null;
+        }
     }
 
     /**

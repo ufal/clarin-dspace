@@ -28,10 +28,12 @@ public interface EPersonNetidAliasDAO extends GenericDAO<EPersonNetidAlias> {
     EPersonNetidAlias findByNetid(Context context, String netid) throws SQLException;
 
     /**
-     * Find all alias rows whose netid starts with "{@code valuePrefix}[" - i.e. any
-     * authority, matching only on the value part.
+     * Find aliases whose stored netid is {@code value[<any authority>]} - the netid column
+     * stores identities formatted by {@code Util#formatNetId(value, authority)}, while
+     * upstream attributes like voperson_external_id release the bare value without the
+     * authority suffix.
      */
-    List<EPersonNetidAlias> findByValuePrefix(Context context, String valuePrefix) throws SQLException;
+    List<EPersonNetidAlias> findByValueAnyAuthority(Context context, String value) throws SQLException;
 
     /**
      * Find all aliases currently attached to the given EPerson.

@@ -30,7 +30,8 @@ public interface ClarinIdentityService {
 
     /**
      * Value persisted in {@code eperson_netid_alias.source} for aliases created by the
-     * one-off migration backfill of pre-existing legacy netids.
+     * one-off migration backfill of pre-existing legacy netids
+     * ({@code V7.6_2026.07.08__eperson_netid_alias.sql}).
      */
     String SOURCE_MIGRATION = "migration";
 
@@ -95,10 +96,17 @@ public interface ClarinIdentityService {
      * <ul>
      *   <li>exactly one EPerson already holds an alias matching one of the
      *       released eppns -&gt; attach {@code proxyNetid} to it and return it;</li>
-     *   <li>zero or more-than-one match -&gt; refuse to guess, return null
-     *       (multiple matches are logged for an admin merge).</li>
+     *   <li>zero matches -&gt; return null (the caller may fall through to its
+     *       other identification methods);</li>
+     *   <li>more than one match -&gt; refuse to guess and throw
+     *       {@link org.dspace.eperson.clarin.AmbiguousIdentityException}; the
+     *       caller must not auto-register a new EPerson for this login, the
+     *       existing accounts need an admin merge/link first.</li>
      * </ul>
+     *
+     * @throws org.dspace.eperson.clarin.AmbiguousIdentityException if the
+     *      released eppns match more than one existing EPerson
      */
-    EPerson autoLink(Context context, List<String> releasedEppns, String proxyAuthority, String proxyNetid)
+    EPerson autoLink(Context context, List<String> upstreamEppns, String proxyAuthority, String proxyNetid)
         throws SQLException;
 }

@@ -14,6 +14,7 @@ import java.util.Objects;
 import java.util.UUID;
 import javax.servlet.http.HttpServletRequest;
 
+import org.apache.commons.lang3.StringUtils;
 import org.dspace.app.rest.exception.DSpaceBadRequestException;
 import org.dspace.app.util.Util;
 import org.dspace.core.Context;
@@ -29,6 +30,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -52,13 +54,16 @@ public class ClarinIdentityLinkController {
 
     @PreAuthorize("hasAuthority('ADMIN')")
     @RequestMapping(method = RequestMethod.POST, path = "/link")
-    public ResponseEntity<RepresentationModel<?>> link(HttpServletRequest request)
+    public ResponseEntity<RepresentationModel<?>> link(@RequestParam("eperson") UUID epersonUuid,
+                                                       @RequestParam("value") String value,
+                                                       @RequestParam("authority") String authority,
+                                                       HttpServletRequest request)
             throws SQLException {
         Context context = getContext(request);
 
-        UUID epersonUuid = parseUuid(request.getParameter("eperson"), "eperson");
-        String value = requireParameter(request, "value");
-        String authority = requireParameter(request, "authority");
+        if (StringUtils.isBlank(value) || StringUtils.isBlank(authority)) {
+            throw new DSpaceBadRequestException("Parameters 'value' and 'authority' must not be blank");
+        }
 
         EPerson ePerson = ePersonService.find(context, epersonUuid);
         if (ePerson == null) {
@@ -75,25 +80,6 @@ public class ClarinIdentityLinkController {
         context.commit();
 
         return ControllerUtils.toEmptyResponse(HttpStatus.CREATED);
-    }
-
-    private static UUID parseUuid(String value, String paramName) {
-        if (value == null) {
-            throw new DSpaceBadRequestException("Missing required parameter: " + paramName);
-        }
-        try {
-            return UUID.fromString(value);
-        } catch (IllegalArgumentException e) {
-            throw new DSpaceBadRequestException("Invalid UUID for parameter " + paramName + ": " + value);
-        }
-    }
-
-    private static String requireParameter(HttpServletRequest request, String paramName) {
-        String value = request.getParameter(paramName);
-        if (value == null || value.isBlank()) {
-            throw new DSpaceBadRequestException("Missing required parameter: " + paramName);
-        }
-        return value;
     }
 
     private static Context getContext(HttpServletRequest request) {

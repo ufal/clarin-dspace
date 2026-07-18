@@ -141,11 +141,10 @@ public class ClarinIdentityServiceTest extends AbstractIntegrationTestWithDataba
         identityService.attach(context, other, "novak@jinauni.cz[https://jinauni.cz/idp/shibboleth]",
             "migration", null);
         String proxyNetid = "hash123[" + ALLOWLISTED_PROXY + "]";
-        List<String> releasedEppns = Arrays.asList("novak@cuni.cz", "novak@jinauni.cz");
+        List<String> upstreamEppns = Arrays.asList("novak@cuni.cz", "novak@jinauni.cz");
 
-        EPerson result = identityService.autoLink(context, releasedEppns, ALLOWLISTED_PROXY, proxyNetid);
-
-        assertNull(result);
+        assertThrows(AmbiguousIdentityException.class,
+            () -> identityService.autoLink(context, upstreamEppns, ALLOWLISTED_PROXY, proxyNetid));
         assertNull(identityService.resolve(context, proxyNetid));
     }
 
