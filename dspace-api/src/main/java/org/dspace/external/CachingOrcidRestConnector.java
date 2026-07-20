@@ -174,7 +174,9 @@ public class CachingOrcidRestConnector {
         }
     }
 
-    private InputStream httpGet(String path, String accessToken) throws IOException {
+    // Package/sub-class visible so tests can stub the HTTP layer (see CachingOrcidRestConnectorTest)
+    // and avoid hitting the live ORCID sandbox.
+    protected InputStream httpGet(String path, String accessToken) throws IOException {
         String trimmedPath = path.replaceFirst("^/+", "").replaceFirst("/+$", "");
 
         String fullPath = apiURL + '/' + trimmedPath;

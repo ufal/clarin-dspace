@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+    Canned ORCID "expanded-search" response used by CachingOrcidRestConnectorTest so the test does NOT
+    depend on the live ORCID sandbox (https://pub.sandbox.orcid.org), whose dataset is periodically reset
+    and previously caused intermittent CI failures (e.g. num-found dropping below a hard-coded threshold).
+    Namespace/element names mirror org.orcid.jaxb.model.v3.release.search.expanded.ExpandedSearch.
+    The first result intentionally maps to the label "Connor, John" (family-names, given-names).
+-->
+<expanded-search:expanded-search num-found="1725"
+        xmlns:expanded-search="http://www.orcid.org/ns/expanded-search">
+    <expanded-search:expanded-result>
+        <expanded-search:orcid-id>0000-0002-9150-2529</expanded-search:orcid-id>
+        <expanded-search:given-names>John</expanded-search:given-names>
+        <expanded-search:family-names>Connor</expanded-search:family-names>
+    </expanded-search:expanded-result>
+    <expanded-search:expanded-result>
+        <expanded-search:orcid-id>0000-0002-1208-2352</expanded-search:orcid-id>
+        <expanded-search:given-names>John</expanded-search:given-names>
+        <expanded-search:family-names>Kendrew</expanded-search:family-names>
+        <expanded-search:credit-name>John Kendrew</expanded-search:credit-name>
+    </expanded-search:expanded-result>
+</expanded-search:expanded-search>

@@ -250,7 +250,6 @@ public class ClarinRefBoxController {
 
             // Some preparing for the getting the data.
             OAIRequestParameters parameters = new OAIRequestParameters(parameterMap);
-            response.setContentType("application/xml");
 
             // Get the OAI-PMH data.
             oaipmh = dataProvider.handle(parameters);

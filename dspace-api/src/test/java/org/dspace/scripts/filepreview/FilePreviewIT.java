@@ -13,6 +13,7 @@ import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -60,7 +61,8 @@ public class FilePreviewIT extends AbstractIntegrationTestWithDatabase {
 
     Collection collection;
     Item item;
-    EPerson eperson;
+    // avoid using eperson created in superclass
+    EPerson ePerson;
     String PASSWORD = "test";
 
     @Before
@@ -68,7 +70,7 @@ public class FilePreviewIT extends AbstractIntegrationTestWithDatabase {
         InputStream previewZipIs = getClass().getResourceAsStream("preview-file-test.zip");
 
         context.turnOffAuthorisationSystem();
-        eperson = EPersonBuilder.createEPerson(context)
+        ePerson = EPersonBuilder.createEPerson(context)
                 .withEmail("test@test.edu").withPassword(PASSWORD).build();
         Community community = CommunityBuilder.createCommunity(context).withName("Com").build();
         collection = CollectionBuilder.createCollection(context, community).withName("Col").build();
@@ -103,20 +105,10 @@ public class FilePreviewIT extends AbstractIntegrationTestWithDatabase {
     }
 
     @Test
-    public void testUnauthorizedPassword() throws Exception {
-        // Run the script
-        TestDSpaceRunnableHandler testDSpaceRunnableHandler = new TestDSpaceRunnableHandler();
-        String[] args = new String[] { "file-preview", "-e", eperson.getEmail()};
-        int run = ScriptLauncher.handleScript(args, ScriptLauncher.getConfig(kernelImpl),
-                testDSpaceRunnableHandler, kernelImpl);
-        assertEquals(1, run); // Since a ParseException was caught, expect return code 1
-    }
-
-    @Test
     public void testWhenNoFilesRun() throws Exception {
         TestDSpaceRunnableHandler testDSpaceRunnableHandler = new TestDSpaceRunnableHandler();
 
-        String[] args = new String[] { "file-preview", "-e", eperson.getEmail(), "-p",  PASSWORD };
+        String[] args = new String[] { "file-preview", "-e", ePerson.getEmail() };
         int run = ScriptLauncher.handleScript(args, ScriptLauncher.getConfig(kernelImpl),
                 testDSpaceRunnableHandler, kernelImpl);
         assertEquals(0, run);
@@ -125,26 +117,154 @@ public class FilePreviewIT extends AbstractIntegrationTestWithDatabase {
 
     @Test
     public void testForSpecificItem() throws Exception {
+        Item item2 = createOtherWorkspaceItemWithBitstream(ePerson, 0);
         // Run the script
-        runScriptForItemWithBitstreams(item);
+        TestDSpaceRunnableHandler testHandler = runScriptForItemWithBitstreams(item2, ePerson);
+        checkHandlerMessages(testHandler, ePerson, item2, "logos.tgz", true);
+
+        Bitstream b = bitstreamService.findAll(context).stream()
+                .filter(bitstream -> bitstream.getName().equals("logos.tgz"))
+                .findFirst().orElse(null);
+
+        assertNotNull(b);
+        assertEquals("logos.tgz", b.getName());
+
+        // the preview content was created since the item was created by the same user as the script was run
+        assertTrue("Expects preview content created.", previewContentService.hasPreview(context, b));
+        assertEquals(2, previewContentService.getPreview(context, b).size());
+    }
+
+    @Test
+    public void testWhenScriptCannotCreateFilePreview() throws Exception {
+        Item item2 = createOtherWorkspaceItemWithBitstream(eperson, 0);
+        // Run the script as another user, without admin rights
+        TestDSpaceRunnableHandler testHandler = runScriptForItemWithBitstreams(item2, ePerson);
+        checkHandlerMessages(testHandler, ePerson, item2, null, false);
+
+        Bitstream b = bitstreamService.findAll(context).stream()
+                .filter(bitstream -> bitstream.getName().equals("logos.tgz"))
+                .findFirst().orElse(null);
+
+        assertNotNull(b);
+        assertEquals("logos.tgz", b.getName());
+
+        // the preview content cannot be created since the item was created by another user (eperson)
+        // than the user (ePerson) who runs the script
+        assertFalse("Expects preview content not created.", previewContentService.hasPreview(context, b));
+
+        // Run the script as admin user
+        testHandler = runScriptForItemWithBitstreams(item2, admin);
+        checkHandlerMessages(testHandler, admin, item2, "logos.tgz", true);
+
+        // now the preview content was created since the script was run by admin user
+        assertTrue("Expects preview content created.", previewContentService.hasPreview(context, b));
+        assertEquals(2, previewContentService.getPreview(context, b).size());
     }
 
     @Test
     public void testPreviewWithSyncStorage() throws Exception {
         configurationService.setProperty("sync.storage.service.enabled", true);
+        Item item2 = createOtherWorkspaceItemWithBitstream(ePerson, SYNC_STORE_NUMBER);
+        // Run the script
+        TestDSpaceRunnableHandler testHandler = runScriptForItemWithBitstreams(item2, ePerson);
+        checkHandlerMessages(testHandler, ePerson, item2, "logos.tgz", true);
 
+        Bitstream b = bitstreamService.findAll(context).stream()
+                .filter(bitstream -> bitstream.getStoreNumber() == SYNC_STORE_NUMBER)
+                .findFirst().orElse(null);
+
+        assertNotNull(b);
+        assertEquals("logos.tgz", b.getName());
+        assertTrue("Expects preview content created and stored.", previewContentService.hasPreview(context, b));
+    }
+
+    @Test
+    public void testForAllItem() throws Exception {
+        // Run the script
+        TestDSpaceRunnableHandler testDSpaceRunnableHandler = new TestDSpaceRunnableHandler();
+        String[] args = new String[] { "file-preview", "-e", ePerson.getEmail()};
+        int run = ScriptLauncher.handleScript(args, ScriptLauncher.getConfig(kernelImpl),
+                testDSpaceRunnableHandler, kernelImpl);
+        assertEquals(0, run);
+        // There should be no errors or warnings
+        checkNoError(testDSpaceRunnableHandler);
+    }
+
+    @Test
+    public void testPreviewWithForce() throws Exception {
+        Item item2 = createOtherWorkspaceItemWithBitstream(ePerson, 0);
+        // Run the script
+        TestDSpaceRunnableHandler testHandler1 = runScriptForItemWithBitstreams(item2, ePerson);
+        checkHandlerMessages(testHandler1, ePerson, item2, "logos.tgz", true);
+
+        // run again with force option, the existing preview content should be deleted and new one created
+        TestDSpaceRunnableHandler testHandler2 = new TestDSpaceRunnableHandler();
+        String[] args = new String[] { "file-preview", "-u", item2.getID().toString(),
+                "-e", admin.getEmail(), "-f"};
+        int run = ScriptLauncher.handleScript(args, ScriptLauncher.getConfig(kernelImpl), testHandler2, kernelImpl);
+        assertEquals(0, run);
+        checkNoError(testHandler2);
+
+        List<String> messages = testHandler2.getInfoMessages();
+        assertThat(messages, hasSize(7));
+
+        assertThat(messages, hasItem(containsString("Deleting existing preview content:")));
+
+        Bitstream b = bitstreamService.findAll(context).stream()
+                .filter(bitstream -> bitstream.getName().equals("logos.tgz"))
+                .findFirst().orElse(null);
+
+        assertTrue("Expects preview content created.", previewContentService.hasPreview(context, b));
+        assertEquals(2, previewContentService.getPreview(context, b).size());
+    }
+
+    private void checkNoError(TestDSpaceRunnableHandler testDSpaceRunnableHandler) {
+        assertThat(testDSpaceRunnableHandler.getErrorMessages(), empty());
+        assertThat(testDSpaceRunnableHandler.getWarningMessages(), empty());
+    }
+
+    private TestDSpaceRunnableHandler runScriptForItemWithBitstreams(Item item, EPerson user)
+            throws Exception {
+        // Run the script
+        TestDSpaceRunnableHandler testDSpaceRunnableHandler = new TestDSpaceRunnableHandler();
+        String[] args = new String[] { "file-preview", "-u", item.getID().toString(),
+                "-e", user.getEmail()};
+        int run = ScriptLauncher.handleScript(args, ScriptLauncher.getConfig(kernelImpl),
+                testDSpaceRunnableHandler, kernelImpl);
+        assertEquals(0, run);
+        // There should be no errors or warnings
+        checkNoError(testDSpaceRunnableHandler);
+
+        return testDSpaceRunnableHandler;
+    }
+
+    private void checkHandlerMessages(TestDSpaceRunnableHandler testDSpaceRunnableHandler,
+                                      EPerson user,
+                                      Item item,
+                                      String fileName,
+                                      boolean previewGenerationExpected) {
+        List<String> messages = testDSpaceRunnableHandler.getInfoMessages();
+        assertThat(messages, hasSize(previewGenerationExpected ? 3 : 2));
+        assertThat(messages, hasItem(containsString("Generate the file previews for the specified item with " +
+                "the given UUID: " + item.getID())));
+        assertThat(messages, hasItem(containsString("Authentication by user: " + user.getEmail())));
+        if (previewGenerationExpected) {
+            // There should be an info message about generating the file previews for the specified bitstream
+            assertThat(messages, hasItem(containsString("Generating file preview for bitstream: " + fileName)));
+        }
+    }
+
+    private Item createOtherWorkspaceItemWithBitstream(EPerson user, int storageNumber) throws Exception {
         context.turnOffAuthorisationSystem();
-
+        context.setCurrentUser(user);
         WorkspaceItem wItem2;
         try (InputStream tgzFile = getClass().getResourceAsStream("logos.tgz")) {
             wItem2 = WorkspaceItemBuilder.createWorkspaceItem(context, collection)
-                    .withBitstream("logos.tgz", "/local/path/logos.tgz", tgzFile, SYNC_STORE_NUMBER)
+                    .withBitstream("logos.tgz", "/local/path/logos.tgz", tgzFile, storageNumber)
                     .build();
         }
-
         context.restoreAuthSystemState();
 
-        // Get the item and its bitstream
         Item item2 = wItem2.getItem();
         List<Bundle> bundles = item2.getBundles();
         Bitstream bitstream2 = bundles.get(0).getBitstreams().get(0);
@@ -157,50 +277,6 @@ public class FilePreviewIT extends AbstractIntegrationTestWithDatabase {
         context.reloadEntity(bitstream2);
         context.reloadEntity(item2);
 
-        runScriptForItemWithBitstreams(item2);
-
-        Bitstream b2 = bitstreamService.findAll(context).stream()
-                .filter(b -> b.getStoreNumber() == SYNC_STORE_NUMBER)
-                .findFirst().orElse(null);
-
-        assertNotNull(b2);
-        assertTrue("Expects preview content created and stored.", previewContentService.hasPreview(context, b2));
-    }
-
-    @Test
-    public void testForAllItem() throws Exception {
-        // Run the script
-        TestDSpaceRunnableHandler testDSpaceRunnableHandler = new TestDSpaceRunnableHandler();
-        String[] args = new String[] { "file-preview", "-e", eperson.getEmail(), "-p",  PASSWORD};
-        int run = ScriptLauncher.handleScript(args, ScriptLauncher.getConfig(kernelImpl),
-                testDSpaceRunnableHandler, kernelImpl);
-        assertEquals(0, run);
-        // There should be no errors or warnings
-        checkNoError(testDSpaceRunnableHandler);
-    }
-
-    private void checkNoError(TestDSpaceRunnableHandler testDSpaceRunnableHandler) {
-        assertThat(testDSpaceRunnableHandler.getErrorMessages(), empty());
-        assertThat(testDSpaceRunnableHandler.getWarningMessages(), empty());
-    }
-
-    private void runScriptForItemWithBitstreams(Item item) throws Exception {
-        // Run the script
-        TestDSpaceRunnableHandler testDSpaceRunnableHandler = new TestDSpaceRunnableHandler();
-        String[] args = new String[] { "file-preview", "-u", item.getID().toString(),
-                "-e", eperson.getEmail(), "-p",  PASSWORD};
-        int run = ScriptLauncher.handleScript(args, ScriptLauncher.getConfig(kernelImpl),
-                testDSpaceRunnableHandler, kernelImpl);
-        assertEquals(0, run);
-        // There should be no errors or warnings
-        checkNoError(testDSpaceRunnableHandler);
-
-        // There should be an info message about generating the file previews for the specified item
-        List<String> messages = testDSpaceRunnableHandler.getInfoMessages();
-        assertThat(messages, hasSize(2));
-        assertThat(messages, hasItem(containsString("Generate the file previews for the specified item with " +
-                "the given UUID: " + item.getID())));
-        assertThat(messages,
-                hasItem(containsString("Authentication by user: " + eperson.getEmail())));
+        return item2;
     }
 }

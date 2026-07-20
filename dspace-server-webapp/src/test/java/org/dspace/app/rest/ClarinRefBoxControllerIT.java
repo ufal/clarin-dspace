@@ -7,12 +7,19 @@
  */
 package org.dspace.app.rest;
 
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.emptyOrNullString;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
+import org.dspace.app.rest.utils.SolrOAIReindexer;
 import org.dspace.app.rest.utils.Utils;
 import org.dspace.builder.CollectionBuilder;
 import org.dspace.builder.CommunityBuilder;
@@ -20,25 +27,79 @@ import org.dspace.builder.ItemBuilder;
 import org.dspace.content.Collection;
 import org.dspace.content.Item;
 import org.dspace.services.ConfigurationService;
+import org.dspace.solr.MockSolrServer;
+import org.dspace.xoai.services.api.cache.XOAICacheService;
+import org.dspace.xoai.services.api.solr.SolrServerResolver;
+import org.dspace.xoai.services.api.xoai.ItemRepositoryResolver;
+import org.junit.After;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.util.ReflectionTestUtils;
 
 /**
  * The Integration Test class for the ClarinRefBoxController.
  */
+@TestPropertySource(properties = {"oai.enabled = true"})
 public class ClarinRefBoxControllerIT extends AbstractControllerIntegrationTest {
 
     @Autowired
     ConfigurationService configurationService;
+
+    @Autowired
+    SolrOAIReindexer solrOAIReindexer;
+
+    // Mock OAI cache to disable it during tests (avoids side-effects from cache state)
+    @MockBean
+    private XOAICacheService xoaiCacheService;
+
+    // Mock the OAI SolrServerResolver — overridden to return an embedded Solr client in setUp()
+    @MockBean
+    private SolrServerResolver solrServerResolver;
+
+    // Used to reset the cached DSpaceItemSolrRepository before each test
+    @Autowired(required = false)
+    private ItemRepositoryResolver itemRepositoryResolver;
+
+    private MockSolrServer mockOAISolr;
 
     // FS = featuredService
     private Item itemWithFS;
     private Item item;
     private Collection collection;
 
+    @Override
     @Before
-    public void setup() {
+    public void setUp() throws Exception {
+        super.setUp();
+
+        // Skip all tests if the OAI module is not on the classpath
+        try {
+            Class.forName("org.dspace.app.configuration.OAIWebConfig");
+        } catch (ClassNotFoundException ce) {
+            Assume.assumeNoException(ce);
+        }
+
+        // Initialise embedded Solr for the OAI core
+        mockOAISolr = new MockSolrServer("oai");
+        when(solrServerResolver.getServer()).thenReturn(mockOAISolr.getSolrServer());
+
+        // Disable OAI caching so tests see live Solr state
+        when(xoaiCacheService.isActive()).thenReturn(false);
+        when(xoaiCacheService.hasCache(anyString())).thenReturn(false);
+
+        // Reset the cached ItemRepository so it is re-created with the embedded client
+        if (itemRepositoryResolver != null) {
+            ReflectionTestUtils.setField(itemRepositoryResolver, "itemRepository", null);
+        }
+
+        // Ensure the reindexer also uses the embedded Solr client
+        ReflectionTestUtils.setField(solrOAIReindexer, "solrServerResolver", solrServerResolver);
+
         context.turnOffAuthorisationSystem();
         parentCommunity = CommunityBuilder.createCommunity(context).withName("test").build();
         collection = CollectionBuilder.createCollection(context, parentCommunity).withName("Collection 1").build();
@@ -58,6 +119,17 @@ public class ClarinRefBoxControllerIT extends AbstractControllerIntegrationTest 
                 .withMetadata("local","featuredService","pmltq", "Arabic|URLArabic")
                 .build();
         context.restoreAuthSystemState();
+
+        // Index the test item in the xoai Solr core so the citations endpoint can find it.
+        solrOAIReindexer.reindexItem(item);
+    }
+
+    @After
+    public void tearDownOAI() throws Exception {
+        if (mockOAISolr != null) {
+            mockOAISolr.destroy();
+            mockOAISolr = null;
+        }
     }
 
     @Test
@@ -324,5 +396,61 @@ public class ClarinRefBoxControllerIT extends AbstractControllerIntegrationTest 
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.displayText").value(org.hamcrest.Matchers.containsString(
                         "First Author; et al.")));
+    }
+
+    // --- Citations endpoint tests (#1366) ---
+
+    @Test
+    public void testCitationsEndpointReturnsBibtex() throws Exception {
+        // Verifies the /citations endpoint does not return a 500 for a valid handle + bibtex
+        // type (regression test for #1366) and that the response is a valid OaiMetadataWrapper.
+        // Content-Type must be application/json (catches reintroduction of the XML preset bug).
+        // $.metadata must contain "@misc{" which is the BibTeX entry marker produced by the XSLT.
+        getClient().perform(get("/api/core/refbox/citations")
+                        .param("type", "bibtex")
+                        .param("handle", item.getHandle()))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.metadata", containsString("@misc{")));
+    }
+
+    @Test
+    public void testCitationsEndpointReturnsCmdi() throws Exception {
+        // Verifies the /citations endpoint does not return a 500 for a valid handle + cmdi type
+        // (regression test for #1366) and that the response is a valid OaiMetadataWrapper.
+        // Content-Type must be application/json (catches reintroduction of the XML preset bug).
+        // $.metadata must be non-empty (the CMDI crosswalk always produces XML content).
+        getClient().perform(get("/api/core/refbox/citations")
+                        .param("type", "cmdi")
+                        .param("handle", item.getHandle()))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.metadata", not(emptyOrNullString())));
+    }
+
+    @Test
+    public void testCitationsEndpointWithUrlBuiltHandle() throws Exception {
+        // Reproduces the exact URL format that buildExportFormats() produces, where
+        // the handle is the canonical URL path (e.g. "/hdl.handle.net/123456789/xxx").
+        // The endpoint must not return 500 for this input.
+        String handle = "/" + Utils.getCanonicalHandleUrlNoProtocol(item);
+        getClient().perform(get("/api/core/refbox/citations")
+                        .param("type", "bibtex")
+                        .param("handle", handle))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    public void testCitationsEndpointWithMissingTypeParam() throws Exception {
+        getClient().perform(get("/api/core/refbox/citations")
+                        .param("handle", item.getHandle()))
+                .andExpect(status().is4xxClientError());
+    }
+
+    @Test
+    public void testCitationsEndpointWithMissingHandleParam() throws Exception {
+        getClient().perform(get("/api/core/refbox/citations")
+                        .param("type", "bibtex"))
+                .andExpect(status().is4xxClientError());
     }
 }

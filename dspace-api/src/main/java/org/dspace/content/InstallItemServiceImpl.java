@@ -41,6 +41,9 @@ import org.dspace.identifier.service.IdentifierService;
 import org.dspace.services.ConfigurationService;
 import org.dspace.supervision.SupervisionOrder;
 import org.dspace.supervision.service.SupervisionOrderService;
+import org.dspace.versioning.Version;
+import org.dspace.versioning.service.VersionHistoryService;
+import org.dspace.versioning.service.VersioningService;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -71,6 +74,10 @@ public class InstallItemServiceImpl implements InstallItemService {
     private ResourcePolicyService resourcePolicyService;
     @Autowired(required = true)
     protected ConfigurationService configurationService;
+    @Autowired(required = true)
+    protected VersioningService versioningService;
+    @Autowired(required = true)
+    protected VersionHistoryService versionHistoryService;
 
     Logger log = LogManager.getLogger(InstallItemServiceImpl.class);
 
@@ -107,6 +114,8 @@ public class InstallItemServiceImpl implements InstallItemService {
 
         // Finish up / archive the item
         item = finishItem(c, item, is);
+
+        fixRelationMetadata(c, item);
 
         // As this is a BRAND NEW item, as a final step we need to remove the
         // submitter item policies created during deposit and replace them with
@@ -408,6 +417,66 @@ public class InstallItemServiceImpl implements InstallItemService {
         resPol.setAction(action);
         resPol.setdSpaceObject(item);
         context.restoreAuthSystemState();
+    }
+
+    /**
+     * This method adds the "dc.relation.isreplacedby" metadata field to the previous item, if exists.
+     *
+     * @param c Context
+     * @param item Item being installed
+     * @throws SQLException If there is an issue interacting with the database.
+     */
+    private void fixRelationMetadata(Context c, Item item) throws SQLException, AuthorizeException {
+        String dcRelationReplaces = itemService.getMetadataFirstValue(item, "dc", "relation", "replaces", Item.ANY);
+        if (dcRelationReplaces == null) {
+            // nothing need to be done if the new item doesn't have "dc.relation.replaces" metadata field
+            return;
+        }
+        Version itemVersion = versioningService.getVersion(c, item);
+        if (itemVersion != null) {
+            Version previousItemVersion =
+                    versionHistoryService.getPrevious(c, itemVersion.getVersionHistory(), itemVersion);
+            if (previousItemVersion != null) {
+                Item previousItem = previousItemVersion.getItem();
+                if (previousItem != null) {
+                    String previousIdentifierUri =
+                            itemService.getMetadataFirstValue(previousItem, "dc", "identifier", "uri", Item.ANY);
+                    if (dcRelationReplaces.equals(previousIdentifierUri)) {
+                        // set "dc.relation.isreplacedby" metadata field to the previous item,
+                        // pointing to the handle of the new item
+                        // reload the previous item to avoid "detached entity" error
+                        // when updating it in the setIsReplacedByMetadata() method
+                        setIsReplacedByMetadata(c, c.reloadEntity(previousItem), item);
+                    }
+                }
+            }
+        }
+    }
+
+    private void setIsReplacedByMetadata(Context c, Item previousItem, Item newItem)
+            throws SQLException, AuthorizeException {
+        String identifierUri = itemService.getMetadataFirstValue(newItem, "dc", "identifier","uri", Item.ANY);
+        if (StringUtils.isBlank(identifierUri)) {
+            log.warn("The new item (id: {}) doesn't have the metadata dc.identifier.uri, " +
+                            "so it's not possible to add dc.relation.isreplacedby to the previous item",
+                    newItem.getID());
+        } else {
+            boolean isReplacedByAlreadyExists =
+                    itemService.getMetadata(previousItem, "dc", "relation", "isreplacedby", Item.ANY)
+                            .stream()
+                            .anyMatch(m -> identifierUri.equals(m.getValue()));
+            if (!isReplacedByAlreadyExists) {
+                itemService.addMetadata(c, previousItem, "dc", "relation", "isreplacedby", null, identifierUri);
+                try {
+                    c.turnOffAuthorisationSystem();
+                    itemService.update(c, previousItem);
+                } catch (AuthorizeException e) {
+                    throw new SQLException("Unable to update previous item after adding dc.relation.isreplacedby", e);
+                } finally {
+                    c.restoreAuthSystemState();
+                }
+            }
+        }
     }
 
 }

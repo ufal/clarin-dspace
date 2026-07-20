@@ -1,0 +1,4 @@
+[submodule ".dspace-skills"]
+	path = .dspace-skills
+	url = git@github.com:dataquest-dev/dspace-skills.git
+	branch = main

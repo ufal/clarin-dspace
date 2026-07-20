@@ -44,6 +44,7 @@ import org.dspace.app.rest.model.patch.ReplaceOperation;
 import org.dspace.app.rest.repository.handler.service.UriListHandlerService;
 import org.dspace.app.rest.submit.SubmissionService;
 import org.dspace.app.rest.submit.UploadableStep;
+import org.dspace.app.rest.submit.step.ClarinLicenseSubmissionUtils;
 import org.dspace.app.rest.utils.BigMultipartFile;
 import org.dspace.app.rest.utils.Utils;
 import org.dspace.app.util.SubmissionConfig;
@@ -51,14 +52,11 @@ import org.dspace.app.util.SubmissionConfigReaderException;
 import org.dspace.app.util.SubmissionStepConfig;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.authorize.service.AuthorizeService;
-import org.dspace.content.Bitstream;
-import org.dspace.content.Bundle;
 import org.dspace.content.Collection;
 import org.dspace.content.Item;
 import org.dspace.content.LicenseUtils;
 import org.dspace.content.MetadataValue;
 import org.dspace.content.WorkspaceItem;
-import org.dspace.content.clarin.ClarinLicense;
 import org.dspace.content.service.BitstreamFormatService;
 import org.dspace.content.service.BitstreamService;
 import org.dspace.content.service.CollectionService;
@@ -532,12 +530,13 @@ public class WorkspaceItemRestRepository extends DSpaceRestRepository<WorkspaceI
         // Get item
         Item item = source.getItem();
         if (Objects.isNull(item)) {
-            // add log
+            log.warn("Cannot maintain CLARIN licenses: workspace item {} has no underlying item.", source.getID());
             return;
         }
         // Get value from operation
         if (!(op instanceof ReplaceOperation)) {
-            // add log
+            log.warn("Ignoring non-replace operation '{}' on license patch path for workspace item {}.",
+                    op.getOp(), source.getID());
             return;
         }
 
@@ -555,53 +554,13 @@ public class WorkspaceItemRestRepository extends DSpaceRestRepository<WorkspaceI
             clarinLicenseName = jsonNodeValue.asText();
         }
 
-        // Get clarin license by definition
-        ClarinLicense clarinLicense = clarinLicenseService.findByName(context, clarinLicenseName);
-        if (StringUtils.isNotBlank(clarinLicenseName) && Objects.isNull(clarinLicense)) {
-            throw new ClarinLicenseNotFoundException("Cannot patch workspace item with id: " + source.getID() + "," +
-                    " because the clarin license with name: " + clarinLicenseName + " isn't supported in" +
-                    " the CLARIN/DSpace");
+        // Delegate to the shared helper so the legacy `/license` path and the
+        // section path `/sections/clarin-license/select` apply the same logic.
+        try {
+            ClarinLicenseSubmissionUtils.applyLicense(context, item, clarinLicenseName);
+        } catch (ClarinLicenseNotFoundException ex) {
+            throw new UnprocessableEntityException(ex.getMessage(), ex);
         }
-
-        // Clear the license metadata from the item
-        clarinLicenseService.clearLicenseMetadataFromItem(context, item);
-
-        // Detach the clarin licenses from the uploaded bitstreams
-        List<Bundle> bundles = item.getBundles(Constants.CONTENT_BUNDLE_NAME);
-        for (Bundle bundle : bundles) {
-            List<Bitstream> bitstreamList = bundle.getBitstreams();
-            for (Bitstream bitstream : bitstreamList) {
-                // in case bitstream ID exists in license table for some reason .. just remove it
-                this.clarinLicenseResourceMappingService.detachLicenses(context, bitstream);
-            }
-        }
-
-        // Save changes to database
-        itemService.update(context, item);
-
-        if (Objects.isNull(clarinLicense)) {
-            log.info("The clarin license is null so all item metadata for license was cleared and the" +
-                    "licenses was detached.");
-            return;
-        }
-
-        // If the clarin license is not null that means some clarin license was updated and accepted
-        // Attach the new clarin license to every bitstream and add clarin license values to the item metadata.
-
-        // update item metadata with license data
-        clarinLicenseService.addLicenseMetadataToItem(context, clarinLicense, item);
-
-        // Attach the clarin license to the bitstreams
-        for (Bundle bundle : bundles) {
-            List<Bitstream> bitstreamList = bundle.getBitstreams();
-            for (Bitstream bitstream : bitstreamList) {
-                // in case bitstream ID exists in license table for some reason .. just remove it
-                this.clarinLicenseResourceMappingService.attachLicense(context, clarinLicense, bitstream);
-            }
-        }
-
-        // Save changes to database
-        itemService.update(context, item);
     }
 
     private void grantDistributionLicense(Context context, WorkspaceItem source, Operation op)

@@ -7,6 +7,7 @@
  */
 package org.dspace.app.reportdiff;
 
+import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.dspace.app.healthreport.HealthReport;
 import org.dspace.scripts.configuration.ScriptConfiguration;
@@ -33,26 +34,32 @@ public class ReportDiffScriptConfiguration<T extends ReportDiff> extends ScriptC
     public Options getOptions() {
         if (options == null) {
             Options options = new Options();
-            options.addOption("i", "info", false,
+            options.addOption("h", "help", false,
                     "Show help information.");
             options.addOption("e", "email", true,
                     "Send report to this email address.");
             options.getOption("e").setType(String.class);
-            options.addOption("c", "check", true,
-                    String.format("Perform only specific check (use index from 0 to %d, " +
-                            "otherwise perform default checks).", HealthReport.getNumberOfChecks() - 1));
-            options.getOption("c").setType(String.class);
+            Option checkOption = Option.builder("c").longOpt("check").hasArgs()
+                    .desc(String.format("Filter comparison to one or more specific checks by index (0 to %d). " +
+                            "Repeat the flag (e.g. -c 1 -c 3) to compare multiple checks from both reports.",
+                            HealthReport.getNumberOfChecks() - 1))
+                    .type(String.class)
+                    .build();
+            options.addOption(checkOption);
 
-            options.addOption("d", "dates", false, "Show all report dates");
+            options.addOption("l", "list", false,
+                    "List available reports (ID, timestamp, args). Use to find report IDs.");
 
-            options.addOption("l", "limit", true,
-                    "Limit the number of entries (use only with -d). If omitted, all entries are shown.");
-            options.getOption("l").setType(String.class);
+            options.addOption("m", "max", true,
+                    "Limit the number of entries (use only with -l). If omitted, all entries are shown.");
+            options.getOption("m").setType(String.class);
 
-            options.addOption("f", "from", true,"Report from specific date [YYYY-MM-DD HH:mm:ss.SSS].");
-            options.getOption("f").setType(String.class);
+            options.addOption("s", "source", true,
+                    "Source report ID to compare from.");
+            options.getOption("s").setType(String.class);
 
-            options.addOption("t", "to", true,"Report to specific date [YYYY-MM-DD HH:mm:ss.SSS].");
+            options.addOption("t", "target", true,
+                    "Target report ID to compare against.");
             options.getOption("t").setType(String.class);
 
             super.options =  options;

@@ -2879,7 +2879,8 @@ public class TaskRestRepositoriesIT extends AbstractControllerIntegrationTest {
                  .andExpect(status().isCreated())
                  .andExpect(jsonPath("$", Matchers.allOf(hasJsonPath("$.type", is("claimedtask")))));
 
-        // try to patch a workspace item while it is in a step that does not have the edit_metadata option (review step)
+        // try to patch a workflow item by a user who does not have the edit metadata permission
+        // in the current step (review step)
         String authToken = getAuthToken(eperson.getEmail(), password);
 
         // a simple patch to update an existent metadata
@@ -2893,7 +2894,7 @@ public class TaskRestRepositoriesIT extends AbstractControllerIntegrationTest {
         getClient(authToken).perform(patch("/api/workflow/workflowitems/" + witem.getID())
             .content(patchBody)
             .contentType(javax.ws.rs.core.MediaType.APPLICATION_JSON_PATCH_JSON))
-            .andExpect(status().isUnprocessableEntity());
+            .andExpect(status().isForbidden());
     }
 
     @Test

@@ -1,0 +1,52 @@
+{
+  "errors": {
+    "dc.type": [
+      "^Does not have dc.type metadata",
+      "^dc.type has null value",
+      "^leading or trailing spaces",
+      "^empty value",
+      "^invalid type ("
+    ],
+    "dc.language": [
+      "^dc.language.iso",
+      "^Invalid language code",
+      "^local.language.name"
+    ],
+    "dc.title": [
+      "^Item has no dc.title metadata",
+      "^Title "
+    ],
+    "dc.relation": [
+      "^contains 'dc.relation.",
+      "^the referenced item"
+    ],
+    "dc.rights": [
+      "^has labels ",
+      "^There are bitstreams but incomplete rights metadata."
+    ],
+    "dc.description": [
+      "^contains suspicious [dc.description.uri] metadata"
+    ],
+    "local.branding": [
+      "^local.branding "
+    ],
+    "validation.duplicate.value": [
+      "is present multiple times$"
+    ],
+    "validation.missing.handle": [
+      "^Does not have a handle"
+    ],
+    "validation.empty.value": [
+      " is empty$",
+      " is null$"
+    ],
+    "validation.complex.type": [
+      " is a component with "
+    ]
+  },
+  "warnings": {
+    "dc.subject": [
+      "^does not contain any [dc.subject] values"
+    ]
+  }
+}

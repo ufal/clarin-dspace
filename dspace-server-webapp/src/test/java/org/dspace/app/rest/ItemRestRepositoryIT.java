@@ -5102,6 +5102,19 @@ public class ItemRestRepositoryIT extends AbstractControllerIntegrationTest {
                 .andExpect(jsonPath("$", HalMatcher.matchNoEmbeds()))
                 .andExpect(jsonPath("$", existNoteLocalMetadataMatcher))
                 .andExpect(jsonPath("$", existDescriptionProvenanceMetadataMatcher));
+
+        // After the submitter is deleted, the response for the request made using the previously issued submitter
+        // token (which now authenticates as anonymous) should not contain
+        // `local.submission.note` and `dc.description.provenance` metadata
+        context.turnOffAuthorisationSystem();
+        EPersonBuilder.deleteEPerson(submitter.getID());
+        context.restoreAuthSystemState();
+
+        getClient(submitterToken).perform(get("/api/core/items/" + publicItem.getID()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", HalMatcher.matchNoEmbeds()))
+                .andExpect(jsonPath("$", notExistNoteLocalMetadataMatcher))
+                .andExpect(jsonPath("$", notExistDescriptionProvenanceMetadataMatcher));
     }
 
     /**

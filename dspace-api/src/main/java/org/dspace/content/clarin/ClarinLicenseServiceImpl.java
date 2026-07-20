@@ -99,6 +99,11 @@ public class ClarinLicenseServiceImpl implements ClarinLicenseService {
     }
 
     @Override
+    public List<ClarinLicense> findByLabel(Context context, String label) throws SQLException {
+        return clarinLicenseDAO.findByLabel(context, label);
+    }
+
+    @Override
     public void addLicenseMetadataToItem(Context context, ClarinLicense clarinLicense, Item item) throws SQLException {
         if (Objects.isNull(clarinLicense) || Objects.isNull(item)) {
             log.error("Cannot add clarin license to the item metadata because the Item or the CLARIN License is null.");

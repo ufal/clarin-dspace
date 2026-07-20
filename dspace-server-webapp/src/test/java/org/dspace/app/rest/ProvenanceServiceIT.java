@@ -121,9 +121,9 @@ public class ProvenanceServiceIT extends AbstractControllerIntegrationTest {
     @Test
     public void updateLicenseTest() throws Exception {
         Bitstream bitstream = createBitstream(item, Constants.LICENSE_BUNDLE_NAME);
-        ClarinLicense clarinLicense1 = createClarinLicense("Test 1", "Test Def");
+        ClarinLicense clarinLicense1 = createClarinLicense("Test 1", "Test Def", "LBL_1");
         ClarinLicenseResourceMapping mapping = createResourceMapping(clarinLicense1, bitstream);
-        ClarinLicense clarinLicense2 = createClarinLicense("Test 2", "Test Def");
+        ClarinLicense clarinLicense2 = createClarinLicense("Test 2", "Test Def", "LBL_2");
 
         String token = getAuthToken(admin.getEmail(), password);
         getClient(token).perform(put("/api/core/items/" + item.getID() + "/bundles")
@@ -139,7 +139,7 @@ public class ProvenanceServiceIT extends AbstractControllerIntegrationTest {
 
     @Test
     public void addLicenseTest() throws Exception {
-        ClarinLicense clarinLicense = createClarinLicense("Test", "Test Def");
+        ClarinLicense clarinLicense = createClarinLicense("Test", "Test Def", "LBL");
 
         String token = getAuthToken(admin.getEmail(), password);
         getClient(token).perform(put("/api/core/items/" + item.getID() + "/bundles")
@@ -153,7 +153,7 @@ public class ProvenanceServiceIT extends AbstractControllerIntegrationTest {
     @Test
     public void removeLicenseTest() throws Exception {
         Bitstream bitstream = createBitstream(item, Constants.LICENSE_BUNDLE_NAME);
-        ClarinLicense clarinLicense = createClarinLicense("Test", "Test Def");
+        ClarinLicense clarinLicense = createClarinLicense("Test", "Test Def", "LBL");
         ClarinLicenseResourceMapping mapping = createResourceMapping(clarinLicense, bitstream);
 
         String token = getAuthToken(admin.getEmail(), password);
@@ -478,14 +478,14 @@ public class ProvenanceServiceIT extends AbstractControllerIntegrationTest {
         return clarinLicenseLabel;
     }
 
-    private ClarinLicense createClarinLicense(String name, String definition)
+    private ClarinLicense createClarinLicense(String name, String definition, String label)
             throws SQLException, AuthorizeException {
         context.turnOffAuthorisationSystem();
         ClarinLicense clarinLicense = ClarinLicenseBuilder.createClarinLicense(context).build();
         clarinLicense.setDefinition(definition);
         clarinLicense.setName(name);
         HashSet<ClarinLicenseLabel> clarinLicenseLabels = new HashSet<>();
-        ClarinLicenseLabel clarinLicenseLabel = createClarinLicenseLabel("lbl", false, "Test Title");
+        ClarinLicenseLabel clarinLicenseLabel = createClarinLicenseLabel(label, false, label + " Title");
         clarinLicenseLabels.add(clarinLicenseLabel);
         clarinLicense.setLicenseLabels(clarinLicenseLabels);
         clarinLicenseService.update(context, clarinLicense);
@@ -498,11 +498,12 @@ public class ProvenanceServiceIT extends AbstractControllerIntegrationTest {
     }
 
     private void deleteClarinLicense(ClarinLicense license) throws Exception {
-        int size = license.getLicenseLabels().size();
-        for (int i = 0; i < size; i++) {
-            deleteClarinLicenseLable(license.getLicenseLabels().get(i).getID());
-        }
+        // first delete license, then labels, because of the foreign key constraint
+        List<ClarinLicenseLabel> clarinLicenseLabels = license.getLicenseLabels();
         ClarinLicenseBuilder.deleteClarinLicense(license.getID());
+        for (ClarinLicenseLabel clarinLicenseLabel : clarinLicenseLabels) {
+            deleteClarinLicenseLable(clarinLicenseLabel.getID());
+        }
     }
 
     private Collection createCollection() {

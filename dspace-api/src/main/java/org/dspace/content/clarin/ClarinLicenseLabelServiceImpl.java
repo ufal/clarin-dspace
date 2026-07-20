@@ -78,6 +78,11 @@ public class ClarinLicenseLabelServiceImpl implements ClarinLicenseLabelService 
     }
 
     @Override
+    public ClarinLicenseLabel findByLabel(Context context, String label) throws SQLException {
+        return clarinLicenseLabelDAO.findByLabel(context, label);
+    }
+
+    @Override
     public void delete(Context context, ClarinLicenseLabel license) throws SQLException, AuthorizeException {
         if (!authorizeService.isAdmin(context)) {
             throw new AuthorizeException(

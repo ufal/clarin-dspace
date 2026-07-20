@@ -155,21 +155,26 @@ public class PreviewContentServiceImpl implements PreviewContentService {
     @Override
     public boolean canPreview(Context context, Bitstream bitstream, boolean authorization)
             throws SQLException, AuthorizeException {
-        try {
-            // Check it is allowed by configuration
-            boolean isAllowedByCfg = configurationService.getBooleanProperty("file.preview.enabled", true);
-            if (!isAllowedByCfg) {
-                return false;
-            }
-
-            // Check it is allowed by license
-            if (authorization) {
-                authorizeService.authorizeAction(context, bitstream, Constants.READ);
-            }
-            return true;
-        } catch (MissingLicenseAgreementException e) {
+        // Check it is allowed by configuration
+        boolean isAllowedByCfg = configurationService.getBooleanProperty("file.preview.enabled", true);
+        if (!isAllowedByCfg) {
             return false;
         }
+        if (authorization) {
+            // Verify that bitstream policy allows user to READ the bitstream.
+            // If not, the preview content is disabled.
+            try {
+                authorizeService.authorizeAction(context, bitstream, Constants.READ);
+            } catch (AuthorizeException e) {
+                // In case the license agreement(for bitstream downloading) is needed,
+                // the MissingLicenseAgreementException, that extends AuthorizeException, is thrown.
+                // For this case we also disable the content preview.
+                // Otherwise, user could see the content of some files without accepting the agreement,
+                // which could cause a security issue.
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override
@@ -178,13 +183,16 @@ public class PreviewContentServiceImpl implements PreviewContentService {
         File file = null;
 
         try {
-            file = bitstreamService.retrieveFile(context, bitstream, false); // Retrieve the file
+            file = bitstreamService.retrieveFile(context, bitstream, true); // Retrieve the file
 
             if (Objects.nonNull(file)) {
                 fileInfos = processFileToFilePreview(context, bitstream, file);
             }
         } catch (MissingLicenseAgreementException e) {
-            log.error("Missing license agreement: ", e);
+            log.warn("File Preview disabled: Missing license agreement!");
+            throw e;
+        } catch (AuthorizeException e) {
+            log.warn("File Preview disabled: Authorization error!");
             throw e;
         } catch (IOException e) {
             log.error("IOException during file processing: ", e);
@@ -361,7 +369,7 @@ public class PreviewContentServiceImpl implements PreviewContentService {
         if (fileName == null) {
             logBitstreamNameIsNull();
         } else {
-            if (fileName.toLowerCase().endsWith("tar.gz")) {
+            if (fileName.toLowerCase().endsWith(".tar.gz") || fileName.toLowerCase().endsWith(".tgz")) {
                 processTarGzipFile(filePaths, file, bitstream);
             } else {
                 try (InputStream is = new GzipCompressorInputStream(new FileInputStream(file))) {

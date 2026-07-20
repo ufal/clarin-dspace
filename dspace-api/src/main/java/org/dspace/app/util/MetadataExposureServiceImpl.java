@@ -21,6 +21,7 @@ import org.dspace.app.util.service.MetadataExposureService;
 import org.dspace.authorize.service.AuthorizeService;
 import org.dspace.content.Item;
 import org.dspace.core.Context;
+import org.dspace.eperson.EPerson;
 import org.dspace.services.ConfigurationService;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -117,10 +118,12 @@ public class MetadataExposureServiceImpl implements MetadataExposureService {
         }
 
         // The user is not administrator, but he could be a submitter
-        if (hidden && Objects.nonNull(context) && Objects.nonNull(item) &&
-                this.submitterShouldSee(schema, element, qualifier)) {
-            // the submitters override
-            hidden = !item.getSubmitter().equals(context.getCurrentUser());
+        if (hidden && Objects.nonNull(context) && Objects.nonNull(item)) {
+            EPerson submitter = item.getSubmitter();
+            if (Objects.nonNull(submitter) && this.submitterShouldSee(schema, element, qualifier)) {
+                // the submitters override
+                hidden = !submitter.equals(context.getCurrentUser());
+            }
         }
 
         return hidden;

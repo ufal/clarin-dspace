@@ -1127,6 +1127,20 @@ public class EPersonRestRepositoryIT extends AbstractControllerIntegrationTest {
     }
 
     @Test
+    public void deleteYourselfForbidden() throws Exception {
+        // login as admin
+        String adminToken = getAuthToken(admin.getEmail(), password);
+
+        // Deleting yourself is forbidden
+        getClient(adminToken).perform(delete("/api/eperson/epersons/" + admin.getID()))
+                .andExpect(status().isBadRequest());
+
+        // Verify the admin is still here
+        getClient(adminToken).perform(get("/api/eperson/epersons/" + admin.getID()))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     public void deleteViolatingWorkFlowConstraints() throws Exception {
         // We turn off the authorization system in order to create the structure as defined below
         context.turnOffAuthorisationSystem();

@@ -7,14 +7,18 @@
  */
 package org.dspace.app.rest.repository;
 
+import static org.dspace.app.rest.repository.ClarinLicenseRestRepository.OPERATION_PATH_LICENSE_RESOURCE;
 import static org.dspace.xmlworkflow.state.actions.processingaction.ProcessingAction.SUBMIT_EDIT_METADATA;
 
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import javax.servlet.http.HttpServletRequest;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.dspace.app.rest.Parameter;
@@ -24,9 +28,12 @@ import org.dspace.app.rest.exception.RESTAuthorizationException;
 import org.dspace.app.rest.exception.UnprocessableEntityException;
 import org.dspace.app.rest.model.ErrorRest;
 import org.dspace.app.rest.model.WorkflowItemRest;
+import org.dspace.app.rest.model.patch.JsonValueEvaluator;
 import org.dspace.app.rest.model.patch.Operation;
 import org.dspace.app.rest.model.patch.Patch;
+import org.dspace.app.rest.model.patch.ReplaceOperation;
 import org.dspace.app.rest.submit.SubmissionService;
+import org.dspace.app.rest.submit.step.ClarinLicenseSubmissionUtils;
 import org.dspace.app.rest.utils.SolrOAIReindexer;
 import org.dspace.app.util.SubmissionConfigReaderException;
 import org.dspace.authorize.AuthorizeException;
@@ -200,11 +207,15 @@ public class WorkflowItemRestRepository extends DSpaceRestRepository<WorkflowIte
 
     @Override
     public WorkflowItemRest upload(HttpServletRequest request, String apiCategory, String model, Integer id,
-                                   MultipartFile file) throws SQLException {
+                                   MultipartFile file) throws SQLException, AuthorizeException {
 
         Context context = obtainContext();
         WorkflowItemRest wsi = findOne(context, id);
         XmlWorkflowItem source = wis.find(context, id);
+
+        if (source == null) {
+            throw new ResourceNotFoundException("WorkflowItem with id " + id + " not found");
+        }
 
         this.checkIfEditMetadataAllowedInCurrentStep(context, source);
         List<ErrorRest> errors = submissionService.uploadFileToInprogressSubmission(context, request, wsi, source,
@@ -226,17 +237,27 @@ public class WorkflowItemRestRepository extends DSpaceRestRepository<WorkflowIte
         WorkflowItemRest wsi = findOne(context, id);
         XmlWorkflowItem source = wis.find(context, id);
 
+        if (source == null) {
+            throw new ResourceNotFoundException("WorkflowItem with id " + id + " not found");
+        }
+
         this.checkIfEditMetadataAllowedInCurrentStep(context, source);
 
         for (Operation op : operations) {
             //the value in the position 0 is a null value
             String[] path = op.getPath().substring(1).split("/", 3);
-            if (OPERATION_PATH_SECTIONS.equals(path[0])) {
+            if (OPERATION_PATH_LICENSE_RESOURCE.equals(path[0])) {
+                // Apply the CLARIN license change through the shared submission helper so the
+                // workflow `/license` path behaves the same as the submission license paths.
+                // A non-existing license surfaces as ClarinLicenseNotFoundException (404).
+                ClarinLicenseSubmissionUtils.applyLicense(context, source.getItem(), extractLicenseName(op));
+            } else if (OPERATION_PATH_SECTIONS.equals(path[0])) {
                 String section = path[1];
                 submissionService.evaluatePatchToInprogressSubmission(context, request, source, wsi, section, op);
             } else {
                 throw new DSpaceBadRequestException(
-                    "Patch path operation need to starts with '" + OPERATION_PATH_SECTIONS + "'");
+                    "Patch path operation need to starts with '" +
+                            OPERATION_PATH_LICENSE_RESOURCE + "' or '" + OPERATION_PATH_SECTIONS + "'");
             }
         }
         wis.update(context, source);
@@ -279,19 +300,64 @@ public class WorkflowItemRestRepository extends DSpaceRestRepository<WorkflowIte
     }
 
     /**
+     * Extract the CLARIN license name from a JSON Patch {@code replace} operation on the {@code /license}
+     * path. The value is accepted either as a plain string or as an object wrapping a textual {@code value}
+     * field; a non-replace operation or any other value shape is rejected as a bad request. A blank name is
+     * passed through (the submission helper treats it as a request to clear the current license selection).
+     * @param op the JSON Patch operation targeting the license path
+     * @return the CLARIN license name to apply
+     */
+    private String extractLicenseName(Operation op) {
+        if (!(op instanceof ReplaceOperation)) {
+            throw new DSpaceBadRequestException("The operation to update the license must be the 'replace' operation");
+        }
+        if (op.getValue() instanceof String) {
+            return (String) op.getValue();
+        }
+        if (!(op.getValue() instanceof JsonValueEvaluator)) {
+            throw wrongValueFormatException(op);
+        }
+        JsonValueEvaluator jsonValEvaluator = (JsonValueEvaluator) op.getValue();
+        if (!(jsonValEvaluator.getValueNode() instanceof ObjectNode)) {
+            throw wrongValueFormatException(op);
+        }
+        // a replace operation may wrap the value in an ObjectNode under the "value" key
+        JsonNode jsonNodeValue = jsonValEvaluator.getValueNode().get("value");
+        if (jsonNodeValue != null && jsonNodeValue.isTextual()) {
+            return jsonNodeValue.asText();
+        }
+        throw wrongValueFormatException(op);
+    }
+
+    private DSpaceBadRequestException wrongValueFormatException(Operation op) {
+        return new DSpaceBadRequestException("Unsupported value format for operation '" + op.getOp()
+                + "'. Expected a string or an object with a textual 'value' field.");
+    }
+
+    /**
      * Checks if @link{SUBMIT_EDIT_METADATA} is a valid option in the workflow step this task is currently at.
      * Patching and uploading is only allowed if this is the case.
      * @param context               Context
      * @param xmlWorkflowItem       WorkflowItem of the task
      */
-    private void checkIfEditMetadataAllowedInCurrentStep(Context context, XmlWorkflowItem xmlWorkflowItem) {
+    private void checkIfEditMetadataAllowedInCurrentStep(Context context, XmlWorkflowItem xmlWorkflowItem)
+            throws AuthorizeException {
         try {
-            ClaimedTask claimedTask = claimedTaskService.findByWorkflowIdAndEPerson(context, xmlWorkflowItem,
-                context.getCurrentUser());
-            if (claimedTask == null) {
+            List<ClaimedTask> claimTasks = claimedTaskService.findByWorkflowItem(context, xmlWorkflowItem);
+            if (claimTasks.isEmpty()) {
                 throw new UnprocessableEntityException("WorkflowItem with id " + xmlWorkflowItem.getID()
-                    + " has not been claimed yet.");
+                        + " has not been claimed yet.");
             }
+
+            ClaimedTask claimedTask = claimTasks.stream()
+                    .filter(ct -> Objects.equals(ct.getOwner(), context.getCurrentUser()))
+                    .findFirst()
+                    .orElse(null);
+            if (claimedTask == null) {
+                throw new AuthorizeException("The current user hasn't claimed the workflow item with id " +
+                        xmlWorkflowItem.getID() + ", so the user cannot patch this item");
+            }
+
             Workflow workflow = workflowFactory.getWorkflow(claimedTask.getWorkflowItem().getCollection());
             Step step = workflow.getStep(claimedTask.getStepID());
             WorkflowActionConfig currentActionConfig = step.getActionConfig(claimedTask.getActionID());

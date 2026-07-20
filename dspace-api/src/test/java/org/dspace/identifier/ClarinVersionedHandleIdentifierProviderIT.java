@@ -40,7 +40,7 @@ import org.junit.Test;
 /**
  * Unit Tests for ClarinVersionedHandleIdentifierProvider
  *
- * @authorMilan Kuchtiak
+ * @author Milan Kuchtiak
  */
 public class ClarinVersionedHandleIdentifierProviderIT extends AbstractIntegrationTestWithDatabase {
     private IdentifierServiceImpl identifierService;
@@ -110,6 +110,11 @@ public class ClarinVersionedHandleIdentifierProviderIT extends AbstractIntegrati
         assertThat(metadataValues.get(0).getValue(), equalTo(itemV1HandleRef));
 
         WorkflowItem workflowItem = workflowItemService.create(context, itemV2, collection);
+
+        // check dc.relation.isreplacedby metadata is not available yet on itemV1
+        metadataValues = itemService.getMetadata(itemV1, "dc", "relation", "isreplacedby", Item.ANY);
+        assertThat(metadataValues.size(), equalTo(0));
+
         Item installedItem = installItemService.installItem(context, workflowItem);
 
         // get current date
@@ -133,6 +138,14 @@ public class ClarinVersionedHandleIdentifierProviderIT extends AbstractIntegrati
         metadataValues = itemService.getMetadata(installedItem, "dc", "identifier", "uri", Item.ANY);
         assertThat(metadataValues.size(), equalTo(1));
         assertThat(metadataValues.get(0).getValue(), not(itemV1HandleRef));
+
+        // check "dc.relation.isreplacedby" metadata is set for the previous version of installedItem (itemV1)
+        // and points to the handle of the new version (installedItem)
+        String installedItemHandleRef =
+                itemService.getMetadataFirstValue(installedItem, "dc", "identifier", "uri", Item.ANY);
+        metadataValues = itemService.getMetadata(itemV1, "dc", "relation", "isreplacedby", Item.ANY);
+        assertThat(metadataValues.size(), equalTo(1));
+        assertThat(metadataValues.get(0).getValue(), equalTo(installedItemHandleRef));
     }
 
     private void registerProvider(Class type) {

@@ -27,6 +27,7 @@ import org.dspace.content.factory.ContentServiceFactory;
 import org.dspace.content.service.CollectionService;
 import org.dspace.content.service.CommunityService;
 import org.dspace.content.service.ItemService;
+import org.dspace.core.factory.CoreServiceFactory;
 import org.dspace.services.ConfigurationService;
 import org.dspace.services.factory.DSpaceServicesFactory;
 import org.dspace.versioning.VersionHistory;
@@ -62,6 +63,7 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
     Item itemWithIncorrectLanguageName;
     Item itemWithTwoAvailableDates;
     Item itemWithTwoAvailableDatesAndLang;
+    Item itemWithTwoDois;
     Item itemVersion1;
     Item itemVersion2;
     Item itemVersion3;
@@ -73,6 +75,7 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
     @Override
     public void setUp() throws Exception {
         super.setUp();
+        CoreServiceFactory.getInstance().getPluginService().clearNamedPluginClasses();
         try {
             context.turnOffAuthorisationSystem();
 
@@ -143,6 +146,13 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
 
             itemService.addMetadata(context, itemWithTwoAvailableDatesAndLang,"dc", "date",
                     "available", "en_US", "2021-01-01");
+
+            itemWithTwoDois = ItemBuilder.createItem(context, collection)
+                    .withTitle("Item With Two DOIs")
+                    .withMetadata("dc", "type", null, "corpus")
+                    .withMetadata("dc", "identifier", "doi", "https://doi.org/10.5072/test-1")
+                    .withMetadata("dc", "identifier", "doi", "https://doi.org/10.5072/test-2")
+                    .build();
 
             itemVersion1 = ItemBuilder.createItem(context, collection)
                     .withTitle("Item Version 1")
@@ -232,6 +242,20 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
     }
 
     @Test
+    public void testItemWithTwoDois() throws IOException {
+        Curator curator = new Curator();
+        curator.addTask(TASK_NAME);
+        context.setCurrentUser(admin);
+
+        // Run curator task for item with two dc.identifier.doi - should fail
+        curator.curate(context, itemWithTwoDois.getHandle());
+        int status = curator.getStatus(TASK_NAME);
+        assertEquals("Curation should fail for item with two dc.identifier.doi", Curator.CURATE_FAIL, status);
+        String result = curator.getResult(TASK_NAME);
+        assertTrue("Result should mention multiple dc.identifier.doi", result.contains("dc.identifier.doi"));
+    }
+
+    @Test
     public void testValidItem() throws IOException {
         Curator curator = new Curator();
         curator.addTask(TASK_NAME);
@@ -295,7 +319,6 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
         curator.curate(context, itemWithIncorrectLanguageName.getHandle());
         int status = curator.getStatus(TASK_NAME);
         String result = curator.getResult(TASK_NAME);
-        System.out.println("Test result: " + result);
         assertEquals("Curation should fail for item with incorrect local.language.name", Curator.CURATE_FAIL, status);
         assertTrue("Result should mention local.language.name mismatch, but was: " + result,
             result.contains("local.language.name") && result.contains("does not match"));

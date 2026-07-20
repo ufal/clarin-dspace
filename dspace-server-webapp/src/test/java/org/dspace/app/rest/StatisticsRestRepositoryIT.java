@@ -938,6 +938,13 @@ public class StatisticsRestRepositoryIT extends AbstractControllerIntegrationTes
             .contentType(contentType))
                                 .andExpect(status().isCreated());
 
+        // Force a commit that waits for a new searcher so the two just-posted view events are guaranteed to be
+        // flushed and visible to the report query below. This covers both ways the report could otherwise come
+        // back empty: postView()'s own commit uses waitSearcher=false (can return before the searcher reopens),
+        // and if the solr-statistics.autoCommit=false override were dropped by a mid-test config reload then
+        // postView() skips its commit entirely (Solr's own autoCommit only fires after 10s).
+        StatisticsServiceFactory.getInstance().getSolrLoggerService().commit();
+
         // And request that collection's TopCountries report
         getClient(adminToken).perform(
             get("/api/statistics/usagereports/" + communityVisited.getID() + "_" + TOP_COUNTRIES_REPORT_ID))

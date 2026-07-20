@@ -277,7 +277,7 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
 
             // Step 4: Log the user in.
             context.setCurrentUser(eperson);
-            request.getSession().setAttribute("shib.authenticated", true);
+            request.setAttribute("shib.authenticated", true);
             AuthenticateServiceFactory.getInstance().getAuthenticationService().initEPerson(context, request, eperson);
 
             log.info(eperson.getEmail() + " has been authenticated via shibboleth.");
@@ -330,42 +330,35 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
     @Override
     public List<Group> getSpecialGroups(Context context, HttpServletRequest request) {
         try {
-            // User has not successfuly authenticated via shibboleth.
-            if (request == null ||
-                    context.getCurrentUser() == null ||
-                    request.getSession().getAttribute("shib.authenticated") == null) {
-                return Collections.EMPTY_LIST;
+            // User has not successfully authenticated via shibboleth.
+            if (request == null || context.getCurrentUser() == null) {
+                return Collections.emptyList();
             }
 
-            // If we have already calculated the special groups then return them.
-            if (request.getSession().getAttribute("shib.specialgroup") != null) {
-                log.debug("Returning cached special groups.");
-                List<UUID> sessionGroupIds = (List<UUID>) request.getSession().getAttribute("shib.specialgroup");
-                List<Group> result = new ArrayList<>();
-                for (UUID uuid : sessionGroupIds) {
-                    result.add(groupService.find(context, uuid));
-                }
-                return result;
+            List<Group> specialGroups = context.getSpecialGroups();
+            if (!specialGroups.isEmpty()) {
+                log.debug("Returning special groups from context.");
+                return specialGroups;
             }
 
+            if (request.getAttribute("shib.authenticated") == null) {
+                log.debug("User has not been authenticated via shibboleth, returning empty list of special groups.");
+                return Collections.emptyList();
+            }
 
             List<UUID> groupIds = new ShibGroup(new ShibHeaders(request), context).get();
-            // Cache the special groups, so we don't have to recalculate them again
-            // for this session.
-            request.getSession().setAttribute("shib.specialgroup", groupIds);
 
             List<Group> groups = new ArrayList<>();
             for (UUID uuid : groupIds) {
                 Group foundGroup = groupService.find(context, uuid);
-                if (Objects.isNull(foundGroup)) {
-                    continue;
+                if (foundGroup != null) {
+                    groups.add(foundGroup);
                 }
-                groups.add(foundGroup);
             }
             return groups;
         } catch (Throwable t) {
-            log.error("Unable to validate any sepcial groups this user may belong too because of an exception.", t);
-            return Collections.EMPTY_LIST;
+            log.error("Unable to validate any special groups this user may belong to because of an exception.", t);
+            return Collections.emptyList();
         }
     }
 
@@ -1291,7 +1284,7 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
     public boolean isUsed(final Context context, final HttpServletRequest request) {
         if (request != null &&
                 context.getCurrentUser() != null &&
-                request.getSession().getAttribute("shib.authenticated") != null) {
+                request.getAttribute("shib.authenticated") != null) {
             return true;
         }
         return false;
