@@ -247,6 +247,10 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
         BitstreamFormat customMimeTypeFormat = tarXGzipFile.getFormat(context);
 
         BitstreamBuilder.deleteBitstream(tarXGzipFile.getID());
+        if (customMimeTypeFormat != null) {
+            bitstreamFormatService.delete(context, customMimeTypeFormat);
+        }
+
         BitstreamBuilder.deleteBitstream(tgzFile.getID());
         BitstreamBuilder.deleteBitstream(gzFile.getID());
         BitstreamBuilder.deleteBitstream(tarXzFile.getID());
@@ -254,11 +258,6 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
         BitstreamBuilder.deleteBitstream(tgzFileWithGzipMimeType.getID());
         BitstreamBuilder.deleteBitstream(tarGzFileWithWrongExtension.getID());
         BitstreamBuilder.deleteBitstream(tarXzFileWithIncorrectMimeType.getID());
-
-        // removing custom mime type format created for tarXGzipFile and tgzFileWithGzipMimeType files
-        if (customMimeTypeFormat != null) {
-            bitstreamFormatService.delete(context, customMimeTypeFormat);
-        }
 
         super.destroy();
     }

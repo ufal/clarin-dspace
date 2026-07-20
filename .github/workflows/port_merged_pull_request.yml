@@ -46,16 +46,16 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
       # Port PR to other branch (ONLY if labeled with "port to")
       - name: Port pull requests
-        uses: kosarko/backport-action@44f5afb93822657a4de40932496f6fd5dae3a617
+        uses: kosarko/backport-action@89c144d93ff1747569093da0c4b99a73f55574da
         with:
           github_token: ${{ steps.app-token.outputs.token }}
           # Trigger based on a "port to [branch]" label on PR
           # (This label must specify the branch name to port to)
           label_pattern: '^port to ([^ ]+)$'
           # Title to add to the (newly created) port PR
-          pull_title: '[Port ${target_branch}] ${pull_title}'
+          pull_title: '[Port to ${target_branch}] ${pull_title}'
           # Description to add to the (newly created) port PR
-          pull_description: 'Port of #${pull_number} by @${pull_author} to `${target_branch}`.'
+          pull_description: 'Port of ${source_repo}#${pull_number} by @${pull_author} to `${target_branch}`.'
           # Skip any merge commits in the ported PR. This means only non-merge commits are cherry-picked to the new PR
           merge_commits: 'skip'
           experimental: |

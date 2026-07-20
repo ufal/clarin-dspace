@@ -31,14 +31,10 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
- * This check runs the "metadataqa" curation task on the whole repository,
- * and provides a report about the number of errors and warnings.
- *
  * @author Milan Kuchtiak
  */
 public class MetadataCheck extends Check {
 
-    private static final String CURATION_TASK_NAME = "metadataqa";
     private static final String QA_METADATA_ERROR_PATTERNS_JSON = "metadata-check-patterns.json";
     private static final String VALIDATION_TYPE_OTHER = "validation.other";
     private static final int COUNT_INDENTATION = 30;
@@ -92,7 +88,7 @@ public class MetadataCheck extends Check {
         JSONObject root = new JSONObject();
 
         Curator curator = new Curator();
-        curator.addTask(CURATION_TASK_NAME);
+        curator.addTask("metadataqa");
 
         MetadataReporter reporter = new MetadataReporter(
                 maxErrorsToShow,
@@ -385,19 +381,14 @@ public class MetadataCheck extends Check {
          *                        comparing to the frequency of the new message
          */
         private void replaceMessage(Message message, StoredMessagesInfo storedMessagesInfo, int dispersionQuota) {
-            Map<String, List<String>> storedMessages = storedMessagesInfo.getStoredMessages();
-
-            // calculate the highest frequency of messages for any short message in stored messages,
-            String messageKeyWithHighestFrequency = Objects.requireNonNull(getMessageWithHighestCount(storedMessages));
-            int highestMessageFrequency = storedMessages.get(messageKeyWithHighestFrequency).size();
-
-            // int highestMessageFrequency = storedMessagesInfo.getHighestFrequency();
+            int highestMessageFrequency = storedMessagesInfo.getHighestFrequency();
             if (highestMessageFrequency <= 1) {
                 // no replacement, as there are no messages with the frequency higher than 1, so the replacement
                 // of any message would not increase the diversity of messages in stored messages
                 return;
             }
             String messageKey = message.getMessageKey();
+            Map<String, List<String>> storedMessages = storedMessagesInfo.getStoredMessages();
             List<String> storedMessagesForMessageKey = storedMessages.get(messageKey);
 
             if (storedMessagesForMessageKey != null &&
@@ -407,10 +398,11 @@ public class MetadataCheck extends Check {
                 return;
             }
 
-            // recalculate the highest frequency of messages for any short message in stored messages,
+            // recalculate the highest frequency of messages for any short message in storedmessages,
             // because it can be changed after each replacement
-            messageKeyWithHighestFrequency = Objects.requireNonNull(getMessageWithHighestCount(storedMessages));
+            String messageKeyWithHighestFrequency = Objects.requireNonNull(getMessageWithHighestCount(storedMessages));
             highestMessageFrequency = storedMessages.get(messageKeyWithHighestFrequency).size();
+            storedMessagesInfo.setHighestFrequency(highestMessageFrequency);
 
             if (highestMessageFrequency <= 1) {
                 // no replacement, as there are no messages with the frequency higher than 1 anymore
@@ -459,15 +451,25 @@ public class MetadataCheck extends Check {
      */
     private static class StoredMessagesInfo {
         private int count;
+        private int highestFrequency;
         private final Map<String, List<String>> storedMessages;
 
         StoredMessagesInfo() {
             this.count = 0;
+            this.highestFrequency = Integer.MAX_VALUE;
             storedMessages = new TreeMap<>();
         }
 
         public int getCount() {
             return count;
+        }
+
+        public int getHighestFrequency() {
+            return highestFrequency;
+        }
+
+        public void setHighestFrequency(int highestFrequency) {
+            this.highestFrequency = highestFrequency;
         }
 
         public Map<String, List<String>> getStoredMessages() {

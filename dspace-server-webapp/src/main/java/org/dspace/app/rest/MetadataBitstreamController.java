@@ -11,6 +11,8 @@ import static org.dspace.app.rest.utils.RegexUtils.REGEX_REQUESTMAPPING_IDENTIFI
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Objects;
@@ -115,7 +117,7 @@ public class MetadataBitstreamController {
         // This bitstream is used to get it's item in the statistics tracker
         Bitstream bitstreamForStatistics = null;
         name = item.getName() + ".zip";
-        response.setHeader(HttpHeaders.CONTENT_DISPOSITION, String.format("attachment;filename=\"%s\"", name));
+        response.setHeader(HttpHeaders.CONTENT_DISPOSITION, buildContentDisposition(name));
         response.setContentType("application/zip");
         List<Bundle> bundles = item.getBundles("ORIGINAL");
 
@@ -142,5 +144,20 @@ public class MetadataBitstreamController {
         zip.close();
         matomoBitstreamTracker.trackBitstreamDownload(context, request, bitstreamForStatistics, true);
         response.getOutputStream().flush();
+    }
+
+    /**
+     * Build a Content-Disposition header value using RFC 5987 encoding.
+     * Includes both {@code filename} (ASCII fallback with escaped quotes) and {@code filename*}
+     * (UTF-8 percent-encoded) so that browsers can save files with special characters correctly.
+     */
+    private String buildContentDisposition(String name) {
+        String encoded = URLEncoder.encode(name, StandardCharsets.UTF_8)
+                .replace("+", "%20");
+        String asciiFallback = name.replaceAll("[^\\x20-\\x7E]", "_")
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"");
+        return String.format("attachment; filename=\"%s\"; filename*=UTF-8''%s",
+                asciiFallback, encoded);
     }
 }

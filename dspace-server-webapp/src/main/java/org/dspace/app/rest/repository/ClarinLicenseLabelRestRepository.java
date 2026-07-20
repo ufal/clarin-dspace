@@ -139,6 +139,7 @@ public class ClarinLicenseLabelRestRepository extends DSpaceRestRepository<Clari
                     " already exists");
         }
 
+        clarinLicenseLabel.setId(id);
         updateClarinLicenseLabel(clarinLicenseLabel, clarinLicenseLabelRest);
 
         clarinLicenseLabelService.update(context, clarinLicenseLabel);
