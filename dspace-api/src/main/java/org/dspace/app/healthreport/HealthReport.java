@@ -13,10 +13,14 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import javax.mail.MessagingException;
 
 import org.apache.commons.cli.Option;
@@ -29,10 +33,11 @@ import org.dspace.content.service.ReportResultService;
 import org.dspace.core.Context;
 import org.dspace.core.Email;
 import org.dspace.core.I18nUtil;
+import org.dspace.core.factory.CoreServiceFactory;
+import org.dspace.core.service.PluginService;
 import org.dspace.eperson.factory.EPersonServiceFactory;
 import org.dspace.eperson.service.EPersonService;
 import org.dspace.health.Check;
-import org.dspace.health.Report;
 import org.dspace.health.ReportInfo;
 import org.dspace.scripts.DSpaceRunnable;
 import org.dspace.services.ConfigurationService;
@@ -56,12 +61,12 @@ public class HealthReport extends DSpaceRunnable<HealthReportScriptConfiguration
     /**
      * Checks to be performed.
      */
-    private static final LinkedHashMap<String, Check> checks = Report.checks();
+    private static final LinkedHashMap<String, Check> checks = getChecks();
 
     /**
-     * `-i`: Info, show help information.
+     * `-h`: Help, show help information.
      */
-    private boolean info = false;
+    private boolean help = false;
 
     /**
      * `-e`: Email, send report to specified email address.
@@ -69,9 +74,10 @@ public class HealthReport extends DSpaceRunnable<HealthReportScriptConfiguration
     private String[] emails;
 
     /**
-     * `-c`: Check, perform only specific check by index (0-`getNumberOfChecks()`).
+     * `-c`: Check, perform only specific checks by index (0-`getNumberOfChecks()`).
+     * Supports multiple values.
      */
-    private int specificCheck = -1;
+    private List<Integer> specificChecks = new ArrayList<>();
 
     /**
      * `-f`: For, specify the last N days to consider.
@@ -80,9 +86,9 @@ public class HealthReport extends DSpaceRunnable<HealthReportScriptConfiguration
     private int forLastNDays = configurationService.getIntProperty("healthcheck.last_n_days");
 
     /**
-     * `-o`: Output, specify a file to save the report.
+     * `-r`: Report, specify a file to save the report.
      */
-    private String fileName;
+    private String reportFile;
 
     @Override
     public HealthReportScriptConfiguration getScriptConfiguration() {
@@ -93,52 +99,64 @@ public class HealthReport extends DSpaceRunnable<HealthReportScriptConfiguration
     @Override
     public void setup() throws ParseException {
         ePersonService = EPersonServiceFactory.getInstance().getEPersonService();
-        // `-i`: Info, show help information.
-        if (commandLine.hasOption('i')) {
-            info = true;
+        // `-h`: Help, show help information.
+        if (commandLine.hasOption('h')) {
+            help = true;
             return;
         }
 
         // `-e`: Email, send report to specified email address.
         if (commandLine.hasOption('e')) {
             emails = commandLine.getOptionValues('e');
-            handler.logInfo("\nReport sent to this email address: " + String.join(", ", emails));
         }
 
-        // `-c`: Check, perform only specific check by index (0-`getNumberOfChecks()`).
+        // `-c`: Check, perform only specific checks by index (0-`getNumberOfChecks()`).
+        // Supports multiple values e.g. -c 0 -c 3 -c 4
         if (commandLine.hasOption('c')) {
-            String checkOption = commandLine.getOptionValue('c');
-            try {
-                specificCheck = Integer.parseInt(checkOption);
-                if (specificCheck < 0 || specificCheck >= getNumberOfChecks()) {
-                    specificCheck = -1;
+            String[] checkOptions = commandLine.getOptionValues('c');
+            for (String checkOption : checkOptions) {
+                try {
+                    int checkIndex = Integer.parseInt(checkOption);
+                    if (checkIndex < 0 || checkIndex >= getNumberOfChecks()) {
+                        handler.logError("Invalid value for check: " + checkOption +
+                                ". Must be an integer from 0 to " + (getNumberOfChecks() - 1) + ".");
+                        throw new ParseException("Invalid check index: " + checkOption);
+                    }
+                    specificChecks.add(checkIndex);
+                } catch (NumberFormatException e) {
+                    handler.logError("Invalid value for check: '" + checkOption +
+                            "'. It has to be an integer number from 0 to " + (getNumberOfChecks() - 1) + ".");
+                    throw new ParseException("Invalid check value: " + checkOption);
                 }
-            } catch (NumberFormatException e) {
-                log.info("Invalid value for check. It has to be a number from the displayed range.");
-                return;
             }
         }
 
-        // `-f`: For, specify the last N days to consider.
+        // `-f`: For, specify the last N days to consider. Must be a positive integer.
         if (commandLine.hasOption('f')) {
             String daysOption = commandLine.getOptionValue('f');
             try {
                 forLastNDays = Integer.parseInt(daysOption);
+                if (forLastNDays <= 0) {
+                    handler.logError("Invalid value for -f: " + daysOption +
+                            ". Must be a positive integer (greater than 0).");
+                    throw new ParseException("Invalid -f value: " + daysOption);
+                }
             } catch (NumberFormatException e) {
-                log.info("Invalid value for last N days. Argument f has to be a number.");
-                return;
+                handler.logError("Invalid value for -f: '" + daysOption +
+                        "'. Must be a positive integer.");
+                throw new ParseException("Invalid -f value: " + daysOption);
             }
         }
 
-        // `-o`: Output, specify a file to save the report.
-        if (commandLine.hasOption('o')) {
-            fileName = commandLine.getOptionValue('o');
+        // `-r`: Report, specify a file to save the report.
+        if (commandLine.hasOption('r')) {
+            reportFile = commandLine.getOptionValue('r');
         }
     }
 
     @Override
     public void internalRun() throws Exception {
-        if (info) {
+        if (help) {
             printHelp();
             return;
         }
@@ -149,15 +167,14 @@ public class HealthReport extends DSpaceRunnable<HealthReportScriptConfiguration
             ReportInfo ri = new ReportInfo(this.forLastNDays);
 
             StringBuilder sbReport = new StringBuilder();
-            sbReport.append("\n\nHEALTH REPORT:\n");
 
             int position = -1;
             JSONObject root = new JSONObject();
             // Create the array
             JSONArray checksArray = new JSONArray();
-            for (Map.Entry<String, Check> check_entry : Report.checks().entrySet()) {
+            for (Map.Entry<String, Check> check_entry : checks.entrySet()) {
                 ++position;
-                if (specificCheck != -1 && specificCheck != position) {
+                if (!specificChecks.isEmpty() && !specificChecks.contains(position)) {
                     continue;
                 }
 
@@ -197,10 +214,14 @@ public class HealthReport extends DSpaceRunnable<HealthReportScriptConfiguration
             reportResultService.update(context, reportResult);
             context.commit();
 
+            // Prepend the header with the persisted report ID so users can refer to it later
+            String finalReport = "\n\nHEALTH REPORT " + reportResult.getID() + ":\n" + sbReport.toString();
+
             // save output to file
-            if (fileName != null) {
-                InputStream inputStream = toInputStream(sbReport.toString(), StandardCharsets.UTF_8);
-                handler.writeFilestream(context, fileName, inputStream, "export");
+            if (reportFile != null) {
+                InputStream inputStream = toInputStream(finalReport, StandardCharsets.UTF_8);
+                handler.writeFilestream(context, reportFile, inputStream, "export");
+                context.commit();
 
                 context.restoreAuthSystemState();
 
@@ -213,27 +234,34 @@ public class HealthReport extends DSpaceRunnable<HealthReportScriptConfiguration
                     for (String recipient : emails) {
                         e.addRecipient(recipient);
                     }
-                    e.addArgument(sbReport.toString());
+                    e.addArgument(finalReport);
                     e.send();
+                    handler.logInfo("Report sent to: " + String.join(", ", emails));
                 } catch (IOException | MessagingException e) {
                     log.error("Error sending email:", e);
+                    handler.logError("Error sending email to " + String.join(", ", emails)
+                            + ": " + e.getMessage());
                 }
             }
 
-            handler.logInfo(sbReport.toString());
+            handler.logInfo(finalReport);
         }
     }
 
     @Override
     public void printHelp() {
-        handler.logInfo("\n\nINFORMATION\nThis process creates a health report of your DSpace.\n" +
+        int configuredForLastNDays = configurationService.getIntProperty("healthcheck.last_n_days");
+        handler.logInfo("\n\nHELP\nThis process creates a health report of your DSpace.\n" +
                 "You can choose from these available options:\n" +
-                "  -i, --info            Show help information\n" +
+                "  -h, --help            Show help information\n" +
                 "  -e, --email           Send report to specified email address\n" +
-                "  -c, --check           Perform only specific check by index (0-" + (getNumberOfChecks() - 1) + ")\n" +
-                "  -f, --for             Specify the last N days to consider\n" +
-                "  -o, --output          Specify a file to save the report\n\n" +
-                "If you want to execute only one check using -c, use check index:\n" + checksNamesToString() + "\n"
+                "  -c, --check           Perform specific check(s) by index (0-" + (getNumberOfChecks() - 1) +
+                "). Repeat the flag (e.g. -c 1 -c 3) to run multiple checks. " +
+                "Default: All checks\n" +
+                "  -f, --for             Specify the last N days to consider (positive integer). " +
+                "Default: " + configuredForLastNDays + "\n" +
+                "  -r, --report          Specify a file to save the report\n\n" +
+                "Available checks:\n" + checksNamesToString() + "\n"
         );
     }
 
@@ -242,13 +270,21 @@ public class HealthReport extends DSpaceRunnable<HealthReportScriptConfiguration
      * This method is used to print the options used for the report.
      */
     private String printCommandlineOptions() {
-        // Return key-value pairs of options
         StringBuilder options = new StringBuilder();
+        Set<String> processedOptions = new LinkedHashSet<>();
+
         for (Option option : commandLine.getOptions()) {
             String key = option.getOpt();
-            String value = commandLine.getOptionValue(key);
-            if (value != null) {
-                options.append(String.format("  -%s: %s\n", key, value));
+            if (key == null || processedOptions.contains(key)) {
+                continue;
+            }
+            processedOptions.add(key);
+
+            String[] values = commandLine.getOptionValues(key);
+            if (values != null && values.length > 0) {
+                for (String value : values) {
+                    options.append(String.format("  -%s: %s\n", key, value));
+                }
             } else {
                 options.append(String.format("  -%s\n", key));
             }
@@ -294,5 +330,26 @@ public class HealthReport extends DSpaceRunnable<HealthReportScriptConfiguration
             pos++;
         }
         return null; // should not happen
+    }
+
+    /**
+     * Create check list from configured healthcheck plugins.
+     */
+    private static LinkedHashMap<String, Check> getChecks() {
+        LinkedHashMap<String, Check> loadedChecks = new LinkedHashMap<>();
+        String[] checkNames = DSpaceServicesFactory.getInstance().getConfigurationService()
+                .getArrayProperty("healthcheck.checks");
+        PluginService pluginService = CoreServiceFactory.getInstance().getPluginService();
+
+        for (String checkName : checkNames) {
+            Check check = (Check) pluginService.getNamedPlugin(Check.class, checkName);
+            if (check != null) {
+                loadedChecks.put(checkName, check);
+            } else {
+                log.warn("Could not find implementation for [{}]", checkName);
+            }
+        }
+
+        return loadedChecks;
     }
 }

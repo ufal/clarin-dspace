@@ -245,6 +245,7 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
         BitstreamBuilder.deleteBitstream(tarGzFile.getID());
 
         BitstreamFormat customMimeTypeFormat = tarXGzipFile.getFormat(context);
+
         BitstreamBuilder.deleteBitstream(tarXGzipFile.getID());
         if (customMimeTypeFormat != null) {
             bitstreamFormatService.delete(context, customMimeTypeFormat);

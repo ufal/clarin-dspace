@@ -19,9 +19,11 @@ import java.net.URLConnection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import javax.servlet.http.HttpServletRequest;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -29,19 +31,21 @@ import org.apache.logging.log4j.Logger;
 import org.dspace.app.rest.Parameter;
 import org.dspace.app.rest.SearchRestMethod;
 import org.dspace.app.rest.converter.WorkspaceItemConverter;
+import org.dspace.app.rest.exception.ClarinLicenseNotFoundException;
 import org.dspace.app.rest.exception.DSpaceBadRequestException;
 import org.dspace.app.rest.exception.RepositoryMethodNotImplementedException;
 import org.dspace.app.rest.exception.UnprocessableEntityException;
 import org.dspace.app.rest.model.ErrorRest;
 import org.dspace.app.rest.model.WorkspaceItemRest;
+import org.dspace.app.rest.model.patch.JsonValueEvaluator;
 import org.dspace.app.rest.model.patch.Operation;
 import org.dspace.app.rest.model.patch.Patch;
 import org.dspace.app.rest.model.patch.ReplaceOperation;
 import org.dspace.app.rest.repository.handler.service.UriListHandlerService;
 import org.dspace.app.rest.submit.SubmissionService;
 import org.dspace.app.rest.submit.UploadableStep;
+import org.dspace.app.rest.submit.step.ClarinLicenseSubmissionUtils;
 import org.dspace.app.rest.utils.BigMultipartFile;
-import org.dspace.app.rest.utils.ClarinLicenseUtils;
 import org.dspace.app.rest.utils.Utils;
 import org.dspace.app.util.SubmissionConfig;
 import org.dspace.app.util.SubmissionConfigReaderException;
@@ -81,6 +85,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
+import org.springframework.util.ObjectUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 
@@ -240,8 +245,7 @@ public class WorkspaceItemRestRepository extends DSpaceRestRepository<WorkspaceI
             //the value in the position 0 is a null value
             String[] path = op.getPath().substring(1).split("/", 3);
             if (OPERATION_PATH_LICENSE_RESOURCE.equals(path[0])) {
-                ClarinLicenseUtils.updateLicenseForItem(context,
-                        itemService, clarinLicenseService, clarinLicenseResourceMappingService, source, op);
+                this.maintainLicensesForItem(context, source, op);
                 continue;
             }
             if (OPERATION_PATH_LICENSE_GRANTED.equals(path[0])) {
@@ -511,6 +515,51 @@ public class WorkspaceItemRestRepository extends DSpaceRestRepository<WorkspaceI
                     " because: " + e.getMessage();
             log.error(errorMessage, e);
             throw new RuntimeException(errorMessage, e);
+        }
+    }
+
+    /**
+     * Detach the clarin license from the bitstreams and if the clarin license is not null attach the
+     * new clarin license to the bitstream.
+     * @param context DSpace context object
+     * @param source WorkspaceItem object
+     * @param op should be ReplaceOperation, if it is not - do nothing
+     */
+    private void maintainLicensesForItem(Context context, WorkspaceItem source, Operation op)
+            throws SQLException, AuthorizeException {
+        // Get item
+        Item item = source.getItem();
+        if (Objects.isNull(item)) {
+            log.warn("Cannot maintain CLARIN licenses: workspace item {} has no underlying item.", source.getID());
+            return;
+        }
+        // Get value from operation
+        if (!(op instanceof ReplaceOperation)) {
+            log.warn("Ignoring non-replace operation '{}' on license patch path for workspace item {}.",
+                    op.getOp(), source.getID());
+            return;
+        }
+
+        String clarinLicenseName;
+        if (op.getValue() instanceof String) {
+            clarinLicenseName = (String) op.getValue();
+        } else {
+            JsonValueEvaluator jsonValEvaluator = (JsonValueEvaluator) op.getValue();
+            // replace operation has value wrapped in the ObjectNode
+            JsonNode jsonNodeValue = jsonValEvaluator.getValueNode().get("value");
+            if (ObjectUtils.isEmpty(jsonNodeValue)) {
+                log.info("Cannot get clarin license name value from the ReplaceOperation.");
+                return;
+            }
+            clarinLicenseName = jsonNodeValue.asText();
+        }
+
+        // Delegate to the shared helper so the legacy `/license` path and the
+        // section path `/sections/clarin-license/select` apply the same logic.
+        try {
+            ClarinLicenseSubmissionUtils.applyLicense(context, item, clarinLicenseName);
+        } catch (ClarinLicenseNotFoundException ex) {
+            throw new UnprocessableEntityException(ex.getMessage(), ex);
         }
     }
 

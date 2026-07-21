@@ -34,18 +34,4 @@ public class ReportResultDAOImpl extends AbstractHibernateDAO<ReportResult> impl
 
         return singleResult(query);
     }
-
-    @Override
-    public ReportResult findByLastModifiedAndCheckType(Context context, Date lastModified, int checkType)
-            throws SQLException {
-        // Use string matching for checkType in args (args contains command line options like "-c: 0")
-        Query query = createQuery(context, "SELECT r FROM ReportResult r WHERE r.lastModified = :lastModified " +
-                "AND r.args LIKE :argsPattern");
-
-        query.setParameter("lastModified", lastModified);
-        query.setParameter("argsPattern", "%-c: " + checkType + "%");
-        query.setHint("org.hibernate.cacheable", Boolean.TRUE);
-
-        return singleResult(query);
-    }
 }

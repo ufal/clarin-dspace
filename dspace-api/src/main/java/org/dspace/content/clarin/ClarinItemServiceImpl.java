@@ -227,7 +227,7 @@ public class ClarinItemServiceImpl implements ClarinItemService {
                 itemService.getMetadata(item, "local", "approximateDate", "issued", Item.ANY, false);
 
         if (CollectionUtils.isEmpty(approximatedDates) || StringUtils.isBlank(approximatedDates.get(0).getValue())) {
-            log.warn("Cannot update item dates metadata because the approximate date is empty.");
+            log.debug("Cannot update item dates metadata because the approximate date is empty.");
             return;
         }
 

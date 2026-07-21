@@ -25,7 +25,7 @@
       "^There are bitstreams but incomplete rights metadata."
     ],
     "dc.description": [
-      "^contains suspicious dc.description.uri metadata"
+      "^contains suspicious [dc.description.uri] metadata"
     ],
     "local.branding": [
       "^local.branding "

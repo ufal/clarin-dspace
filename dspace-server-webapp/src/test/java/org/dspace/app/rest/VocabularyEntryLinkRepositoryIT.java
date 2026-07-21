@@ -117,6 +117,7 @@ public class VocabularyEntryLinkRepositoryIT extends AbstractControllerIntegrati
     public void rorAuthorityRequestWithResponseInLocale() throws Exception {
         ConfigurationService configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
         String defaultLocale = configurationService.getProperty("default.locale");
+        String originalStoredNameType = configurationService.getProperty("ror.authority.stored-name-type", "en_label");
         configurationService.setProperty("default.locale", "it");
         configurationService.setProperty("ror.authority.stored-name-type", "locale_label");
 
@@ -126,7 +127,7 @@ public class VocabularyEntryLinkRepositoryIT extends AbstractControllerIntegrati
                     .param("exact", "true")), "Università di Pisa", "Università di Pisa");
         } finally {
             configurationService.setProperty("default.locale", defaultLocale);
-            configurationService.setProperty("ror.authority.stored-name-type", "en_label");
+            configurationService.setProperty("ror.authority.stored-name-type", originalStoredNameType);
         }
     }
 
@@ -134,6 +135,7 @@ public class VocabularyEntryLinkRepositoryIT extends AbstractControllerIntegrati
     public void rorAuthorityRequestWithRorDisplaySelectionType() throws Exception {
         ConfigurationService configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
         String defaultLocale = configurationService.getProperty("default.locale");
+        String originalStoredNameType = configurationService.getProperty("ror.authority.stored-name-type", "en_label");
         configurationService.setProperty("default.locale", "it");
         configurationService.setProperty("ror.authority.stored-name-type", "ror_display");
 
@@ -143,7 +145,7 @@ public class VocabularyEntryLinkRepositoryIT extends AbstractControllerIntegrati
                     .param("exact", "true")), "University of Pisa", "Università di Pisa");
         } finally {
             configurationService.setProperty("default.locale", defaultLocale);
-            configurationService.setProperty("ror.authority.stored-name-type", "en_label");
+            configurationService.setProperty("ror.authority.stored-name-type", originalStoredNameType);
         }
     }
 

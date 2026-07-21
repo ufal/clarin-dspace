@@ -319,7 +319,6 @@ public class ItemMetadataQACheckerIT extends AbstractIntegrationTestWithDatabase
         curator.curate(context, itemWithIncorrectLanguageName.getHandle());
         int status = curator.getStatus(TASK_NAME);
         String result = curator.getResult(TASK_NAME);
-        System.out.println("Test result: " + result);
         assertEquals("Curation should fail for item with incorrect local.language.name", Curator.CURATE_FAIL, status);
         assertTrue("Result should mention local.language.name mismatch, but was: " + result,
             result.contains("local.language.name") && result.contains("does not match"));

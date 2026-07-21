@@ -8,6 +8,7 @@
 package org.dspace.external.model.ror;
 
 import java.util.List;
+import java.util.Optional;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -32,7 +33,7 @@ public class RorItems {
     ) {
         this.noOfResults = noOfResults;
         this.timeTaken = timeTaken;
-        this.items = items;
+        this.items = Optional.ofNullable(items).orElse(List.of());
     }
 
     public int getNoOfResults() {

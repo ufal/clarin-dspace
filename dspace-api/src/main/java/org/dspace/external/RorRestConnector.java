@@ -75,7 +75,7 @@ public class RorRestConnector {
     }
 
     public Response getByID(String rorID) {
-        if (rorID.matches(ROR_ID_PATTERN)) {
+        if (rorID != null && rorID.matches(ROR_ID_PATTERN)) {
             return client.target(apiUrl).path(rorID)
                     .request()
                     .header("Client-Id", clientId)
@@ -86,7 +86,8 @@ public class RorRestConnector {
         }
     }
 
-    @Cacheable(cacheNames = "ror-labels", key = "#rorID + '_' + #locale", unless = "#result == null")
+    @Cacheable(cacheNames = "ror-labels", key = "#rorID + '_' + #locale",
+            unless = "#result == null || #result.equals(#rorID)")
     public String getLabel(String rorID, String locale) {
         Choice choice = getChoice(rorID, locale);
         return choice != null ? choice.label : rorID;
@@ -159,6 +160,9 @@ public class RorRestConnector {
     }
 
     public Choices getBestMatch(String text, String locale) {
+        if (text == null || text.trim().isEmpty()) {
+            return new Choices(true);
+        }
         try (Response response = getByQuery(sanitizeQuery(text))) {
             if (response.getStatus() == Response.Status.OK.getStatusCode()) {
                 try (InputStream is = response.readEntity(InputStream.class)) {
@@ -221,7 +225,7 @@ public class RorRestConnector {
             // 4 - locale label from labels, 3 - locale label from aliases, 2 - english label, 1 - any other label
             int labelQuality = 0;
             // the enLabelQuality is the following:
-            // 2 - english label from labels, 1 - english label from aliasses
+            // 2 - english label from labels, 1 - english label from aliases
             int enLabelQuality = 0;
 
             for (RorItem.Name name : names) {
@@ -271,7 +275,7 @@ public class RorRestConnector {
             }
 
             String value;
-            // set tha value based on the configuration of the name selection type
+            // set the value based on the configuration of the name selection type
             switch (storedNameType) {
                 case ROR_DISPLAY : {
                     value = (rorDisplay != null) ? rorDisplay : label;

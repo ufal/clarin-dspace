@@ -30,16 +30,5 @@ public interface ReportResultDAO extends GenericDAO<ReportResult> {
       * @throws SQLException if a database error occurs
       */
     ReportResult findByLastModified(Context context, Date lastModified) throws SQLException;
-
-    /**
-     * Find a ReportResult by its last modified date and check type.
-     *
-     * @param context the DSpace context
-     * @param lastModified the exact last modified date to search for
-     * @param checkType the check type index to filter by (searches within args field)
-     * @return the ReportResult matching both criteria, or null if not found
-     * @throws SQLException if a database error occurs
-     */
-    ReportResult findByLastModifiedAndCheckType(Context context, Date lastModified, int checkType) throws SQLException;
 }
 

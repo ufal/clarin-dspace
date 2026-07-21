@@ -26,8 +26,6 @@ import org.dspace.app.util.DCInput;
 import org.dspace.app.util.DCInputSet;
 import org.dspace.app.util.DCInputsReader;
 import org.dspace.app.util.DCInputsReaderException;
-import org.dspace.content.Collection;
-import org.dspace.content.Community;
 import org.dspace.content.DSpaceObject;
 import org.dspace.content.Item;
 import org.dspace.content.MetadataValue;
@@ -58,6 +56,10 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
     private String handlePrefix;
     private Map<String, Integer> complexInputs;
 
+    private String[] nonRepeatableMetadata;
+    private String[] strangeMetadata;
+    private String[] highlyRecommended;
+
     private VersionHistoryService versionHistoryService;
 
     @Override
@@ -76,6 +78,24 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
             dcTypeValuesSet = new HashSet<>(Arrays.asList(
                 "corpus", "lexicalConceptualResource", "languageDescription", "toolService"));
         }
+
+        nonRepeatableMetadata = configurationService.getArrayProperty("lr.curation.metadata.nonrepeatable",
+                new String[]{
+                    "local.branding",
+                    "dc.type",
+                    "dc.date.accessioned",
+                    "dc.rights.label",
+                    "dc.date.available",
+                    "dc.source.uri",
+                    "dc.identifier.doi",
+                    "metashare.ResourceInfo#DistributionInfo#LicenseInfo.license"
+                });
+        strangeMetadata = configurationService.getArrayProperty("lr.curation.metadata.strange", new String[]{
+            "dc.description.uri",
+        });
+        highlyRecommended = configurationService.getArrayProperty("lr.curation.metadata.recommended", new String[]{
+            "dc.subject",
+        });
 
         complexInputs = new HashMap<>();
         loadComplexInputs();
@@ -141,9 +161,8 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
                         validateDcLanguageIso(item, results);
                         validateRelations(item, results);
                         validateEmptyMetadata(item, metadataValues, results);
-                        validateDuplicateMetadata(item, results);
+                        validatePredefinedNonRepeatableMetadata(item, results);
                         validateStrangeMetadata(item, results);
-                        validateBrandingConsistency(item, results);
                         validateRightsLabels(item, results);
                         itemWithFilesHasLicense(item);
                         validateHighlyRecommendedMetadata(item, results);
@@ -235,6 +254,11 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
      */
     private void validateDcLanguageIso(Item item, StringBuilder results) throws CurateException {
         List<MetadataValue> dcsLanguageIso = itemService.getMetadataByMetadataString(item, "dc.language.iso");
+
+        // build maps of expected and actual language names keyed by place
+        Map<Integer, String> expectedLangNamesByPlace = new HashMap<>();
+        Map<Integer, String> isoCodesByPlace = new HashMap<>();
+
         if (dcsLanguageIso != null && !dcsLanguageIso.isEmpty()) {
             // Validate dc.language.iso codes
             for (MetadataValue langCodeDC : dcsLanguageIso) {
@@ -247,6 +271,11 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
                         String.format("Invalid language code - %s", langCode),
                         Curator.CURATE_FAIL);
                 }
+
+                Integer place = langCodeDC.getPlace();
+                String expectedLangName = IsoLangCodes.getLangForCode(langCode);
+                expectedLangNamesByPlace.put(place, expectedLangName);
+                isoCodesByPlace.put(place, langCode);
             }
 
             // Validate local.language.name matches dc.language.iso
@@ -258,15 +287,33 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
                     Curator.CURATE_FAIL);
             }
 
-            // Validate that each language name corresponds to its ISO code
-            for (int i = 0; i < dcsLanguageIso.size(); i++) {
-                String expectedLangName = IsoLangCodes.getLangForCode(dcsLanguageIso.get(i).getValue());
-                String actualLangName = languageNames.get(i).getValue();
+            Map<Integer, String> actualLangNamesByPlace = new HashMap<>();
+            for (MetadataValue languageName : languageNames) {
+                Integer place = languageName.getPlace();
+                String actualLangName = languageName.getValue();
+                actualLangNamesByPlace.put(place, actualLangName);
+            }
+
+            // Ensure that the sets of places match between ISO codes and language names
+            Set<Integer> expectedPlaces = expectedLangNamesByPlace.keySet();
+            Set<Integer> actualPlaces = actualLangNamesByPlace.keySet();
+            if (!expectedPlaces.equals(actualPlaces)) {
+                throw new CurateException(
+                        String.format("local.language.name places %s do not match dc.language.iso places %s",
+                                actualPlaces, expectedPlaces),
+                        Curator.CURATE_FAIL);
+            }
+            // Validate that each language name corresponds to its ISO code for each place
+            for (Integer place : expectedPlaces) {
+                String expectedLangName = expectedLangNamesByPlace.get(place);
+                String actualLangName = actualLangNamesByPlace.get(place);
                 if (!expectedLangName.equals(actualLangName)) {
                     throw new CurateException(
-                        String.format("local.language.name [%s] does not match expected name [%s] for ISO code [%s]",
-                            actualLangName, expectedLangName, dcsLanguageIso.get(i).getValue()),
-                        Curator.CURATE_FAIL);
+                            String.format(
+                                    "local.language.name [%s] at place [%d] does not match expected name [%s] " +
+                                            "for ISO code [%s]",
+                                    actualLangName, place, expectedLangName, isoCodesByPlace.get(place)),
+                            Curator.CURATE_FAIL);
                 }
             }
         }
@@ -444,52 +491,14 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
         }
     }
 
-    private void validateDuplicateMetadata(Item item, StringBuilder results) throws CurateException {
-        for (String noDuplicate : new String[]{
-            "local.branding",
-            "dc.type",
-            "dc.date.accessioned",
-            "dc.rights.label",
-            "dc.date.available",
-            "dc.source.uri",
-            "dc.identifier.doi",
-            "metashare.ResourceInfo#DistributionInfo#LicenseInfo.license"
-        }) {
+    private void validatePredefinedNonRepeatableMetadata(Item item, StringBuilder results) throws CurateException {
+        for (String noDuplicate : nonRepeatableMetadata) {
             List<MetadataValue> vals = itemService.getMetadataByMetadataString(item, noDuplicate);
             if (null != vals && vals.size() > 1) {
                 throw new CurateException(
                     String.format("value [%s] is present multiple times", noDuplicate),
                     Curator.CURATE_FAIL);
             }
-        }
-    }
-
-    private void validateBrandingConsistency(Item item, StringBuilder results) throws CurateException {
-        try {
-            Collection owningCollection = item.getOwningCollection();
-            if (owningCollection != null) {
-                List<Community> communities = owningCollection.getCommunities();
-                if (communities != null && !communities.isEmpty()) {
-                    String cName = communities.get(0).getName();
-                    List<MetadataValue> brandings = itemService.getMetadata(item, "local", "branding", null, Item.ANY);
-                    if (1 != brandings.size()) {
-                        throw new CurateException(
-                            String.format("local.branding present [%d] count", brandings.size()),
-                            Curator.CURATE_FAIL);
-                    }
-                    if (!cName.equals(brandings.get(0).getValue())) {
-                        throw new CurateException(
-                            String.format("local.branding [%s] does not match community [%s]",
-                                brandings.get(0).getValue(), cName),
-                            Curator.CURATE_FAIL);
-                    }
-                }
-            }
-        } catch (SQLException e) {
-            throw new CurateException(
-                String.format("has invalid community [%s]", e.getMessage()),
-                Curator.CURATE_FAIL);
-
         }
     }
 
@@ -517,9 +526,7 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
     }
 
     private void validateHighlyRecommendedMetadata(Item item, StringBuilder results) throws CurateException {
-        for (String md : new String[]{
-            "dc.subject",
-        }) {
+        for (String md : highlyRecommended) {
             List<MetadataValue> vals = itemService.getMetadataByMetadataString(item, md);
             if (null == vals || vals.isEmpty()) {
                 throw new CurateException(
@@ -530,9 +537,7 @@ public class ItemMetadataQAChecker extends AbstractCurationTask {
     }
 
     private void validateStrangeMetadata(Item item, StringBuilder results) throws CurateException {
-        for (String md : new String[]{
-            "dc.description.uri",
-        }) {
+        for (String md : strangeMetadata) {
             List<MetadataValue> vals = itemService.getMetadataByMetadataString(item, md);
             if (null != vals && !vals.isEmpty()) {
                 throw new CurateException(

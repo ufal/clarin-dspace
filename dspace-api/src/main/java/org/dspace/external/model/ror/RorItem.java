@@ -8,6 +8,7 @@
 package org.dspace.external.model.ror;
 
 import java.util.List;
+import java.util.Optional;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -34,10 +35,10 @@ public class RorItem {
                    @JsonProperty("status") String status,
                    @JsonProperty("types") String[] types) {
         this.id = id;
-        this.names = names;
-        this.locations = locations;
+        this.names = Optional.ofNullable(names).orElse(List.of());
+        this.locations = Optional.ofNullable(locations).orElse(List.of());
         this.status = status;
-        this.types = types;
+        this.types = Optional.ofNullable(types).orElse(new String[0]);
     }
 
     public String getId() {
@@ -71,7 +72,7 @@ public class RorItem {
                     @JsonProperty("types") List<String> types,
                     @JsonProperty("value") String value) {
             this.lang = lang;
-            this.types = types;
+            this.types = Optional.ofNullable(types).orElse(List.of());
             this.value = value;
         }
 

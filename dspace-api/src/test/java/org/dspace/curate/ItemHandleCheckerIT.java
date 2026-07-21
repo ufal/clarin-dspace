@@ -21,6 +21,10 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Random;
 
+import okhttp3.mockwebserver.Dispatcher;
+import okhttp3.mockwebserver.MockResponse;
+import okhttp3.mockwebserver.MockWebServer;
+import okhttp3.mockwebserver.RecordedRequest;
 import org.dspace.AbstractIntegrationTestWithDatabase;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.builder.ItemBuilder;
@@ -43,6 +47,12 @@ import org.junit.Test;
 /**
  * Test for checkhandles curation task.
  *
+ * <p>The handle URLs are served by a local {@link MockWebServer} instead of the live handle resolver
+ * (http://hdl.handle.net/), which the task contacts over HTTP. Hitting the live resolver made these tests
+ * flaky: when the network was slow the HEAD request timed out and the task reported {@code 617}
+ * (SocketTimeoutException) instead of the expected status. The mock dispatcher returns deterministic
+ * responses keyed by path.</p>
+ *
  * @author mkuchtiak
  */
 public class ItemHandleCheckerIT extends AbstractIntegrationTestWithDatabase {
@@ -55,11 +65,10 @@ public class ItemHandleCheckerIT extends AbstractIntegrationTestWithDatabase {
     private static final String HANDLE_ITEM3 = HANDLE_COLLECTION + "-3";
     private static final String HANDLE_ITEM4 = HANDLE_COLLECTION + "-4";
     private static final String HANDLE_NON_EXISTING = HANDLE_COLLECTION + "-999";
-    private static final String HANDLE_URL_REAL = "http://hdl.handle.net/20.1000/5555";
-    private static final String HANDLE_INVALID = HANDLE_URL_REAL + "/..??^^/";
+    // Path (relative to the mock server) of a handle that the resolver answers with a 302 redirect to a 200 page.
+    private static final String HANDLE_REDIRECT_PATH = "20.1000/5555";
     private static final String HANDLE_IGNORED_1 = "11234/998";
     private static final String HANDLE_IGNORED_2 = "11234/999";
-    private static final String HANDLE_URL_IGNORED = "http://hdl.handle.net/" + HANDLE_IGNORED_2;
 
     protected CommunityService communityService = ContentServiceFactory.getInstance().getCommunityService();
     protected CollectionService collectionService = ContentServiceFactory.getInstance().getCollectionService();
@@ -77,15 +86,50 @@ public class ItemHandleCheckerIT extends AbstractIntegrationTestWithDatabase {
     private Curator curator;
     private CuratorReportTest.ListReporter reporter;
 
+    // Local stand-in for the handle resolver. Started in setUp(); its base URL becomes handle.canonical.prefix.
+    private MockWebServer mockHandleServer;
+    // Previous handle.canonical.prefix, captured in setUp and restored in destroy so the shared config is not
+    // left pointing at the now-closed mock server for later tests in the same JVM.
+    private String originalHandlePrefix;
+    // URLs that point at the mock server (computed from its dynamic port in setUp).
+    private String handleUrlReal;
+    private String handleUrlRedirectTarget;
+    private String handleInvalid;
+    private String handleUrlIgnored;
+
     @Before
     @Override
     public void setUp() throws Exception {
         super.setUp();
         CoreServiceFactory.getInstance().getPluginService().clearNamedPluginClasses();
         try {
+            // Serve handle URLs from a local mock server so the task never contacts the live resolver.
+            mockHandleServer = new MockWebServer();
+            String baseUrl = mockHandleServer.url("/").toString();
+            handleUrlReal = baseUrl + HANDLE_REDIRECT_PATH;
+            handleUrlRedirectTarget = baseUrl + HANDLE_REDIRECT_PATH + "-target";
+            handleInvalid = handleUrlReal + "/..??^^/";
+            handleUrlIgnored = baseUrl + HANDLE_IGNORED_2;
+            mockHandleServer.setDispatcher(new Dispatcher() {
+                @Override
+                public MockResponse dispatch(RecordedRequest request) {
+                    String path = request.getPath();
+                    if (("/" + HANDLE_REDIRECT_PATH).equals(path)) {
+                        // a "real" handle: 302 redirect; the task follows redirects manually via the Location header
+                        return new MockResponse().setResponseCode(302).setHeader("Location", handleUrlRedirectTarget);
+                    }
+                    if (("/" + HANDLE_REDIRECT_PATH + "-target").equals(path)) {
+                        return new MockResponse().setResponseCode(200);
+                    }
+                    // any other (well-formed, non-ignored) handle URL is treated as "not found"
+                    return new MockResponse().setResponseCode(404);
+                }
+            });
+
             //we have to create a new community in the database
             context.turnOffAuthorisationSystem();
-            cfg.setProperty("handle.canonical.prefix", "http://hdl.handle.net/");
+            originalHandlePrefix = cfg.getProperty("handle.canonical.prefix");
+            cfg.setProperty("handle.canonical.prefix", baseUrl);
             cfg.setProperty("curate.checklist.ignore", HANDLE_IGNORED_1 + "," + HANDLE_IGNORED_2);
 
             this.parentCommunity = communityService.create(null, context);
@@ -131,7 +175,7 @@ public class ItemHandleCheckerIT extends AbstractIntegrationTestWithDatabase {
 
     @Test
     public void testItemHandleRedirected() throws IOException {
-        replaceHandleUrl(item2, HANDLE_URL_REAL);
+        replaceHandleUrl(item2, handleUrlReal);
         curator.curate(context, HANDLE_ITEM2);
         assertEquals("Curation should succeed", Curator.CURATE_SUCCESS, curator.getStatus(TASK_NAME));
         assertTrue(curator.getResult(TASK_NAME).contains(redirectedResultForItem(item2)));
@@ -150,18 +194,18 @@ public class ItemHandleCheckerIT extends AbstractIntegrationTestWithDatabase {
 
     @Test
     public void testInvalidHandleUrl() throws IOException {
-        replaceHandleUrl(item3, HANDLE_INVALID);
+        replaceHandleUrl(item3, handleInvalid);
         curator.curate(context, HANDLE_ITEM3);
         assertEquals("Curation should fail", Curator.CURATE_FAIL, curator.getStatus(TASK_NAME));
         String singleReport = reporter.getReport().get(0);
-        assertTrue(singleReport.contains(HANDLE_INVALID + " = 500 - FAILED\n"));
+        assertTrue(singleReport.contains(handleInvalid + " = 500 - FAILED\n"));
         assertTrue(singleReport.contains("Error: java.net.URISyntaxException: Illegal character"));
         reporter.getReport().clear();
     }
 
     @Test
     public void testHandleUrlIgnored() throws IOException {
-        replaceHandleUrl(item4, HANDLE_URL_IGNORED);
+        replaceHandleUrl(item4, handleUrlIgnored);
         curator.curate(context, HANDLE_ITEM4);
         assertEquals("Curation should skip", Curator.CURATE_SKIP, curator.getStatus(TASK_NAME));
         assertEquals("Item: " + HANDLE_ITEM4 + "\n", reporter.getReport().get(0));
@@ -170,9 +214,9 @@ public class ItemHandleCheckerIT extends AbstractIntegrationTestWithDatabase {
 
     @Test
     public void testCurateCollection() throws IOException {
-        replaceHandleUrl(item2, HANDLE_URL_REAL);
-        replaceHandleUrl(item3, HANDLE_INVALID);
-        replaceHandleUrl(item4, HANDLE_URL_IGNORED);
+        replaceHandleUrl(item2, handleUrlReal);
+        replaceHandleUrl(item3, handleInvalid);
+        replaceHandleUrl(item4, handleUrlIgnored);
         curator.curate(context, HANDLE_COLLECTION);
         // the final curator status is derived from the status of the latest checked item
         // so the final curator status is unpredictable
@@ -184,7 +228,7 @@ public class ItemHandleCheckerIT extends AbstractIntegrationTestWithDatabase {
                 both(
                      containsString("Item: " + item2.getHandle())).and(containsString(" = 200 - OK\n")
                 ), // item2
-                containsString(HANDLE_INVALID + " = 500 - FAILED"), // item 3
+                containsString(handleInvalid + " = 500 - FAILED"), // item 3
                 is("Item: " + HANDLE_ITEM4 + "\n") // item 4 (ignored)
         ));
     }
@@ -192,6 +236,13 @@ public class ItemHandleCheckerIT extends AbstractIntegrationTestWithDatabase {
     @After
     @Override
     public void destroy() throws Exception {
+        if (mockHandleServer != null) {
+            mockHandleServer.close();
+        }
+        // restore the shared config so a later test is not left pointing at the now-closed mock server
+        if (originalHandlePrefix != null) {
+            cfg.setProperty("handle.canonical.prefix", originalHandlePrefix);
+        }
         // remove all registered handles properly
         identifierService.delete(context, item1, HANDLE_ITEM1);
         identifierService.delete(context, item2, HANDLE_ITEM2);

@@ -472,6 +472,10 @@ public class ClarinWorkflowItemRestRepositoryIT extends AbstractControllerIntegr
                         .contentType(javax.ws.rs.core.MediaType.APPLICATION_JSON_PATCH_JSON))
                 .andExpect(status().isOk());
 
+        XmlWorkflowItem updatedWfItem = xmlWorkflowItemService.find(context, wfItem.getID());
+        assertThat(itemService.getMetadataFirstValue(updatedWfItem.getItem(), "dc", "rights", null, Item.ANY),
+                is("CL Name"));
+
         Map<String, String> wrappedValue = new HashMap<String, String>();
         wrappedValue.put("value", "CL Name");
         ops.set(0, new ReplaceOperation("/" + ClarinLicenseRestRepository.OPERATION_PATH_LICENSE_RESOURCE,

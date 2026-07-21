@@ -17,6 +17,8 @@ import java.util.Objects;
 import java.util.UUID;
 import javax.servlet.http.HttpServletRequest;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.dspace.app.rest.Parameter;
@@ -26,10 +28,12 @@ import org.dspace.app.rest.exception.RESTAuthorizationException;
 import org.dspace.app.rest.exception.UnprocessableEntityException;
 import org.dspace.app.rest.model.ErrorRest;
 import org.dspace.app.rest.model.WorkflowItemRest;
+import org.dspace.app.rest.model.patch.JsonValueEvaluator;
 import org.dspace.app.rest.model.patch.Operation;
 import org.dspace.app.rest.model.patch.Patch;
+import org.dspace.app.rest.model.patch.ReplaceOperation;
 import org.dspace.app.rest.submit.SubmissionService;
-import org.dspace.app.rest.utils.ClarinLicenseUtils;
+import org.dspace.app.rest.submit.step.ClarinLicenseSubmissionUtils;
 import org.dspace.app.rest.utils.SolrOAIReindexer;
 import org.dspace.app.util.SubmissionConfigReaderException;
 import org.dspace.authorize.AuthorizeException;
@@ -38,8 +42,6 @@ import org.dspace.content.Item;
 import org.dspace.content.service.BitstreamFormatService;
 import org.dspace.content.service.BitstreamService;
 import org.dspace.content.service.ItemService;
-import org.dspace.content.service.clarin.ClarinLicenseResourceMappingService;
-import org.dspace.content.service.clarin.ClarinLicenseService;
 import org.dspace.core.Constants;
 import org.dspace.core.Context;
 import org.dspace.eperson.EPerson;
@@ -119,12 +121,6 @@ public class WorkflowItemRestRepository extends DSpaceRestRepository<WorkflowIte
 
     @Autowired
     private SolrOAIReindexer solrOAIReindexer;
-
-    @Autowired
-    ClarinLicenseService clarinLicenseService;
-
-    @Autowired
-    ClarinLicenseResourceMappingService clarinLicenseResourceMappingService;
 
     private SubmissionConfigService submissionConfigService;
 
@@ -217,6 +213,10 @@ public class WorkflowItemRestRepository extends DSpaceRestRepository<WorkflowIte
         WorkflowItemRest wsi = findOne(context, id);
         XmlWorkflowItem source = wis.find(context, id);
 
+        if (source == null) {
+            throw new ResourceNotFoundException("WorkflowItem with id " + id + " not found");
+        }
+
         this.checkIfEditMetadataAllowedInCurrentStep(context, source);
         List<ErrorRest> errors = submissionService.uploadFileToInprogressSubmission(context, request, wsi, source,
                 file);
@@ -247,14 +247,17 @@ public class WorkflowItemRestRepository extends DSpaceRestRepository<WorkflowIte
             //the value in the position 0 is a null value
             String[] path = op.getPath().substring(1).split("/", 3);
             if (OPERATION_PATH_LICENSE_RESOURCE.equals(path[0])) {
-                ClarinLicenseUtils.updateLicenseForItem(context,
-                        itemService, clarinLicenseService, clarinLicenseResourceMappingService, source, op);
+                // Apply the CLARIN license change through the shared submission helper so the
+                // workflow `/license` path behaves the same as the submission license paths.
+                // A non-existing license surfaces as ClarinLicenseNotFoundException (404).
+                ClarinLicenseSubmissionUtils.applyLicense(context, source.getItem(), extractLicenseName(op));
             } else if (OPERATION_PATH_SECTIONS.equals(path[0])) {
                 String section = path[1];
                 submissionService.evaluatePatchToInprogressSubmission(context, request, source, wsi, section, op);
             } else {
                 throw new DSpaceBadRequestException(
-                    "Patch path operation need to starts with '" + OPERATION_PATH_SECTIONS + "'");
+                    "Patch path operation need to starts with '" +
+                            OPERATION_PATH_LICENSE_RESOURCE + "' or '" + OPERATION_PATH_SECTIONS + "'");
             }
         }
         wis.update(context, source);
@@ -294,6 +297,41 @@ public class WorkflowItemRestRepository extends DSpaceRestRepository<WorkflowIte
             throw new RuntimeException("IOException in " + this.getClass() + "#delete trying to delete a workflowitem" +
                 " from db (abort).", e);
         }
+    }
+
+    /**
+     * Extract the CLARIN license name from a JSON Patch {@code replace} operation on the {@code /license}
+     * path. The value is accepted either as a plain string or as an object wrapping a textual {@code value}
+     * field; a non-replace operation or any other value shape is rejected as a bad request. A blank name is
+     * passed through (the submission helper treats it as a request to clear the current license selection).
+     * @param op the JSON Patch operation targeting the license path
+     * @return the CLARIN license name to apply
+     */
+    private String extractLicenseName(Operation op) {
+        if (!(op instanceof ReplaceOperation)) {
+            throw new DSpaceBadRequestException("The operation to update the license must be the 'replace' operation");
+        }
+        if (op.getValue() instanceof String) {
+            return (String) op.getValue();
+        }
+        if (!(op.getValue() instanceof JsonValueEvaluator)) {
+            throw wrongValueFormatException(op);
+        }
+        JsonValueEvaluator jsonValEvaluator = (JsonValueEvaluator) op.getValue();
+        if (!(jsonValEvaluator.getValueNode() instanceof ObjectNode)) {
+            throw wrongValueFormatException(op);
+        }
+        // a replace operation may wrap the value in an ObjectNode under the "value" key
+        JsonNode jsonNodeValue = jsonValEvaluator.getValueNode().get("value");
+        if (jsonNodeValue != null && jsonNodeValue.isTextual()) {
+            return jsonNodeValue.asText();
+        }
+        throw wrongValueFormatException(op);
+    }
+
+    private DSpaceBadRequestException wrongValueFormatException(Operation op) {
+        return new DSpaceBadRequestException("Unsupported value format for operation '" + op.getOp()
+                + "'. Expected a string or an object with a textual 'value' field.");
     }
 
     /**
