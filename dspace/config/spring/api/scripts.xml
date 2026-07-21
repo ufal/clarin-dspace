@@ -56,6 +56,12 @@
         <property name="dspaceRunnableClass" value="org.dspace.administer.ProcessCleanerCli"/>
     </bean>
 
+    <bean id="eperson-merge" class="org.dspace.administer.EPersonMergeCliConfiguration">
+        <property name="description"
+                  value="Merge two duplicate EPerson accounts: re-point ownership from --from to --to, tombstone --from"/>
+        <property name="dspaceRunnableClass" value="org.dspace.administer.EPersonMergeCli"/>
+    </bean>
+
     <bean id="filter-media" class="org.dspace.app.mediafilter.MediaFilterScriptConfiguration">
         <property name="description" value="Perform the media filtering to extract full text from documents and to create thumbnails"/>
         <property name="dspaceRunnableClass" value="org.dspace.app.mediafilter.MediaFilterScript"/>

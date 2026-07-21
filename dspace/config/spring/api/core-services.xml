@@ -99,6 +99,8 @@
     <bean class="org.dspace.content.clarin.ClarinTokenServiceImpl"/>
     <bean class="org.dspace.content.ReportResultServiceImpl"/>
     <bean class="org.dspace.eperson.clarin.ClarinIdentityServiceImpl"/>
+    <bean class="org.dspace.eperson.clarin.EPersonMergeAuditServiceImpl"/>
+    <bean class="org.dspace.eperson.clarin.EPersonMergeServiceImpl"/>
 
     <bean class="org.dspace.core.NewsServiceImpl">
         <property name="acceptableFilenames">

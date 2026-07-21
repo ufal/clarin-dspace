@@ -48,6 +48,12 @@ public interface ClarinIdentityService {
     String SOURCE_ADMIN = "admin";
 
     /**
+     * Value persisted in {@code eperson_netid_alias.source} for aliases carried over onto the
+     * surviving EPerson by the {@code eperson-merge} tooling.
+     */
+    String SOURCE_MERGE = "merge";
+
+    /**
      * Resolve a formatted "value[authority]" netid to the EPerson it is aliased
      * to. Falls back to a legacy {@code EPerson.netid} column match when no
      * alias exists. Returns null if neither matches.

@@ -13,6 +13,7 @@ import java.util.List;
 import org.dspace.content.Item;
 import org.dspace.core.Context;
 import org.dspace.core.GenericDAO;
+import org.dspace.eperson.EPerson;
 import org.dspace.versioning.Version;
 import org.dspace.versioning.VersionHistory;
 
@@ -26,6 +27,11 @@ import org.dspace.versioning.VersionHistory;
  */
 public interface VersionDAO extends GenericDAO<Version> {
     public Version findByItem(Context context, Item item) throws SQLException;
+
+    /**
+     * All versions attributed to an EPerson (used by {@code eperson-merge}).
+     */
+    public List<Version> findByEPerson(Context context, EPerson ePerson) throws SQLException;
 
     /**
      * This method returns all versions of an version history that have items

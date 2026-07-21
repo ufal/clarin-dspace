@@ -13,6 +13,7 @@ import java.util.List;
 
 import org.dspace.content.Item;
 import org.dspace.core.Context;
+import org.dspace.eperson.EPerson;
 import org.dspace.versioning.Version;
 import org.dspace.versioning.VersionHistory;
 
@@ -111,5 +112,14 @@ public interface VersioningService {
      * @throws SQLException      If database error
      */
     public int countVersionsByHistoryWithItem(Context context, VersionHistory versionHistory) throws SQLException;
+
+    /**
+     * All versions attributed to an EPerson (used by {@code eperson-merge}).
+     *
+     * @param context context
+     * @param ePerson EPerson
+     * @throws SQLException if database error
+     */
+    List<Version> findByEPerson(Context context, EPerson ePerson) throws SQLException;
 
 }

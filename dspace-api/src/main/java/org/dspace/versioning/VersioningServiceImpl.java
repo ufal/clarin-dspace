@@ -19,6 +19,7 @@ import org.dspace.content.WorkspaceItem;
 import org.dspace.content.service.ItemService;
 import org.dspace.content.service.WorkspaceItemService;
 import org.dspace.core.Context;
+import org.dspace.eperson.EPerson;
 import org.dspace.versioning.dao.VersionDAO;
 import org.dspace.versioning.service.VersionHistoryService;
 import org.dspace.versioning.service.VersioningService;
@@ -269,5 +270,10 @@ public class VersioningServiceImpl implements VersioningService {
     @Override
     public void deleteVersion(Context c, Version version) throws SQLException {
         versionDAO.delete(c, version);
+    }
+
+    @Override
+    public List<Version> findByEPerson(Context context, EPerson ePerson) throws SQLException {
+        return versionDAO.findByEPerson(context, ePerson);
     }
 }

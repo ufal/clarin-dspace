@@ -14,6 +14,7 @@ import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.Item;
 import org.dspace.content.clarin.MatomoReportSubscription;
 import org.dspace.core.Context;
+import org.dspace.eperson.EPerson;
 
 /**
  * Service interface class for the MatomoReportSubscription object.
@@ -79,5 +80,17 @@ public interface MatomoReportSubscriptionService {
      * @throws AuthorizeException the user in not admin
      */
     List<MatomoReportSubscription> findAll(Context context) throws SQLException, AuthorizeException;
+
+    /**
+     * Re-point all of {@code from}'s subscriptions to {@code to} (used by {@code eperson-merge}), dropping
+     * any that would duplicate a subscription {@code to} already has for the same item.
+     *
+     * @param context DSpace context object
+     * @param from EPerson whose subscriptions are being moved
+     * @param to EPerson receiving the subscriptions
+     * @return the number of subscriptions actually re-pointed (not counting dropped duplicates)
+     * @throws SQLException if database error
+     */
+    int reassignEPerson(Context context, EPerson from, EPerson to) throws SQLException;
 
 }
