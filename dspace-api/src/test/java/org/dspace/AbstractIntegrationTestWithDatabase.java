@@ -170,21 +170,29 @@ public class AbstractIntegrationTestWithDatabase extends AbstractDSpaceIntegrati
         // cache, configuration, builder cache) must be reset regardless of whether builder cleanup threw.
         // Otherwise a single flake in one test's teardown poisons every subsequent test in the class.
         Exception primaryFailure = null;
+
         try {
             AbstractBuilder.cleanupObjects();
-            parentCommunity = null;
+        } catch (Exception e) {
+            primaryFailure = new RuntimeException("Error cleaning up builder objects", e);
+        }
+        parentCommunity = null;
+        try {
             cleanupContext();
         } catch (Exception e) {
-            primaryFailure = new RuntimeException("Error cleaning up builder objects & context object", e);
-        } finally {
-            try {
-                resetSharedState();
-            } catch (Exception e) {
-                if (primaryFailure == null) {
-                    primaryFailure = e;
-                } else {
-                    primaryFailure.addSuppressed(e);
-                }
+            if (primaryFailure == null) {
+                primaryFailure = new RuntimeException("Error cleaning up context object", e);
+            } else {
+                primaryFailure.addSuppressed(e);
+            }
+        }
+        try {
+            resetSharedState();
+        } catch (Exception e) {
+            if (primaryFailure == null) {
+                primaryFailure = e;
+            } else {
+                primaryFailure.addSuppressed(e);
             }
         }
         if (primaryFailure != null) {
@@ -193,7 +201,7 @@ public class AbstractIntegrationTestWithDatabase extends AbstractDSpaceIntegrati
     }
 
     /**
-     * Reset all shared static state between tests: Solr cores, authority cache, QA events, configuration
+     * Reset all shared static state between tests: Solr cores, authority cache, configuration
      * service, and the builder cache. Called from {@link #destroy()} inside a finally block so this always
      * runs, even if earlier teardown steps failed.
      *
