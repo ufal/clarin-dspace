@@ -310,7 +310,6 @@ public class ITDSpaceAIP extends AbstractIntegrationTest {
     @After
     @Override
     public void destroy() {
-        context.abort();
         super.destroy();
     }
 
