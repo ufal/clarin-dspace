@@ -152,3 +152,29 @@ jobs:
     secrets:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_ACCESS_TOKEN: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+
+  ###########################################################################
+  # Redeploy the ok-dspace test environment (ufal/dspace-k8s, ns kosarko-ns)
+  ###########################################################################
+  # Runs only for pushes to the default branch, after the images this
+  # environment consumes have actually been pushed. This job only records the
+  # new version: it sends a repository_dispatch to ufal/dspace-k8s, which pins
+  # the tag to git, and a reconciler inside the cluster picks it up. No
+  # deployment step and no cluster credential exists in this repository - or in
+  # GitHub at all.
+  deploy-ok-dspace:
+    if: github.repository == 'ufal/clarin-dspace' && github.event_name == 'push' && github.ref_name == 'clarin-v7'
+    # Both images are built from this same commit, so ok-dspace pins one SHA
+    # for the pair. Waiting for both avoids dispatching a half-built version.
+    needs: [dspace, dspace-solr]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger deployment
+        uses: peter-evans/repository-dispatch@v4
+        with:
+          # Fine-grained PAT, scoped to ufal/dspace-k8s only, Contents: write
+          # (what POST /repos/{owner}/{repo}/dispatches requires).
+          token: ${{ secrets.OK_DSPACE_DEPLOY_TOKEN }}
+          repository: ufal/dspace-k8s
+          event-type: deploy-ok-dspace
+          client-payload: '{"component":"backend","sha":"${{ github.sha }}"}'
