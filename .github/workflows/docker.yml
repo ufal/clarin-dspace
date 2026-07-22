@@ -170,6 +170,10 @@ jobs:
     # for the pair. Waiting for both avoids dispatching a half-built version.
     needs: [dspace, dspace-solr]
     runs-on: ubuntu-latest
+    # This job authenticates with a PAT and never uses GITHUB_TOKEN, so it needs
+    # none of the workflow-level permissions. Dropping them limits what a
+    # compromised third-party action could reach from here.
+    permissions: {}
     steps:
       - name: Notify ufal/dspace-k8s
         uses: peter-evans/repository-dispatch@v4
