@@ -171,16 +171,24 @@ jobs:
     needs: [dspace, dspace-solr]
     runs-on: ubuntu-latest
     # This job authenticates with a PAT and never uses GITHUB_TOKEN, so it needs
-    # none of the workflow-level permissions. Dropping them limits what a
-    # compromised third-party action could reach from here.
+    # none of the workflow-level permissions at all.
     permissions: {}
     steps:
+      # One POST, hand-rolled with the `gh` and `jq` that ubuntu-latest already
+      # ships, rather than a third-party dispatch action: a single API call is
+      # not worth a supply-chain dependency that runs with the PAT in its
+      # environment.
       - name: Notify ufal/dspace-k8s
-        uses: peter-evans/repository-dispatch@v4
-        with:
+        env:
           # Fine-grained PAT, scoped to ufal/dspace-k8s only, Contents: write
           # (what POST /repos/{owner}/{repo}/dispatches requires).
-          token: ${{ secrets.OK_DSPACE_DEPLOY_TOKEN }}
-          repository: ufal/dspace-k8s
-          event-type: deploy-ok-dspace
-          client-payload: '{"component":"backend","sha":"${{ github.sha }}"}'
+          GH_TOKEN: ${{ secrets.OK_DSPACE_DEPLOY_TOKEN }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # jq builds the payload from an --arg, so the value is a JSON string
+          # by construction rather than by careful quoting.
+          jq -n --arg sha "${SHA}" \
+            '{event_type: "deploy-ok-dspace",
+              client_payload: {component: "backend", sha: $sha}}' \
+            | gh api -X POST repos/ufal/dspace-k8s/dispatches --input -
