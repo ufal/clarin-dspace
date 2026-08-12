@@ -10,7 +10,6 @@ package org.dspace.app.rest.hf;
 import static org.junit.Assert.assertEquals;
 
 import java.io.File;
-import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -45,7 +44,7 @@ public class HfPythonClientIT extends AbstractHfClientIT {
     private void check(String repoId) throws Exception {
         Assume.assumeTrue("uv is not installed", which("uv") != null);
 
-        File home = Files.createTempDirectory("hf-python-home").toFile();
+        File home = newWorkDir("python-");
         File script = writeScript("check_hub.py", home);
 
         Map<String, String> env = new HashMap<>();

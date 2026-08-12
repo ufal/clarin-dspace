@@ -8,7 +8,6 @@
 package org.dspace.app.rest.hf;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 /**
@@ -25,9 +24,9 @@ public class HuggingFaceRefs {
 
     private List<HuggingFaceRef> branches = new ArrayList<>();
 
-    private List<HuggingFaceRef> converts = Collections.emptyList();
+    private List<HuggingFaceRef> converts = new ArrayList<>();
 
-    private List<HuggingFaceRef> tags = Collections.emptyList();
+    private List<HuggingFaceRef> tags = new ArrayList<>();
 
     /**
      * Default no-arg constructor required for Jackson (de)serialization.

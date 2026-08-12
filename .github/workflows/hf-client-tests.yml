@@ -47,8 +47,34 @@ jobs:
         run: |
           mvn --no-transfer-progress -V install -P-assembly -Phf-client-its \
               -DskipIntegrationTests=false -Dit.test='Hf*ClientIT' -DfailIfNoTests=false \
-              -Dtest.argLine=-Xmx1024m -Dfailsafe.rerunFailingTestsCount=1 \
+              -Dfailsafe.rerunFailingTestsCount=1 \
               -Dcheckstyle.skip=true -Dlicense.skip=true -Dxml.skip=true -Denforcer.skip=true
+
+      # Every one of these tests skips itself when its client cannot be provisioned, which is the
+      # right behaviour locally but useless here: a huggingface.co blip, a GitHub-releases 404 or
+      # an npm hiccup would otherwise produce a green nightly in which nothing ran at all. An
+      # instrument that reports "nothing found" when it never looked is worse than no instrument,
+      # so CI - and only CI - insists the tests actually executed.
+      - name: Fail if the client tests did not actually run
+        run: |
+          reports=dspace-server-webapp/target/failsafe-reports
+          status=0
+          for suite in HfLlamaCppClientIT HfPythonClientIT HfJsClientIT; do
+            report="$reports/TEST-org.dspace.app.rest.hf.$suite.xml"
+            if [ ! -f "$report" ]; then
+              echo "::error::$suite produced no report - it never ran"
+              status=1
+            elif ! grep -q 'skipped="0"' "$report"; then
+              echo "::error::$suite was skipped - its client could not be provisioned"
+              status=1
+            elif grep -q 'tests="0"' "$report"; then
+              echo "::error::$suite ran zero tests"
+              status=1
+            else
+              echo "$suite ran"
+            fi
+          done
+          exit $status
 
       - name: Upload test results
         uses: actions/upload-artifact@v4

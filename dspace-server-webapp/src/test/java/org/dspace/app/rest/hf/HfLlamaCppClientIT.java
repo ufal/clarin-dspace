@@ -15,13 +15,18 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.junit.Assume;
 import org.junit.Test;
@@ -101,7 +106,11 @@ public class HfLlamaCppClientIT extends AbstractHfClientIT {
                     .directory(dir.toFile())
                     .redirectErrorStream(true)
                     .start();
-            tar.waitFor();
+            if (!tar.waitFor(120, TimeUnit.SECONDS)) {
+                tar.destroyForcibly();
+                Assume.assumeTrue("Unpacking the llama.cpp release timed out", false);
+            }
+            Assume.assumeTrue("Unpacking the llama.cpp release failed", tar.exitValue() == 0);
         }
         Assume.assumeTrue("No llama.cpp binary available", candidate.canExecute());
         llamaBinary = candidate;
@@ -114,7 +123,7 @@ public class HfLlamaCppClientIT extends AbstractHfClientIT {
      */
     private List<Path> download(String repoId) throws Exception {
         File llama = llama();
-        File home = Files.createTempDirectory("hf-llama-home").toFile();
+        File home = newWorkDir("llama-");
 
         Map<String, String> env = new HashMap<>();
         env.put("HOME", home.getAbsolutePath());
@@ -125,10 +134,34 @@ public class HfLlamaCppClientIT extends AbstractHfClientIT {
 
         ProcessResult result = run(home, env, 300, llama.getAbsolutePath(), "download", "-hf", repoId);
 
-        List<Path> models = findFiles(home.toPath(), ".gguf");
+        List<Path> models = findModels(home.toPath());
         assertTrue("llama download produced no .gguf for " + repoId
                 + " (exit " + result.exitCode + ")\n" + result.output, !models.isEmpty());
         return models;
+    }
+
+    /**
+     * Collect the {@code .gguf} files llama.cpp actually materialised.
+     *
+     * <p>Symlinks are followed deliberately: llama.cpp writes the payload into {@code blobs/}
+     * under its {@code oid} and links to it from {@code snapshots/}, so a walk that stopped at
+     * link entries would see 76-byte links rather than the model, and every size assertion would
+     * be meaningless. Blobs are hash-named, so they do not double-count against the suffix
+     * filter.</p>
+     *
+     * @param root the client's home directory
+     * @return the model files found
+     * @throws IOException if the directory cannot be walked
+     */
+    private List<Path> findModels(Path root) throws IOException {
+        if (!Files.isDirectory(root)) {
+            return Collections.emptyList();
+        }
+        try (Stream<Path> walk = Files.walk(root, FileVisitOption.FOLLOW_LINKS)) {
+            return walk.filter(p -> p.getFileName().toString().endsWith(".gguf"))
+                    .filter(Files::isRegularFile)
+                    .collect(Collectors.toList());
+        }
     }
 
     @Test

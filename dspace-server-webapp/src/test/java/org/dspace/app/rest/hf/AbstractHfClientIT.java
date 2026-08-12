@@ -12,13 +12,10 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
-import java.net.URI;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -26,6 +23,7 @@ import org.dspace.app.rest.test.AbstractWebClientIntegrationTest;
 import org.dspace.builder.BitstreamBuilder;
 import org.dspace.builder.CollectionBuilder;
 import org.dspace.builder.CommunityBuilder;
+import org.dspace.builder.ItemBuilder;
 import org.dspace.content.Collection;
 import org.dspace.content.Community;
 import org.dspace.content.Item;
@@ -148,7 +146,7 @@ public abstract class AbstractHfClientIT extends AbstractWebClientIntegrationTes
 
     private Item createModelItem(Collection collection, String title, byte[] model, String... filenames)
             throws Exception {
-        Item item = org.dspace.builder.ItemBuilder.createItem(context, collection)
+        Item item = ItemBuilder.createItem(context, collection)
                 .withTitle(title)
                 .withType("machineLearningModel")
                 .build();
@@ -173,13 +171,20 @@ public abstract class AbstractHfClientIT extends AbstractWebClientIntegrationTes
     }
 
     /**
-     * Port the test web server is listening on. The {@code @LocalServerPort} field of the base
-     * class is private, so it is recovered from the URL it builds.
+     * Create a working directory for one external client run.
      *
-     * @return the server port
+     * <p>Rooted under {@code target/} rather than the system temp directory so that
+     * {@code mvn clean} reaps it, a failed run leaves its artefacts behind for post-mortem, and
+     * CI's report upload can reach them.</p>
+     *
+     * @param prefix directory name prefix
+     * @return the created directory
+     * @throws IOException if it cannot be created
      */
-    protected int serverPort() {
-        return URI.create(getURL("/")).getPort();
+    protected File newWorkDir(String prefix) throws IOException {
+        Path root = Paths.get("target", "hf-client-its", "work");
+        Files.createDirectories(root);
+        return Files.createTempDirectory(root, prefix).toFile();
     }
 
     /**
@@ -257,6 +262,8 @@ public abstract class AbstractHfClientIT extends AbstractWebClientIntegrationTes
         Process process = builder.start();
         boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
         if (!finished) {
+            // npm spawns children; killing only the parent would leave them running.
+            process.descendants().forEach(ProcessHandle::destroyForcibly);
             process.destroyForcibly();
             process.waitFor(10, TimeUnit.SECONDS);
         }
@@ -304,26 +311,5 @@ public abstract class AbstractHfClientIT extends AbstractWebClientIntegrationTes
             Files.copy(is, target.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
         }
         return target;
-    }
-
-    /**
-     * Collect every regular file under a directory, following symlinks — the HuggingFace cache
-     * layout stores the payload in {@code blobs/} and links to it from {@code snapshots/}, so a
-     * naive walk sees only link entries.
-     *
-     * @param root directory to scan
-     * @return the files found
-     * @throws IOException if the directory cannot be walked
-     */
-    protected List<Path> findFiles(Path root, String suffix) throws IOException {
-        List<Path> found = new ArrayList<>();
-        if (!Files.isDirectory(root)) {
-            return found;
-        }
-        Files.walk(root, java.nio.file.FileVisitOption.FOLLOW_LINKS)
-                .filter(p -> p.getFileName().toString().endsWith(suffix))
-                .filter(Files::isRegularFile)
-                .forEach(found::add);
-        return found;
     }
 }

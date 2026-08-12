@@ -10,7 +10,6 @@ package org.dspace.app.rest.hf;
 import static org.junit.Assert.assertEquals;
 
 import java.io.File;
-import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -51,7 +50,7 @@ public class HfJsClientIT extends AbstractHfClientIT {
         Assume.assumeTrue("npm is not installed", which("npm") != null);
         Assume.assumeTrue("node is not installed", which("node") != null);
 
-        File home = Files.createTempDirectory("hf-js-home").toFile();
+        File home = newWorkDir("js-");
         Map<String, String> env = new HashMap<>();
         env.put("HOME", home.getAbsolutePath());
 
