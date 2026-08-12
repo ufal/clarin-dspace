@@ -203,18 +203,34 @@ public class ClarinHuggingFaceController {
         }
     }
 
+    /**
+     * List the git refs of an exposed Item, HuggingFace-Hub
+     * {@code GET /api/models/{repo}/refs} style.
+     *
+     * <p>A DSpace Item has no git history, so a single synthetic {@code main} branch is
+     * advertised, pointing at the Item's current revision sha. This is not cosmetic: clients
+     * feed {@code targetCommit} straight back as the revision of the subsequent {@code tree}
+     * and {@code resolve} calls, so it must be a revision {@link ClarinHuggingFaceService#
+     * isValidRevision(String, String)} accepts.</p>
+     *
+     * @param prefix  the handle prefix (e.g. "11234")
+     * @param suffix  the handle suffix (e.g. "1-5814")
+     * @param request the HTTP request
+     * @return the refs of the repository, or an error response
+     * @throws SQLException if a database error occurs
+     */
     @GetMapping("/api/models/{prefix}/{suffix}/refs")
     public ResponseEntity<Object> refs(@PathVariable String prefix, @PathVariable String suffix,
-                                       HttpServletRequest request) throws SQLException {
+            HttpServletRequest request) throws SQLException {
         if (!huggingFaceService.isEnabled()) {
             return ResponseEntity.notFound().build();
         }
 
+        Context context = ContextUtil.obtainContext(request);
         try {
-            return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(
-                    "{\"branches\": [ {\"name\": \"main\", \"ref\": \"refs/heads/main\", " +
-                    "\"targetCommit\": \"3a8c0b1456843b87a61c5c9e1996903ea740ea15\" }]," +
-                    "\"converts\": [], \"tags\": [] }");
+            ResolvedRepository repository = resolveAuthorizedRepository(context, prefix, suffix);
+            context.complete();
+            return ResponseEntity.ok(HuggingFaceRefs.mainOnly(repository.sha));
         } catch (HuggingFaceApiException e) {
             return e.toResponse();
         }

@@ -1,0 +1,58 @@
+# Drives real third-party HuggingFace clients (llama.cpp, huggingface_hub, @huggingface/hub)
+# against the /api/hf facade.
+#
+# These are deliberately NOT part of the per-push build: they need network access and an
+# external toolchain, whereas the normal test suite has no infrastructure dependency at all.
+# They also guard against drift in software we do not control, which moves on the clients'
+# release schedules rather than on ours - so a nightly run is the cadence that actually
+# catches something, and a per-push run would only re-verify the same fact repeatedly.
+name: HuggingFace client contract tests
+
+on:
+  schedule:
+    # 03:20 UTC daily
+    - cron: '20 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hf-clients:
+    runs-on: ubuntu-latest
+    env:
+      MAVEN_OPTS: "-Xmx1024M"
+    steps:
+      - name: Checkout codebase
+        uses: actions/checkout@v4
+
+      - name: Install JDK 11
+        uses: actions/setup-java@v4
+        with:
+          java-version: 11
+          distribution: 'temurin'
+          cache: 'maven'
+
+      # The Python client is provisioned by uv at test time, on purpose: these tests exist to
+      # exercise the CURRENT client releases, so pinning them here would defeat the point.
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run HuggingFace client contract tests
+        run: |
+          mvn --no-transfer-progress -V install -P-assembly -Phf-client-its \
+              -DskipIntegrationTests=false -Dit.test='Hf*ClientIT' -DfailIfNoTests=false \
+              -Dtest.argLine=-Xmx1024m -Dfailsafe.rerunFailingTestsCount=1 \
+              -Dcheckstyle.skip=true -Dlicense.skip=true -Dxml.skip=true -Denforcer.skip=true
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hf-client-test-results
+          path: '**/target/failsafe-reports/**'
