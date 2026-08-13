@@ -156,6 +156,17 @@ public class SubmissionFormsLocaleConsistencyTest {
     private Document parse(File file) throws Exception {
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         factory.setNamespaceAware(false);
+        factory.setFeature(javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING, true);
+
+        // Allow DOCTYPE - submission-forms.xml legitimately uses one - but keep
+        // external entity/DTD resolution locked down to avoid XXE exposure.
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", false);
+        factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+        factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+        factory.setXIncludeAware(false);
+        factory.setExpandEntityReferences(true);
+
         DocumentBuilder builder = factory.newDocumentBuilder();
         return builder.parse(file);
     }
