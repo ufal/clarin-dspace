@@ -74,6 +74,12 @@
         <skipUnitTests>true</skipUnitTests>
         <skipIntegrationTests>true</skipIntegrationTests>
 
+        <!-- Integration tests that drive real third-party clients (see the 'hf-client-its' profile)
+             are excluded from the normal IT run: they need a network connection and an external
+             toolchain (node, uv, a llama.cpp binary), which the default suite deliberately does not.
+             The 'hf-client-its' profile flips this pattern to something that matches nothing. -->
+        <client.its.exclude>**/*ClientIT.java</client.its.exclude>
+
         <!-- 'root.basedir' is the path to the root [dspace-src] dir. It must be redefined by each child POM,
                      as it is used to reference the LICENSE.header and *.properties file(s) in that directory. -->
         <root.basedir>${basedir}</root.basedir>
@@ -236,6 +242,7 @@
                         <argLine>${test.argLine} ${failsafeJacoco}</argLine>
                         <excludes>
                             <exclude>**/Abstract*</exclude>
+                            <exclude>${client.its.exclude}</exclude>
                         </excludes>
                          <!-- Detailed logs in failsafe-reports/testName-output.txt instead of stdout -->
                         <redirectTestOutputToFile>true</redirectTestOutputToFile>
@@ -515,6 +522,43 @@
     </build>
 
     <profiles>
+        <!-- Opt-in profile which also runs the *ClientIT integration tests: end-to-end tests that
+             drive real third-party HuggingFace clients (llama.cpp, huggingface_hub, @huggingface/hub)
+             against a live test server, to verify the /api/hf facade against the contracts those
+             clients actually implement rather than against our reading of them.
+
+             These are excluded from the normal IT run because they need network access and an
+             external toolchain; the default suite has no such dependency. Run with:
+               mvn install -DskipIntegrationTests=false -Phf-client-its -Dit.test='Hf*ClientIT' \
+                   -DfailIfNoTests=false -Dtest.argLine=-Xmx1024m
+             Each test skips itself (JUnit Assume) when its client cannot be provisioned. -->
+        <profile>
+            <id>hf-client-its</id>
+            <properties>
+                <!-- Matches nothing, so *ClientIT is no longer excluded from the failsafe run. -->
+                <client.its.exclude>**/NoSuchClientITExclusion.java</client.its.exclude>
+            </properties>
+            <build>
+                <pluginManagement>
+                    <plugins>
+                        <plugin>
+                            <groupId>org.apache.maven.plugins</groupId>
+                            <artifactId>maven-failsafe-plugin</artifactId>
+                            <configuration>
+                                <systemPropertyVariables>
+                                    <!-- Second guard. The exclude pattern above is ignored whenever
+                                         someone passes -Dit.test=..., which would drag these
+                                         network-dependent tests into an ordinary run; the tests
+                                         themselves also check this flag and skip without it. -->
+                                    <hf.client.its>true</hf.client.its>
+                                </systemPropertyVariables>
+                            </configuration>
+                        </plugin>
+                    </plugins>
+                </pluginManagement>
+            </build>
+        </profile>
+
         <!-- Profile which sets our default system properties for all Unit/Integration tests.
              By default, this sets UTF-8 encoding for all tests and gives tests 1GB of memory max.
              Both m-surefire-p and m-failsafe-p are unable to use MAVEN_OPTS because they fork a new JVM for testing.
