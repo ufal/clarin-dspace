@@ -52,12 +52,6 @@ import org.w3c.dom.NodeList;
  * JUnit Parameterized test case, so a failure in submission-forms_it.xml,
  * say, is reported separately from submission-forms_cs.xml rather than
  * being lumped into one giant failure.
- * <p>
- * For every &lt;definition name="..."&gt; element, and recursively for every
- * child element inside it (matched across the two files by its "name"
- * attribute, or by dc-schema/dc-element/dc-qualifier for DSpace
- * &lt;field&gt; elements), all remaining attributes (input-type, required,
- * regex, repeatable, vocabulary, etc.) are compared.
  */
 @RunWith(Parameterized.class)
 public class SubmissionFormsLocaleConsistencyTest {
@@ -89,15 +83,22 @@ public class SubmissionFormsLocaleConsistencyTest {
     private Element localizedRoot;
 
     @BeforeClass
-    public static void checkBaseFileExists() throws Exception {
+    public static void checkBaseFileExists() {
         File baseFile = new File(CONFIG_DIR, BASE_FILE_NAME);
         if (!baseFile.isFile()) {
             throw new IllegalStateException(
                     "Base submission-forms.xml file not found under " + baseFile.getAbsolutePath()
                             + " - check CONFIG_DIR is correct and submission-forms.xml exists.");
         }
-        Document baseDoc = parse(baseFile);
-        originalRoot = baseDoc.getDocumentElement();
+        try {
+            Document baseDoc = parse(baseFile);
+            originalRoot = baseDoc.getDocumentElement();
+        } catch (Exception e) {
+            throw new IllegalStateException(
+                    "Failed to parse base submission-forms.xml file under " + baseFile.getAbsolutePath()
+                            + " - check CONFIG_DIR is correct and submission-forms.xml is valid XML.",
+                    e);
+        }
     }
 
     public SubmissionFormsLocaleConsistencyTest(String locale, File localeFile) {
@@ -140,9 +141,16 @@ public class SubmissionFormsLocaleConsistencyTest {
     }
 
     @Before
-    public void setUp() throws Exception {
-        Document localeDoc = parse(localeFile);
-        localizedRoot = localeDoc.getDocumentElement();
+    public void setUp() {
+        try {
+            Document localeDoc = parse(localeFile);
+            localizedRoot = localeDoc.getDocumentElement();
+        } catch (Exception e) {
+            throw new IllegalStateException(
+                    "Failed to parse locale submission-forms file " + localeFile.getAbsolutePath()
+                            + " - check the file is valid XML.",
+                    e);
+        }
     }
 
     // ------------------------------------------------------------------
@@ -396,6 +404,10 @@ public class SubmissionFormsLocaleConsistencyTest {
     private static Map<String, Element> byNameAttr(List<Element> elements) {
         Map<String, Element> m = new LinkedHashMap<>();
         for (Element e : elements) {
+            if (!e.hasAttribute("name")) {
+                throw new IllegalStateException(
+                        "The 'name' attribute missing in element " + e.getTagName());
+            }
             m.put(e.getAttribute("name"), e);
         }
         return m;
@@ -404,10 +416,11 @@ public class SubmissionFormsLocaleConsistencyTest {
     private static Map<String, Element> byValuePairsKey(List<Element> elements) {
         Map<String, Element> m = new LinkedHashMap<>();
         for (Element e : elements) {
-            String key = e.hasAttribute("value-pairs-name")
-                    ? e.getAttribute("value-pairs-name")
-                    : e.getAttribute("name");
-            m.put(key, e);
+            if (!e.hasAttribute("value-pairs-name")) {
+                throw new IllegalStateException(
+                        "The 'value-pairs-name' attribute missing in value-pairs element");
+            }
+            m.put(e.getAttribute("value-pairs-name"), e);
         }
         return m;
     }
