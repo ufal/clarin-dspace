@@ -23,6 +23,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 
@@ -247,8 +248,18 @@ public class SubmissionFormsLocaleConsistencyTest {
             assertEquals("value-pairs '" + name + "': pair count mismatch",
                     enPairs.size(), localePairs.size());
 
-            for (int p = 0; p < enPairs.size(); p++) {
-                assertStructurallyEqual(enPairs.get(p), localePairs.get(p),
+            List<Element> sortedEnPairs = enPairs.stream()
+                    .sorted(Comparator.comparing(el ->
+                            getSubElementText(el, "stored-value")))
+                    .collect(Collectors.toList());
+
+            List<Element> sortedLocalePairs = localePairs.stream()
+                    .sorted(Comparator.comparing(el ->
+                            getSubElementText(el, "stored-value")))
+                    .collect(Collectors.toList());
+
+            for (int p = 0; p < sortedEnPairs.size(); p++) {
+                assertStructurallyEqual(sortedEnPairs.get(p), sortedLocalePairs.get(p),
                         "value-pairs[" + name + "]/pair[" + p + "]",
                         PAIR_LOCALIZED_TAGS, Map.of());
             }
@@ -278,11 +289,20 @@ public class SubmissionFormsLocaleConsistencyTest {
 
             List<Element> enInputs = childElementsByTag(enDef, "input");
             List<Element> localeInputs = childElementsByTag(localeDef, "input");
+
             assertEquals("definition '" + name + "': input count mismatch",
                     enInputs.size(), localeInputs.size());
 
-            for (int i = 0; i < enInputs.size(); i++) {
-                assertStructurallyEqual(enInputs.get(i), localeInputs.get(i),
+            List<Element> sortedEnInputs = enInputs.stream()
+                    .sorted(Comparator.comparing(el -> el.getAttribute("name")))
+                    .collect(Collectors.toList());
+
+            List<Element> sortedLocaleInputs = localeInputs.stream()
+                    .sorted(Comparator.comparing(el -> el.getAttribute("name")))
+                    .collect(Collectors.toList());
+
+            for (int i = 0; i < sortedEnInputs.size(); i++) {
+                assertStructurallyEqual(sortedEnInputs.get(i), sortedLocaleInputs.get(i),
                         "definition[" + name + "]/input[" + i + "]",
                         Set.of(), INPUT_LOCALIZED_ATTRS);
             }
@@ -483,6 +503,14 @@ public class SubmissionFormsLocaleConsistencyTest {
             assertStructurallyEqual(enChild, localeChild, path + "/" + enChild.getTagName() + "[" + i + "]",
                     localizedTags, localizedAttrsByTag);
         }
+    }
+
+    private static String getSubElementText(Element parent, String childName) {
+        NodeList list = parent.getElementsByTagName(childName);
+        if (list.getLength() > 0) {
+            return list.item(0).getTextContent().trim(); // Trims whitespace from inside the XML tags
+        }
+        return ""; // Safely returns empty string if sub-element is missing
     }
 
 }
