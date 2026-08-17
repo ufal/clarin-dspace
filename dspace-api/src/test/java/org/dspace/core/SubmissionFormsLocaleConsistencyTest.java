@@ -52,6 +52,8 @@ import org.w3c.dom.NodeList;
  * JUnit Parameterized test case, so a failure in submission-forms_it.xml,
  * say, is reported separately from submission-forms_cs.xml rather than
  * being lumped into one giant failure.
+ *
+ * @author Milan Kuchtiak
  */
 @RunWith(Parameterized.class)
 public class SubmissionFormsLocaleConsistencyTest {
