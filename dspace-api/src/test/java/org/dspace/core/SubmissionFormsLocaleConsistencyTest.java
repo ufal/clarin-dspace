@@ -7,11 +7,11 @@
  */
 package org.dspace.core;
 
-import static org.junit.Assert.fail;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -20,15 +20,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 
+import org.junit.Assume;
+import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.w3c.dom.Attr;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NamedNodeMap;
@@ -66,14 +69,36 @@ public class SubmissionFormsLocaleConsistencyTest {
     private static final Pattern LOCALE_FILE_PATTERN =
             Pattern.compile("^submission-forms_(.+)\\.xml$");
 
-    private static final Set<String> IGNORED_ATTRS = new HashSet<>(Arrays.asList(
-            "label", "hint", "description", "placeholder"));
+    /** {@code <field>} children whose *text* may legitimately differ between locales. */
+    private static final Set<String> FIELD_LOCALIZED_TAGS = Set.of("label", "hint", "required");
 
-    private static final Set<String> IGNORED_TEXT_TAGS = new HashSet<>(Arrays.asList(
-            "label", "hint", "description"));
+    /** {@code <relation-field>} children whose *text* may legitimately differ between locales. */
+    private static final Set<String> RELATION_FIELD_LOCALIZED_TAGS = Set.of("label", "hint");
+
+    /** {@code <pair>} children whose *text* may legitimately differ between locales. */
+    private static final Set<String> PAIR_LOCALIZED_TAGS = Set.of("displayed-value");
+
+    /** {@code <input>} attributes (inside form-complex-definitions) that may differ. */
+    private static final Map<String, Set<String>> INPUT_LOCALIZED_ATTRS =
+            Map.of("input", Set.of("label", "hint", "placeholder"));
 
     private final String locale;
     private final File localeFile;
+
+    private static Element originalRoot;
+    private Element localizedRoot;
+
+    @BeforeClass
+    public static void checkBaseFileExists() throws Exception {
+        File baseFile = new File(CONFIG_DIR, BASE_FILE_NAME);
+        if (!baseFile.isFile()) {
+            throw new IllegalStateException(
+                    "Base submission-forms.xml file not found under " + baseFile.getAbsolutePath()
+                            + " - check CONFIG_DIR is correct and submission-forms.xml exists.");
+        }
+        Document baseDoc = parse(baseFile);
+        originalRoot = baseDoc.getDocumentElement();
+    }
 
     public SubmissionFormsLocaleConsistencyTest(String locale, File localeFile) {
         this.locale = locale;
@@ -114,46 +139,152 @@ public class SubmissionFormsLocaleConsistencyTest {
         return params;
     }
 
-    @Test
-    public void localeMatchesBaseStructure() throws Exception {
-        File baseFile = new File(CONFIG_DIR, BASE_FILE_NAME);
-        Document baseDoc = parse(baseFile);
+    @Before
+    public void setUp() throws Exception {
         Document localeDoc = parse(localeFile);
+        localizedRoot = localeDoc.getDocumentElement();
+    }
 
-        Map<String, Element> baseDefs = indexDefinitions(baseDoc);
-        Map<String, Element> localeDefs = indexDefinitions(localeDoc);
+    // ------------------------------------------------------------------
+    // 1) same overall element vocabulary
+    // ------------------------------------------------------------------
+    @Test
+    public void sameElementVocabulary() {
+        Set<String> enTags = allTagNames(originalRoot);
+        Set<String> localeTags = allTagNames(localizedRoot);
+        Set<String> onlyOriginal = new TreeSet<>(enTags);
+        onlyOriginal.removeAll(localeTags);
+        Set<String> onlyLocalized = new TreeSet<>(localeTags);
+        onlyLocalized.removeAll(enTags);
 
-        List<String> errors = new ArrayList<>();
+        assertEquals("element vocabulary differs\n"
+                        + "  original only : " + onlyOriginal + "\n"
+                        + "  localized only: " + onlyLocalized,
+                enTags, localeTags);
+    }
 
-        for (String name : baseDefs.keySet()) {
-            if (!localeDefs.containsKey(name)) {
-                errors.add("definition '" + name + "': present in base but missing in " + locale);
+    // ------------------------------------------------------------------
+    // 2) form-definitions -> form -> row -> field
+    // ------------------------------------------------------------------
+    @Test
+    public void formDefinitionsConsistency() {
+        Element enDefs = firstChildByTag(originalRoot, "form-definitions");
+        Element localeDefs = firstChildByTag(localizedRoot, "form-definitions");
+        assertNotNull("form-definitions missing in original", enDefs);
+        assertNotNull("form-definitions missing in localized", localeDefs);
+
+        Map<String, Element> enForms = byNameAttr(childElementsByTag(enDefs, "form"));
+        Map<String, Element> localeForms = byNameAttr(childElementsByTag(localeDefs, "form"));
+        assertEquals("form name mismatch", enForms.keySet(), localeForms.keySet());
+
+        for (String name : enForms.keySet()) {
+            Element enForm = enForms.get(name);
+            Element localeForm = localeForms.get(name);
+
+            List<Element> enRows = childElementsByTag(enForm, "row");
+            List<Element> localeRows = childElementsByTag(localeForm, "row");
+            assertEquals("form '" + name + "': row count mismatch", enRows.size(), localeRows.size());
+
+            for (int r = 0; r < enRows.size(); r++) {
+                List<Element> enFields = childElementsByTag(enRows.get(r), "field");
+                List<Element> localeFields = childElementsByTag(localeRows.get(r), "field");
+                assertEquals("form '" + name + "' row " + r + ": field count mismatch",
+                        enFields.size(), localeFields.size());
+
+                for (int f = 0; f < enFields.size(); f++) {
+                    Element enField = enFields.get(f);
+                    Element localeField = localeFields.get(f);
+                    String fid = fieldIdentity(enField);
+                    assertStructurallyEqual(enField, localeField,
+                            "form[" + name + "]/row[" + r + "]/field[" + fid + "]",
+                            FIELD_LOCALIZED_TAGS, Map.of());
+                }
+
+                List<Element> enRelationFields = childElementsByTag(enRows.get(r), "relation-field");
+                List<Element> localeRelationFields = childElementsByTag(localeRows.get(r), "relation-field");
+                assertEquals("form '" + name + "' row " + r + ": relation-field count mismatch",
+                        enRelationFields.size(), localeRelationFields.size());
+
+                for (int f = 0; f < enRelationFields.size(); f++) {
+                    Element enRelationField = enRelationFields.get(f);
+                    Element localeRelationField = localeRelationFields.get(f);
+                    String fid = relationFieldIdentity(enRelationField);
+                    assertStructurallyEqual(enRelationField, localeRelationField,
+                            "form[" + name + "]/row[" + r + "]/relation-field[" + fid + "]",
+                            RELATION_FIELD_LOCALIZED_TAGS, Map.of());
+                }
+
+
             }
-        }
-        for (String name : localeDefs.keySet()) {
-            if (!baseDefs.containsKey(name)) {
-                errors.add("definition '" + name + "': present in " + locale + " but missing in base");
-            }
-        }
-
-        for (String name : baseDefs.keySet()) {
-            if (localeDefs.containsKey(name)) {
-                compareElements(baseDefs.get(name), localeDefs.get(name), "definition[" + name + "]", errors);
-            }
-        }
-
-        if (!errors.isEmpty()) {
-            StringBuilder sb = new StringBuilder();
-            sb.append(errors.size()).append(" inconsistency(ies) found between ")
-                    .append(BASE_FILE_NAME).append(" and ").append(localeFile.getName()).append(":\n");
-            for (String e : errors) {
-                sb.append(" - ").append(e).append("\n");
-            }
-            fail(sb.toString());
         }
     }
 
-    private Document parse(File file) throws Exception {
+    // ------------------------------------------------------------------
+    // 3) form-value-pairs -> value-pairs -> pair
+    // ------------------------------------------------------------------
+    @Test
+    public void formValuePairsConsistency() {
+        Element enVp = firstChildByTag(originalRoot, "form-value-pairs");
+        Element localeVp = firstChildByTag(localizedRoot, "form-value-pairs");
+        assertNotNull("form-value-pairs missing in original", enVp);
+        assertNotNull("form-value-pairs missing in localized", localeVp);
+
+        Map<String, Element> enGroups = byValuePairsKey(childElementsByTag(enVp, "value-pairs"));
+        Map<String, Element> localeGroups = byValuePairsKey(childElementsByTag(localeVp, "value-pairs"));
+        assertEquals("value-pairs name mismatch", enGroups.keySet(), localeGroups.keySet());
+
+        for (String name : enGroups.keySet()) {
+            Element enGroup = enGroups.get(name);
+            Element localeGroup = localeGroups.get(name);
+
+            List<Element> enPairs = childElementsByTag(enGroup, "pair");
+            List<Element> localePairs = childElementsByTag(localeGroup, "pair");
+            assertEquals("value-pairs '" + name + "': pair count mismatch",
+                    enPairs.size(), localePairs.size());
+
+            for (int p = 0; p < enPairs.size(); p++) {
+                assertStructurallyEqual(enPairs.get(p), localePairs.get(p),
+                        "value-pairs[" + name + "]/pair[" + p + "]",
+                        PAIR_LOCALIZED_TAGS, Map.of());
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // 4) form-complex-definitions -> definition -> input
+    // ------------------------------------------------------------------
+    @Test
+    public void formComplexDefinitionsConsistency() {
+        Element enRoot = firstChildByTag(originalRoot, "form-complex-definitions");
+        Element localeRoot = firstChildByTag(localizedRoot, "form-complex-definitions");
+
+        Assume.assumeTrue("no form-complex-definitions section in either file",
+                !(enRoot == null && localeRoot == null));
+        assertNotNull("form-complex-definitions present only in localized file", enRoot);
+        assertNotNull("form-complex-definitions present only in original file", localeRoot);
+
+        Map<String, Element> enDefsMap = byNameAttr(childElementsByTag(enRoot, "definition"));
+        Map<String, Element> localeDefsMap = byNameAttr(childElementsByTag(localeRoot, "definition"));
+        assertEquals("definition name mismatch", enDefsMap.keySet(), localeDefsMap.keySet());
+
+        for (String name : enDefsMap.keySet()) {
+            Element enDef = enDefsMap.get(name);
+            Element localeDef = localeDefsMap.get(name);
+
+            List<Element> enInputs = childElementsByTag(enDef, "input");
+            List<Element> localeInputs = childElementsByTag(localeDef, "input");
+            assertEquals("definition '" + name + "': input count mismatch",
+                    enInputs.size(), localeInputs.size());
+
+            for (int i = 0; i < enInputs.size(); i++) {
+                assertStructurallyEqual(enInputs.get(i), localeInputs.get(i),
+                        "definition[" + name + "]/input[" + i + "]",
+                        Set.of(), INPUT_LOCALIZED_ATTRS);
+            }
+        }
+    }
+
+    private static Document parse(File file) throws Exception {
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         factory.setNamespaceAware(false);
         factory.setFeature(javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING, true);
@@ -171,95 +302,177 @@ public class SubmissionFormsLocaleConsistencyTest {
         return builder.parse(file);
     }
 
-    private Map<String, Element> indexDefinitions(Document doc) {
-        Map<String, Element> result = new LinkedHashMap<>();
-        NodeList defs = doc.getElementsByTagName("definition");
-        for (int i = 0; i < defs.getLength(); i++) {
-            Element def = (Element) defs.item(i);
-            result.put(def.getAttribute("name"), def);
-        }
-        return result;
-    }
+    // ------------------------------------------------------------------
+    // generic DOM helpers
+    // ------------------------------------------------------------------
 
-    /** Best-effort identity for aligning an element across the two files. */
-    private String nodeKey(Element el) {
-        if ("field".equals(el.getTagName())) {
-            return "field:" + el.getAttribute("dc-schema") + "/"
-                    + el.getAttribute("dc-element") + "/" + el.getAttribute("dc-qualifier");
-        }
-        return el.getTagName() + ":" + el.getAttribute("name");
-    }
-
-    private Map<String, String> attrsOf(Element el) {
-        Map<String, String> attrs = new TreeMap<>();
-        NamedNodeMap map = el.getAttributes();
-        for (int i = 0; i < map.getLength(); i++) {
-            Attr attr = (Attr) map.item(i);
-            if (!IGNORED_ATTRS.contains(attr.getName())) {
-                attrs.put(attr.getName(), attr.getValue());
-            }
-        }
-        return attrs;
-    }
-
-    private List<Element> childElements(Element el) {
-        List<Element> children = new ArrayList<>();
-        NodeList nodes = el.getChildNodes();
-        for (int i = 0; i < nodes.getLength(); i++) {
-            Node n = nodes.item(i);
+    private static List<Element> childElements(Element parent) {
+        List<Element> out = new ArrayList<>();
+        NodeList nl = parent.getChildNodes();
+        for (int i = 0; i < nl.getLength(); i++) {
+            Node n = nl.item(i);
             if (n.getNodeType() == Node.ELEMENT_NODE) {
-                Element child = (Element) n;
-                if (!IGNORED_TEXT_TAGS.contains(child.getTagName())) {
-                    children.add(child);
-                }
+                out.add((Element) n);
             }
         }
-        return children;
+        return out;
     }
 
-    private void compareElements(Element a, Element b, String path, List<String> errors) {
-        if (!a.getTagName().equals(b.getTagName())) {
-            errors.add(path + ": tag mismatch <" + a.getTagName() + "> vs <" + b.getTagName() + ">");
+    private static List<Element> childElementsByTag(Element parent, String tag) {
+        List<Element> out = new ArrayList<>();
+        for (Element c : childElements(parent)) {
+            if (c.getTagName().equals(tag)) {
+                out.add(c);
+            }
+        }
+        return out;
+    }
+
+    private static Element firstChildByTag(Element parent, String tag) {
+        List<Element> matches = childElementsByTag(parent, tag);
+        return matches.isEmpty() ? null : matches.get(0);
+    }
+
+    private static String text(Element e) {
+        String t = e.getTextContent();
+        return t == null ? "" : t.trim();
+    }
+
+    private static List<String> tagsOf(List<Element> elements) {
+        List<String> out = new ArrayList<>();
+        for (Element e : elements) {
+            out.add(e.getTagName());
+        }
+        return out;
+    }
+
+    private static Set<String> allTagNames(Element root) {
+        Set<String> tags = new HashSet<>();
+        collectTags(root, tags);
+        return tags;
+    }
+
+    private static void collectTags(Element e, Set<String> tags) {
+        tags.add(e.getTagName());
+        for (Element c : childElements(e)) {
+            collectTags(c, tags);
+        }
+    }
+
+    private static Map<String, String> attrMap(Element e, Set<String> ignore) {
+        Map<String, String> m = new TreeMap<>();
+        NamedNodeMap attrs = e.getAttributes();
+        for (int i = 0; i < attrs.getLength(); i++) {
+            Node a = attrs.item(i);
+            if (!ignore.contains(a.getNodeName())) {
+                m.put(a.getNodeName(), a.getNodeValue());
+            }
+        }
+        return m;
+    }
+
+    private static String fieldIdentity(Element field) {
+        List<String> parts = new ArrayList<>();
+        for (String tag : new String[] {"dc-schema", "dc-element", "dc-qualifier"}) {
+            Element c = firstChildByTag(field, tag);
+            if (c != null && !text(c).isEmpty()) {
+                parts.add(text(c));
+            }
+        }
+        return parts.isEmpty() ? "<field>" : String.join(".", parts);
+    }
+
+    private static String relationFieldIdentity(Element field) {
+        List<String> parts = new ArrayList<>();
+        for (String tag : new String[] {"relationship-type", "search-configuration"}) {
+            Element c = firstChildByTag(field, tag);
+            if (c != null && !text(c).isEmpty()) {
+                parts.add(text(c));
+            }
+        }
+        return parts.isEmpty() ? "<relation-field>" : String.join(".", parts);
+    }
+
+    private static Map<String, Element> byNameAttr(List<Element> elements) {
+        Map<String, Element> m = new LinkedHashMap<>();
+        for (Element e : elements) {
+            m.put(e.getAttribute("name"), e);
+        }
+        return m;
+    }
+
+    private static Map<String, Element> byValuePairsKey(List<Element> elements) {
+        Map<String, Element> m = new LinkedHashMap<>();
+        for (Element e : elements) {
+            String key = e.hasAttribute("value-pairs-name")
+                    ? e.getAttribute("value-pairs-name")
+                    : e.getAttribute("name");
+            m.put(key, e);
+        }
+        return m;
+    }
+
+    // ------------------------------------------------------------------
+    // core recursive structural comparison
+    // ------------------------------------------------------------------
+    /**
+     * Recursively asserts that {@code enEl} (original) and {@code localeEl} (localized)
+     * have the same structure: same tag, same attributes/values (except
+     * attributes listed in {@code localizedAttrsByTag} for that tag, which
+     * only need to be present/absent consistently), and the same children
+     * (same tags, same order, same count). Leaf text must match exactly,
+     * UNLESS the tag is listed in {@code localizedTags}, in which case both
+     * sides just need to have text, or both be empty (i.e. a translation
+     * wasn't simply dropped).
+     */
+    private void assertStructurallyEqual(Element enEl, Element localeEl, String path,
+                                         Set<String> localizedTags,
+                                         Map<String, Set<String>> localizedAttrsByTag) {
+        assertEquals(path + ": tag mismatch", enEl.getTagName(), localeEl.getTagName());
+
+        Set<String> ignoreAttrs = localizedAttrsByTag.containsKey(enEl.getTagName())
+                ? localizedAttrsByTag.get(enEl.getTagName())
+                : Set.of();
+        Map<String, String> enAttrs = attrMap(enEl, ignoreAttrs);
+        Map<String, String> localeAttrs = attrMap(localeEl, ignoreAttrs);
+        assertEquals(path + ": attribute mismatch\n"
+                        + "  original : " + attrMap(enEl, Set.of()) + "\n"
+                        + "  localized: " + attrMap(localeEl, Set.of()),
+                enAttrs, localeAttrs);
+
+        for (String attr : ignoreAttrs) {
+            assertEquals(path + ": localized attribute '" + attr + "' present in only one file",
+                    enEl.hasAttribute(attr), localeEl.hasAttribute(attr));
+        }
+
+        List<Element> enChildren = childElements(enEl);
+        List<Element> localeChildren = childElements(localeEl);
+        List<String> enTags = tagsOf(enChildren);
+        List<String> localeTags = tagsOf(localeChildren);
+        assertEquals(path + ": child element mismatch\n"
+                        + "  original : " + enTags + "\n"
+                        + "  localized: " + localeTags,
+                enTags, localeTags);
+
+        if (enChildren.isEmpty()) {
+            String enText = text(enEl);
+            String localeText = text(localeEl);
+            if (localizedTags.contains(enEl.getTagName())) {
+                assertEquals(path + "/" + enEl.getTagName() + ": localized text present in only one file "
+                                + "(original=" + enText + ", localized=" + localeText + ")",
+                        enText.isEmpty(), localeText.isEmpty());
+            } else {
+                assertEquals(path + "/" + enEl.getTagName() + ": text mismatch", enText, localeText);
+            }
             return;
         }
 
-        Map<String, String> aAttrs = attrsOf(a);
-        Map<String, String> bAttrs = attrsOf(b);
-        if (!aAttrs.equals(bAttrs)) {
-            errors.add(path + ": attribute mismatch\n    base: " + aAttrs + "\n    " + locale + ": " + bAttrs);
-        }
-
-        Map<String, List<Element>> aChildren = groupByKey(childElements(a));
-        Map<String, List<Element>> bChildren = groupByKey(childElements(b));
-
-        for (String key : aChildren.keySet()) {
-            if (!bChildren.containsKey(key)) {
-                errors.add(path + ": element [" + key + "] present in base but missing in " + locale);
-            }
-        }
-        for (String key : bChildren.keySet()) {
-            if (!aChildren.containsKey(key)) {
-                errors.add(path + ": element [" + key + "] present in " + locale + " but missing in base");
-            }
-        }
-
-        for (String key : aChildren.keySet()) {
-            if (bChildren.containsKey(key)) {
-                List<Element> aList = aChildren.get(key);
-                List<Element> bList = bChildren.get(key);
-                int n = Math.min(aList.size(), bList.size());
-                for (int i = 0; i < n; i++) {
-                    compareElements(aList.get(i), bList.get(i), path + "/" + key + "[" + i + "]", errors);
-                }
-            }
+        for (int i = 0; i < enChildren.size(); i++) {
+            Element enChild = enChildren.get(i);
+            Element localeChild = localeChildren.get(i);
+            assertStructurallyEqual(enChild, localeChild, path + "/" + enChild.getTagName() + "[" + i + "]",
+                    localizedTags, localizedAttrsByTag);
         }
     }
 
-    private Map<String, List<Element>> groupByKey(List<Element> elements) {
-        Map<String, List<Element>> grouped = new LinkedHashMap<>();
-        for (Element el : elements) {
-            grouped.computeIfAbsent(nodeKey(el), k -> new ArrayList<>()).add(el);
-        }
-        return grouped;
-    }
 }
