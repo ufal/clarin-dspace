@@ -127,9 +127,12 @@
 
     <bean class="org.dspace.event.EventServiceImpl"/>
 
-    <bean class="org.dspace.handle.HandleServiceImpl"/>
+    <bean class="org.dspace.handle.HandleServiceImpl">
+        <property name="epicHandleService" ref="${epic.handle.service.implementation:epic2}"/>
+    </bean>
+
     <bean class="org.dspace.handle.HandleClarinServiceImpl"/>
-    <bean class="org.dspace.handle.EpicHandleServiceImpl"/>
+    <bean id = "epic2" class="org.dspace.handle.EpicHandleServiceImpl"/>
 
     <bean class="org.dspace.harvest.HarvestedCollectionServiceImpl"/>
     <bean class="org.dspace.harvest.HarvestedItemServiceImpl"/>
