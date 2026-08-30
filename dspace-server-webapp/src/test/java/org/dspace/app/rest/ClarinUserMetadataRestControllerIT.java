@@ -186,7 +186,7 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
 
     @Test
     public void notAuthorizedUser_withAllowingAnonymousLicense_shouldSendEmail() throws Exception {
-        this.prepareEnvironment("SEND_TOKEN", Confirmation.ALLOW_ANONYMOUS);
+        this.prepareEnvironment("SEND_TOKEN,EXTRA_EMAIL", Confirmation.ALLOW_ANONYMOUS);
         ObjectMapper mapper = new ObjectMapper();
         ClarinUserMetadataRest clarinUserMetadata1 = new ClarinUserMetadataRest();
         clarinUserMetadata1.setMetadataKey("NAME");
@@ -223,6 +223,165 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
                         .contentType(contentType))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.page.totalElements", is(1)));
+    }
+
+    @Test
+    public void notAuthorizedUser_manageUserMetadata_withEmptyMetadata_shouldReturn_400() throws Exception {
+        this.prepareEnvironment(null, Confirmation.ALLOW_ANONYMOUS);
+        getClient().perform(post("/api/core/clarinusermetadata/manage?bitstreamUUID=" + bitstream.getID())
+                        .content(new byte[0])
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    public void authorizedUser_manageUserMetadata_shouldStoreOnlyRequiredMetadata() throws Exception {
+        this.prepareEnvironment("SEND_TOKEN,EXTRA_EMAIL,NAME", Confirmation.ALLOW_ANONYMOUS);
+        ObjectMapper mapper = new ObjectMapper();
+        ClarinUserMetadataRest clarinUserMetadata1 = new ClarinUserMetadataRest();
+        clarinUserMetadata1.setMetadataKey("NAME");
+        clarinUserMetadata1.setMetadataValue("Test");
+
+        ClarinUserMetadataRest clarinUserMetadata2 = new ClarinUserMetadataRest();
+        clarinUserMetadata2.setMetadataKey("ADDRESS");
+        clarinUserMetadata2.setMetadataValue("Test2");
+
+        ClarinUserMetadataRest clarinUserMetadata3 = new ClarinUserMetadataRest();
+        clarinUserMetadata3.setMetadataKey("SEND_TOKEN");
+
+        ClarinUserMetadataRest clarinUserMetadata4 = new ClarinUserMetadataRest();
+        clarinUserMetadata4.setMetadataKey("EXTRA_EMAIL");
+        clarinUserMetadata4.setMetadataValue("test@test.edu");
+
+        ClarinUserMetadataRest clarinUserMetadata5 = new ClarinUserMetadataRest();
+        clarinUserMetadata5.setMetadataKey("ORGANIZATION");
+        clarinUserMetadata5.setMetadataValue("organization");
+
+        List<ClarinUserMetadataRest> clarinUserMetadataRestList = new ArrayList<>();
+        clarinUserMetadataRestList.add(clarinUserMetadata1);
+        clarinUserMetadataRestList.add(clarinUserMetadata2);
+        clarinUserMetadataRestList.add(clarinUserMetadata3);
+        clarinUserMetadataRestList.add(clarinUserMetadata4);
+        clarinUserMetadataRestList.add(clarinUserMetadata5);
+
+        String adminToken = getAuthToken(admin.getEmail(), password);
+        // Load bitstream from the item.
+        getClient().perform(post("/api/core/clarinusermetadata/manage?bitstreamUUID=" + bitstream.getID())
+                        .content(mapper.writeValueAsBytes(clarinUserMetadataRestList.toArray()))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", notNullValue()))
+                .andExpect(jsonPath("$", is(CHECK_EMAIL_RESPONSE_CONTENT)));
+
+        // Get created CLRUA
+        getClient(adminToken).perform(get("/api/core/clarinlruallowances")
+                        .contentType(contentType))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements", is(1)));
+
+        // Get created User Metadata - there should be 2 records,
+        // because only 2 metadata fields are required by the license (EXTRA_EMAIL and NAME)
+        getClient(adminToken).perform(get("/api/core/clarinusermetadata")
+                        .contentType(contentType))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements", is(2)));
+    }
+
+    @Test
+    public void authorizedUser_manageUserMetadata_organizationIsOptional() throws Exception {
+        this.prepareEnvironment("NAME,ORGANIZATION", Confirmation.ALLOW_ANONYMOUS);
+        ObjectMapper mapper = new ObjectMapper();
+        ClarinUserMetadataRest clarinUserMetadata1 = new ClarinUserMetadataRest();
+        clarinUserMetadata1.setMetadataKey("NAME");
+        clarinUserMetadata1.setMetadataValue("Test");
+
+        ClarinUserMetadataRest clarinUserMetadata2 = new ClarinUserMetadataRest();
+        clarinUserMetadata2.setMetadataKey("ADDRESS");
+        clarinUserMetadata2.setMetadataValue("Test2");
+
+        List<ClarinUserMetadataRest> clarinUserMetadataRestList = new ArrayList<>();
+        clarinUserMetadataRestList.add(clarinUserMetadata1);
+        clarinUserMetadataRestList.add(clarinUserMetadata2);
+
+        String adminToken = getAuthToken(admin.getEmail(), password);
+        // Load bitstream from the item.
+        getClient().perform(post("/api/core/clarinusermetadata/manage?bitstreamUUID=" + bitstream.getID())
+                        .content(mapper.writeValueAsBytes(clarinUserMetadataRestList.toArray()))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", notNullValue()));
+
+        // Get created CLRUA
+        getClient(adminToken).perform(get("/api/core/clarinlruallowances")
+                        .contentType(contentType))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements", is(1)));
+
+        // Get created User Metadata - only NAME metadata is stored,
+        // because ORGANIZATION metadata is empty and should not be stored
+        getClient(adminToken).perform(get("/api/core/clarinusermetadata")
+                        .contentType(contentType))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements", is(1)));
+    }
+
+    @Test
+    public void authorizedUser_manageUserMetadata_shouldStoreOrganizationAndIP() throws Exception {
+        this.prepareEnvironment("ORGANIZATION", Confirmation.ALLOW_ANONYMOUS);
+        ObjectMapper mapper = new ObjectMapper();
+        ClarinUserMetadataRest clarinUserMetadata1 = new ClarinUserMetadataRest();
+        clarinUserMetadata1.setMetadataKey("ORGANIZATION");
+        clarinUserMetadata1.setMetadataValue("Test");
+
+        ClarinUserMetadataRest clarinUserMetadata2 = new ClarinUserMetadataRest();
+        clarinUserMetadata2.setMetadataKey("IP");
+        clarinUserMetadata2.setMetadataValue("127.0.0.1");
+
+        List<ClarinUserMetadataRest> clarinUserMetadataRestList = new ArrayList<>();
+        clarinUserMetadataRestList.add(clarinUserMetadata1);
+        clarinUserMetadataRestList.add(clarinUserMetadata2);
+
+        String adminToken = getAuthToken(admin.getEmail(), password);
+        // Load bitstream from the item.
+        getClient().perform(post("/api/core/clarinusermetadata/manage?bitstreamUUID=" + bitstream.getID())
+                        .content(mapper.writeValueAsBytes(clarinUserMetadataRestList.toArray()))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", notNullValue()));
+
+        // Get created CLRUA
+        getClient(adminToken).perform(get("/api/core/clarinlruallowances")
+                        .contentType(contentType))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements", is(1)));
+
+        // Get created User Metadata - there should be 2 records (ORGANIZATION and IP)
+        getClient(adminToken).perform(get("/api/core/clarinusermetadata")
+                        .contentType(contentType))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements", is(2)));
+    }
+
+    @Test
+    public void authorizedUser_manageUserMetadata_withMissingRequiredKeys_shouldFail() throws Exception {
+        this.prepareEnvironment("SEND_TOKEN,EXTRA_EMAIL,REQUIRED_ORGANIZATION", Confirmation.ALLOW_ANONYMOUS);
+        ObjectMapper mapper = new ObjectMapper();
+
+        ClarinUserMetadataRest clarinUserMetadata1 = new ClarinUserMetadataRest();
+        clarinUserMetadata1.setMetadataKey("SEND_TOKEN");
+
+        ClarinUserMetadataRest clarinUserMetadata2 = new ClarinUserMetadataRest();
+        clarinUserMetadata2.setMetadataKey("EXTRA_EMAIL");
+        clarinUserMetadata2.setMetadataValue("test@test.edu");
+
+        List<ClarinUserMetadataRest> clarinUserMetadataRestList = new ArrayList<>();
+        clarinUserMetadataRestList.add(clarinUserMetadata1);
+        clarinUserMetadataRestList.add(clarinUserMetadata2);
+
+        getClient().perform(post("/api/core/clarinusermetadata/manage?bitstreamUUID=" + bitstream.getID())
+                        .content(mapper.writeValueAsBytes(clarinUserMetadataRestList.toArray()))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -272,7 +431,7 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
 
     @Test
     public void authorizedUserWithoutMetadata_shouldSendEmail() throws Exception {
-        this.prepareEnvironment("SEND_TOKEN", Confirmation.NOT_REQUIRED);
+        this.prepareEnvironment("SEND_TOKEN,EXTRA_EMAIL", Confirmation.NOT_REQUIRED);
         context.turnOffAuthorisationSystem();
         ClarinUserRegistration clarinUserRegistration = ClarinUserRegistrationBuilder
                 .createClarinUserRegistration(context).withEPersonID(admin.getID()).build();
@@ -375,7 +534,7 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
 
     @Test
     public void authorizedUserWithMetadata_shouldSendEmail() throws Exception {
-        this.prepareEnvironment("SEND_TOKEN,NAME,ADDRESS", Confirmation.NOT_REQUIRED);
+        this.prepareEnvironment("SEND_TOKEN,NAME,ADDRESS,EXTRA_EMAIL", Confirmation.NOT_REQUIRED);
         context.turnOffAuthorisationSystem();
         ClarinUserRegistration clarinUserRegistration = ClarinUserRegistrationBuilder
                 .createClarinUserRegistration(context).withEPersonID(admin.getID()).build();

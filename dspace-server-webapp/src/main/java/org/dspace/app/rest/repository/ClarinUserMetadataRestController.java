@@ -20,14 +20,19 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import javax.mail.MessagingException;
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.NotFoundException;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -57,7 +62,6 @@ import org.dspace.core.Email;
 import org.dspace.core.I18nUtil;
 import org.dspace.eperson.EPerson;
 import org.dspace.services.ConfigurationService;
-import org.json.simple.parser.ParseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -73,6 +77,8 @@ public class ClarinUserMetadataRestController {
     private static final Logger log = LoggerFactory.getLogger(ClarinUserMetadataRestController.class);
 
     public static final String CHECK_EMAIL_RESPONSE_CONTENT = "checkEmail";
+
+    private static final List<String> OPTIONAL_METADATA_KEYS = List.of("ORGANIZATION");
 
     @Autowired
     ClarinUserMetadataService clarinUserMetadataService;
@@ -93,14 +99,17 @@ public class ClarinUserMetadataRestController {
     @Autowired
     ConfigurationService configurationService;
 
+    @Autowired
+    ObjectMapper objectMapper;
+
     // Enum to distinguish between the two types of the email
     enum MailType { ALLZIP, BITSTREAM }
 
     @RequestMapping(value = "/zip", method = POST, consumes = APPLICATION_JSON)
     @PreAuthorize("permitAll()")
     public ResponseEntity manageUserMetadataForZIP(@RequestParam("itemUUID") UUID itemUUID,
-                                             HttpServletRequest request)
-            throws SQLException, ParseException, IOException, AuthorizeException, MessagingException {
+                                                   HttpServletRequest request)
+            throws SQLException, IOException, AuthorizeException {
 
         // Get context from the request
         Context context = obtainContext(request);
@@ -127,17 +136,26 @@ public class ClarinUserMetadataRestController {
 
         boolean shouldEmailToken = false;
         ClarinLicense clarinLicense = null;
-        // Get ClarinUserMetadataRest Array from the request body
-        ClarinUserMetadataRest[] clarinUserMetadataRestArray =
-                new ObjectMapper().readValue(request.getInputStream(), ClarinUserMetadataRest[].class);
-        if (Objects.isNull(clarinUserMetadataRestArray)) {
-            throw new RuntimeException("The clarinUserMetadataRestArray cannot be null. It could be empty, but" +
-                    " not null");
+        Set<String> requiredInfoKeys = new HashSet<>();
+
+        List<Bundle> bundles = item.getBundles("ORIGINAL");
+        if (!bundles.isEmpty()) {
+            List<Bitstream> bitstreams = bundles.get(0).getBitstreams();
+            if (!bitstreams.isEmpty()) {
+                ClarinLicenseResourceMapping clarinLicenseResourceMapping =
+                        this.getLicenseResourceMapping(context, bitstreams.get(0).getID());
+                clarinLicense = getClarinLicense(clarinLicenseResourceMapping);
+                shouldEmailToken = this.shouldEmailToken(clarinLicenseResourceMapping);
+                requiredInfoKeys.addAll(getRequiredInfoKeys(clarinLicense));
+            }
         }
 
-        // Convert Array to the List
-        List<ClarinUserMetadataRest> clarinUserMetadataRestList = Arrays.asList(clarinUserMetadataRestArray);
-        List<Bundle> bundles = item.getBundles("ORIGINAL");
+        ClarinUserMetadataRest[] clarinUserMetadataRestArray = getClarinUserMetadata(request);
+        checkForRequiredInfoKeys(clarinUserMetadataRestArray, requiredInfoKeys);
+        List<ClarinUserMetadataRest> clarinUserMetadataRestList = (clarinLicense == null)
+                ? Arrays.asList(clarinUserMetadataRestArray)
+                : getFilteredUserMetadataForClarinLicense(clarinUserMetadataRestArray, requiredInfoKeys);
+
         for (Bundle original : bundles) {
             List<Bitstream> bss = original.getBitstreams();
             for (Bitstream bitstream : bss) {
@@ -159,18 +177,11 @@ public class ClarinUserMetadataRestController {
                     this.processSignedInUser(context, currentUser, clarinUserMetadataRestList,
                             clarinLicenseResourceMapping, downloadToken);
                 }
-
-                // Check (only once) if the Clarin License contains the required information to SEND_TOKEN, which means
-                // the item must be downloaded after the user confirms the download with the token sent by email.
-                if (Objects.isNull(clarinLicense)) {
-                    clarinLicense = this.getClarinLicense(clarinLicenseResourceMapping);
-                    shouldEmailToken = this.shouldEmailToken(clarinLicenseResourceMapping);
-                }
             }
         }
 
         context.commit();
-        if (shouldEmailToken) {
+        if (clarinLicense != null && shouldEmailToken) {
             // If yes - send token to e-mail
             try {
                 String email = getEmailFromUserMetadata(clarinUserMetadataRestList);
@@ -191,8 +202,8 @@ public class ClarinUserMetadataRestController {
     @RequestMapping(method = POST, consumes = APPLICATION_JSON)
     @PreAuthorize("permitAll()")
     public ResponseEntity manageUserMetadata(@RequestParam("bitstreamUUID") UUID bitstreamUUID,
-                                                     HttpServletRequest request)
-            throws SQLException, ParseException, IOException, AuthorizeException, MessagingException {
+                                             HttpServletRequest request)
+            throws SQLException, IOException, AuthorizeException {
 
         // Get context from the request
         Context context = obtainContext(request);
@@ -200,7 +211,6 @@ public class ClarinUserMetadataRestController {
         if (Objects.isNull(context)) {
             return null;
         }
-
 
         Bitstream bitstream = bitstreamService.find(context, bitstreamUUID);
         if (Objects.isNull(bitstream)) {
@@ -228,16 +238,13 @@ public class ClarinUserMetadataRestController {
             throw new AuthorizeException("Anonymous user is not allowed to get access token");
         }
 
-        // Get ClarinUserMetadataRest Array from the request body
-        ClarinUserMetadataRest[] clarinUserMetadataRestArray =
-                new ObjectMapper().readValue(request.getInputStream(), ClarinUserMetadataRest[].class);
-        if (Objects.isNull(clarinUserMetadataRestArray)) {
-            throw new RuntimeException("The clarinUserMetadataRestArray cannot be null. It could be empty, but" +
-                    " not null");
-        }
+        ClarinUserMetadataRest[] clarinUserMetadataRestArray = getClarinUserMetadata(request);
 
-        // Convert Array to the List
-        List<ClarinUserMetadataRest> clarinUserMetadataRestList = Arrays.asList(clarinUserMetadataRestArray);
+        Set<String> requiredInfoKeys = getRequiredInfoKeys(clarinLicense);
+        checkForRequiredInfoKeys(clarinUserMetadataRestArray, requiredInfoKeys);
+        List<ClarinUserMetadataRest> clarinUserMetadataRestList = getFilteredUserMetadataForClarinLicense(
+                clarinUserMetadataRestArray, requiredInfoKeys);
+
         if (Objects.isNull(currentUser)) {
             // The user is not signed in
             this.processNonSignedInUser(context, clarinUserMetadataRestList, clarinLicenseResourceMapping,
@@ -284,7 +291,7 @@ public class ClarinUserMetadataRestController {
                                            MailType mailType,
                                            List<ClarinUserMetadataRest> clarinUserMetadataRestList,
                                            String itemHandle)
-            throws IOException, SQLException, MessagingException {
+            throws IOException, MessagingException {
         if (StringUtils.isBlank(email)) {
             log.error("Cannot send email with download link because the email is empty.");
             throw new DSpaceBadRequestException("Cannot send email with download link because the email is empty.");
@@ -610,5 +617,80 @@ public class ClarinUserMetadataRestController {
             clarinUserMetadataList.add(clarinUserMetadata);
         }
         return clarinUserMetadataList;
+    }
+
+    /**
+     * Get ClarinUserMetadataRest array from the request body. Throws exception if the request body is empty or invalid.
+     *
+     * @param request request
+     * @return ClarinUserMetadataRest array
+     */
+    private ClarinUserMetadataRest[] getClarinUserMetadata(HttpServletRequest request) throws IOException {
+        ClarinUserMetadataRest[] clarinUserMetadataRestArray;
+        try {
+            clarinUserMetadataRestArray = objectMapper.readValue(
+                    request.getInputStream(), ClarinUserMetadataRest[].class);
+        } catch (JsonProcessingException ex) {
+            throw new DSpaceBadRequestException("Missing or Invalid User Data", ex);
+        }
+        if (Objects.isNull(clarinUserMetadataRestArray)) {
+            throw new DSpaceBadRequestException("Missing or Invalid User Data");
+        }
+        return clarinUserMetadataRestArray;
+    }
+
+    /**
+     * Gets the required info keys for the given ClarinLicense.
+     * Note that "SEND_TOKEN" is not considered required.
+     *
+     * @param clarinLicense the ClarinLicense object to get required info keys from
+     * @return Set of required info keys for the given ClarinLicense
+     */
+    private static Set<String> getRequiredInfoKeys(ClarinLicense clarinLicense) {
+        return Optional.ofNullable(clarinLicense.getRequiredInfo())
+                .map(requiredInfo -> Arrays.stream(requiredInfo.split(","))
+                        .map(String::trim)
+                        .filter(s -> StringUtils.isNotBlank(s) && !"SEND_TOKEN".equals(s))
+                        .collect(Collectors.toSet()))
+                .orElse(Set.of());
+    }
+
+    /**
+     * Checks if the given array of ClarinUserMetadataRest objects contains all required info keys.
+     * Note that the OPTIONAL_METADATA_KEYS are not required.
+     *
+     * @param clarinUserMetadataRestArray the array of ClarinUserMetadataRest objects to check
+     * @param requiredInfoKeys the set of required info keys to check against
+     */
+    private static void checkForRequiredInfoKeys(ClarinUserMetadataRest[] clarinUserMetadataRestArray,
+                                                 Set<String> requiredInfoKeys) {
+        if (!requiredInfoKeys.stream().allMatch(requiredInfoKey ->
+                OPTIONAL_METADATA_KEYS.contains(requiredInfoKey) ||
+                Arrays.stream(clarinUserMetadataRestArray)
+                        .anyMatch(clarinUserMetadataRest ->
+                                requiredInfoKey.equals(clarinUserMetadataRest.getMetadataKey())
+                                        && StringUtils.isNotBlank(clarinUserMetadataRest.getMetadataValue())))) {
+            throw new DSpaceBadRequestException("Missing required user metadata keys for the license.");
+        }
+    }
+
+    /**
+     * Filters the given array of ClarinUserMetadataRest objects to include only those
+     * required by the given ClarinLicense.
+     * Note that the "IP" should be included if present.
+     *
+     * @param clarinUserMetadataRestArray the array of ClarinUserMetadataRest objects to filter
+     * @param requiredInfoKeys the set of required keys for the given ClarinLicense
+     * @return a list of filtered ClarinUserMetadataRest objects
+     */
+    private static List<ClarinUserMetadataRest> getFilteredUserMetadataForClarinLicense(
+            ClarinUserMetadataRest[] clarinUserMetadataRestArray,
+            Set<String> requiredInfoKeys) {
+        return Arrays.stream(clarinUserMetadataRestArray)
+                .filter(clarinUserMetadataRest ->
+                        StringUtils.isNotBlank(clarinUserMetadataRest.getMetadataValue())
+                                && ("IP".equals(clarinUserMetadataRest.getMetadataKey())
+                                    || requiredInfoKeys.contains(clarinUserMetadataRest.getMetadataKey())))
+                .collect(Collectors.toList());
     }
 }
