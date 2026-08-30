@@ -122,6 +122,8 @@ public class DataCiteConnector
 
     protected String USERNAME;
     protected String PASSWORD;
+    protected String doiPrefix;
+
     @Autowired
     protected HandleService handleService;
 
@@ -247,6 +249,12 @@ public class DataCiteConnector
         return this.PASSWORD;
     }
 
+    protected String getDoiPrefix() {
+        if (this.doiPrefix == null) {
+            this.doiPrefix = configurationService.getProperty(CFG_PREFIX);
+        }
+        return this.doiPrefix;
+    }
 
     @Override
     public boolean isDOIReserved(Context context, String doi)
@@ -375,9 +383,9 @@ public class DataCiteConnector
         // Set the transform's parameters.
         // XXX Should the actual list be configurable?
         Map<String, String> parameters = new HashMap<>();
-        if (configurationService.hasProperty(CFG_PREFIX)) {
-            parameters.put("prefix",
-                           configurationService.getProperty(CFG_PREFIX));
+        String doiPrefix = getDoiPrefix();
+        if (doiPrefix != null) {
+            parameters.put("prefix", doiPrefix);
         }
         if (configurationService.hasProperty(CFG_PUBLISHER)) {
             parameters.put("publisher",
