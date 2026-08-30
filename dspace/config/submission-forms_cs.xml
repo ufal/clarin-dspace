@@ -228,8 +228,19 @@
                     <repeatable>false</repeatable>
                     <label>Popis</label>
                     <input-type>textarea</input-type>
-                    <hint>Popište nahrávaná data.</hint>
+                    <hint>Popište nahrávaná data U popisu je možné použít Markdown formátování (https://www.markdownguide.org/).</hint>
                     <required>Uveďte prosím popis.</required>
+                </field>
+            </row>
+            <row>
+                <field>
+                    <dc-schema>local</dc-schema>
+                    <dc-element>description</dc-element>
+                    <dc-qualifier>usemarkdown</dc-qualifier>
+                    <repeatable>true</repeatable>
+                    <label>Použít Markdown formátování</label>
+                    <input-type value-pairs-name="use_markdown">list</input-type>
+                    <hint/>
                 </field>
             </row>
             <row>
@@ -3163,6 +3174,13 @@
             <pair>
                 <displayed-value>teachingMaterials</displayed-value>
                 <stored-value>teachingMaterials</stored-value>
+            </pair>
+        </value-pairs>
+
+        <value-pairs value-pairs-name="use_markdown" dc-term="">
+            <pair>
+                <displayed-value>Ano</displayed-value>
+                <stored-value>yes</stored-value>
             </pair>
         </value-pairs>
 
