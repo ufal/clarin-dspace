@@ -12,6 +12,8 @@
         </dim:dim>
     </xsl:template>
 
+    <xsl:template match="text()|@*"/>
+
     <xsl:template match="/doc:metadata/doc:element/doc:element/doc:element/doc:field[@name='value']">
         <xsl:call-template name="dimfield">
             <xsl:with-param name="mdschema" select="../../../@name"/>
