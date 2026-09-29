@@ -1,0 +1,318 @@
+/**
+ * The contents of this file are subject to the license and copyright
+ * detailed in the LICENSE and NOTICE files at the root of the source
+ * tree and available online at
+ *
+ * http://www.dspace.org/license/
+ */
+package org.dspace.app.oai;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import java.util.ArrayList;
+import java.util.List;
+import javax.ws.rs.core.MediaType;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.solr.client.solrj.SolrQuery;
+import org.apache.solr.common.SolrDocumentList;
+import org.dspace.app.rest.model.ResourcePolicyRest;
+import org.dspace.app.rest.model.patch.Operation;
+import org.dspace.app.rest.model.patch.ReplaceOperation;
+import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
+import org.dspace.authorize.ResourcePolicy;
+import org.dspace.authorize.factory.AuthorizeServiceFactory;
+import org.dspace.builder.CollectionBuilder;
+import org.dspace.builder.CommunityBuilder;
+import org.dspace.builder.ItemBuilder;
+import org.dspace.builder.ResourcePolicyBuilder;
+import org.dspace.builder.WorkspaceItemBuilder;
+import org.dspace.content.Collection;
+import org.dspace.content.Item;
+import org.dspace.content.WorkspaceItem;
+import org.dspace.content.factory.ContentServiceFactory;
+import org.dspace.content.service.ItemService;
+import org.dspace.core.Constants;
+import org.dspace.eperson.Group;
+import org.dspace.eperson.factory.EPersonServiceFactory;
+import org.dspace.event.factory.EventServiceFactory;
+import org.dspace.event.service.EventService;
+import org.dspace.services.ConfigurationService;
+import org.dspace.services.factory.DSpaceServicesFactory;
+import org.dspace.solr.MockSolrServer;
+import org.dspace.xoai.services.impl.solr.DSpaceSolrServerResolver;
+import org.dspace.xoai.solr.DSpaceSolrSearch;
+import org.junit.After;
+import org.junit.Assume;
+import org.junit.Before;
+import org.junit.Test;
+import org.springframework.test.util.ReflectionTestUtils;
+
+/**
+ * Regression test for ufal/clarin-dspace#1416: an item archived through the normal REST
+ * submission/workflow process (i.e. {@code WorkflowItemRestRepository#createAndReturn}) must be
+ * discoverable via OAI-PMH right away.
+ * <p>
+ * {@code WorkflowItemRestRepository} previously called {@code SolrOAIReindexer#reindexItem}
+ * directly after archiving, but that call was a pure duplicate: {@code InstallItemServiceImpl}
+ * already fires {@code Event.INSTALL} for every archived item, and that event is now picked up by
+ * {@link org.dspace.xoai.app.OAIConsumer} regardless of which code path triggered the install. This
+ * test proves that removing the manual call didn't regress the normal submission path, mirroring
+ * {@link ItemImportOAIIndexingIT}, which proves the same thing for the CLI batch importer.
+ * <p>
+ * Unlike {@link ItemImportOAIIndexingIT}, this test can't opt a {@code Context} into a dedicated
+ * dispatcher via {@code Context#setDispatcher}: the {@code Context} used by
+ * {@code WorkflowItemRestRepository} is created by the servlet filter for the current HTTP request,
+ * not by this test, and always resolves to the hardcoded {@code "default"} dispatcher. Since the
+ * shared test {@code local.cfg} (used by every module's tests, including {@code dspace-api}'s, which
+ * has no dependency on {@code dspace-oai}) can't safely add {@code oai} to {@code "default"} either,
+ * this test instead activates it by mutating the DSpace kernel's in-memory
+ * {@link ConfigurationService} directly and forcing {@link EventService} to rebuild its dispatcher
+ * pool — an override strictly scoped to this JVM/test run and reverted in {@link #tearDownOAI()}.
+ */
+public class ItemOAIIndexingIT extends AbstractControllerIntegrationTest {
+
+    private final ItemService itemService = ContentServiceFactory.getInstance().getItemService();
+    private final ConfigurationService configurationService =
+            DSpaceServicesFactory.getInstance().getConfigurationService();
+    private final EventService eventService = EventServiceFactory.getInstance().getEventService();
+
+    private MockSolrServer mockOAISolr;
+    private String[] originalConsumers;
+
+    @Override
+    @Before
+    public void setUp() throws Exception {
+        super.setUp();
+
+        // Skip if the OAI module is not on the classpath
+        try {
+            Class.forName("org.dspace.app.configuration.OAIWebConfig");
+        } catch (ClassNotFoundException ce) {
+            Assume.assumeNoException(ce);
+        }
+
+        // OAIConsumer builds its own Spring context (see BasicConfiguration) rather than using
+        // beans from the webapp's ApplicationContext, so @MockBean cannot intercept its Solr
+        // client. Redirect DSpaceSolrServerResolver's cached client (a static field, shared by
+        // every instance) to an embedded "oai" core instead.
+        mockOAISolr = new MockSolrServer("oai");
+        ReflectionTestUtils.setField(DSpaceSolrServerResolver.class, "server", mockOAISolr.getSolrServer());
+
+        // Activate "oai" on the "default" dispatcher for the lifetime of this test only (see class
+        // javadoc for why). Nulling the pool forces EventServiceImpl to rebuild it, re-reading the
+        // consumer list on the next commit instead of reusing an already-pooled "default" dispatcher.
+        originalConsumers = configurationService.getArrayProperty("event.dispatcher.default.consumers");
+        configurationService.setProperty("event.dispatcher.default.consumers",
+                String.join(", ", originalConsumers) + ", oai");
+        ReflectionTestUtils.setField(eventService, "dispatcherPool", null);
+    }
+
+    @After
+    public void tearDownOAI() throws Exception {
+        ReflectionTestUtils.setField(DSpaceSolrServerResolver.class, "server", null);
+        if (mockOAISolr != null) {
+            mockOAISolr.destroy();
+            mockOAISolr = null;
+        }
+        if (originalConsumers != null) {
+            configurationService.setProperty("event.dispatcher.default.consumers",
+                    String.join(", ", originalConsumers));
+            ReflectionTestUtils.setField(eventService, "dispatcherPool", null);
+        }
+    }
+
+    @Test
+    public void archivedItemAppearsInOai() throws Exception {
+        context.turnOffAuthorisationSystem();
+        context.setCurrentUser(admin);
+        parentCommunity = CommunityBuilder.createCommunity(context)
+                .withName("Parent Community")
+                .build();
+        Collection collection = CollectionBuilder.createCollection(context, parentCommunity)
+                .withName("Collection")
+                .build();
+
+        WorkspaceItem wsitem = WorkspaceItemBuilder.createWorkspaceItem(context, collection)
+                .withTitle("OAI Workflow Test Item")
+                .withIssueDate("2026-01-01")
+                .grantLicense()
+                .build();
+        context.restoreAuthSystemState();
+
+        String token = getAuthToken(admin.getEmail(), password);
+
+        // No workflow is configured on the collection, so this archives the item immediately
+        // (see WorkflowItemRestRepository#createAndReturn).
+        getClient(token).perform(post(BASE_REST_SERVER_URL + "/api/workflow/workflowitems")
+                        .content("/api/submission/workspaceitems/" + wsitem.getID())
+                        .contentType(textUriContentType))
+                .andExpect(status().isCreated());
+
+        Item item = itemService.findByMetadataField(context, "dc", "title", null,
+                "OAI Workflow Test Item").next();
+        assertTrue("Item should have been archived immediately (no workflow configured)",
+                item.isArchived());
+        assertNotNull("Archived item should have been assigned a handle", item.getHandle());
+
+        SolrDocumentList results = DSpaceSolrSearch.query(mockOAISolr.getSolrServer(),
+                new SolrQuery("item.handle:" + item.getHandle()));
+        assertEquals("Item archived via the REST workflow submission should already be indexed "
+                + "in the OAI Solr core", 1, results.getNumFound());
+        assertEquals(item.getHandle(), results.get(0).getFieldValue("item.handle"));
+    }
+
+    @Test
+    public void modifiedItemUpdatesOai() throws Exception {
+        context.turnOffAuthorisationSystem();
+        parentCommunity = CommunityBuilder.createCommunity(context)
+                .withName("Parent Community")
+                .build();
+        Collection collection = CollectionBuilder.createCollection(context, parentCommunity)
+                .withName("Collection")
+                .build();
+        Item item = ItemBuilder.createItem(context, collection)
+                .withTitle("Original Title")
+                .withIssueDate("2026-01-01")
+                .build();
+        context.restoreAuthSystemState();
+
+        // sanity check: the item was already indexed on archival, with its original title
+        SolrDocumentList initialResults = DSpaceSolrSearch.query(mockOAISolr.getSolrServer(),
+                new SolrQuery("item.handle:" + item.getHandle()));
+        assertEquals(1, initialResults.getNumFound());
+        assertTrue("OAI record should initially contain the original title",
+                initialResults.get(0).getFieldValue("item.compile").toString().contains("Original Title"));
+
+        String token = getAuthToken(admin.getEmail(), password);
+
+        List<Operation> ops = new ArrayList<>();
+        ops.add(new ReplaceOperation("/metadata/dc.title/0", "Updated Title"));
+        getClient(token).perform(patch(BASE_REST_SERVER_URL + "/api/core/items/" + item.getID())
+                        .content(getPatchContent(ops))
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk());
+
+        SolrDocumentList updatedResults = DSpaceSolrSearch.query(mockOAISolr.getSolrServer(),
+                new SolrQuery("item.handle:" + item.getHandle()));
+        assertEquals("Item should still have exactly one OAI record after being modified",
+                1, updatedResults.getNumFound());
+        assertTrue("OAI record should reflect the updated title after the metadata patch",
+                updatedResults.get(0).getFieldValue("item.compile").toString().contains("Updated Title"));
+    }
+
+    @Test
+    public void deletedItemIsRemovedFromOai() throws Exception {
+        context.turnOffAuthorisationSystem();
+        parentCommunity = CommunityBuilder.createCommunity(context)
+                .withName("Parent Community")
+                .build();
+        Collection collection = CollectionBuilder.createCollection(context, parentCommunity)
+                .withName("Collection")
+                .build();
+        Item item = ItemBuilder.createItem(context, collection)
+                .withTitle("Item To Delete")
+                .withIssueDate("2026-01-01")
+                .build();
+        context.restoreAuthSystemState();
+
+        String handle = item.getHandle();
+
+        // sanity check: the item was indexed on archival
+        SolrDocumentList initialResults = DSpaceSolrSearch.query(mockOAISolr.getSolrServer(),
+                new SolrQuery("item.handle:" + handle));
+        assertEquals(1, initialResults.getNumFound());
+
+        String token = getAuthToken(admin.getEmail(), password);
+
+        getClient(token).perform(delete(BASE_REST_SERVER_URL + "/api/core/items/" + item.getID()))
+                .andExpect(status().isNoContent());
+
+        SolrDocumentList resultsAfterDelete = DSpaceSolrSearch.query(mockOAISolr.getSolrServer(),
+                new SolrQuery("item.handle:" + handle));
+        assertEquals("Item deleted via REST should have been removed from the OAI Solr core",
+                0, resultsAfterDelete.getNumFound());
+    }
+
+    @Test
+    public void resourcePolicyUpdateReindexOai() throws Exception {
+        context.turnOffAuthorisationSystem();
+        parentCommunity = CommunityBuilder.createCommunity(context)
+                .withName("Parent Community")
+                .build();
+        Collection collection = CollectionBuilder.createCollection(context, parentCommunity)
+                .withName("Collection")
+                .build();
+        Item item = ItemBuilder.createItem(context, collection)
+                .withTitle("Item With Policy")
+                .withIssueDate("2026-01-01")
+                .build();
+
+        // ItemBuilder/installItemService inherits the collection's own default READ policies onto
+        // the item, so it may already have an Anonymous READ policy besides the one we add below.
+        // Clear all READ policies first so the item's public/non-public state is fully controlled
+        // by the single policy this test manages, rather than depending on any leftover default.
+        AuthorizeServiceFactory.getInstance().getResourcePolicyService()
+                .removePolicies(context, item, Constants.READ);
+
+        Group anonymousGroup = EPersonServiceFactory.getInstance().getGroupService()
+                .findByName(context, Group.ANONYMOUS);
+        ResourcePolicy resourcePolicy = ResourcePolicyBuilder.createResourcePolicy(context, null, anonymousGroup)
+                .withAction(Constants.READ)
+                .withDspaceObject(item)
+                .withPolicyType(ResourcePolicy.TYPE_CUSTOM)
+                .withName("Anonymous Read Policy")
+                .build();
+        context.restoreAuthSystemState();
+
+        // sanity check: the item is indexed and currently public (Anonymous has an active READ
+        // policy), so it's not yet flagged as an OAI-PMH tombstone.
+        SolrDocumentList initialResults = DSpaceSolrSearch.query(mockOAISolr.getSolrServer(),
+                new SolrQuery("item.handle:" + item.getHandle()));
+        assertEquals(1, initialResults.getNumFound());
+        assertEquals("Item should initially be public (Anonymous has an active READ policy)",
+                true, initialResults.get(0).getFieldValue("item.public"));
+        assertEquals("Item should not initially be flagged deleted in the OAI Solr core",
+                false, initialResults.get(0).getFieldValue("item.deleted"));
+
+        String token = getAuthToken(admin.getEmail(), password);
+
+        // Changing WHO a policy applies to (Group -> EPerson) isn't supported by PATCH, nor by the
+        // PUT .../eperson|group link-replace endpoints (both reject cross-type reassignment with
+        // 422 - see ResourcePolicyEPersonReplaceRestController/ResourcePolicyGroupReplaceRestController).
+        // So restricting READ to admin-only means deleting the Anonymous policy and creating a new
+        // admin-only one, exactly as an administrator would have to do via the UI.
+        getClient(token).perform(delete(BASE_REST_SERVER_URL + "/api/authz/resourcepolicies/"
+                        + resourcePolicy.getID()))
+                .andExpect(status().isNoContent());
+
+        ResourcePolicyRest resourcePolicyRest = new ResourcePolicyRest();
+        resourcePolicyRest.setPolicyType(ResourcePolicy.TYPE_CUSTOM);
+        resourcePolicyRest.setAction(Constants.actionText[Constants.READ]);
+        ObjectMapper mapper = new ObjectMapper();
+        getClient(token).perform(post(BASE_REST_SERVER_URL + "/api/authz/resourcepolicies")
+                        .content(mapper.writeValueAsBytes(resourcePolicyRest))
+                        .param("resource", item.getID().toString())
+                        .param("eperson", admin.getID().toString())
+                        .contentType(contentType))
+                .andExpect(status().isCreated());
+
+        // OAIConsumer reindexes with the context's current user temporarily nulled out (see
+        // OAIConsumer#end), so "is this item public" is evaluated as Anonymous would see it, not
+        // as the admin who made the REST calls. With Anonymous no longer having READ access, the
+        // item should now be flagged as an OAI-PMH tombstone (item.deleted:true).
+        SolrDocumentList updatedResults = DSpaceSolrSearch.query(mockOAISolr.getSolrServer(),
+                new SolrQuery("item.handle:" + item.getHandle()));
+        assertEquals("Item should still have exactly one OAI record after its READ policy was "
+                + "restricted to admin-only", 1, updatedResults.getNumFound());
+        assertEquals("Item should be flagged as deleted (OAI-PMH tombstone) in the OAI Solr core, "
+                + "since Anonymous no longer has READ access",
+                true, updatedResults.get(0).getFieldValue("item.deleted"));
+    }
+}

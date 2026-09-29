@@ -505,6 +505,38 @@ public class XOAI {
         return doc;
     }
 
+    /**
+     * Add or update a single item in the OAI Solr index and commit immediately. Used to keep the
+     * index in sync when an item is created, modified or deleted through a code path (e.g. batch/CLI
+     * import, AIP/packager restore) that doesn't otherwise push into this Solr core, unlike the full
+     * or incremental {@link #index()} run or the REST API's own synchronous reindexing.
+     *
+     * @param item item to (re)index
+     */
+    public void indexItem(Item item)
+            throws SQLException, IOException, XMLStreamException, WritingXmlException, SolrServerException {
+        if (item.getHandle() == null) {
+            log.warn("Skipped item without handle: " + item.getID());
+            return;
+        }
+        SolrClient server = solrServerResolver.getServer();
+        server.add(index(item));
+        server.commit();
+    }
+
+    /**
+     * Remove a single item, identified by its id, from the OAI Solr index and commit immediately.
+     * Used when an item is permanently deleted through a code path that doesn't otherwise notify
+     * this Solr core.
+     *
+     * @param itemId id of the deleted item
+     */
+    public void deleteItem(UUID itemId) throws SolrServerException, IOException {
+        SolrClient server = solrServerResolver.getServer();
+        server.deleteByQuery("item.id:" + itemId);
+        server.commit();
+    }
+
     private boolean willChangeStatus(Item item) throws SQLException {
         List<ResourcePolicy> policies = authorizeService.getPoliciesActionFilter(context, item, Constants.READ);
         for (ResourcePolicy policy : policies) {
