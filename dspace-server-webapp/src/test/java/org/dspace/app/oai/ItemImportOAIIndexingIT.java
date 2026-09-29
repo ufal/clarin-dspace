@@ -105,7 +105,7 @@ public class ItemImportOAIIndexingIT extends AbstractControllerIntegrationTest {
     }
 
     @Test
-    public void importedItemAppearsInOaiWithoutManualReindex() throws Exception {
+    public void importedItemAppearsInOaiIndex() throws Exception {
         context.turnOffAuthorisationSystem();
         parentCommunity = CommunityBuilder.createCommunity(context)
                 .withName("Parent Community")
@@ -135,13 +135,13 @@ public class ItemImportOAIIndexingIT extends AbstractControllerIntegrationTest {
             importContext.setCurrentUser(ePersonService.find(importContext, admin.getID()));
             importContext.turnOffAuthorisationSystem();
 
-            List<Collection> mycollections = Collections.singletonList(
+            List<Collection> myCollections = Collections.singletonList(
                     collectionService.find(importContext, collection.getID()));
             String sourceDir = safDir.toString();
             String mapFile = tempDir.resolve("mapfile.out").toString();
 
             ItemImportService itemImportService = ItemImportServiceFactory.getInstance().getItemImportService();
-            itemImportService.addItems(importContext, mycollections, sourceDir, mapFile, false);
+            itemImportService.addItems(importContext, myCollections, sourceDir, mapFile, false);
             importContext.complete();
 
             Item item = itemService.findByMetadataField(context, "dc", "title", null,
