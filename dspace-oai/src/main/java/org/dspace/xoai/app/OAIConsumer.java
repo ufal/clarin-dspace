@@ -7,7 +7,10 @@
  */
 package org.dspace.xoai.app;
 
+import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -31,9 +34,42 @@ import org.springframework.context.annotation.AnnotationConfigApplicationContext
  * ensures e.g. a freshly batch-imported item is immediately resolvable via OAI-PMH (and
  * features built on top of it, such as <code>/api/core/refbox/citations</code>) without
  * requiring a manual <code>bin/dspace oai import</code> run.
+ * <p>
+ * Indexing is done synchronously in {@link #end}, reusing the SAME {@link Context} that fired
+ * the events, rather than opening a separate one: events are dispatched BEFORE the triggering
+ * context's transaction commits (see {@link Context#commit()}), so a second Context/DB
+ * connection could not see the not-yet-committed changes. A later attempt to defer indexing
+ * until after the real commit (via a Hibernate transaction synchronization) turned out to be
+ * unreliable in general, since {@link Context#dispatchEvents()} is sometimes called well before
+ * an eventual commit (e.g. DSpace's own test builders batch many changes under one long-lived
+ * Context, committed only once at the very end) - so that commit may never arrive within any
+ * useful timeframe.
+ * <p>
+ * Reusing the triggering Context means inheriting whatever privileged state it happens to be
+ * in. OAI-PMH is an anonymous-facing protocol, so item.public/item.deleted must be computed as
+ * Anonymous would see them - not as the acting user (e.g. an admin can always read an item,
+ * which would otherwise make everything look public), and not with authorization checks
+ * disabled entirely (e.g. the CLI batch importer calls
+ * {@code context.turnOffAuthorisationSystem()} and never restores it before committing). Both
+ * {@code currentUser} and the private {@code ignoreAuth} flag are therefore reset for the
+ * duration of the indexing calls below, then restored. {@code ignoreAuth} has no public setter
+ * other than the stack-based {@code turnOffAuthorisationSystem()}/{@code restoreAuthSystemState()}
+ * pair (unsafe to (mis)use here - see git history for details), so it's reset directly via
+ * reflection.
  */
 public class OAIConsumer implements Consumer {
     private static final Logger log = LogManager.getLogger(OAIConsumer.class);
+
+    private static final Field IGNORE_AUTH_FIELD;
+
+    static {
+        try {
+            IGNORE_AUTH_FIELD = Context.class.getDeclaredField("ignoreAuth");
+            IGNORE_AUTH_FIELD.setAccessible(true);
+        } catch (NoSuchFieldException e) {
+            throw new ExceptionInInitializerError(e);
+        }
+    }
 
     private ItemService itemService;
     private AnnotationConfigApplicationContext applicationContext;
@@ -49,11 +85,6 @@ public class OAIConsumer implements Consumer {
 
     @Override
     public void consume(Context ctx, Event event) throws Exception {
-
-        if (event.getEventType() == Event.INSTALL) {
-            System.out.println("Event type is INSTALL");
-        }
-
         if (event.getSubjectType() != Constants.ITEM) {
             return;
         }
@@ -73,8 +104,6 @@ public class OAIConsumer implements Consumer {
         }
 
         toIndex.add(event.getSubjectID());
-        System.out.println("Added item with ID: " + event.getSubjectID() + " to toIndex set.");
-        System.out.println("Current toIndex set: " + toIndex);
     }
 
     @Override
@@ -87,49 +116,62 @@ public class OAIConsumer implements Consumer {
             XOAI indexer = new XOAI(ctx, false, false);
             applicationContext.getAutowireCapableBeanFactory().autowireBean(indexer);
 
-            // OAI-PMH is an anonymous-facing protocol, so item.public/item.deleted must reflect
-            // what an anonymous harvester can see, not what the user who triggered this change
-            // can see (e.g. an admin performing a REST update can always read an item, so
-            // authorizeActionBoolean() would otherwise report every item as public regardless of
-            // whether Anonymous actually has READ access). Temporarily switch the SAME context to
-            // no current user for the indexing calls, then restore it. We deliberately reuse ctx
-            // rather than opening a separate Context/DB connection here: events are dispatched
-            // BEFORE the triggering context's transaction is committed (see Context#commit), so a
-            // second connection could not see the not-yet-committed changes anyway.
             EPerson previousUser = ctx.getCurrentUser();
+            boolean previousIgnoreAuth = getIgnoreAuth(ctx);
             try {
                 ctx.setCurrentUser(null);
+                setIgnoreAuth(ctx, false);
 
-                if (toIndex != null) {
+                if (toIndex != null && !toIndex.isEmpty()) {
+                    List<Item> items = new ArrayList<>();
                     for (UUID id : toIndex) {
+                        Item item = itemService.find(ctx, id);
+                        if (item == null) {
+                            // removed again before this batch of events was processed
+                            continue;
+                        }
+                        items.add(item);
+                    }
+                    if (!items.isEmpty()) {
                         try {
-                            Item item = itemService.find(ctx, id);
-                            if (item == null) {
-                                // removed again before this batch of events was processed
-                                continue;
-                            }
-                            indexer.indexItem(item);
+                            indexer.indexItems(items);
                         } catch (Exception ex) {
-                            log.error("Failed to reindex item " + id + " in the OAI Solr core", ex);
+                            log.error("Failed to reindex " + items.size() + " item(s) in the OAI Solr core", ex);
                         }
                     }
                 }
 
-                if (toDelete != null) {
-                    for (UUID id : toDelete) {
-                        try {
-                            indexer.deleteItem(id);
-                        } catch (Exception ex) {
-                            log.error("Failed to remove item " + id + " from the OAI Solr core", ex);
-                        }
+                if (toDelete != null && !toDelete.isEmpty()) {
+                    try {
+                        indexer.deleteItems(toDelete);
+                    } catch (Exception ex) {
+                        log.error("Failed to remove " + toDelete.size() + " item(s) from the OAI Solr core", ex);
                     }
                 }
             } finally {
                 ctx.setCurrentUser(previousUser);
+                setIgnoreAuth(ctx, previousIgnoreAuth);
             }
         } finally {
             toIndex = null;
             toDelete = null;
+        }
+    }
+
+    private static boolean getIgnoreAuth(Context ctx) {
+        try {
+            return (boolean) IGNORE_AUTH_FIELD.get(ctx);
+        } catch (IllegalAccessException e) {
+            log.error("Failed to read Context#ignoreAuth, assuming authorization checks are active", e);
+            return false;
+        }
+    }
+
+    private static void setIgnoreAuth(Context ctx, boolean value) {
+        try {
+            IGNORE_AUTH_FIELD.set(ctx, value);
+        } catch (IllegalAccessException e) {
+            log.error("Failed to set Context#ignoreAuth to " + value, e);
         }
     }
 

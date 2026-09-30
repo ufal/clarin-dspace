@@ -25,6 +25,7 @@ import java.util.Date;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import javax.xml.stream.XMLStreamException;
 
@@ -94,6 +95,8 @@ public class XOAI {
     private XOAILastCompilationCacheService xoaiLastCompilationCacheService;
     @Autowired
     private XOAIItemCacheService xoaiItemCacheService;
+    @Autowired
+    private XOAICacheService xoaiCacheService;
     @Autowired
     private CollectionsService collectionsService;
 
@@ -506,35 +509,113 @@ public class XOAI {
     }
 
     /**
-     * Add or update a single item in the OAI Solr index and commit immediately. Used to keep the
-     * index in sync when an item is created, modified or deleted through a code path (e.g. batch/CLI
-     * import, AIP/packager restore) that doesn't otherwise push into this Solr core, unlike the full
-     * or incremental {@link #index()} run or the REST API's own synchronous reindexing.
+     * Add or update several items in the OAI Solr index, committing once at the end (in chunks of
+     * {@code oai.import.batch.size}, matching the batching done by the full/incremental
+     * {@link #index()} run - see {@link #index(Iterator)}). Used by the event consumer to keep the
+     * index in sync with item changes from REST submissions, batch/CLI imports, AIP/packager
+     * restores, and other code paths, without a separate network round-trip and Solr commit per
+     * item - important since a single batch/CLI import can install thousands of items in one
+     * transaction, all reindexed together here.
+     * <p>
+     * A failure while building one item's document is logged and skipped, so it doesn't prevent
+     * the rest of the batch from being indexed.
+     * <p>
+     * The OAI-PMH response cache and each item's compiled-metadata cache are purged afterwards -
+     * a successful Solr write alone does not invalidate them, and
+     * {@code org.dspace.xoai.controller.DSpaceOAIDataProvider} (when the cache is enabled) would
+     * otherwise keep serving stale cached {@code GetRecord}/{@code ListRecords} responses. This
+     * mirrors what the old, REST-only {@code SolrOAIReindexer} and the full/incremental
+     * {@link #index()} run both already do.
      *
-     * @param item item to (re)index
+     * @param items items to (re)index
      */
-    public void indexItem(Item item)
-            throws SQLException, IOException, XMLStreamException, WritingXmlException, SolrServerException {
-        if (item.getHandle() == null) {
-            log.warn("Skipped item without handle: " + item.getID());
-            return;
-        }
+    public void indexItems(List<Item> items) throws SolrServerException, IOException {
+        int batchSize = configurationService.getIntProperty("oai.import.batch.size", 1000);
         SolrClient server = solrServerResolver.getServer();
-        server.add(index(item));
+        List<SolrInputDocument> docs = new ArrayList<>();
+        List<Item> indexed = new ArrayList<>();
+        for (Item item : items) {
+            if (item.getHandle() == null) {
+                log.warn("Skipped item without handle: " + item.getID());
+                continue;
+            }
+            try {
+                docs.add(index(item));
+                indexed.add(item);
+            } catch (SQLException | IOException | XMLStreamException | WritingXmlException ex) {
+                log.error("Failed to build OAI Solr document for item " + item.getID(), ex);
+            }
+            if (docs.size() >= batchSize) {
+                server.add(docs);
+                docs.clear();
+            }
+        }
+        if (!docs.isEmpty()) {
+            server.add(docs);
+        }
         server.commit();
+
+        for (Item item : indexed) {
+            clearItemCache(item);
+        }
+        clearResponseCache();
     }
 
     /**
-     * Remove a single item, identified by its id, from the OAI Solr index and commit immediately.
-     * Used when an item is permanently deleted through a code path that doesn't otherwise notify
-     * this Solr core.
+     * Remove several items, identified by id, from the OAI Solr index, committing once at the end.
+     * Used when items are permanently deleted through a code path that doesn't otherwise notify
+     * this Solr core. A failure while removing one item is logged and skipped, so it doesn't
+     * prevent the rest of the batch from being removed.
+     * <p>
+     * The OAI-PMH response cache is purged afterwards - see {@link #indexItems} for why.
      *
-     * @param itemId id of the deleted item
+     * @param itemIds ids of the deleted items
      */
-    public void deleteItem(UUID itemId) throws SolrServerException, IOException {
+    public void deleteItems(Set<UUID> itemIds) throws SolrServerException, IOException {
+        if (itemIds.isEmpty()) {
+            return;
+        }
         SolrClient server = solrServerResolver.getServer();
-        server.deleteByQuery("item.id:" + itemId);
+        for (UUID itemId : itemIds) {
+            try {
+                server.deleteByQuery("item.id:" + itemId);
+            } catch (SolrServerException | IOException ex) {
+                log.error("Failed to remove item " + itemId + " from the OAI Solr core", ex);
+            }
+        }
         server.commit();
+
+        clearResponseCache();
+    }
+
+    /**
+     * Purge the compiled-metadata cache entry for a single item. Failures are logged and
+     * swallowed, matching the old {@code SolrOAIReindexer}'s defensive handling - a cache that
+     * fails to clear (e.g. due to concurrent access) shouldn't fail the reindex that already
+     * succeeded; it will simply be refreshed on the next cache miss.
+     */
+    private void clearItemCache(Item item) {
+        try {
+            xoaiItemCacheService.delete(item);
+        } catch (Exception ex) {
+            log.warn("Failed to clear the OAI item cache for item " + item.getID()
+                    + " (will refresh naturally): " + ex.getMessage());
+        }
+    }
+
+    /**
+     * Purge the whole OAI-PMH response cache, if active. See {@link #clearItemCache} for why
+     * failures are only logged, not thrown.
+     */
+    private void clearResponseCache() {
+        try {
+            if (xoaiCacheService != null && xoaiCacheService.isActive()) {
+                xoaiCacheService.deleteAll();
+            }
+        } catch (Exception ex) {
+            log.warn("Failed to clear the OAI response cache (harvesters will get fresh data on cache miss): "
+                    + ex.getMessage());
+        }
     }
 
     private boolean willChangeStatus(Item item) throws SQLException {

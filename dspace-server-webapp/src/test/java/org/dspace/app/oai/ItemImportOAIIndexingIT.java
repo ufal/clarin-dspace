@@ -8,7 +8,11 @@
 package org.dspace.app.oai;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -32,12 +36,16 @@ import org.dspace.core.Context;
 import org.dspace.eperson.factory.EPersonServiceFactory;
 import org.dspace.eperson.service.EPersonService;
 import org.dspace.solr.MockSolrServer;
+import org.dspace.xoai.data.DSpaceItem;
+import org.dspace.xoai.services.api.xoai.ItemRepositoryResolver;
 import org.dspace.xoai.services.impl.solr.DSpaceSolrServerResolver;
 import org.dspace.xoai.solr.DSpaceSolrSearch;
 import org.junit.After;
 import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.util.ReflectionTestUtils;
 
 /**
@@ -67,11 +75,17 @@ import org.springframework.test.util.ReflectionTestUtils;
  * references, and the import {@link Context} below opts into it explicitly via
  * {@link Context#setDispatcher}.
  */
+@TestPropertySource(properties = {"oai.enabled = true"})
 public class ItemImportOAIIndexingIT extends AbstractControllerIntegrationTest {
 
     private final ItemService itemService = ContentServiceFactory.getInstance().getItemService();
     private final CollectionService collectionService = ContentServiceFactory.getInstance().getCollectionService();
     private final EPersonService ePersonService = EPersonServiceFactory.getInstance().getEPersonService();
+
+    // Used to reset the cached DSpaceItemSolrRepository before this test, in case an earlier test
+    // (in the same JVM/Surefire fork) left it bound to a different embedded Solr core instance.
+    @Autowired(required = false)
+    private ItemRepositoryResolver itemRepositoryResolver;
 
     private MockSolrServer mockOAISolr;
 
@@ -93,6 +107,11 @@ public class ItemImportOAIIndexingIT extends AbstractControllerIntegrationTest {
         // every instance) to an embedded "oai" core instead.
         mockOAISolr = new MockSolrServer("oai");
         ReflectionTestUtils.setField(DSpaceSolrServerResolver.class, "server", mockOAISolr.getSolrServer());
+
+        // Reset the cached ItemRepository so it is re-created bound to the embedded client above
+        if (itemRepositoryResolver != null) {
+            ReflectionTestUtils.setField(itemRepositoryResolver, "itemRepository", null);
+        }
     }
 
     @After
@@ -153,6 +172,23 @@ public class ItemImportOAIIndexingIT extends AbstractControllerIntegrationTest {
             assertEquals("Item imported via the batch importer should already be indexed in the OAI "
                     + "Solr core, without running 'bin/dspace oai import'", 1, results.getNumFound());
             assertEquals(item.getHandle(), results.get(0).getFieldValue("item.handle"));
+
+            // Beyond the backing Solr document, also verify the item is genuinely discoverable
+            // through a real OAI-PMH request - this additionally exercises the OAI-PMH response
+            // cache and the request-serving/authorization-filter layers, none of which the Solr
+            // check above touches.
+            String oaiIdentifier = DSpaceItem.buildIdentifier(item.getHandle());
+            String response = getClient().perform(get("/oai/request")
+                            .param("verb", "GetRecord")
+                            .param("metadataPrefix", "oai_dc")
+                            .param("identifier", oaiIdentifier))
+                    .andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString();
+
+            assertFalse("GetRecord should not report the item as unknown ('idDoesNotExist')",
+                    response.contains("idDoesNotExist"));
+            assertTrue("GetRecord response should contain the imported item's title",
+                    response.contains("OAI Consumer Import Test Item"));
         } finally {
             PathUtils.deleteDirectory(tempDir);
         }

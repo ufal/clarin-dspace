@@ -8,9 +8,11 @@
 package org.dspace.app.oai;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -46,12 +48,16 @@ import org.dspace.event.service.EventService;
 import org.dspace.services.ConfigurationService;
 import org.dspace.services.factory.DSpaceServicesFactory;
 import org.dspace.solr.MockSolrServer;
+import org.dspace.xoai.data.DSpaceItem;
+import org.dspace.xoai.services.api.xoai.ItemRepositoryResolver;
 import org.dspace.xoai.services.impl.solr.DSpaceSolrServerResolver;
 import org.dspace.xoai.solr.DSpaceSolrSearch;
 import org.junit.After;
 import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.util.ReflectionTestUtils;
 
 /**
@@ -76,12 +82,18 @@ import org.springframework.test.util.ReflectionTestUtils;
  * {@link ConfigurationService} directly and forcing {@link EventService} to rebuild its dispatcher
  * pool — an override strictly scoped to this JVM/test run and reverted in {@link #tearDownOAI()}.
  */
+@TestPropertySource(properties = {"oai.enabled = true"})
 public class ItemOAIIndexingIT extends AbstractControllerIntegrationTest {
 
     private final ItemService itemService = ContentServiceFactory.getInstance().getItemService();
     private final ConfigurationService configurationService =
             DSpaceServicesFactory.getInstance().getConfigurationService();
     private final EventService eventService = EventServiceFactory.getInstance().getEventService();
+
+    // Used to reset the cached DSpaceItemSolrRepository before each test, in case an earlier test
+    // left it bound to a different embedded Solr core instance.
+    @Autowired(required = false)
+    private ItemRepositoryResolver itemRepositoryResolver;
 
     private MockSolrServer mockOAISolr;
     private String[] originalConsumers;
@@ -104,6 +116,11 @@ public class ItemOAIIndexingIT extends AbstractControllerIntegrationTest {
         // every instance) to an embedded "oai" core instead.
         mockOAISolr = new MockSolrServer("oai");
         ReflectionTestUtils.setField(DSpaceSolrServerResolver.class, "server", mockOAISolr.getSolrServer());
+
+        // Reset the cached ItemRepository so it is re-created bound to the embedded client above
+        if (itemRepositoryResolver != null) {
+            ReflectionTestUtils.setField(itemRepositoryResolver, "itemRepository", null);
+        }
 
         // Activate "oai" on the "default" dispatcher for the lifetime of this test only (see class
         // javadoc for why). Nulling the pool forces EventServiceImpl to rebuild it, re-reading the
@@ -166,6 +183,22 @@ public class ItemOAIIndexingIT extends AbstractControllerIntegrationTest {
         assertEquals("Item archived via the REST workflow submission should already be indexed "
                 + "in the OAI Solr core", 1, results.getNumFound());
         assertEquals(item.getHandle(), results.get(0).getFieldValue("item.handle"));
+
+        // Beyond the backing Solr document, also verify the item is genuinely discoverable
+        // through a real OAI-PMH request - this additionally exercises the response cache and
+        // the request-serving/authorization-filter layers, none of which the Solr check touches.
+        String oaiIdentifier = DSpaceItem.buildIdentifier(item.getHandle());
+        String response = getClient().perform(get("/oai/request")
+                        .param("verb", "GetRecord")
+                        .param("metadataPrefix", "oai_dc")
+                        .param("identifier", oaiIdentifier))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        assertFalse("GetRecord should not report the item as unknown ('idDoesNotExist')",
+                response.contains("idDoesNotExist"));
+        assertTrue("GetRecord response should contain the archived item's title",
+                response.contains("OAI Workflow Test Item"));
     }
 
     @Test
@@ -190,6 +223,19 @@ public class ItemOAIIndexingIT extends AbstractControllerIntegrationTest {
         assertTrue("OAI record should initially contain the original title",
                 initialResults.get(0).getFieldValue("item.compile").toString().contains("Original Title"));
 
+        // Warm the OAI-PMH response cache with the item's ORIGINAL title, before the patch below.
+        // This is what actually lets the assertions after the patch prove the response cache gets
+        // invalidated, rather than just proving the backing Solr document was updated.
+        String oaiIdentifier = DSpaceItem.buildIdentifier(item.getHandle());
+        String initialResponse = getClient().perform(get("/oai/request")
+                        .param("verb", "GetRecord")
+                        .param("metadataPrefix", "oai_dc")
+                        .param("identifier", oaiIdentifier))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        assertTrue("GetRecord response should initially contain the original title",
+                initialResponse.contains("Original Title"));
+
         String token = getAuthToken(admin.getEmail(), password);
 
         List<Operation> ops = new ArrayList<>();
@@ -205,6 +251,17 @@ public class ItemOAIIndexingIT extends AbstractControllerIntegrationTest {
                 1, updatedResults.getNumFound());
         assertTrue("OAI record should reflect the updated title after the metadata patch",
                 updatedResults.get(0).getFieldValue("item.compile").toString().contains("Updated Title"));
+
+        String updatedResponse = getClient().perform(get("/oai/request")
+                        .param("verb", "GetRecord")
+                        .param("metadataPrefix", "oai_dc")
+                        .param("identifier", oaiIdentifier))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        assertFalse("GetRecord should not keep serving a cached response with the stale, "
+                + "original title", updatedResponse.contains("Original Title"));
+        assertTrue("GetRecord response should reflect the updated title, not a stale cached "
+                + "response", updatedResponse.contains("Updated Title"));
     }
 
     @Test
@@ -229,6 +286,19 @@ public class ItemOAIIndexingIT extends AbstractControllerIntegrationTest {
                 new SolrQuery("item.handle:" + handle));
         assertEquals(1, initialResults.getNumFound());
 
+        // Warm the OAI-PMH response cache with a successful GetRecord response, before the item
+        // is deleted below - this is what lets the post-delete assertion prove the response cache
+        // gets invalidated, rather than just proving the backing Solr document was removed.
+        String oaiIdentifier = DSpaceItem.buildIdentifier(handle);
+        String initialResponse = getClient().perform(get("/oai/request")
+                        .param("verb", "GetRecord")
+                        .param("metadataPrefix", "oai_dc")
+                        .param("identifier", oaiIdentifier))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        assertFalse("GetRecord should initially find the item",
+                initialResponse.contains("idDoesNotExist"));
+
         String token = getAuthToken(admin.getEmail(), password);
 
         getClient(token).perform(delete(BASE_REST_SERVER_URL + "/api/core/items/" + item.getID()))
@@ -238,6 +308,16 @@ public class ItemOAIIndexingIT extends AbstractControllerIntegrationTest {
                 new SolrQuery("item.handle:" + handle));
         assertEquals("Item deleted via REST should have been removed from the OAI Solr core",
                 0, resultsAfterDelete.getNumFound());
+
+        String responseAfterDelete = getClient().perform(get("/oai/request")
+                        .param("verb", "GetRecord")
+                        .param("metadataPrefix", "oai_dc")
+                        .param("identifier", oaiIdentifier))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        assertTrue("GetRecord should report the item as unknown after deletion, not keep serving "
+                + "a cached response from before the delete",
+                responseAfterDelete.contains("idDoesNotExist"));
     }
 
     @Test
@@ -281,6 +361,22 @@ public class ItemOAIIndexingIT extends AbstractControllerIntegrationTest {
         assertEquals("Item should not initially be flagged deleted in the OAI Solr core",
                 false, initialResults.get(0).getFieldValue("item.deleted"));
 
+        // Warm the OAI-PMH response cache with the item's full, public record, before the
+        // resource policy is restricted below - this is what lets the post-change assertions
+        // prove the response cache gets invalidated, rather than just proving the backing Solr
+        // document was updated.
+        String oaiIdentifier = DSpaceItem.buildIdentifier(item.getHandle());
+        String initialResponse = getClient().perform(get("/oai/request")
+                        .param("verb", "GetRecord")
+                        .param("metadataPrefix", "oai_dc")
+                        .param("identifier", oaiIdentifier))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        assertFalse("GetRecord should initially return the full record, not a deleted/tombstoned "
+                + "status", initialResponse.contains("status=\"deleted\""));
+        assertTrue("GetRecord response should initially contain the item's title",
+                initialResponse.contains("Item With Policy"));
+
         String token = getAuthToken(admin.getEmail(), password);
 
         // Changing WHO a policy applies to (Group -> EPerson) isn't supported by PATCH, nor by the
@@ -314,5 +410,17 @@ public class ItemOAIIndexingIT extends AbstractControllerIntegrationTest {
         assertEquals("Item should be flagged as deleted (OAI-PMH tombstone) in the OAI Solr core, "
                 + "since Anonymous no longer has READ access",
                 true, updatedResults.get(0).getFieldValue("item.deleted"));
+
+        String updatedResponse = getClient().perform(get("/oai/request")
+                        .param("verb", "GetRecord")
+                        .param("metadataPrefix", "oai_dc")
+                        .param("identifier", oaiIdentifier))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        assertTrue("GetRecord should now report the record as deleted (OAI-PMH tombstone), not "
+                + "keep serving the stale, previously-cached full record",
+                updatedResponse.contains("status=\"deleted\""));
+        assertFalse("GetRecord response should no longer contain the item's metadata once "
+                + "tombstoned", updatedResponse.contains("Item With Policy"));
     }
 }
