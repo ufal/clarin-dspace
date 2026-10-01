@@ -39,6 +39,7 @@ import org.dspace.content.Collection;
 import org.dspace.content.Item;
 import org.dspace.content.WorkspaceItem;
 import org.dspace.content.factory.ContentServiceFactory;
+import org.dspace.content.service.CollectionService;
 import org.dspace.content.service.ItemService;
 import org.dspace.core.Constants;
 import org.dspace.eperson.Group;
@@ -86,6 +87,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 public class ItemOAIIndexingIT extends AbstractControllerIntegrationTest {
 
     private final ItemService itemService = ContentServiceFactory.getInstance().getItemService();
+    private final CollectionService collectionService = ContentServiceFactory.getInstance().getCollectionService();
     private final ConfigurationService configurationService =
             DSpaceServicesFactory.getInstance().getConfigurationService();
     private final EventService eventService = EventServiceFactory.getInstance().getEventService();
@@ -134,6 +136,9 @@ public class ItemOAIIndexingIT extends AbstractControllerIntegrationTest {
     @After
     public void tearDownOAI() throws Exception {
         ReflectionTestUtils.setField(DSpaceSolrServerResolver.class, "server", null);
+        if (itemRepositoryResolver != null) {
+            ReflectionTestUtils.setField(itemRepositoryResolver, "itemRepository", null);
+        }
         if (mockOAISolr != null) {
             mockOAISolr.destroy();
             mockOAISolr = null;
@@ -422,5 +427,105 @@ public class ItemOAIIndexingIT extends AbstractControllerIntegrationTest {
                 updatedResponse.contains("status=\"deleted\""));
         assertFalse("GetRecord response should no longer contain the item's metadata once "
                 + "tombstoned", updatedResponse.contains("Item With Policy"));
+    }
+
+    @Test
+    public void collectionMappingReindexOai() throws Exception {
+        context.turnOffAuthorisationSystem();
+        parentCommunity = CommunityBuilder.createCommunity(context)
+                .withName("Parent Community")
+                .build();
+        Collection originalCollection = CollectionBuilder.createCollection(context, parentCommunity)
+                .withName("Original Collection")
+                .build();
+        Collection mappedCollection = CollectionBuilder.createCollection(context, parentCommunity)
+                .withName("Mapped Collection")
+                .build();
+        Item item = ItemBuilder.createItem(context, originalCollection)
+                .withTitle("Mapped Item")
+                .withIssueDate("2026-01-01")
+                .build();
+        context.restoreAuthSystemState();
+
+        String originalCollectionSet = "col_" + originalCollection.getHandle().replace("/", "_");
+        String mappedCollectionSet = "col_" + mappedCollection.getHandle().replace("/", "_");
+        String oaiIdentifier = DSpaceItem.buildIdentifier(item.getHandle());
+
+        // sanity check: the item was indexed on archival, listing only its owning collection
+        SolrDocumentList initialResults = DSpaceSolrSearch.query(mockOAISolr.getSolrServer(),
+                new SolrQuery("item.handle:" + item.getHandle()));
+        assertEquals(1, initialResults.getNumFound());
+        assertTrue("OAI record should initially list the owning collection",
+                initialResults.get(0).getFieldValues("item.collections").contains(originalCollectionSet));
+        assertFalse("OAI record should not yet list the not-yet-mapped collection",
+                initialResults.get(0).getFieldValues("item.collections").contains(mappedCollectionSet));
+
+        // Map the item into a second collection directly through CollectionService (the same call
+        // MappedCollectionRestController#createCollectionToItemRelation makes), WITHOUT also
+        // touching the item's own metadata. This isolates the Collection+Add event path
+        // (OAIConsumer#resolveItemIdToReindex) from the accompanying Item+Modify_Metadata event
+        // that the REST mapping endpoint additionally fires via ProvenanceService#mappedItem -
+        // that second event would independently trigger a reindex and could mask a regression in
+        // the Collection+Add handling specifically.
+        context.turnOffAuthorisationSystem();
+        collectionService.addItem(context, mappedCollection, item);
+        context.restoreAuthSystemState();
+        context.dispatchEvents();
+
+        SolrDocumentList afterAddResults = DSpaceSolrSearch.query(mockOAISolr.getSolrServer(),
+                new SolrQuery("item.handle:" + item.getHandle()));
+        assertEquals("Item should still have exactly one OAI record after being mapped into a "
+                + "second collection", 1, afterAddResults.getNumFound());
+        assertTrue("OAI record should still list the original owning collection",
+                afterAddResults.get(0).getFieldValues("item.collections").contains(originalCollectionSet));
+        assertTrue("OAI record should now also list the newly mapped collection, without requiring "
+                + "a manual reindex (Collection+Add fires with the Collection as subject and the "
+                + "Item as object)",
+                afterAddResults.get(0).getFieldValues("item.collections").contains(mappedCollectionSet));
+
+        // Also verify the new collection membership is reflected in a real OAI-PMH GetRecord
+        // response's <setSpec> list (DSpaceSolrItem#getSets reads the same item.collections field).
+        String responseAfterAdd = getClient().perform(get("/oai/request")
+                        .param("verb", "GetRecord")
+                        .param("metadataPrefix", "oai_dc")
+                        .param("identifier", oaiIdentifier))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        assertTrue("GetRecord response should list the newly mapped collection as one of the "
+                + "item's sets", responseAfterAdd.contains(mappedCollectionSet));
+
+        // Now unmap the item from the second collection, the same way, isolating the
+        // Collection+Remove event path. It is not orphaned by this (and so not deleted), since it
+        // is still owned by the original collection.
+        //
+        // Re-fetch the item first: the GetRecord call above went through a separate,
+        // request-scoped Context/Hibernate session, which can leave this test's own 'item'
+        // reference detached from its session. Mutating a detached entity would silently be lost
+        // (never flushed), so operate on a freshly-attached instance instead.
+        context.turnOffAuthorisationSystem();
+        item = itemService.find(context, item.getID());
+        collectionService.removeItem(context, mappedCollection, item);
+        context.restoreAuthSystemState();
+        context.dispatchEvents();
+
+        SolrDocumentList afterRemoveResults = DSpaceSolrSearch.query(mockOAISolr.getSolrServer(),
+                new SolrQuery("item.handle:" + item.getHandle()));
+        assertEquals("Item should still have exactly one OAI record after being unmapped from the "
+                + "second collection", 1, afterRemoveResults.getNumFound());
+        assertTrue("OAI record should still list the original owning collection",
+                afterRemoveResults.get(0).getFieldValues("item.collections").contains(originalCollectionSet));
+        assertFalse("OAI record should no longer list the unmapped collection, without requiring a "
+                + "manual reindex (Collection+Remove fires with the Collection as subject and the "
+                + "Item as object)",
+                afterRemoveResults.get(0).getFieldValues("item.collections").contains(mappedCollectionSet));
+
+        String responseAfterRemove = getClient().perform(get("/oai/request")
+                        .param("verb", "GetRecord")
+                        .param("metadataPrefix", "oai_dc")
+                        .param("identifier", oaiIdentifier))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        assertFalse("GetRecord response should no longer list the unmapped collection as one of "
+                + "the item's sets", responseAfterRemove.contains(mappedCollectionSet));
     }
 }

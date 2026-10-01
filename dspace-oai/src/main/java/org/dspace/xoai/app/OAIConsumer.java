@@ -56,6 +56,11 @@ import org.springframework.context.annotation.AnnotationConfigApplicationContext
  * other than the stack-based {@code turnOffAuthorisationSystem()}/{@code restoreAuthSystemState()}
  * pair (unsafe to (mis)use here - see git history for details), so it's reset directly via
  * reflection.
+ * <p>
+ * Besides direct Item events, this consumer also reacts to {@code Collection+Add/Remove} (an item
+ * mapped into or out of a collection fires the event with the Collection as the subject and the
+ * Item as the object - see {@link #resolveItemIdToReindex}), since each OAI document stores the
+ * item's collection/community membership.
  */
 public class OAIConsumer implements Consumer {
     private static final Logger log = LogManager.getLogger(OAIConsumer.class);
@@ -85,7 +90,8 @@ public class OAIConsumer implements Consumer {
 
     @Override
     public void consume(Context ctx, Event event) throws Exception {
-        if (event.getSubjectType() != Constants.ITEM) {
+        UUID itemId = resolveItemIdToReindex(event);
+        if (itemId == null) {
             return;
         }
         if (toIndex == null) {
@@ -98,12 +104,35 @@ public class OAIConsumer implements Consumer {
         if (event.getEventType() == Event.DELETE) {
             // the item is already (or about to be) removed from the database, so it can no
             // longer be looked up by id; the subject id is still available on the event though
-            toIndex.remove(event.getSubjectID());
-            toDelete.add(event.getSubjectID());
+            toIndex.remove(itemId);
+            toDelete.add(itemId);
             return;
         }
 
-        toIndex.add(event.getSubjectID());
+        toIndex.add(itemId);
+    }
+
+    /**
+     * Resolve the id of the item that should be reindexed for this event, or {@code null} if the
+     * event isn't relevant. Most Item-subject events (Install/Modify/Modify_Metadata/Delete/Remove)
+     * directly reference the changed item as the subject. {@code Collection+Add/Remove} events are
+     * different: mapping/unmapping an archived item into or out of a collection
+     * ({@code CollectionServiceImpl#addItem}/{@code removeItem}) fires the event with the
+     * Collection as the subject and the affected Item as the object - without special-casing this
+     * (mirroring {@code IndexEventConsumer}, which has the same need for Discovery), mapping an
+     * item would never update its OAI "sets" (collection/community membership, stored in each OAI
+     * document - see {@link XOAI#index}), leaving them stale until a full reindex.
+     */
+    private UUID resolveItemIdToReindex(Event event) {
+        if (event.getSubjectType() == Constants.ITEM) {
+            return event.getSubjectID();
+        }
+        if (event.getSubjectType() == Constants.COLLECTION
+                && (event.getEventType() == Event.ADD || event.getEventType() == Event.REMOVE)
+                && event.getObjectType() == Constants.ITEM) {
+            return event.getObjectID();
+        }
+        return null;
     }
 
     @Override

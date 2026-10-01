@@ -117,6 +117,9 @@ public class ItemImportOAIIndexingIT extends AbstractControllerIntegrationTest {
     @After
     public void tearDownOAI() throws Exception {
         ReflectionTestUtils.setField(DSpaceSolrServerResolver.class, "server", null);
+        if (itemRepositoryResolver != null) {
+            ReflectionTestUtils.setField(itemRepositoryResolver, "itemRepository", null);
+        }
         if (mockOAISolr != null) {
             mockOAISolr.destroy();
             mockOAISolr = null;
