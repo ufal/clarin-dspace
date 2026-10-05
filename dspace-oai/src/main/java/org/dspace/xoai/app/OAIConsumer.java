@@ -61,6 +61,8 @@ import org.springframework.context.annotation.AnnotationConfigApplicationContext
  * mapped into or out of a collection fires the event with the Collection as the subject and the
  * Item as the object - see {@link #resolveItemIdToReindex}), since each OAI document stores the
  * item's collection/community membership.
+ *
+ * @author Milan Kuchtiak
  */
 public class OAIConsumer implements Consumer {
     private static final Logger log = LogManager.getLogger(OAIConsumer.class);

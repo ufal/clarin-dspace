@@ -69,7 +69,7 @@ import org.springframework.test.util.ReflectionTestUtils;
  * {@code WorkflowItemRestRepository} previously called {@code SolrOAIReindexer#reindexItem}
  * directly after archiving, but that call was a pure duplicate: {@code InstallItemServiceImpl}
  * already fires {@code Event.INSTALL} for every archived item, and that event is now picked up by
- * {@link org.dspace.xoai.app.OAIConsumer} regardless of which code path triggered the install. This
+ * {@link org.dspace.xoai.app.OAIConsumer} regardless of which code path triggered the installation. This
  * test proves that removing the manual call didn't regress the normal submission path, mirroring
  * {@link ItemImportOAIIndexingIT}, which proves the same thing for the CLI batch importer.
  * <p>
@@ -82,6 +82,8 @@ import org.springframework.test.util.ReflectionTestUtils;
  * this test instead activates it by mutating the DSpace kernel's in-memory
  * {@link ConfigurationService} directly and forcing {@link EventService} to rebuild its dispatcher
  * pool — an override strictly scoped to this JVM/test run and reverted in {@link #tearDownOAI()}.
+ *
+ * @author Milan Kuchtiak
  */
 @TestPropertySource(properties = {"oai.enabled = true"})
 public class ItemOAIIndexingIT extends AbstractControllerIntegrationTest {

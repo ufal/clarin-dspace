@@ -515,12 +515,12 @@ public class XOAI {
      * index in sync with item changes from REST submissions, batch/CLI imports, AIP/packager
      * restores, and other code paths, without a separate network round-trip and Solr commit per
      * item - important since a single batch/CLI import can install thousands of items in one
-     * transaction, all reindexed together here.
+     * transaction, all re-indexed together here.
      * <p>
      * A failure while building one item's document is logged and skipped, so it doesn't prevent
      * the rest of the batch from being indexed.
      * <p>
-     * The OAI-PMH response cache and each item's compiled-metadata cache are purged afterwards -
+     * The OAI-PMH response cache and each item's compiled-metadata cache are purged afterward -
      * a successful Solr write alone does not invalidate them, and
      * {@code org.dspace.xoai.controller.DSpaceOAIDataProvider} (when the cache is enabled) would
      * otherwise keep serving stale cached {@code GetRecord}/{@code ListRecords} responses. This
@@ -580,7 +580,7 @@ public class XOAI {
             try {
                 server.deleteByQuery("item.id:" + itemId);
             } catch (SolrServerException | IOException ex) {
-                log.error("Failed to remove item " + itemId + " from the OAI Solr core", ex);
+                log.error("Failed to remove item {} from the OAI Solr core", itemId, ex);
             }
         }
         server.commit();
@@ -598,8 +598,8 @@ public class XOAI {
         try {
             xoaiItemCacheService.delete(item);
         } catch (Exception ex) {
-            log.warn("Failed to clear the OAI item cache for item " + item.getID()
-                    + " (will refresh naturally): " + ex.getMessage());
+            log.warn("Failed to clear the OAI item cache for item {} (will refresh naturally): {}",
+                    item.getID(), ex.getMessage());
         }
     }
 
@@ -613,8 +613,8 @@ public class XOAI {
                 xoaiCacheService.deleteAll();
             }
         } catch (Exception ex) {
-            log.warn("Failed to clear the OAI response cache (harvesters will get fresh data on cache miss): "
-                    + ex.getMessage());
+            log.warn("Failed to clear the OAI response cache (harvesters will get fresh data on cache miss): {}",
+                    ex.getMessage());
         }
     }
 

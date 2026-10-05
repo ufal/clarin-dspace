@@ -521,7 +521,7 @@ public class ClarinRefBoxController {
 
     /**
      * Build a short, human-readable message explaining why no citation is available, to show in
-     * place of the citation content itself. Note this bypasses the frontend's own i18n/translation
+     * place of the citation content itself. Note this bypasses the frontend own i18n/translation
      * system (it's always returned in English) - a more complete fix would have the frontend
      * detect an empty/unavailable response itself and show its own translated message instead.
      */

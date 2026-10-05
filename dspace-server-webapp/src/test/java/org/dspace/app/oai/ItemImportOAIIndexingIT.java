@@ -64,7 +64,7 @@ import org.springframework.test.util.ReflectionTestUtils;
  * same bean id) into the same Spring context — a collision that doesn't occur in production,
  * where the CLI and the webapp run as separate processes. {@code addItems} is exactly what
  * {@code ItemImportCLI#process} calls for the "add" command, so this still exercises the same
- * production import codepath used by {@code bin/dspace import -a}.
+ * production import code-path used by {@code bin/dspace import -a}.
  * <p>
  * The shared test {@code local.cfg} (used by every module's tests, including {@code dspace-api}'s,
  * which has no dependency on {@code dspace-oai}) intentionally omits {@code oai} from the
@@ -74,6 +74,8 @@ import org.springframework.test.util.ReflectionTestUtils;
  * {@code oai-test} dispatcher (consumers: versioning, discovery, eperson, oai) that nothing else
  * references, and the import {@link Context} below opts into it explicitly via
  * {@link Context#setDispatcher}.
+ *
+ * @author Milan Kuchtiak
  */
 @TestPropertySource(properties = {"oai.enabled = true"})
 public class ItemImportOAIIndexingIT extends AbstractControllerIntegrationTest {
