@@ -17,13 +17,18 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import javax.ws.rs.core.MediaType;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.common.SolrDocumentList;
+import org.dspace.app.bulkedit.DSpaceCSV;
+import org.dspace.app.bulkedit.MetadataImport;
 import org.dspace.app.rest.model.ResourcePolicyRest;
 import org.dspace.app.rest.model.patch.Operation;
 import org.dspace.app.rest.model.patch.ReplaceOperation;
@@ -529,5 +534,102 @@ public class ItemOAIIndexingIT extends AbstractControllerIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
         assertFalse("GetRecord response should no longer list the unmapped collection as one of "
                 + "the item's sets", responseAfterRemove.contains(mappedCollectionSet));
+    }
+
+    @Test
+    public void metadataImportCollectionMappingReindexOai() throws Exception {
+        context.turnOffAuthorisationSystem();
+        parentCommunity = CommunityBuilder.createCommunity(context)
+                .withName("Parent Community")
+                .build();
+        Collection originalCollection = CollectionBuilder.createCollection(context, parentCommunity)
+                .withName("Original Collection")
+                .build();
+        Collection mappedCollection = CollectionBuilder.createCollection(context, parentCommunity)
+                .withName("Mapped Collection")
+                .build();
+        Item item = ItemBuilder.createItem(context, originalCollection)
+                .withTitle("Bulk Mapped Item")
+                .withIssueDate("2026-01-01")
+                .build();
+        context.restoreAuthSystemState();
+
+        String originalCollectionSet = "col_" + originalCollection.getHandle().replace("/", "_");
+        String mappedCollectionSet = "col_" + mappedCollection.getHandle().replace("/", "_");
+
+        // sanity check: the item was indexed on archival, listing only its owning collection
+        SolrDocumentList initialResults = DSpaceSolrSearch.query(mockOAISolr.getSolrServer(),
+                new SolrQuery("item.handle:" + item.getHandle()));
+        assertEquals(1, initialResults.getNumFound());
+        assertFalse("OAI record should not yet list the not-yet-mapped collection",
+                initialResults.get(0).getFieldValues("item.collections").contains(mappedCollectionSet));
+
+        // Map the item into a second collection via a bulk CSV metadata-import (bin/dspace
+        // metadata-import), the same way an administrator would bulk re-map many items at once.
+        // MetadataImport#runImport's "add to new mapped collections" loop calls
+        // CollectionService#addItem directly, with NO accompanying item-metadata-touching call -
+        // unlike the REST mapping endpoint (which also fires a provenance-triggered
+        // Item+Modify_Metadata event as a side effect), this code path relies entirely on
+        // OAIConsumer's Collection+Add handling to keep the OAI index in sync.
+        runMetadataImport(
+                "id,collection",
+                item.getID() + "," + originalCollection.getHandle() + "||" + mappedCollection.getHandle());
+
+        SolrDocumentList afterAddResults = DSpaceSolrSearch.query(mockOAISolr.getSolrServer(),
+                new SolrQuery("item.handle:" + item.getHandle()));
+        assertEquals("Item should still have exactly one OAI record after a bulk metadata-import "
+                + "mapped it into a second collection", 1, afterAddResults.getNumFound());
+        assertTrue("OAI record should still list the original owning collection",
+                afterAddResults.get(0).getFieldValues("item.collections").contains(originalCollectionSet));
+        assertTrue("OAI record should now also list the newly mapped collection, without requiring "
+                + "a manual reindex, after a bulk metadata-import collection change",
+                afterAddResults.get(0).getFieldValues("item.collections").contains(mappedCollectionSet));
+
+        // Now unmap it again via another bulk CSV import, listing only the owning collection -
+        // MetadataImport#runImport's "remove old mapped collections" loop, which likewise calls
+        // CollectionService#removeItem with no accompanying item-metadata-touching call.
+        runMetadataImport(
+                "id,collection",
+                item.getID() + "," + originalCollection.getHandle());
+
+        SolrDocumentList afterRemoveResults = DSpaceSolrSearch.query(mockOAISolr.getSolrServer(),
+                new SolrQuery("item.handle:" + item.getHandle()));
+        assertEquals("Item should still have exactly one OAI record after a bulk metadata-import "
+                + "unmapped it from the second collection", 1, afterRemoveResults.getNumFound());
+        assertTrue("OAI record should still list the original owning collection",
+                afterRemoveResults.get(0).getFieldValues("item.collections").contains(originalCollectionSet));
+        assertFalse("OAI record should no longer list the unmapped collection, without requiring a "
+                + "manual reindex, after a bulk metadata-import collection change",
+                afterRemoveResults.get(0).getFieldValues("item.collections").contains(mappedCollectionSet));
+    }
+
+    /**
+     * Run a bulk CSV metadata-import (bin/dspace metadata-import) directly against the test's own
+     * Context, bypassing the "metadata-import" DSpaceRunnable/ScriptLauncher entirely: a bean id
+     * collision between config/spring/api/scripts.xml and config/spring/rest/scripts.xml (both
+     * register a bean named "metadata-import") makes the script unreliable to invoke this way in
+     * dspace-server-webapp's test environment - the same issue ItemImportOAIIndexingIT works
+     * around for the "import" script. MetadataImport#initMetadataImport is the public, non-CLI
+     * entry point that lets a pre-built DSpaceCSV be imported directly.
+     */
+    private void runMetadataImport(String... csvLines) throws Exception {
+        String content = String.join("\n", csvLines);
+        DSpaceCSV dspaceCsv = new DSpaceCSV(
+                new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)), context);
+        MetadataImport metadataImport = new MetadataImport();
+        metadataImport.initMetadataImport(dspaceCsv);
+        // initMetadataImport only populates the parsed 'toImport' lines; runImport also reads the
+        // package-private 'csv' field directly (e.g. csv.hasActions()), which has no public
+        // setter since it's normally only set by the CLI's own internalRun().
+        ReflectionTestUtils.setField(metadataImport, "csv", dspaceCsv);
+        // Likewise, the static 'authorityControlled' field is only populated by the CLI's own
+        // setAuthorizedMetadataFields() (private, called from internalRun()); isAuthorityControlledField()
+        // NPEs on a null Set otherwise. An empty Set is fine here since no field in this test's CSV
+        // is authority-controlled.
+        ReflectionTestUtils.setField(MetadataImport.class, "authorityControlled", new HashSet<String>());
+
+        context.turnOffAuthorisationSystem();
+        metadataImport.runImport(context, true, false, false, false);
+        context.restoreAuthSystemState();
     }
 }
