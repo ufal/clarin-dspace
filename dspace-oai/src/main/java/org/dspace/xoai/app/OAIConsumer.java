@@ -208,5 +208,9 @@ public class OAIConsumer implements Consumer {
 
     @Override
     public void finish(Context ctx) {
+        if (applicationContext != null) {
+            applicationContext.close();
+            applicationContext = null;
+        }
     }
 }

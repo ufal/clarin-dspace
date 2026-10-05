@@ -624,12 +624,20 @@ public class ItemOAIIndexingIT extends AbstractControllerIntegrationTest {
         ReflectionTestUtils.setField(metadataImport, "csv", dspaceCsv);
         // Likewise, the static 'authorityControlled' field is only populated by the CLI's own
         // setAuthorizedMetadataFields() (private, called from internalRun()); isAuthorityControlledField()
-        // NPEs on a null Set otherwise. An empty Set is fine here since no field in this test's CSV
-        // is authority-controlled.
+        // NPEs on a null Set otherwise. It must be saved and restored rather than just overwritten:
+        // being static, and only (re)initialized by internalRun() when null, leaving a stale/empty
+        // value here would silently disable authority-controlled field handling for every later
+        // test in the same JVM.
+        Object previousAuthorityControlled =
+                ReflectionTestUtils.getField(MetadataImport.class, "authorityControlled");
         ReflectionTestUtils.setField(MetadataImport.class, "authorityControlled", new HashSet<String>());
 
         context.turnOffAuthorisationSystem();
-        metadataImport.runImport(context, true, false, false, false);
-        context.restoreAuthSystemState();
+        try {
+            metadataImport.runImport(context, true, false, false, false);
+        } finally {
+            context.restoreAuthSystemState();
+            ReflectionTestUtils.setField(MetadataImport.class, "authorityControlled", previousAuthorityControlled);
+        }
     }
 }
