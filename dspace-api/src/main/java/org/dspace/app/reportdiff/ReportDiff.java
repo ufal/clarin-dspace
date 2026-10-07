@@ -107,6 +107,7 @@ public class ReportDiff extends DSpaceRunnable<ReportDiffScriptConfiguration> {
     private static final String FIELD_ORDER_KEY = "fieldOrder";
     private static final Pattern SHORT_ARG_WITH_VALUE = Pattern.compile("^-([a-zA-Z]):\\s*(.*)$");
     private static final Pattern SHORT_ARG_WITHOUT_VALUE = Pattern.compile("^-([a-zA-Z])$");
+    private static final Pattern CHECKS_INDEX_PATTERN = Pattern.compile("^/checks/(\\d+)");
 
     // Field configuration cache
     private static Map<String, String> fieldMappings = null;
@@ -219,7 +220,8 @@ public class ReportDiff extends DSpaceRunnable<ReportDiffScriptConfiguration> {
             sourceReportId = parseReportIdOption(sValue);
             if (sourceReportId == null) {
                 handler.logWarning("Invalid value for -s: '" + sValue
-                        + "'. The last report from the database will be used instead.");
+                        + "'. Report IDs must be positive integers. The value will be ignored and the "
+                        + "source report will be selected automatically.");
             }
         }
 
@@ -229,7 +231,8 @@ public class ReportDiff extends DSpaceRunnable<ReportDiffScriptConfiguration> {
             targetReportId = parseReportIdOption(tValue);
             if (targetReportId == null) {
                 handler.logWarning("Invalid value for -t: '" + tValue
-                        + "'. The last report from the database will be used instead.");
+                        + "'. Report IDs must be positive integers. The value will be ignored and the "
+                        + "target report will be selected automatically.");
             }
         }
 
@@ -386,19 +389,30 @@ public class ReportDiff extends DSpaceRunnable<ReportDiffScriptConfiguration> {
                 return;
             }
 
-            if (sourceReportId == null) {
-                handler.logInfo("Only '-t' was specified; '-s' will be set to the latest report from the "
-                        + "database.");
-                if (size > 0) {
-                    sourceReportId = allReports.get(size - 1).getID();
-                }
-            }
+            Integer newestId = allReports.get(size - 1).getID();
+            Integer secondNewestId = size > 1 ? allReports.get(size - 2).getID() : null;
 
             if (targetReportId == null) {
-                handler.logInfo("Only '-s' was specified; '-t' will be set to the latest report from the "
-                        + "database.");
-                if (size > 0) {
-                    targetReportId = allReports.get(size - 1).getID();
+                // Default the target to the newest or second newest report, depending on the source.
+                if (!Objects.equals(newestId, sourceReportId)) {
+                    targetReportId = newestId;
+                    handler.logInfo("Only '-s' was specified; '-t' will be set to the latest report (ID "
+                            + newestId + ").");
+                } else if (secondNewestId != null) {
+                    targetReportId = secondNewestId;
+                    handler.logInfo("Only '-s' was specified and the source is the latest report; "
+                            + "'-t' will be set to the second latest report (ID " + secondNewestId + ").");
+                }
+            } else {
+                // Default the source to the newest or second newest report, depending on the target.
+                if (!Objects.equals(newestId, targetReportId)) {
+                    sourceReportId = newestId;
+                    handler.logInfo("Only '-t' was specified; '-s' will be set to the latest report (ID "
+                            + newestId + ").");
+                } else if (secondNewestId != null) {
+                    sourceReportId = secondNewestId;
+                    handler.logInfo("Only '-t' was specified and the target is the latest report; "
+                            + "'-s' will be set to the second latest report (ID " + secondNewestId + ").");
                 }
             }
         } catch (SQLException e) {
@@ -730,13 +744,16 @@ public class ReportDiff extends DSpaceRunnable<ReportDiffScriptConfiguration> {
 
         StringBuilder sb = new StringBuilder();
 
+        // Dynamically assigned sections
+        int sectionNumber = 1;
+
         // Header
         ConfigurationService configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
         String dspaceName = configurationService.getProperty("dspace.name", "DSpace");
         sb.append(dspaceName).append(": Repository Health Report Diff\n\n");
 
-        // Executive Summary
-        sb.append("Section 1: Executive Summary\n");
+        // Executive Summary (always the first section)
+        sb.append("Section ").append(sectionNumber++).append(": Executive Summary\n");
         sb.append("\n");
 
         // Report metadata
@@ -750,11 +767,15 @@ public class ReportDiff extends DSpaceRunnable<ReportDiffScriptConfiguration> {
         String timePeriod = calculateTimePeriod(fromReport.getLastModified(), toReport.getLastModified());
         sb.append("Report Period: ").append(timePeriod).append("\n\n");
 
+        boolean hasSkippedChecks = !normalized.onlyInFrom.isEmpty() || !normalized.onlyInTo.isEmpty();
+
         // When there are no checks in common between the two reports there is nothing to diff.
         // In that case, only show the executive summary and the list of skipped checks so the
         // user can immediately see why the comparison was not performed.
         if (!normalized.hasCommonChecks) {
-            appendSkippedChecksSection(sb, normalized, fromReport, toReport);
+            if (hasSkippedChecks) {
+                appendSkippedChecksSection(sb, sectionNumber++, normalized, fromReport, toReport);
+            }
             return sb.toString();
         }
 
@@ -768,11 +789,13 @@ public class ReportDiff extends DSpaceRunnable<ReportDiffScriptConfiguration> {
             return sb.toString();
         }
 
-        // Section 2: Skipped Checks (not present in both reports)
-        appendSkippedChecksSection(sb, normalized, fromReport, toReport);
+        // Skipped Checks
+        if (hasSkippedChecks) {
+            appendSkippedChecksSection(sb, sectionNumber++, normalized, fromReport, toReport);
+        }
 
-        // Section 3: Detailed Change Log
-        sb.append("Section 3: Detailed Change Log\n\n");
+        // Detailed Change Log
+        sb.append("Section ").append(sectionNumber++).append(": Detailed Change Log\n\n");
         sb.append("Changes Summary\n");
         String detailedSummary = generateDetailedSummary(normalizedFromJson, normalizedToJson);
         sb.append(detailedSummary).append("\n");
@@ -786,17 +809,18 @@ public class ReportDiff extends DSpaceRunnable<ReportDiffScriptConfiguration> {
      * Append the "Section 2: Skipped Checks" block listing checks that are present
      * in only one of the compared reports. Appends nothing when no check was skipped.
      *
-     * @param sb         the StringBuilder to append to
-     * @param normalized the normalization result holding the skipped check names
-     * @param fromReport the "from" report
-     * @param toReport   the "to" report
+     * @param sb            the StringBuilder to append to
+     * @param sectionNumber the section number to render in the section header
+     * @param normalized    the normalization result holding the skipped check names
+     * @param fromReport    the "from" report
+     * @param toReport      the "to" report
      */
-    private void appendSkippedChecksSection(StringBuilder sb, NormalizationResult normalized,
+    private void appendSkippedChecksSection(StringBuilder sb, int sectionNumber, NormalizationResult normalized,
                                             ReportResult fromReport, ReportResult toReport) {
         if (normalized.onlyInFrom.isEmpty() && normalized.onlyInTo.isEmpty()) {
             return;
         }
-        sb.append("Section 2: Skipped Checks\n\n");
+        sb.append("Section ").append(sectionNumber).append(": Skipped Checks\n\n");
         sb.append("The following checks could not be compared because they were not present in " +
                 "both reports.\n\n");
         if (!normalized.onlyInFrom.isEmpty()) {
@@ -1374,33 +1398,37 @@ public class ReportDiff extends DSpaceRunnable<ReportDiffScriptConfiguration> {
             return "No differences found.";
         }
 
+        // Map the numeric check index to check name
+        Map<Integer, String> checkNames = buildCheckNameMap(oldNode);
+
         StringBuilder sb = new StringBuilder();
 
         for (JsonNode op : patch) {
             String operation = op.path("op").asText();
             String path = op.path("path").asText();
+            String displayPath = humanizeCheckPath(path, checkNames);
 
             switch (operation) {
                 case "replace":
-                    appendReplace(sb, oldNode, op, path);
+                    appendReplace(sb, oldNode, op, path, displayPath);
                     break;
                 case "add":
-                    appendAdd(sb, op, path);
+                    appendAdd(sb, op, displayPath);
                     break;
                 case "remove":
-                    appendRemove(sb, oldNode, path);
+                    appendRemove(sb, oldNode, path, displayPath);
                     break;
                 case "move":
-                    appendMove(sb, op, path);
+                    appendMove(sb, humanizeCheckPath(op.path("from").asText(), checkNames), displayPath);
                     break;
                 case "copy":
-                    appendCopy(sb, op, path);
+                    appendCopy(sb, humanizeCheckPath(op.path("from").asText(), checkNames), displayPath);
                     break;
                 case "test":
-                    appendTest(sb, op, path);
+                    appendTest(sb, op, displayPath);
                     break;
                 default:
-                    sb.append(String.format("%-7s at %s (unhandled op)%n", operation.toUpperCase(), path));
+                    sb.append(String.format("%-7s at %s (unhandled op)%n", operation.toUpperCase(), displayPath));
             }
         }
 
@@ -1408,19 +1436,68 @@ public class ReportDiff extends DSpaceRunnable<ReportDiffScriptConfiguration> {
     }
 
     /**
+     * Build a map from the {@code checks} array index to the check's {@code name} for a report root
+     * node. Used to translate numeric JSON Patch pointers into human-readable check names.
+     *
+     * @param root the report root node containing a {@code checks} array
+     * @return a map of array index to check name
+     */
+    private static Map<Integer, String> buildCheckNameMap(JsonNode root) {
+        Map<Integer, String> checkNames = new HashMap<>();
+        if (root == null) {
+            return checkNames;
+        }
+        JsonNode checks = root.get("checks");
+        if (checks != null && checks.isArray()) {
+            for (int i = 0; i < checks.size(); ++i) {
+                JsonNode nameNode = checks.get(i).get("name");
+                if (nameNode != null && !nameNode.isNull()) {
+                    checkNames.put(i, nameNode.asText());
+                }
+            }
+        }
+        return checkNames;
+    }
+
+    /**
+     * Replace a leading {@code /checks/<index>} segment in a JSON Patch pointer with
+     * {@code /checks/<check name>} so the path is meaningful to administrators.
+     *
+     * @param path       the raw JSON pointer path, e.g. {@code /checks/0/report/errorCount}
+     * @param checkNames the index-to-name map produced by {@link #buildCheckNameMap(JsonNode)}
+     * @return the humanized path, e.g. {@code /checks/Metadata check/report/errorCount}
+     */
+    private static String humanizeCheckPath(String path, Map<Integer, String> checkNames) {
+        if (path == null) {
+            return null;
+        }
+        Matcher matcher = CHECKS_INDEX_PATTERN.matcher(path);
+        if (matcher.find()) {
+            int index = Integer.parseInt(matcher.group(1));
+            String name = checkNames.get(index);
+            if (name != null) {
+                return "/checks/" + name + path.substring(matcher.end(1));
+            }
+        }
+        return path;
+    }
+
+    /**
      * Append a replace operation to the StringBuilder.
      *
-     * @param sb        the StringBuilder to append to
-     * @param oldNode   the old JSON node
-     * @param op        the JSON patch operation node
-     * @param path      the path where the operation occurs
+     * @param sb          the StringBuilder to append to
+     * @param oldNode     the old JSON node
+     * @param op          the JSON patch operation node
+     * @param path        the raw JSON pointer used to look up the old value
+     * @param displayPath the humanized path shown to the user
      */
-    private static void appendReplace(StringBuilder sb, JsonNode oldNode, JsonNode op, String path) {
+    private static void appendReplace(StringBuilder sb, JsonNode oldNode, JsonNode op, String path,
+                                      String displayPath) {
         JsonNode newValue = op.path("value");
         JsonNode oldValue = oldNode.at(path);
         sb.append(String.format(
                 "- REPLACE at %s: %s -> %s%n",
-                path,
+                displayPath,
                 nodeToEscapedString(oldValue),
                 nodeToEscapedString(newValue)
         ));
@@ -1429,15 +1506,15 @@ public class ReportDiff extends DSpaceRunnable<ReportDiffScriptConfiguration> {
     /**
      * Append an add operation to the StringBuilder.
      *
-     * @param sb        the StringBuilder to append to
-     * @param op        the JSON patch operation node
-     * @param path      the path where the operation occurs
+     * @param sb          the StringBuilder to append to
+     * @param op          the JSON patch operation node
+     * @param displayPath the humanized path shown to the user
      */
-    private static void appendAdd(StringBuilder sb, JsonNode op, String path) {
+    private static void appendAdd(StringBuilder sb, JsonNode op, String displayPath) {
         JsonNode addedValue = op.path("value");
         sb.append(String.format(
                 "- ADD     at %s: %s%n",
-                path,
+                displayPath,
                 nodeToEscapedString(addedValue)
         ));
     }
@@ -1445,15 +1522,16 @@ public class ReportDiff extends DSpaceRunnable<ReportDiffScriptConfiguration> {
     /**
      * Append a remove operation to the StringBuilder.
      *
-     * @param sb        the StringBuilder to append to
-     * @param oldNode   the old JSON node
-     * @param path      the path where the operation occurs
+     * @param sb          the StringBuilder to append to
+     * @param oldNode     the old JSON node
+     * @param path        the raw JSON pointer used to look up the removed value
+     * @param displayPath the humanized path shown to the user
      */
-    private static void appendRemove(StringBuilder sb, JsonNode oldNode, String path) {
+    private static void appendRemove(StringBuilder sb, JsonNode oldNode, String path, String displayPath) {
         JsonNode removedValue = oldNode.at(path);
         sb.append(String.format(
                 "- REMOVE  at %s: %s%n",
-                path,
+                displayPath,
                 nodeToEscapedString(removedValue)
         ));
     }
@@ -1461,47 +1539,45 @@ public class ReportDiff extends DSpaceRunnable<ReportDiffScriptConfiguration> {
     /**
      * Append a move operation to the StringBuilder.
      *
-     * @param sb        the StringBuilder to append to
-     * @param op        the JSON patch operation node
-     * @param path      the path where the operation occurs
+     * @param sb          the StringBuilder to append to
+     * @param from        the humanized source path of the move
+     * @param displayPath the humanized destination path shown to the user
      */
-    private static void appendMove(StringBuilder sb, JsonNode op, String path) {
-        String from = op.path("from").asText();
+    private static void appendMove(StringBuilder sb, String from, String displayPath) {
         sb.append(String.format(
                 "- MOVE    from %s to %s%n",
                 from,
-                path
+                displayPath
         ));
     }
 
     /**
      * Append a copy operation to the StringBuilder.
      *
-     * @param sb        the StringBuilder to append to
-     * @param op        the JSON patch operation node
-     * @param path      the path where the operation occurs
+     * @param sb          the StringBuilder to append to
+     * @param from        the humanized source path of the copy
+     * @param displayPath the humanized destination path shown to the user
      */
-    private static void appendCopy(StringBuilder sb, JsonNode op, String path) {
-        String from = op.path("from").asText();
+    private static void appendCopy(StringBuilder sb, String from, String displayPath) {
         sb.append(String.format(
                 "- COPY    from %s to %s%n",
                 from,
-                path
+                displayPath
         ));
     }
 
     /**
      * Append a test operation to the StringBuilder.
      *
-     * @param sb        the StringBuilder to append to
-     * @param op        the JSON patch operation node
-     * @param path      the path where the operation occurs
+     * @param sb          the StringBuilder to append to
+     * @param op          the JSON patch operation node
+     * @param displayPath the humanized path shown to the user
      */
-    private static void appendTest(StringBuilder sb, JsonNode op, String path) {
+    private static void appendTest(StringBuilder sb, JsonNode op, String displayPath) {
         JsonNode testValue = op.path("value");
         sb.append(String.format(
                 "- TEST    at %s: must equal %s%n",
-                path,
+                displayPath,
                 nodeToEscapedString(testValue)
         ));
     }
