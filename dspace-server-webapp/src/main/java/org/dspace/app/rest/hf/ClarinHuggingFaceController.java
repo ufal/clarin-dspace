@@ -203,6 +203,23 @@ public class ClarinHuggingFaceController {
         }
     }
 
+    @GetMapping("/api/models/{prefix}/{suffix}/refs")
+    public ResponseEntity<Object> refs(@PathVariable String prefix, @PathVariable String suffix,
+                                       HttpServletRequest request) throws SQLException {
+        if (!huggingFaceService.isEnabled()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        try {
+            return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(
+                    "{\"branches\": [ {\"name\": \"main\", \"ref\": \"refs/heads/main\", " +
+                    "\"targetCommit\": \"3a8c0b1456843b87a61c5c9e1996903ea740ea15\" }]," +
+                    "\"converts\": [], \"tags\": [] }");
+        } catch (HuggingFaceApiException e) {
+            return e.toResponse();
+        }
+    }
+
     /**
      * List exposed Items ("models"), HuggingFace-Hub {@code GET /api/models} style.
      *

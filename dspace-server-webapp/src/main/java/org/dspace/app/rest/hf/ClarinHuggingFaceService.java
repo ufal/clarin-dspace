@@ -444,7 +444,7 @@ public class ClarinHuggingFaceService {
             treeEntry.setType("file");
             treeEntry.setPath(entry.getKey());
             treeEntry.setSize(entry.getValue().getSizeBytes());
-            treeEntry.setOid(entry.getValue().getChecksum());
+            treeEntry.setOid(DigestUtils.sha1Hex(entry.getKey() + "\n" + entry.getValue().getChecksum()));
             entries.add(treeEntry);
         }
         return entries;
