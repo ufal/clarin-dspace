@@ -5,7 +5,7 @@
   - An empty registry for instance-specific, local metadata. Any non-standard
   - metadata fields should be added here to avoid polluting the standard
   - namespaces.
-  - 
+  -
   -->
 <dspace-dc-types>
 
@@ -41,7 +41,7 @@
     <element>hasCMDI</element>
     <scope_note>Indicates uploaded cmdi file</scope_note>
   </dc-type>
-    
+
   <dc-type>
     <schema>local</schema>
     <element>contact</element>
@@ -157,6 +157,13 @@
     <element>files</element>
     <qualifier>count</qualifier>
     <scope_note>Count of files in the item</scope_note>
+  </dc-type>
+
+  <dc-type>
+    <schema>local</schema>
+    <element>description</element>
+    <qualifier>usemarkdown</qualifier>
+    <scope_note>true when dc.description metadata value should be rendered as Markdown formatted text</scope_note>
   </dc-type>
 
 </dspace-dc-types>
