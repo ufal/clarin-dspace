@@ -83,7 +83,17 @@
     <xsl:template name="Header">
     	<xsl:param name="profile"/>
         <cmd:Header>
-            <cmd:MdCreationDate><xsl:value-of select="$modifyDate"/></cmd:MdCreationDate>
+            <cmd:MdCreationDate>
+                <xsl:choose>
+                    <!-- Cached XOAI may contain Date.toString() instead of a SQL/ISO timestamp. -->
+                    <xsl:when test="fnx:matches($modifyDate, '^[A-Z][a-z]{2} [A-Z][a-z]{2} [0-9]{2} ')">
+                        <xsl:variable name="parts" select="fnx:tokenize($modifyDate, '\s+')"/>
+                        <xsl:variable name="months" select="fnx:tokenize('Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec', ' ')"/>
+                        <xsl:value-of select="concat($parts[last()], '-', format-number(fnx:index-of($months, $parts[2]), '00'), '-', $parts[3])"/>
+                    </xsl:when>
+                    <xsl:otherwise><xsl:value-of select="substring($modifyDate, 1, 10)"/></xsl:otherwise>
+                </xsl:choose>
+            </cmd:MdCreationDate>
             <cmd:MdSelfLink><xsl:value-of select="$dc_identifier_uri"/>@format=cmdi</cmd:MdSelfLink>
             <cmd:MdProfile><xsl:value-of select="$profile"/></cmd:MdProfile>
             <cmd:MdCollectionDisplayName><xsl:value-of select="/doc:metadata/doc:element[@name='others']/doc:field[@name='owningCollection']/text()"/></cmd:MdCollectionDisplayName>
