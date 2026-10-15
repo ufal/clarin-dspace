@@ -70,7 +70,13 @@ user_metadata (user_metadata_id PK,
 
 Cardinalities as they exist today:
 
-- `eperson (1) — (0..1) user_registration` (the anonymous sentinel is the one row with no eperson)
+- `eperson (1) — (0..n) user_registration`, **not** `(0..1)` as originally assumed here — confirmed
+  against production data that a single `eperson` can have *multiple* `user_registration` rows
+  (e.g. one created via standard REST eperson creation with `organization = 'Unknown'`, a second
+  created later via Shib login with a real IdP entityID as `organization`). Nothing in the schema
+  or application code enforces a 1:1 relationship; this matters for the `organization` backfill
+  (Section 4), which must collapse/rank multiple source rows per eperson rather than assume exactly
+  one.
 - `user_registration (1) — (0..n) license_resource_user_allowance`
 - `license_resource_user_allowance (1) — (0..n) user_metadata`
 - `user_registration (1) — (0..n) user_metadata` (redundant with the previous two combined)
@@ -164,11 +170,64 @@ redesign later if/when that distinction becomes operationally necessary. Not in 
    - Drop `user_registration_id` column + FK from `license_resource_user_allowance`.
    - Drop `user_registration_id` column + FK from `user_metadata` entirely (no replacement column —
      see Section 6).
-   - Register `eperson.organization` (and, if kept, `eperson.confirmed`) in the eperson metadata
-     schema.
-   - Migrate data: `INSERT INTO metadatavalue (...) SELECT <eperson metadata field id>,
-     ur.eperson_id, ur.organization FROM user_registration ur WHERE ur.eperson_id IS NOT NULL
-     AND ur.organization IS NOT NULL;` (same pattern for `confirmed`, if kept).
+   - Register `eperson.organization` in the eperson metadata schema (idempotent — safe to run even
+     if the field already exists) and backfill from `user_registration.organization`. Because a
+     single eperson can have multiple `user_registration` rows (corrected cardinality, see Section
+     1), this can't be a naive 1:1 copy: placeholder/noise values must be excluded first
+     (`'Unknown'` — the hardcoded constant from generic REST eperson creation — and the `'anonymous'`
+     sentinel), remaining values deduped per eperson, and — when more than one *real* distinct value
+     remains for the same eperson — ranked by recency (there's no `created_on` on `user_registration`,
+     so the surrogate `user_registration_id` is the only ordering signal available) so the most
+     recent becomes the primary (`place = 0`) value and older ones survive as additional repeated
+     metadata values rather than being silently discarded:
+
+     ```sql
+     -- 1. Register the field (idempotent)
+     INSERT INTO metadatafieldregistry (metadata_schema_id, element, qualifier, scope_note)
+     SELECT msr.metadata_schema_id, 'organization', NULL, NULL
+     FROM metadataschemaregistry msr
+     WHERE msr.short_id = 'eperson'
+       AND NOT EXISTS (
+         SELECT 1 FROM metadatafieldregistry mfr
+         WHERE mfr.metadata_schema_id = msr.metadata_schema_id
+           AND mfr.element = 'organization'
+           AND mfr.qualifier IS NULL
+       );
+
+     -- 2. Backfill, collapsing multiple user_registration rows per eperson
+     WITH org_field AS (
+       SELECT mfr.metadata_field_id
+       FROM metadatafieldregistry mfr
+       JOIN metadataschemaregistry msr ON msr.metadata_schema_id = mfr.metadata_schema_id
+       WHERE msr.short_id = 'eperson'
+         AND mfr.element = 'organization'
+         AND mfr.qualifier IS NULL
+     ),
+     candidate AS (
+       SELECT eperson_id, organization, MAX(user_registration_id) AS latest_ur_id
+       FROM user_registration
+       WHERE eperson_id IS NOT NULL
+         AND organization IS NOT NULL
+         AND trim(organization) <> ''
+         AND organization NOT IN ('Unknown', 'anonymous')
+       GROUP BY eperson_id, organization
+     ),
+     ranked AS (
+       SELECT eperson_id, organization,
+              row_number() OVER (PARTITION BY eperson_id ORDER BY latest_ur_id DESC) - 1 AS place
+       FROM candidate
+     )
+     INSERT INTO metadatavalue (metadata_field_id, text_value, text_lang, place, authority,
+                                 confidence, dspace_object_id)
+     SELECT org_field.metadata_field_id, ranked.organization, NULL, ranked.place, NULL, -1,
+            ranked.eperson_id
+     FROM ranked, org_field;
+     ```
+
+     Worked example from production data: eperson `3d47e27e...` has two `user_registration` rows —
+     `organization = 'Unknown'` (excluded by the placeholder filter) and
+     `organization = 'https://idp.clarin.eu'` (kept) — so it backfills cleanly to one metadata value,
+     no conflict. `confirmed` is not migrated at all — see Section 5's decision to drop it outright.
    - **`license_definition` (new, Section 7):**
      - Add nullable `eperson_id UUID` to `license_definition`.
      - Backfill: `UPDATE license_definition ld SET eperson_id = ur.eperson_id FROM user_registration
