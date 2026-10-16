@@ -8,6 +8,7 @@
 package org.dspace.xoai.tests.stylesheets;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.mock;
@@ -40,7 +41,13 @@ import org.junit.Test;
 import org.mockito.MockedStatic;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
+import org.xml.sax.SAXException;
 
+/**
+ * Validates generated CMDI dates against both supported profiles.
+ *
+ * @author Arnis Voitkans
+ */
 public class LindatCMDIXslTest {
     private static final String CMD = "http://www.clarin.eu/cmd/";
     private static final String XOAI = "http://www.lyncode.com/xoai";
@@ -51,6 +58,7 @@ public class LindatCMDIXslTest {
     private Templates templates;
     private Document uploadedMetadata;
 
+    /** Loads profile schemas without external schema access. */
     @BeforeClass
     public static void loadSchemas() throws Exception {
         SchemaFactory factory = SchemaFactory.newDefaultInstance();
@@ -68,6 +76,7 @@ public class LindatCMDIXslTest {
         });
     }
 
+    /** Uses the production crosswalk with synthetic repository inputs. */
     @Before
     public void setUp() throws Exception {
         ConfigurationService configuration = mock(ConfigurationService.class);
@@ -88,6 +97,7 @@ public class LindatCMDIXslTest {
         templates = new DSpaceResourceResolver().getTemplates("metadataFormats/lindat_cmdi.xsl");
     }
 
+    /** Releases static mocks between tests. */
     @After
     public void tearDown() {
         if (items != null) {
@@ -98,6 +108,7 @@ public class LindatCMDIXslTest {
         }
     }
 
+    /** Covers SQL timestamp precision variants. */
     @Test
     public void sqlTimestampsProduceSchemaDates() throws Exception {
         assertGeneratedDate(Timestamp.valueOf("2026-09-30 20:17:11.508").toString(), "2026-09-30");
@@ -105,12 +116,14 @@ public class LindatCMDIXslTest {
         assertGeneratedDate("2026-09-30 20:17:11", "2026-09-30");
     }
 
+    /** Retains the calendar date expressed in ISO timestamps. */
     @Test
     public void isoTimestampsProduceSchemaDates() throws Exception {
         assertGeneratedDate("2026-09-30T20:17:11.508Z", "2026-09-30");
         assertGeneratedDate("2026-09-30T00:17:11+03:00", "2026-09-30");
     }
 
+    /** Covers actual Java date serialization for every month. */
     @Test
     public void javaDatesProduceSchemaDates() throws Exception {
         for (int month = 1; month <= 12; month++) {
@@ -120,11 +133,35 @@ public class LindatCMDIXslTest {
         }
     }
 
+    /** Prevents incomplete or unrecognized Java dates from becoming valid CMDI dates. */
+    @Test
+    public void malformedJavaDatesDoNotBecomeSchemaDates() throws Exception {
+        String[] timestamps = {
+            "Xyz Abc 12 ",
+            "Xyz Sep 30 20:17:11 UTC 2026",
+            "Wed Abc 30 20:17:11 UTC 2026",
+            "Wed Sep 30 2026",
+            "Wed Sep 30 20:17:11 2026",
+            "Wed Sep 30 invalid UTC 2026",
+            "Wed Sep 30 20:17:11 UTC 2026 trailing 2026"
+        };
+        for (String timestamp : timestamps) {
+            for (boolean newProfile : new boolean[] {true, false}) {
+                Document result = transform(timestamp, newProfile);
+                Schema schema = newProfile ? newProfileSchema : oldProfileSchema;
+                assertThrows(timestamp, SAXException.class,
+                             () -> schema.newValidator().validate(new DOMSource(result)));
+            }
+        }
+    }
+
+    /** Guards against dropping date-only input when no timestamp separator exists. */
     @Test
     public void dateOnlyDoesNotBecomeEmpty() throws Exception {
         assertGeneratedDate("2024-02-29", "2024-02-29");
     }
 
+    /** Preserves the complete uploaded CMDI document. */
     @Test
     public void uploadedMetadataIsNotRewritten() throws Exception {
         uploadedMetadata = transform("2024-02-29", true);

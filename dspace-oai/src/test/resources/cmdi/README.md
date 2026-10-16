@@ -5,6 +5,7 @@ Unmodified public schemas downloaded on 2026-10-14. Both profiles declare
 generated records against each selected profile, preloading the XML namespace
 schema locally with network access disabled. Cases cover SQL and ISO timestamps,
 date-only values and Java `Date.toString()` output for all twelve months.
+Malformed Java-like inputs must not be normalized into schema-valid dates.
 
 | File | Source | SHA-256 |
 | --- | --- | --- |

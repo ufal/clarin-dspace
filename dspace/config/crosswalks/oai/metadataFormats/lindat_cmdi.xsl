@@ -86,7 +86,10 @@
             <cmd:MdCreationDate>
                 <xsl:choose>
                     <!-- Cached XOAI may contain Date.toString() instead of a SQL/ISO timestamp. -->
-                    <xsl:when test="fnx:matches($modifyDate, '^[A-Z][a-z]{2} [A-Z][a-z]{2} [0-9]{2} ')">
+                    <xsl:when test="fnx:matches($modifyDate, concat(
+                        '^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) ',
+                        '(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) ',
+                        '[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} \S+ [0-9]{4}$'))">
                         <xsl:variable name="parts" select="fnx:tokenize($modifyDate, '\s+')"/>
                         <xsl:variable name="months" select="fnx:tokenize('Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec', ' ')"/>
                         <xsl:value-of select="concat($parts[last()], '-', format-number(fnx:index-of($months, $parts[2]), '00'), '-', $parts[3])"/>
