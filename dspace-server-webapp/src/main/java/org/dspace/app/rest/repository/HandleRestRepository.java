@@ -73,7 +73,7 @@ public class HandleRestRepository extends  DSpaceRestRepository<HandleRest, Inte
      * @return        handle rest
      */
     @Override
-    @PreAuthorize("permitAll()")
+    @PreAuthorize("hasAuthority('ADMIN')")
     public HandleRest findOne(Context context, Integer id) {
         Handle handle;
         try {
@@ -99,7 +99,7 @@ public class HandleRestRepository extends  DSpaceRestRepository<HandleRest, Inte
      * @return         page of handle rest
      */
     @Override
-    @PreAuthorize("permitAll()")
+    @PreAuthorize("hasAuthority('ADMIN')")
     public Page<HandleRest> findAll(Context context, Pageable pageable) {
         try {
             // Get sorting request into the string variable
