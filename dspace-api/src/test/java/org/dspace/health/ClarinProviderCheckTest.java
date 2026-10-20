@@ -245,6 +245,10 @@ public class ClarinProviderCheckTest extends AbstractDSpaceTest {
         assertThat(check.getReport(), containsString(String.format("  %-24s%8d\n", "Ok:", 31)));
         assertThat(check.getReportJson().getJSONObject("categories").getLong("Ok"), is(31L));
         assertThat(check.getReportJson().getLong("total"), is(31L));
+        // categories omitted by the service are reported as 0, so that report-diff can compute differences
+        assertThat(check.getReport(), containsString(String.format("  %-24s%8d\n", "Broken:", 0)));
+        assertThat(check.getReportJson().getJSONObject("categories").getLong("Broken"), is(0L));
+        assertThat(check.getReportJson().getJSONObject("categories").getLong("Blocked_By_Robots_txt"), is(0L));
         // no broken links, so the list is not requested
         assertThat(check.requested.size(), is(1));
     }

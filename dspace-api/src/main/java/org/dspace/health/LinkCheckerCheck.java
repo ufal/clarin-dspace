@@ -8,6 +8,9 @@
 package org.dspace.health;
 
 import java.io.IOException;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -31,6 +34,10 @@ public class LinkCheckerCheck extends ClarinProviderCheck {
     private static final String DEFAULT_URL = "https://curation.clarin.eu";
     private static final int DEFAULT_MAX_BROKEN = 50;
     private static final String BROKEN = "Broken";
+    // categories used by the link checker; the report omits categories with no links, but we always report them
+    // (as 0) so that report-diff shows e.g. the last broken link being fixed as a decrease, not a removed field
+    private static final List<String> CATEGORIES = List.of("Ok", "Undetermined", "Restricted_Access",
+            "Blocked_By_Robots_txt", BROKEN, "Invalid_URL");
 
     @Override
     protected void run(ReportInfo ri, String providerName, StringBuilder sb) throws IOException {
@@ -62,14 +69,17 @@ public class LinkCheckerCheck extends ClarinProviderCheck {
         sb.append(String.format("Link checker report:      %s/linkchecker/%s (created %s)\n", url,
                 encode(providerName), created));
 
+        Map<String, Long> counts = new LinkedHashMap<>();
+        CATEGORIES.forEach(category -> counts.put(category, 0L));
+        for (JsonNode statistics : arrayOrSingleton(collection.get("statistics"), reportUrl)) {
+            counts.put(statistics.path("category").asText(), statistics.path("count").asLong());
+        }
         JSONObject categories = new JSONObject();
         long total = 0;
-        for (JsonNode statistics : arrayOrSingleton(collection.get("statistics"), reportUrl)) {
-            String category = statistics.path("category").asText();
-            long count = statistics.path("count").asLong();
-            categories.put(category, count);
-            total += count;
-            sb.append(String.format("  %-24s%8d\n", category + ":", count));
+        for (Map.Entry<String, Long> count : counts.entrySet()) {
+            categories.put(count.getKey(), count.getValue());
+            total += count.getValue();
+            sb.append(String.format("  %-24s%8d\n", count.getKey() + ":", count.getValue()));
         }
         sb.append(String.format("  %-24s%8d\n", "Total:", total));
         root.put("categories", categories);
