@@ -1,0 +1,10 @@
+[
+ {
+  "harvest_id": 18,
+  "endpoints": 2500,
+  "requests": 4853850,
+  "records": 27614000,
+  "when": "2026-10-20T03:28:18.710722+00:00",
+  "type": "clarin"
+ }
+]
