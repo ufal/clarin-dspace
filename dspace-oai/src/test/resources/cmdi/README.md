@@ -13,6 +13,8 @@ Malformed Java-like inputs must not be normalized into schema-valid dates.
 | `p_1349361150622.xsd` | https://catalog.clarin.eu/ds/ComponentRegistry/rest/registry/profiles/clarin.eu:cr1:p_1349361150622/xsd | `e51e8e5fc416f177df7de45eb136c028a10f1b3d8f7f04240b0134157b5d62b1` |
 | `xml.xsd` | https://www.w3.org/2001/xml.xsd | `61960fb3131e38022caad5360e2f33a3382578ab3c80cd58bd74320ede61b20c` |
 
+`xml.xsd` is distributed under the [W3C Software and Document License](https://www.w3.org/Consortium/Legal/copyright-software).
+
 Keep the downloaded schema content and upstream notices intact when refreshing.
 The XOAI input in `../cmdi-item.xml` is synthetic; uploaded-metadata retrieval is
 mocked, while the production crosswalk and XML extension functions execute normally.
