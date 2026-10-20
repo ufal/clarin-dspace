@@ -49,13 +49,14 @@ public abstract class ClarinProviderCheck extends Check {
             setReportJson(root);
             return "Not configured (" + PROVIDER_NAME_PROPERTY + " is empty).\n";
         }
+        StringBuilder sb = new StringBuilder();
         try {
-            return run(ri, providerName.trim());
+            run(ri, providerName.trim(), sb);
         } catch (Exception e) {
-            // a failing remote service must not fail the whole health report
+            // a failing remote service must not fail the whole health report; keep what was collected so far
             error(e, "Could not get data from the CLARIN service.");
-            return "";
         }
+        return sb.toString();
     }
 
     /**
@@ -63,10 +64,10 @@ public abstract class ClarinProviderCheck extends Check {
      *
      * @param ri           report info
      * @param providerName name of this repository as a CLARIN metadata provider
-     * @return the textual report
+     * @param sb           the textual report; what was appended is kept even when an exception is thrown
      * @throws Exception on any failure; it is reported as the check's error
      */
-    protected abstract String run(ReportInfo ri, String providerName) throws Exception;
+    protected abstract void run(ReportInfo ri, String providerName, StringBuilder sb) throws Exception;
 
     /**
      * Fetch the body of the given URL as a string, failing on any non-200 response.
@@ -96,6 +97,25 @@ public abstract class ClarinProviderCheck extends Check {
 
     protected JsonNode fetchJson(String url) throws IOException {
         return mapper.readTree(fetch(url));
+    }
+
+    protected JsonNode fetchJsonArray(String url) throws IOException {
+        return requireArray(fetchJson(url), url);
+    }
+
+    /**
+     * Fail on an unexpected response instead of silently treating it as an empty result.
+     *
+     * @param node the node expected to be a JSON array
+     * @param url  the URL the node came from, for the error message
+     * @return the node
+     * @throws IOException if the node is not an array
+     */
+    protected static JsonNode requireArray(JsonNode node, String url) throws IOException {
+        if (node == null || !node.isArray()) {
+            throw new IOException("Unexpected response from " + url + ": expected a JSON array");
+        }
+        return node;
     }
 
     protected Instant now() {

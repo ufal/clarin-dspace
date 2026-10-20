@@ -33,20 +33,19 @@ public class LinkCheckerCheck extends ClarinProviderCheck {
     private static final String BROKEN = "Broken";
 
     @Override
-    protected String run(ReportInfo ri, String providerName) throws IOException {
+    protected void run(ReportInfo ri, String providerName, StringBuilder sb) throws IOException {
         String url = stripTrailingSlash(getConfigurationService().getProperty(URL_PROPERTY, DEFAULT_URL));
         String filter = getConfigurationService().getProperty(BROKEN_FILTER_PROPERTY);
         int maxBroken = getConfigurationService().getIntProperty(MAX_BROKEN_PROPERTY, DEFAULT_MAX_BROKEN);
 
-        StringBuilder sb = new StringBuilder();
         JSONObject root = new JSONObject();
         root.put("configured", true);
         setReportJson(root);
 
-        JsonNode report = fetchJson(url + "/download/linkchecker/AllLinkcheckerReport?format=json")
-                .path("allLinkcheckerReport");
+        String reportUrl = url + "/download/linkchecker/AllLinkcheckerReport?format=json";
+        JsonNode report = fetchJson(reportUrl).path("allLinkcheckerReport");
         JsonNode collection = null;
-        for (JsonNode c : report.path("collection")) {
+        for (JsonNode c : requireArray(report.get("collection"), reportUrl)) {
             if (providerName.equals(c.path("name").asText())) {
                 collection = c;
                 break;
@@ -55,7 +54,7 @@ public class LinkCheckerCheck extends ClarinProviderCheck {
         if (collection == null) {
             sb.append("WARNING: provider [").append(providerName).append("] not found in the link checker report.\n");
             root.put("found", false);
-            return sb.toString();
+            return;
         }
         root.put("found", true);
         String created = report.path("creationTime").asText();
@@ -65,7 +64,7 @@ public class LinkCheckerCheck extends ClarinProviderCheck {
 
         JSONObject categories = new JSONObject();
         long total = 0;
-        for (JsonNode statistics : collection.path("statistics")) {
+        for (JsonNode statistics : requireArray(collection.get("statistics"), reportUrl)) {
             String category = statistics.path("category").asText();
             long count = statistics.path("count").asLong();
             categories.put(category, count);
@@ -77,15 +76,18 @@ public class LinkCheckerCheck extends ClarinProviderCheck {
         root.put("total", total);
 
         if (categories.optLong(BROKEN) > 0) {
-            reportBroken(url, providerName, filter, maxBroken, sb, root);
+            try {
+                reportBroken(url, providerName, filter, maxBroken, sb, root);
+            } catch (IOException e) {
+                error(e, "Could not get the list of broken links.");
+            }
         }
-        return sb.toString();
     }
 
     private void reportBroken(String url, String providerName, String filter, int maxBroken, StringBuilder sb,
                               JSONObject root) throws IOException {
-        JsonNode links = fetchJson(url + "/download/linkchecker/" + encode(providerName) + "/" + BROKEN
-                + "?format=json").path("link");
+        String brokenUrl = url + "/download/linkchecker/" + encode(providerName) + "/" + BROKEN + "?format=json";
+        JsonNode links = requireArray(fetchJson(brokenUrl).get("link"), brokenUrl);
         Pattern pattern = StringUtils.isBlank(filter) ? null : Pattern.compile(filter);
         StringBuilder lines = new StringBuilder();
         JSONArray shown = new JSONArray();

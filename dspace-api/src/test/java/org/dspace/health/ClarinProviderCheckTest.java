@@ -108,6 +108,40 @@ public class ClarinProviderCheckTest extends AbstractDSpaceTest {
     }
 
     @Test
+    public void vloHarvestStaleComparesFullDuration() {
+        // the harvest is 1 day 8.5 hours old: older than 1 day although toDays() would say 1
+        configurationService.setProperty(VloHarvestCheck.MAX_AGE_PROPERTY, 1);
+        FakeVlo check = new FakeVlo(vloResponses());
+        check.report(new ReportInfo(7));
+
+        assertThat(check.getReport(), containsString("WARNING: the last harvest is older than 1 days."));
+    }
+
+    @Test
+    public void vloHarvestKeepsResultsWhenLatestRunRequestFails() {
+        Map<String, String> responses = vloResponses();
+        responses.remove("/mv_harvest_info");
+        FakeVlo check = new FakeVlo(responses);
+        check.report(new ReportInfo(7));
+
+        assertThat(check.getErrors(), containsString("Could not get the latest harvest run."));
+        assertThat(check.getReport(), containsString("Records harvested:        1448"));
+        // the harvest log is still checked
+        assertThat(check.getReport(), containsString("warnings / errors:      5 / 0"));
+    }
+
+    @Test
+    public void vloHarvestUnexpectedResponseIsAnError() {
+        Map<String, String> responses = vloResponses();
+        responses.put("/mv_endpoint_info", "{}");
+        FakeVlo check = new FakeVlo(responses);
+        check.report(new ReportInfo(7));
+
+        assertThat(check.getErrors(), containsString("expected a JSON array"));
+        assertThat(check.getReport(), not(containsString("not found")));
+    }
+
+    @Test
     public void vloHarvestEndpointNotFound() {
         Map<String, String> responses = vloResponses();
         responses.put("/mv_endpoint_info", "[]");
@@ -175,6 +209,29 @@ public class ClarinProviderCheckTest extends AbstractDSpaceTest {
         assertThat(report, not(containsString("tst.inl.nl")));
         assertThat(report, containsString("and more..."));
         assertThat(check.getReportJson().getJSONArray("brokenShown").length(), is(2));
+    }
+
+    @Test
+    public void linkCheckerKeepsCountsWhenBrokenListFails() {
+        Map<String, String> responses = linkCheckerResponses();
+        responses.remove("/Broken");
+        FakeLinkChecker check = new FakeLinkChecker(responses);
+        check.report(new ReportInfo(7));
+
+        assertThat(check.getErrors(), containsString("Could not get the list of broken links."));
+        assertThat(check.getReport(), containsString(String.format("  %-24s%8d\n", "Broken:", 202)));
+    }
+
+    @Test
+    public void linkCheckerUnexpectedBrokenResponseIsAnError() {
+        Map<String, String> responses = linkCheckerResponses();
+        responses.put("/Broken", "{}");
+        FakeLinkChecker check = new FakeLinkChecker(responses);
+        check.report(new ReportInfo(7));
+
+        assertThat(check.getErrors(), containsString("expected a JSON array"));
+        assertThat(check.getReport(), not(containsString("Broken links: 0")));
+        assertThat(check.getReportJson().has("brokenMatching"), is(false));
     }
 
     @Test

@@ -42,24 +42,23 @@ public class VloHarvestCheck extends ClarinProviderCheck {
     private static final Pattern LOG_LINE = Pattern.compile("^(\\S+) (WARN|ERROR) (.*)$");
 
     @Override
-    protected String run(ReportInfo ri, String providerName) throws IOException {
+    protected void run(ReportInfo ri, String providerName, StringBuilder sb) throws IOException {
         String apiUrl = stripTrailingSlash(getConfigurationService().getProperty(API_URL_PROPERTY, DEFAULT_API_URL));
         String dataUrl = stripTrailingSlash(getConfigurationService().getProperty(DATA_URL_PROPERTY,
                 DEFAULT_DATA_URL));
         int maxAgeDays = getConfigurationService().getIntProperty(MAX_AGE_PROPERTY, DEFAULT_MAX_AGE_DAYS);
 
-        StringBuilder sb = new StringBuilder();
         JSONObject root = new JSONObject();
         root.put("configured", true);
         setReportJson(root);
 
         // the two most recent harvests of our endpoint
-        JsonNode runs = fetchJson(apiUrl + "/mv_endpoint_info?name=eq." + encode(providerName)
+        JsonNode runs = fetchJsonArray(apiUrl + "/mv_endpoint_info?name=eq." + encode(providerName)
                 + "&order=when.desc&limit=2");
-        if (!runs.isArray() || runs.size() == 0) {
+        if (runs.size() == 0) {
             sb.append("WARNING: endpoint [").append(providerName).append("] not found in the VLO harvester.\n");
             root.put("found", false);
-            return sb.toString();
+            return;
         }
         root.put("found", true);
         JsonNode last = runs.get(0);
@@ -67,7 +66,8 @@ public class VloHarvestCheck extends ClarinProviderCheck {
         long harvestId = last.path("harvest_id").asLong();
         String finished = last.path("when").asText();
         long records = last.path("records").asLong();
-        long ageDays = Duration.between(OffsetDateTime.parse(finished).toInstant(), now()).toDays();
+        Duration age = Duration.between(OffsetDateTime.parse(finished).toInstant(), now());
+        long ageDays = age.toDays();
 
         sb.append(String.format("Endpoint:                 %s (id %d, type %s)\n", providerName,
                 last.path("endpoint_id").asLong(), type));
@@ -88,22 +88,26 @@ public class VloHarvestCheck extends ClarinProviderCheck {
             sb.append(String.format("Records harvested:        %d\n", records));
         }
 
-        if (ageDays > maxAgeDays) {
+        if (age.compareTo(Duration.ofDays(maxAgeDays)) > 0) {
             sb.append(String.format("WARNING: the last harvest is older than %d days.\n", maxAgeDays));
         }
 
         // was our endpoint part of the latest harvest run of its type?
-        JsonNode latestRuns = fetchJson(apiUrl + "/mv_harvest_info?type=eq." + encode(type)
-                + "&order=when.desc&limit=1");
-        if (latestRuns.isArray() && latestRuns.size() > 0) {
-            JsonNode latest = latestRuns.get(0);
-            boolean inLatest = latest.path("harvest_id").asLong() == harvestId;
-            root.put("inLatestHarvest", inLatest);
-            if (!inLatest) {
-                sb.append(String.format("WARNING: the endpoint was not part of the latest %s harvest run %d "
-                        + "(finished %s).\n", type, latest.path("harvest_id").asLong(),
-                        latest.path("when").asText()));
+        try {
+            JsonNode latestRuns = fetchJsonArray(apiUrl + "/mv_harvest_info?type=eq." + encode(type)
+                    + "&order=when.desc&limit=1");
+            if (latestRuns.size() > 0) {
+                JsonNode latest = latestRuns.get(0);
+                boolean inLatest = latest.path("harvest_id").asLong() == harvestId;
+                root.put("inLatestHarvest", inLatest);
+                if (!inLatest) {
+                    sb.append(String.format("WARNING: the endpoint was not part of the latest %s harvest run %d "
+                            + "(finished %s).\n", type, latest.path("harvest_id").asLong(),
+                            latest.path("when").asText()));
+                }
             }
+        } catch (IOException e) {
+            error(e, "Could not get the latest harvest run.");
         }
 
         // the harvest log of the last harvest; only the latest one is published
@@ -114,7 +118,6 @@ public class VloHarvestCheck extends ClarinProviderCheck {
         } catch (IOException e) {
             error(e, "Could not get the harvest log.");
         }
-        return sb.toString();
     }
 
     private void reportLog(String log, StringBuilder sb, JSONObject root) {
