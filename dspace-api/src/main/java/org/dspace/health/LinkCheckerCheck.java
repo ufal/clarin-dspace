@@ -45,7 +45,7 @@ public class LinkCheckerCheck extends ClarinProviderCheck {
         String reportUrl = url + "/download/linkchecker/AllLinkcheckerReport?format=json";
         JsonNode report = fetchJson(reportUrl).path("allLinkcheckerReport");
         JsonNode collection = null;
-        for (JsonNode c : requireArray(report.get("collection"), reportUrl)) {
+        for (JsonNode c : arrayOrSingleton(report.get("collection"), reportUrl)) {
             if (providerName.equals(c.path("name").asText())) {
                 collection = c;
                 break;
@@ -64,7 +64,7 @@ public class LinkCheckerCheck extends ClarinProviderCheck {
 
         JSONObject categories = new JSONObject();
         long total = 0;
-        for (JsonNode statistics : requireArray(collection.get("statistics"), reportUrl)) {
+        for (JsonNode statistics : arrayOrSingleton(collection.get("statistics"), reportUrl)) {
             String category = statistics.path("category").asText();
             long count = statistics.path("count").asLong();
             categories.put(category, count);
@@ -112,5 +112,16 @@ public class LinkCheckerCheck extends ClarinProviderCheck {
         }
         root.put("brokenMatching", matching);
         root.put("brokenShown", shown);
+    }
+
+    /**
+     * The summary report collapses one-element lists into a single object (e.g. the statistics of a provider
+     * whose links all fall into one category), so accept both shapes.
+     */
+    private JsonNode arrayOrSingleton(JsonNode node, String url) throws IOException {
+        if (node != null && node.isObject()) {
+            return mapper.createArrayNode().add(node);
+        }
+        return requireArray(node, url);
     }
 }

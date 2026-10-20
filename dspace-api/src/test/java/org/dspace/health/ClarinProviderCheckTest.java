@@ -235,6 +235,21 @@ public class ClarinProviderCheckTest extends AbstractDSpaceTest {
     }
 
     @Test
+    public void linkCheckerAcceptsSingletonStatistics() {
+        // the service returns "statistics" as an object, not an array, when all links are in one category
+        configurationService.setProperty(ClarinProviderCheck.PROVIDER_NAME_PROPERTY, "Corpor_UCLouvain");
+        FakeLinkChecker check = new FakeLinkChecker(linkCheckerResponses());
+        check.report(new ReportInfo(7));
+
+        assertThat(check.getErrors(), is(""));
+        assertThat(check.getReport(), containsString(String.format("  %-24s%8d\n", "Ok:", 31)));
+        assertThat(check.getReportJson().getJSONObject("categories").getLong("Ok"), is(31L));
+        assertThat(check.getReportJson().getLong("total"), is(31L));
+        // no broken links, so the list is not requested
+        assertThat(check.requested.size(), is(1));
+    }
+
+    @Test
     public void linkCheckerProviderNotFound() {
         configurationService.setProperty(ClarinProviderCheck.PROVIDER_NAME_PROPERTY, "Unknown_provider");
         FakeLinkChecker check = new FakeLinkChecker(linkCheckerResponses());

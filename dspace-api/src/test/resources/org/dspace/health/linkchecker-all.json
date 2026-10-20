@@ -106,6 +106,17 @@
       "category": "Broken"
      }
     ]
+   },
+   {
+    "name": "Corpor_UCLouvain",
+    "totNumOfLinksWithDuration": 0,
+    "maxRespTime": 30,
+    "statistics": {
+     "count": 31,
+     "avgRespTime": 26.0,
+     "maxRespTime": 30,
+     "category": "Ok"
+    }
    }
   ]
  }
