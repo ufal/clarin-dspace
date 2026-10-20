@@ -84,6 +84,23 @@ public class HealthReportIT extends AbstractIntegrationTestWithDatabase {
         assertThat(messages, hasItem(containsString("HEALTH REPORT ")));
     }
 
+    /**
+     * The CLARIN provider checks (VLO harvest, Link checker) are in the default list, but without
+     * healthcheck.clarin.provider.name they must not contact the CLARIN services.
+     */
+    @Test
+    public void testClarinProviderChecksNotConfigured() throws Exception {
+        TestDSpaceRunnableHandler handler = new TestDSpaceRunnableHandler();
+        String[] args = new String[] { "health-report", "-c", "6", "-c", "7" };
+        ScriptLauncher.handleScript(args, ScriptLauncher.getConfig(kernelImpl), handler, kernelImpl);
+
+        assertThat(handler.getErrorMessages(), empty());
+        List<String> messages = handler.getInfoMessages();
+        assertThat(messages, hasSize(1));
+        assertThat(messages.get(0), containsString("VLO harvest:\nNot configured"));
+        assertThat(messages.get(0), containsString("Link checker:\nNot configured"));
+    }
+
     @Test
     public void testLicenseCheck() throws Exception {
         context.turnOffAuthorisationSystem();
