@@ -47,9 +47,11 @@ import org.dspace.core.Context;
 import org.dspace.core.Utils;
 import org.dspace.eperson.EPerson;
 import org.dspace.eperson.Group;
+import org.dspace.eperson.clarin.AmbiguousIdentityException;
 import org.dspace.eperson.factory.EPersonServiceFactory;
 import org.dspace.eperson.service.EPersonService;
 import org.dspace.eperson.service.GroupService;
+import org.dspace.eperson.service.clarin.ClarinIdentityService;
 import org.dspace.services.ConfigurationService;
 import org.dspace.services.factory.DSpaceServicesFactory;
 
@@ -124,6 +126,7 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
             ClarinServiceFactory.getInstance().getClarinUserRegistration();
     protected ClarinVerificationTokenService clarinVerificationTokenService = ClarinServiceFactory.getInstance()
             .getClarinVerificationTokenService();
+    protected ClarinIdentityService identityService = EPersonServiceFactory.getInstance().getClarinIdentityService();
 
     /**
      * Authenticate the given or implicit credentials. This is the heart of the
@@ -558,7 +561,18 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
 
         // 1) First, look for a netid header.
         if (netidHeaders != null) {
-            eperson = findEpersonByNetId(netidHeaders, shibheaders, ePersonService, context, true);
+            eperson = findEpersonByNetId(netidHeaders, shibheaders, identityService, context, true);
+            if (eperson != null) {
+                foundNetID = true;
+            }
+        }
+
+        // 1b) CLARIN: an allowlisted identity proxy (e.g. e-INFRA CZ/Perun) may release
+        // voperson_external_id, listing this user's other registered external identities.
+        // If exactly one existing EPerson already holds one of them, auto-link this login
+        // to it instead of falling through to email matching / auto-registration.
+        if (eperson == null && netidHeaders != null) {
+            eperson = tryAutoLink(context, netidHeaders);
             if (eperson != null) {
                 foundNetID = true;
             }
@@ -641,6 +655,51 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
 
 
         return eperson;
+    }
+
+    /**
+     * Try to auto-link this login to an existing EPerson via the allowlisted proxy's
+     * {@code voperson_external_id} attribute (Perun's "merging by all registered external
+     * identities"). See {@link ClarinIdentityService#autoLink}.
+     *
+     * The alias is attached under the netid from the first matching netid header
+     * ({@link #getFirstNetId}) - the same one {@code registerNewEPerson}/{@code updateEPerson}
+     * would lock the account to, so the alias always records the netid the rest of the login
+     * flow actually uses.
+     *
+     * @return the EPerson to log into, or null if auto-linking does not apply/match.
+     */
+    protected EPerson tryAutoLink(Context context, String[] netidHeaders) throws SQLException {
+        String idp = shibheaders.get_idp();
+        if (!identityService.isAllowlistedProxy(idp)) {
+            return null;
+        }
+
+        String vopersonExternalIdHeader = configurationService
+                .getProperty("authentication-shibboleth.voperson-external-id-header");
+        if (vopersonExternalIdHeader == null) {
+            return null;
+        }
+        List<String> upstreamEppns = shibheaders.get(vopersonExternalIdHeader);
+        if (upstreamEppns == null || upstreamEppns.isEmpty()) {
+            return null;
+        }
+
+        String proxyNetid = getFirstNetId(netidHeaders);
+        if (proxyNetid == null) {
+            return null;
+        }
+
+        try {
+            return identityService.autoLink(context, upstreamEppns, idp, proxyNetid);
+        } catch (AmbiguousIdentityException e) {
+            // Several existing accounts could own this login; auto-registering yet another
+            // would deepen the duplication. Email matching may still identify an existing
+            // account, but registration stays blocked until an admin merges/links.
+            log.warn("Blocking auto-registration for this login: {}", e.getMessage());
+            this.isDuplicateUser = true;
+            return null;
+        }
     }
 
     /**
@@ -1310,9 +1369,13 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
 
     /**
      * Find an EPerson by a NetID header. The method will go through all the netid headers and try to find a user.
+     * Resolution goes through {@link ClarinIdentityService#resolve}, which checks the {@code eperson_netid_alias}
+     * table first and falls back to the legacy {@code EPerson.netid} column for accounts that have no alias row
+     * (netids written directly at login are not backfilled into the alias table).
      */
     public static EPerson findEpersonByNetId(String[] netidHeaders, ShibHeaders shibheaders,
-                                             EPersonService ePersonService, Context context, boolean logAllowed)
+                                             ClarinIdentityService identityService, Context context,
+                                             boolean logAllowed)
             throws SQLException {
         // Go through all the netid headers and try to find a user. It could be e.g., `eppn`, `persistent-id`,..
         for (String netidHeader : netidHeaders) {
@@ -1322,7 +1385,7 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
                 continue;
             }
 
-            EPerson eperson = ePersonService.findByNetid(context, netid);
+            EPerson eperson = identityService.resolve(context, netid);
 
             if (eperson == null && logAllowed) {
                 log.info(

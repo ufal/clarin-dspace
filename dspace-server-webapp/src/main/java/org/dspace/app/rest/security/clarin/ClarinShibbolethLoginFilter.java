@@ -34,6 +34,7 @@ import org.dspace.core.Utils;
 import org.dspace.eperson.EPerson;
 import org.dspace.eperson.factory.EPersonServiceFactory;
 import org.dspace.eperson.service.EPersonService;
+import org.dspace.eperson.service.clarin.ClarinIdentityService;
 import org.dspace.services.ConfigurationService;
 import org.dspace.services.factory.DSpaceServicesFactory;
 import org.dspace.web.ContextUtil;
@@ -105,6 +106,7 @@ public class ClarinShibbolethLoginFilter extends StatelessLoginFilter {
     private ClarinVerificationTokenService clarinVerificationTokenService = ClarinServiceFactory.getInstance()
             .getClarinVerificationTokenService();
     private EPersonService ePersonService = EPersonServiceFactory.getInstance().getEPersonService();
+    private ClarinIdentityService identityService = EPersonServiceFactory.getInstance().getClarinIdentityService();
 
     public ClarinShibbolethLoginFilter(String url, AuthenticationManager authenticationManager,
                                  RestAuthenticationService restAuthenticationService) {
@@ -170,7 +172,7 @@ public class ClarinShibbolethLoginFilter extends StatelessLoginFilter {
         EPerson ePerson = null;
         try {
             ePerson = ClarinShibAuthentication.findEpersonByNetId(shib_headers.getNetIdHeaders(), shib_headers,
-                    ePersonService, context, false);
+                    identityService, context, false);
         } catch (SQLException e) {
             // It is logged in the ClarinShibAuthentication class.
         }

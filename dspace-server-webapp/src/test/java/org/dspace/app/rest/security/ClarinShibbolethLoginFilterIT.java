@@ -12,6 +12,7 @@ import static org.dspace.app.rest.security.clarin.ClarinShibbolethLoginFilter.VE
 import static org.dspace.rdf.negotiation.MediaRange.token;
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -42,7 +43,10 @@ import org.dspace.content.clarin.ClarinVerificationToken;
 import org.dspace.content.service.clarin.ClarinVerificationTokenService;
 import org.dspace.core.I18nUtil;
 import org.dspace.eperson.EPerson;
+import org.dspace.eperson.clarin.EPersonNetidAlias;
+import org.dspace.eperson.factory.EPersonServiceFactory;
 import org.dspace.eperson.service.EPersonService;
+import org.dspace.eperson.service.clarin.ClarinIdentityService;
 import org.dspace.services.ConfigurationService;
 import org.junit.After;
 import org.junit.Before;
@@ -695,6 +699,64 @@ public class ClarinShibbolethLoginFilterIT extends AbstractControllerIntegration
             assertEquals(ePerson.getFirstName(), name);
         }
         return ePerson;
+    }
+
+    /**
+     * When an allowlisted identity proxy releases {@code voperson_external_id} values that match
+     * MORE than one existing EPerson, auto-linking must refuse to guess AND the login must not
+     * auto-register a new (duplicate) EPerson either - even though the proxy also released an
+     * email that would normally trigger auto-registration.
+     */
+    @Test
+    public void shouldNotAutoRegisterWhenProxyIdentitiesMatchMultipleEPersons() throws Exception {
+        String proxyIdp = "https://login.e-infra.cz/idp/";
+        String proxyNetidValue = "einfra-hash123";
+        String email = "ambiguous@mail.epic";
+        String vopersonHeader = "SHIB-VOPERSON-EXTERNAL-ID";
+        configurationService.setProperty("identity.auto-link.proxy-allowlist", proxyIdp);
+        configurationService.setProperty("authentication-shibboleth.voperson-external-id-header", vopersonHeader);
+
+        ClarinIdentityService identityService = EPersonServiceFactory.getInstance().getClarinIdentityService();
+
+        // Two existing accounts, each already owning one of the released external identities.
+        context.turnOffAuthorisationSystem();
+        EPerson first = EPersonBuilder.createEPerson(context)
+                .withEmail("first@example.org")
+                .withNameInMetadata("First", "User")
+                .build();
+        EPerson second = EPersonBuilder.createEPerson(context)
+                .withEmail("second@example.org")
+                .withNameInMetadata("Second", "User")
+                .build();
+        identityService.attach(context, first, "novak@cuni.cz[https://cas.cuni.cz/idp/shibboleth]",
+                ClarinIdentityService.SOURCE_MIGRATION, null);
+        identityService.attach(context, second, "novak@jinauni.cz[https://jinauni.cz/idp/shibboleth]",
+                ClarinIdentityService.SOURCE_MIGRATION, null);
+        context.restoreAuthSystemState();
+
+        try {
+            getClient().perform(get("/api/authn/shibboleth")
+                            .header("Shib-Identity-Provider", proxyIdp)
+                            .header("SHIB-NETID", proxyNetidValue)
+                            .header("SHIB-MAIL", email)
+                            .header(vopersonHeader, "novak@cuni.cz;novak@jinauni.cz"))
+                    .andExpect(status().is3xxRedirection());
+
+            // The ambiguous match must not attach the proxy netid to either candidate...
+            String proxyNetid = Util.formatNetId(proxyNetidValue, proxyIdp);
+            assertNull(identityService.resolve(context, proxyNetid));
+            // ...and must not auto-register a third (duplicate) account for this login either.
+            assertNull(ePersonService.findByEmail(context, email));
+            assertNull(ePersonService.findByNetid(context, proxyNetid));
+        } finally {
+            context.turnOffAuthorisationSystem();
+            for (EPerson candidate : new EPerson[] {first, second}) {
+                for (EPersonNetidAlias alias : identityService.findAliases(context, candidate)) {
+                    identityService.detach(context, alias);
+                }
+            }
+            context.restoreAuthSystemState();
+        }
     }
 
     private void checkUserIsSignedIn(String token) throws Exception {
