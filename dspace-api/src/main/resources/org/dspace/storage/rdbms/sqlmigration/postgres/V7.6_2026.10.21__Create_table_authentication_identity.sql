@@ -1,0 +1,31 @@
+--
+-- The contents of this file are subject to the license and copyright
+-- detailed in the LICENSE and NOTICE files at the root of the source
+-- tree and available online at
+--
+-- http://www.dspace.org/license/
+--
+
+-- ufal/clarin-dspace#1140
+
+-----------------------------------------------------------------------------------
+-- Create table for external authentication identities (OIDC, may be later Shibboleth)
+-----------------------------------------------------------------------------------
+CREATE SEQUENCE authentication_identity_id_seq;
+
+CREATE TABLE authentication_identity
+(
+    id          INTEGER PRIMARY KEY,
+    auth_method VARCHAR(32)  NOT NULL,
+    provider    VARCHAR(64)  NOT NULL,
+    user_id     VARCHAR(256) NOT NULL,
+    eperson_id  UUID         NOT NULL,
+    created     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_login  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT authentication_identity_eperson_id_fkey
+        FOREIGN KEY (eperson_id) REFERENCES eperson (uuid) ON DELETE CASCADE,
+    CONSTRAINT authentication_identity_unique
+        UNIQUE (auth_method, provider, user_id)
+);
+
+CREATE INDEX authentication_identity_eperson_id_idx ON authentication_identity (eperson_id);

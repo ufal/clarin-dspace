@@ -7,6 +7,7 @@
  */
 package org.dspace.content.factory;
 
+import org.dspace.content.service.clarin.AuthenticationIdentityService;
 import org.dspace.content.service.clarin.ClarinItemService;
 import org.dspace.content.service.clarin.ClarinLicenseLabelService;
 import org.dspace.content.service.clarin.ClarinLicenseResourceMappingService;
@@ -64,6 +65,9 @@ public class ClarinServiceFactoryImpl extends ClarinServiceFactory {
 
     @Autowired(required = true)
     private ClarinTokenService clarinTokenService;
+
+    @Autowired(required = true)
+    private AuthenticationIdentityService authenticationIdentityService;
 
     @Override
     public ClarinLicenseService getClarinLicenseService() {
@@ -123,5 +127,10 @@ public class ClarinServiceFactoryImpl extends ClarinServiceFactory {
     @Override
     public ClarinTokenService getClarinTokenService() {
         return clarinTokenService;
+    }
+
+    @Override
+    public AuthenticationIdentityService getAuthenticationIdentityService() {
+        return authenticationIdentityService;
     }
 }
