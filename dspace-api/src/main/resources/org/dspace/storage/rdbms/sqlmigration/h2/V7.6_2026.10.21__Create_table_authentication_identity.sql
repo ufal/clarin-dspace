@@ -11,13 +11,13 @@
 -----------------------------------------------------------------------------------
 -- Create table for external authentication identities (OIDC, may be later Shibboleth)
 -----------------------------------------------------------------------------------
-CREATE SEQUENCE authentication_identity_id_seq;
+CREATE SEQUENCE IF NOT EXISTS authentication_identity_id_seq;
 
-CREATE TABLE authentication_identity
+CREATE TABLE IF NOT EXISTS authentication_identity
 (
     id          INTEGER PRIMARY KEY,
     auth_method VARCHAR(32)  NOT NULL,
-    provider    VARCHAR(64)  NOT NULL,
+    provider    VARCHAR(256) NOT NULL,
     user_id     VARCHAR(256) NOT NULL,
     eperson_id  UUID         NOT NULL,
     created     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -28,4 +28,4 @@ CREATE TABLE authentication_identity
         UNIQUE (auth_method, provider, user_id)
 );
 
-CREATE INDEX authentication_identity_eperson_id_idx ON authentication_identity (eperson_id);
+CREATE INDEX IF NOT EXISTS authentication_identity_eperson_id_idx ON authentication_identity (eperson_id);
