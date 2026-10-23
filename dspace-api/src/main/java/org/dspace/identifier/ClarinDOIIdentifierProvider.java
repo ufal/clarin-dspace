@@ -236,17 +236,9 @@ public class ClarinDOIIdentifierProvider extends DOIIdentifierProvider {
     }
 
     private ClarinCommunityDOIIdentifierProvider getProviderForItem(Context context, Item item) {
-
-        // Check communities of item.getCollections() - this will only see collections if the item is archived
-        for (Collection collection : item.getCollections()) {
-            ClarinCommunityDOIIdentifierProvider provider = getProviderForCollection(context, collection);
-            if (provider != null) {
-                return provider;
-            }
-        }
-
-        // Look for the parent object of the item. This is important as the item.getOwningCollection method
-        // may return null, even though the item itself does have a parent object, at the point of archival
+        // Route by the owning collection only (like handle prefixes); mapped collections could pick another
+        // community's provider. For in-progress items getParentObject returns the submission's collection, which
+        // also covers installItem: it registers identifiers before the owning collection is set.
         try {
             DSpaceObject parent = itemService.getParentObject(context, item);
             if (parent instanceof Collection) {
