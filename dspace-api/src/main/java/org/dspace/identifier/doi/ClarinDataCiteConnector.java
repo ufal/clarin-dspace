@@ -7,9 +7,13 @@
  */
 package org.dspace.identifier.doi;
 
+import org.apache.commons.lang3.StringUtils;
+import org.dspace.identifier.DOI;
+
 /**
  * DataCite connector for CLARIN communities.
- * It allows to set the username, password and DOI prefix via setter methods.
+ * It allows to set the username and password via setter methods. The DOI prefix is not configured,
+ * it is taken from the DOI being sent, so one connector serves any prefix its DataCite account owns.
  *
  * @author Milan Kuchtiak (kuchtiak@ufal.mff.cuni.cz)
  */
@@ -23,8 +27,9 @@ public class ClarinDataCiteConnector extends DataCiteConnector {
         super.PASSWORD = password;
     }
 
-    public void setDoiPrefix(String doiPrefix) {
-        super.doiPrefix = doiPrefix;
+    @Override
+    protected String getDoiPrefix(String doi) {
+        return StringUtils.substringBefore(StringUtils.removeStart(doi, DOI.SCHEME), "/");
     }
 
 }

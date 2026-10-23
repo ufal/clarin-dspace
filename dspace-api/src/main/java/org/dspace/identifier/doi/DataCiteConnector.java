@@ -122,7 +122,6 @@ public class DataCiteConnector
 
     protected String USERNAME;
     protected String PASSWORD;
-    protected String doiPrefix;
 
     @Autowired
     protected HandleService handleService;
@@ -249,8 +248,15 @@ public class DataCiteConnector
         return this.PASSWORD;
     }
 
-    protected String getDoiPrefix() {
-        return this.doiPrefix != null ? this.doiPrefix : configurationService.getProperty(CFG_PREFIX);
+    /**
+     * The DOI prefix passed to the crosswalk, which uses it to tell our own DOI apart from
+     * alternate identifiers.
+     *
+     * @param doi the DOI being reserved or registered
+     * @return the configured DOI prefix
+     */
+    protected String getDoiPrefix(String doi) {
+        return configurationService.getProperty(CFG_PREFIX);
     }
 
     @Override
@@ -380,7 +386,7 @@ public class DataCiteConnector
         // Set the transform's parameters.
         // XXX Should the actual list be configurable?
         Map<String, String> parameters = new HashMap<>();
-        String doiPrefix = getDoiPrefix();
+        String doiPrefix = getDoiPrefix(doi);
         if (doiPrefix != null) {
             parameters.put("prefix", doiPrefix);
         }

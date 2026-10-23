@@ -25,8 +25,8 @@ import org.dspace.core.Context;
 /**
  * DOI identifier provider for CLARIN communities.
  * It requires the DOI prefix and the list of CLARIN community IDs to be configured.
- * The DOI connector (a ClarinDataCiteConnector) is configured per provider in Spring, including its
- * credentials and DOI prefix — the connector's prefix must match this provider's prefix.
+ * The DOI connector (a ClarinDataCiteConnector) is configured per provider in Spring with the
+ * credentials of the DataCite account that owns this provider's prefix.
  *
  * @author Milan Kuchtiak (kuchtiak@ufal.mff.cuni.cz)
  */
