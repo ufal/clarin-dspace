@@ -89,6 +89,23 @@ public class SubmissionFormFieldRest {
     private List<String> typeBind;
 
     /**
+     * ComplexDefinition transformed to the JSON string
+     */
+    private String complexDefinition;
+
+    /**
+     * Autocomplete custom field. Give suggestions from this specific autocomplete solr index/file.
+     */
+    private String autocompleteCustom;
+
+    /**
+     * The custom field to type bind. It is used to check that the custom type bind field is defined when
+     * it is defined in the configuration property `submit.type-bind.field`
+     */
+    private String typeBindField;
+
+
+    /**
      * Getter for {@link #selectableMetadata}
      * 
      * @return {@link #selectableMetadata}
@@ -285,5 +302,29 @@ public class SubmissionFormFieldRest {
 
     public void setSelectableRelationship(SelectableRelationship selectableRelationship) {
         this.selectableRelationship = selectableRelationship;
+    }
+
+    public void setComplexDefinition(String complexDefinition) {
+        this.complexDefinition = complexDefinition;
+    }
+
+    public String getComplexDefinition() {
+        return this.complexDefinition;
+    }
+
+    public String getAutocompleteCustom() {
+        return autocompleteCustom;
+    }
+
+    public void setAutocompleteCustom(String autocompleteCustom) {
+        this.autocompleteCustom = autocompleteCustom;
+    }
+
+    public String getTypeBindField() {
+        return typeBindField;
+    }
+
+    public void setTypeBindField(String typeBindField) {
+        this.typeBindField = typeBindField;
     }
 }

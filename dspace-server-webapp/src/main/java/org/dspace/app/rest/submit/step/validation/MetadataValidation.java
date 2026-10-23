@@ -7,10 +7,17 @@
  */
 package org.dspace.app.rest.submit.step.validation;
 
+import static org.dspace.app.rest.submit.step.DescribeStep.KEY_VALUE_SEPARATOR;
+
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
 import org.dspace.app.rest.model.ErrorRest;
@@ -22,10 +29,12 @@ import org.dspace.app.util.DCInputSet;
 import org.dspace.app.util.DCInputsReader;
 import org.dspace.app.util.DCInputsReaderException;
 import org.dspace.app.util.SubmissionStepConfig;
+import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.InProgressSubmission;
 import org.dspace.content.MetadataValue;
 import org.dspace.content.authority.service.MetadataAuthorityService;
 import org.dspace.content.service.ItemService;
+import org.dspace.core.Context;
 import org.dspace.services.ConfigurationService;
 
 /**
@@ -44,6 +53,8 @@ public class MetadataValidation extends AbstractValidation {
 
     private static final String ERROR_VALIDATION_REGEX = "error.validation.regex";
 
+    private static final String LOCAL_METADATA_HAS_CMDI = "local.hasCMDI";
+
     private static final Logger log = org.apache.logging.log4j.LogManager.getLogger(MetadataValidation.class);
 
     private DCInputsReader inputReader;
@@ -59,22 +70,46 @@ public class MetadataValidation extends AbstractValidation {
                                     SubmissionStepConfig config) throws DCInputsReaderException, SQLException {
 
         List<ErrorRest> errors = new ArrayList<>();
-        String documentTypeValue = "";
         DCInputSet inputConfig = getInputReader().getInputsByFormName(config.getId());
-        List<MetadataValue> documentType = itemService.getMetadataByMetadataString(obj.getItem(),
-                configurationService.getProperty("submit.type-bind.field", "dc.type"));
-        if (documentType.size() > 0) {
-            documentTypeValue = documentType.get(0).getValue();
+        List<String> documentTypeValueList = new ArrayList<>();
+        // Get the list of type-bind fields. It could be in the form of schema.element.qualifier=>metadata_field, or
+        // just metadata_field
+        List<String> typeBindFields = Arrays.asList(
+                configurationService.getArrayProperty("submit.type-bind.field", new String[0]));
+
+        for (String typeBindField : typeBindFields) {
+            String typeBFKey = typeBindField;
+            // If the type-bind field is in the form of schema.element.qualifier=>metadata_field, split it and get the
+            // metadata field
+            if (typeBindField.contains(KEY_VALUE_SEPARATOR)) {
+                String[] parts = typeBindField.split(KEY_VALUE_SEPARATOR);
+                // Get the second part of the split - the metadata field
+                typeBFKey = parts[1];
+            }
+            // Get the metadata value for the type-bind field
+            List<MetadataValue> documentType = itemService.getMetadataByMetadataString(obj.getItem(), typeBFKey);
+            if (documentType.size() > 0) {
+                documentTypeValueList.add(documentType.get(0).getValue());
+            }
         }
 
-        // Get list of all field names (including qualdrop names) allowed for this dc.type
-        List<String> allowedFieldNames = inputConfig.populateAllowedFieldNames(documentTypeValue);
+        // Get list of all field names (including qualdrop names) allowed for this dc.type, or specific type-bind field
+        List<String> allowedFieldNames = new ArrayList<>();
 
-        // Begin the actual validation loop
+        if (CollectionUtils.isEmpty(documentTypeValueList)) {
+            // If no dc.type is set, we allow all fields
+            allowedFieldNames.addAll(inputConfig.populateAllowedFieldNames(null));
+        } else {
+            documentTypeValueList.forEach(documentTypeValue -> {
+                allowedFieldNames.addAll(inputConfig.populateAllowedFieldNames(documentTypeValue));
+            });
+        }
+
         for (DCInput[] row : inputConfig.getFields()) {
             for (DCInput input : row) {
                 String fieldKey =
-                    metadataAuthorityService.makeFieldKey(input.getSchema(), input.getElement(), input.getQualifier());
+                        metadataAuthorityService.makeFieldKey(input.getSchema(), input.getElement(),
+                                input.getQualifier());
                 boolean isAuthorityControlled = metadataAuthorityService.isAuthorityControlled(fieldKey);
 
                 List<String> fieldsName = new ArrayList<String>();
@@ -90,10 +125,10 @@ public class MetadataValidation extends AbstractValidation {
 
                         // Check the lookup list. If no other inputs of the same field name allow this type,
                         // then remove. This includes field name without qualifier.
-                        if (!input.isAllowedFor(documentTypeValue) &&  (!allowedFieldNames.contains(fullFieldname)
+                        if (!input.isAllowedFor(documentTypeValueList) && (!allowedFieldNames.contains(fullFieldname)
                                 && !allowedFieldNames.contains(input.getFieldName()))) {
                             itemService.removeMetadataValues(ContextUtil.obtainCurrentRequestContext(),
-                                        obj.getItem(), mdv);
+                                    obj.getItem(), mdv);
                         } else {
                             validateMetadataValues(mdv, input, config, isAuthorityControlled, fieldKey, errors);
                             if (mdv.size() > 0 && input.isVisible(DCInput.SUBMISSION_SCOPE)) {
@@ -117,7 +152,7 @@ public class MetadataValidation extends AbstractValidation {
                 for (String fieldName : fieldsName) {
                     boolean valuesRemoved = false;
                     List<MetadataValue> mdv = itemService.getMetadataByMetadataString(obj.getItem(), fieldName);
-                    if (!input.isAllowedFor(documentTypeValue)) {
+                    if (!input.isAllowedFor(documentTypeValueList)) {
                         // Check the lookup list. If no other inputs of the same field name allow this type,
                         // then remove. Otherwise, do not
                         if (!(allowedFieldNames.contains(fieldName))) {
@@ -125,31 +160,117 @@ public class MetadataValidation extends AbstractValidation {
                                     obj.getItem(), mdv);
                             valuesRemoved = true;
                             log.debug("Stripping metadata values for " + input.getFieldName() + " on type "
-                                    + documentTypeValue + " as it is allowed by another input of the same field " +
+                                    + documentTypeValueList + " as it is allowed by another input of the same field " +
                                     "name");
                         } else {
                             log.debug("Not removing unallowed metadata values for " + input.getFieldName() + " on type "
-                                    + documentTypeValue + " as it is allowed by another input of the same field " +
+                                    + documentTypeValueList + " as it is allowed by another input of the same field " +
                                     "name");
                         }
                     }
                     validateMetadataValues(mdv, input, config, isAuthorityControlled, fieldKey, errors);
-                    if ((input.isRequired() && mdv.size() == 0) && input.isVisible(DCInput.SUBMISSION_SCOPE)
-                                                                && !valuesRemoved) {
+                    if (((input.isRequired() && mdv.size() == 0) && input.isVisible(DCInput.SUBMISSION_SCOPE)
+                            && !valuesRemoved)
+                            || !isValidComplexDefinitionMetadata(input, mdv)) {
                         // Is the input required for *this* type? In other words, are we looking at a required
                         // input that is also allowed for this document type
-                        if (input.isAllowedFor(documentTypeValue)) {
+                        if (input.isAllowedFor(documentTypeValueList)) {
                             // since this field is missing add to list of error
                             // fields
                             addError(errors, ERROR_VALIDATION_REQUIRED, "/"
                                     + WorkspaceItemRestRepository.OPERATION_PATH_SECTIONS + "/" + config.getId() + "/" +
-                                            input.getFieldName());
+                                    input.getFieldName());
+                        }
+                    }
+                    if (LOCAL_METADATA_HAS_CMDI.equals(fieldName)) {
+                        try {
+                            Context context = ContextUtil.obtainCurrentRequestContext();
+                            CMDIFileBundleMaintainer.updateCMDIFileBundle(context, obj.getItem(), mdv);
+                        } catch (AuthorizeException | IOException exception) {
+                            log.error("Cannot update CMDI file bundle (ORIGINAL/METADATA) because: " +
+                                    exception.getMessage());
                         }
                     }
                 }
             }
+
         }
+
         return errors;
+    }
+
+    /**
+     * Check if the metadata values for a complex definition input are valid.
+     * Valid if:
+     * - the complex input field is required and all required nested input fields are filled in.
+     * - the complex input field is not required, if there is a valued in the nested input field - all required nested
+     *      input fields must be filled in.
+     * - the complex input field is not required, and none of the nested input fields are required.
+     */
+    private boolean isValidComplexDefinitionMetadata(DCInput input, List<MetadataValue> mdv) {
+        // The input is not a complex definition - do not validate it
+        if (!input.getInputType().equals("complex")) {
+            return true;
+        }
+
+        // Get the complex definition nested inputs
+        Map<String, Map<String, String>> complexDefinitionInputs = input.getComplexDefinition().getInputs();
+
+        // Check valid state of the complex definition input when it is required
+        if (input.isRequired()) {
+            // There are no values in the complex input field
+            if (CollectionUtils.isEmpty(mdv)) {
+                return false;
+            }
+        } else {
+            // The complex input field is not required
+            if (CollectionUtils.isEmpty(mdv)) {
+                // There are no values in the complex input field
+                return true;
+            }
+        }
+        return checkAllRequiredInputFieldsAreFilledIn(complexDefinitionInputs, mdv);
+    }
+
+    /**
+     * Check if all required nested input fields are filled in.
+     */
+    private boolean checkAllRequiredInputFieldsAreFilledIn(Map<String, Map<String, String>> complexDefinitionInputs,
+                                                        List<MetadataValue> mdv) {
+        // If any of the nested input fields are filled in - all required nested input fields must be filled in
+        int complexDefinitionIndex = -1;
+        // Go through all nested input fields
+        for (String complexDefinitionInputName : complexDefinitionInputs.keySet()) {
+            complexDefinitionIndex++;
+
+            // Get the definition of the nested input field
+            Map<String, String> complexDefinitionInputValues =
+                    complexDefinitionInputs.get(complexDefinitionInputName);
+            // Check if the nested input field is required - if not do not check if it is filled in
+            if (!StringUtils.equals(BooleanUtils.toStringTrueFalse(true),
+                    complexDefinitionInputValues.get("required"))) {
+                continue;
+            }
+
+            // Load filled in values of the nested input field
+            List<String> filledInputValues = new ArrayList<>(Arrays.asList(
+                    mdv.get(0).getValue().split(DCInput.ComplexDefinitions.getSeparator(),-1)));
+
+            // Check if the required nested input field is filled in. It is valid if there is a value in the nested
+            // input.
+            if (!StringUtils.isBlank(filledInputValues.get(complexDefinitionIndex))) {
+                continue;
+            }
+
+            // EU identifier must have `openaire_id` value otherwise the `openaire_id` could be empty.
+            if (StringUtils.equals("openaire_id", complexDefinitionInputName) &&
+                    !StringUtils.equals("euFunds", filledInputValues.get(0))) {
+                continue;
+            }
+            return false;
+
+        }
+        return true;
     }
 
 

@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags:      
+      - '**'
+  workflow_dispatch:
+
+
+env:
+  IMAGE_BASE_NAME: dataquest/dspace
+
+jobs:
+  retag-BE-image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+
+      - name: retag image
+        run: |
+          docker pull ${{ env.IMAGE_BASE_NAME }}:${{ github.sha }}
+          docker tag ${{ env.IMAGE_BASE_NAME }}:${{ github.sha }} ${{ env.IMAGE_BASE_NAME }}:${{ github.ref_name }}
+
+          docker pull ${{ env.IMAGE_BASE_NAME }}-cli:${{ github.sha }}
+          docker tag ${{ env.IMAGE_BASE_NAME }}-cli:${{ github.sha }} ${{ env.IMAGE_BASE_NAME }}-cli:${{ github.ref_name }}
+
+          docker pull ${{ env.IMAGE_BASE_NAME }}-solr:${{ github.sha }}
+          docker tag ${{ env.IMAGE_BASE_NAME }}-solr:${{ github.sha }} ${{ env.IMAGE_BASE_NAME }}-solr:${{ github.ref_name }}
+          
+          docker pull ${{ env.IMAGE_BASE_NAME }}-postgres-loadsql:${{ github.sha }}
+          docker tag ${{ env.IMAGE_BASE_NAME }}-postgres-loadsql:${{ github.sha }} ${{ env.IMAGE_BASE_NAME }}-postgres-loadsql:${{ github.ref_name }}
+
+          docker pull ${{ env.IMAGE_BASE_NAME }}-dependencies:${{ github.sha }}
+          docker tag ${{ env.IMAGE_BASE_NAME }}-dependencies:${{ github.sha }} ${{ env.IMAGE_BASE_NAME }}-dependencies:${{ github.ref_name }}
+
+      - name: push image
+        run: |
+          docker push ${{ env.IMAGE_BASE_NAME }}:${{ github.ref_name }}
+          docker push ${{ env.IMAGE_BASE_NAME }}-cli:${{ github.ref_name }}
+          docker push ${{ env.IMAGE_BASE_NAME }}-solr:${{ github.ref_name }}
+          docker push ${{ env.IMAGE_BASE_NAME }}-postgres-loadsql:${{ github.ref_name }}
+          docker push ${{ env.IMAGE_BASE_NAME }}-dependencies:${{ github.ref_name }}

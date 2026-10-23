@@ -28,6 +28,8 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.SQLException;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -84,6 +86,7 @@ public class VersioningWithRelationshipsIT extends AbstractIntegrationTestWithDa
 
     protected Community community;
     protected Collection collection;
+    protected String formattedDate;
     protected EntityType publicationEntityType;
     protected EntityType personEntityType;
     protected EntityType projectEntityType;
@@ -193,6 +196,9 @@ public class VersioningWithRelationshipsIT extends AbstractIntegrationTestWithDa
             .withCopyToLeft(false)
             .withCopyToRight(false)
             .build();
+
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        formattedDate = LocalDate.now().format(formatter);
     }
 
     protected Relationship getRelationship(
@@ -2113,7 +2119,7 @@ public class VersioningWithRelationshipsIT extends AbstractIntegrationTestWithDa
                 //////////////////
                 // create items //
                 //////////////////
-
+                String person3itemDate = "person 3 (item) (" + formattedDate + ")";
                 // person 1.1
                 Item pe1_1 = ItemBuilder.createItem(context, collection)
                     .withTitle("person 1 (item)")
@@ -2159,7 +2165,7 @@ public class VersioningWithRelationshipsIT extends AbstractIntegrationTestWithDa
                     .build();
 
                 // metadata - person 3 & project 2
-                itemService.addMetadata(context, pe3_1, "dc", "relation", null, null, "project 2 (mdv)");
+                itemService.addMetadata(context, pe3_1, "dc", "relation", null, null, "project 2 (mdv)", "20000", 300);
 
                 // relationship - person 1 & project 3
                 RelationshipBuilder.createRelationshipBuilder(context, pe1_1, pr3_1, isProjectOfPerson)
@@ -2190,14 +2196,14 @@ public class VersioningWithRelationshipsIT extends AbstractIntegrationTestWithDa
                     .build();
 
                 // metadata - person 3 & project 4
-                itemService.addMetadata(context, pe3_1, "dc", "relation", null, null, "project 4 (mdv)");
+                itemService.addMetadata(context, pe3_1, "dc", "relation", null, null, "project 4 (mdv)" , "20000", 300);
 
                 // relationship - person 3 & project 5
                 RelationshipBuilder.createRelationshipBuilder(context, pe3_1, pr5_1, isProjectOfPerson)
                     .build();
 
                 // metadata - person 3 & project 6
-                itemService.addMetadata(context, pe3_1, "dc", "relation", null, null, "project 6 (mdv)");
+                itemService.addMetadata(context, pe3_1, "dc", "relation", null, null, "project 6 (mdv)" , "20000", 300);
 
                 // SUMMARY
                 //
@@ -2395,7 +2401,7 @@ public class VersioningWithRelationshipsIT extends AbstractIntegrationTestWithDa
                 assertEquals(1, mdvs5.get(1).getPlace());
 
                 assertTrue(mdvs5.get(2) instanceof RelationshipMetadataValue);
-                assertEquals("person 3 (item)", mdvs5.get(2).getValue());
+                assertEquals(person3itemDate, mdvs5.get(2).getValue());
                 assertEquals(2, mdvs5.get(2).getPlace());
 
                 assertFalse(mdvs5.get(3) instanceof RelationshipMetadataValue);
@@ -2437,7 +2443,7 @@ public class VersioningWithRelationshipsIT extends AbstractIntegrationTestWithDa
                 assertEquals(1, mdvs6.get(1).getPlace());
 
                 assertTrue(mdvs6.get(2) instanceof RelationshipMetadataValue);
-                assertEquals("person 3 (item)", mdvs6.get(2).getValue());
+                assertEquals(person3itemDate, mdvs6.get(2).getValue());
                 assertEquals(2, mdvs6.get(2).getPlace());
 
                 ////////////////////////////////////////////////
@@ -2510,7 +2516,7 @@ public class VersioningWithRelationshipsIT extends AbstractIntegrationTestWithDa
                 assertEquals(1, mdvs8.get(1).getPlace());
 
                 assertTrue(mdvs8.get(2) instanceof RelationshipMetadataValue);
-                assertEquals("person 3 (item)", mdvs8.get(2).getValue());
+                assertEquals(person3itemDate, mdvs8.get(2).getValue());
                 assertEquals(2, mdvs8.get(2).getPlace());
 
                 assertFalse(mdvs8.get(3) instanceof RelationshipMetadataValue);
@@ -2615,7 +2621,7 @@ public class VersioningWithRelationshipsIT extends AbstractIntegrationTestWithDa
                 assertEquals(1, mdvs10.get(1).getPlace());
 
                 assertTrue(mdvs10.get(2) instanceof RelationshipMetadataValue);
-                assertEquals("person 3 (item)", mdvs10.get(2).getValue());
+                assertEquals(person3itemDate, mdvs10.get(2).getValue());
                 assertEquals(2, mdvs10.get(2).getPlace());
 
                 assertFalse(mdvs10.get(3) instanceof RelationshipMetadataValue);
@@ -2658,7 +2664,7 @@ public class VersioningWithRelationshipsIT extends AbstractIntegrationTestWithDa
                 assertEquals(1, mdvs11.get(1).getPlace());
 
                 assertTrue(mdvs11.get(2) instanceof RelationshipMetadataValue);
-                assertEquals("person 3 (item)", mdvs11.get(2).getValue());
+                assertEquals(person3itemDate, mdvs11.get(2).getValue());
                 assertEquals(2, mdvs11.get(2).getPlace());
 
                 ////////////////////////////////////////
@@ -2824,7 +2830,7 @@ public class VersioningWithRelationshipsIT extends AbstractIntegrationTestWithDa
                 assertEquals(1, mdvs15.get(1).getPlace());
 
                 assertTrue(mdvs15.get(2) instanceof RelationshipMetadataValue);
-                assertEquals("person 3 (item)", mdvs15.get(2).getValue());
+                assertEquals(person3itemDate, mdvs15.get(2).getValue());
                 assertEquals(2, mdvs15.get(2).getPlace());
 
                 assertFalse(mdvs15.get(3) instanceof RelationshipMetadataValue);
@@ -2867,7 +2873,7 @@ public class VersioningWithRelationshipsIT extends AbstractIntegrationTestWithDa
                 assertEquals(1, mdvs16.get(1).getPlace());
 
                 assertTrue(mdvs16.get(2) instanceof RelationshipMetadataValue);
-                assertEquals("person 3 (item)", mdvs16.get(2).getValue());
+                assertEquals(person3itemDate, mdvs16.get(2).getValue());
                 assertEquals(2, mdvs16.get(2).getPlace());
 
                 ////////////////////////////////////////

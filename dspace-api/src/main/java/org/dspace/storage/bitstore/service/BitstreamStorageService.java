@@ -7,6 +7,7 @@
  */
 package org.dspace.storage.bitstore.service;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.sql.SQLException;
@@ -197,5 +198,11 @@ public interface BitstreamStorageService {
      * @param incoming
      */
     public void setIncomingExternal(int incoming);
+
+
+    /**
+     * CLARIN: Retrieve the contents of a bitstream as a File.
+     */
+    public File retrieveFile(Context context, Bitstream bitstream) throws SQLException, IOException;
 
 }

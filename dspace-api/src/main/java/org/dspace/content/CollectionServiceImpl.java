@@ -388,6 +388,22 @@ public class CollectionServiceImpl extends DSpaceObjectServiceImpl<Collection> i
     }
 
     @Override
+    public void addLogo(Context context, Collection collection, Bitstream newLogo)
+            throws SQLException, AuthorizeException {
+        collection.setLogo(newLogo);
+
+        // now create policy for logo bitstream
+        // to match our READ policy
+        List<ResourcePolicy> policies = authorizeService
+                .getPoliciesActionFilter(context, collection, Constants.READ);
+        authorizeService.addPolicies(context, policies, newLogo);
+
+        log.info(LogHelper.getHeader(context, "set_logo",
+                "collection_id=" + collection.getID() + "logo_bitstream_id="
+                        + newLogo.getID()));
+    }
+
+    @Override
     public Group createWorkflowGroup(Context context, Collection collection, int step)
         throws SQLException, AuthorizeException {
         // Check authorisation - Must be an Admin to create Workflow Group

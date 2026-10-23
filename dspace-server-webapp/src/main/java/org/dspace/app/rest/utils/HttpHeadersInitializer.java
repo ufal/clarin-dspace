@@ -284,7 +284,9 @@ public class HttpHeadersInitializer {
         }
         String normalized = Normalizer.normalize(originalFilename, Normalizer.Form.NFD);
         String withoutAccents = normalized.replaceAll("\\p{InCombiningDiacriticalMarks}+", "");
-        return withoutAccents.replaceAll("[^\\x00-\\x7F]", "");
+        return withoutAccents.replaceAll("[^\\x00-\\x7F]", "")
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"");
     }
 
     /**

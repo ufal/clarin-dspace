@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -165,7 +166,16 @@ public class Item extends DSpaceObject implements DSpaceObjectLegacySupport {
      * @return true if the item is discoverable
      */
     public boolean isDiscoverable() {
-        return discoverable;
+        return discoverable && !this.isHidden();
+    }
+
+    public boolean isHidden() {
+        String valueOfHidden = getItemService().getMetadataFirstValue(this, "local",
+                "hidden", null, Item.ANY);
+        if (Objects.nonNull(valueOfHidden) && valueOfHidden.equalsIgnoreCase("hidden")) {
+            return true;
+        }
+        return false;
     }
 
     /**

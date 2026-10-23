@@ -1,0 +1,30 @@
+# Port + project overrides so the local v9 CLARIN stack does not collide with other DSpace
+# stacks already running on this machine (8080/5432/8983 are taken by 8.x stacks).
+# Usage: COMPOSE_PROJECT_NAME=clarinv9 docker compose -f docker-compose.yml -f docker-compose.clarinv9.yml up -d
+networks:
+  # other DSpace stacks on this host already use 172.23.0.0/16; pick a free subnet
+  dspacenet:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
+services:
+  dspace:
+    container_name: clarinv9-dspace
+    ports: !override
+      - published: 18080
+        target: 8080
+      - published: 18000
+        target: 8000
+    environment:
+      dspace__P__server__P__url: http://localhost:18080/server
+      dspace__P__ui__P__url: http://localhost:14000
+  dspacedb:
+    container_name: clarinv9-dspacedb
+    ports: !override
+      - published: 15432
+        target: 5432
+  dspacesolr:
+    container_name: clarinv9-dspacesolr
+    ports: !override
+      - published: 18983
+        target: 8983

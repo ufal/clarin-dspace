@@ -7,6 +7,7 @@
  */
 package org.dspace.storage.bitstore;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
@@ -94,4 +95,15 @@ public interface BitStoreService {
     public default boolean isEnabled() {
         return true;
     }
+
+    /**
+     * CLARIN: Retrieve the bitstream as a local {@link File}. Only the local
+     * ({@link DSBitStoreService}) assetstore supports this; other stores (S3, jclouds)
+     * throw {@link UnsupportedOperationException}. Used by the file-preview feature.
+     */
+    default File getFile(Bitstream bitstream) throws IOException {
+        throw new UnsupportedOperationException(
+            "getFile(Bitstream) is only supported by the local DSBitStoreService assetstore");
+    }
+
 }

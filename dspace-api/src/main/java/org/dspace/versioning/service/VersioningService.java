@@ -80,6 +80,16 @@ public interface VersioningService {
                              int versionNumber);
 
     /**
+     * This method deletes the version associated with the item from the versioning history, but unlike the
+     * {@link #delete} method this doesn't delete the entire item.
+     *
+     * @param c        DSpace context object
+     * @param version  the version to delete
+     * @throws SQLException if database error
+     */
+    void deleteVersion(Context c, Version version) throws SQLException;
+
+    /**
      * Update the Version
      *
      * @param context        context

@@ -7,6 +7,7 @@
  */
 package org.dspace.content.service;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.sql.SQLException;
@@ -245,4 +246,11 @@ public interface BitstreamService extends DSpaceObjectService<Bitstream>, DSpace
      * @throws SQLException
      */
     boolean isInBundle(Bitstream bitstream, java.util.Collection<String> bundleNames) throws SQLException;
+
+    /**
+     * CLARIN: Retrieve the contents of the bitstream as a File (optionally authorizing READ).
+     */
+    public File retrieveFile(Context context, Bitstream bitstream, boolean authorization)
+            throws IOException, SQLException, AuthorizeException;
+
 }

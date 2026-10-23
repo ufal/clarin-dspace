@@ -374,9 +374,8 @@ public class BitstreamRestControllerIT extends AbstractControllerIntegrationTest
         String bitstreamContent = "0123456789";
         String bitstreamName = "ภาษาไทย-com-acentuação.pdf";
         String expectedAscii = "-com-acentuacao.pdf";
-        String expectedUtf8Encoded =
-        "%E0%B8%A0%E0%B8%B2%E0%B8%A9%E0%B8%B2%E0%B9%84%E0%B8%97%E0%B8%A2-"
-        + "com-acentua%C3%A7%C3%A3o.pdf";
+        String expectedUtf8Encoded = "%E0%B8%A0%E0%B8%B2%E0%B8%A9%E0%B8%B2%E0%B9%84%E0%B8%97%E0%B8%A2-"
+            + "com-acentua%C3%A7%C3%A3o.pdf";
 
         try (InputStream is = IOUtils.toInputStream(bitstreamContent, CharEncoding.UTF_8)) {
 
@@ -398,6 +397,48 @@ public class BitstreamRestControllerIT extends AbstractControllerIntegrationTest
             //** THEN **
             .andExpect(status().isOk())
             //We expect the content disposition to have the encoded bitstream name
+            .andExpect(header().string(
+                "Content-Disposition",
+                String.format("attachment; filename=\"%s\"; filename*=UTF-8''%s",
+                              expectedAscii,
+                              expectedUtf8Encoded)
+            ));
+    }
+
+    @Test
+    public void testBitstreamNameWithQuote() throws Exception {
+
+        context.turnOffAuthorisationSystem();
+
+        parentCommunity = CommunityBuilder
+            .createCommunity(context)
+            .build();
+
+        Collection collection = CollectionBuilder
+            .createCollection(context, parentCommunity)
+            .build();
+
+        String bitstreamContent = "0123456789";
+        String bitstreamName = "file \"quoted\".txt";
+        String expectedAscii = "file \\\"quoted\\\".txt";
+        String expectedUtf8Encoded = "file%20%22quoted%22.txt";
+
+        try (InputStream is = IOUtils.toInputStream(bitstreamContent, CharEncoding.UTF_8)) {
+
+            Item item = ItemBuilder
+                .createItem(context, collection)
+                .build();
+
+            bitstream = BitstreamBuilder
+                .createBitstream(context, item, is)
+                .withName(bitstreamName)
+                .build();
+        }
+
+        context.restoreAuthSystemState();
+
+        getClient().perform(get("/api/core/bitstreams/" + bitstream.getID() + "/content"))
+            .andExpect(status().isOk())
             .andExpect(header().string(
                 "Content-Disposition",
                 String.format("attachment; filename=\"%s\"; filename*=UTF-8''%s",

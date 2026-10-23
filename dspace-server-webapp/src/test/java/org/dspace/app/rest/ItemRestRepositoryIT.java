@@ -2504,7 +2504,8 @@ public class ItemRestRepositoryIT extends AbstractControllerIntegrationTest {
         context.restoreAuthSystemState();
         String token = getAuthToken(asUser.getEmail(), password);
 
-        new MetadataPatchSuite(mapper).runWith(getClient(token), "/api/core/items/" + item.getID(), expectedStatus);
+        new MetadataPatchSuite(mapper, "item-metadata-patch-suite.json").runWith(getClient(token),
+                "/api/core/items/" + item.getID(), expectedStatus);
     }
 
     /**
@@ -5348,4 +5349,191 @@ public class ItemRestRepositoryIT extends AbstractControllerIntegrationTest {
 
     }
 
+
+    @Test
+    public void submitterShouldSeeLocalNoteMetadata() throws Exception {
+        // Admin - should see `local.submission.note` and `dc.description.provenance`
+        // Submitter - should see `local.submission.note` but not `dc.local.provenance`
+        // Anonymous user - should not see `local.submission.note` and `dc.description.provenance` also
+
+        final String PROVENANCE = "This is provenance";
+        final String NOTE = "This is note";
+        final String EPERSON_PASSWORD = "qwerty01";
+
+        context.turnOffAuthorisationSystem();
+        // Create Submitter user - Admin and Anonymous user (eperson) is already created
+
+        EPerson submitter = EPersonBuilder.createEPerson(context)
+                .withEmail("clarin@mail.com")
+                .withPassword(EPERSON_PASSWORD)
+                .build();
+
+        context.setCurrentUser(submitter);
+
+        //** GIVEN **
+        //1. A community-collection structure with one parent community and one collection
+        parentCommunity = CommunityBuilder.createCommunity(context)
+                .withName("Parent Community")
+                .build();
+        Collection col = CollectionBuilder.createCollection(context, parentCommunity).withName("Collection").build();
+
+        //2. Create Item with submitter person, with `local.submission.note` metadata
+        Item publicItem = ItemBuilder.createItem(context, col)
+                .withTitle("Public item")
+                .withIssueDate("2021-04-27")
+                .withMetadata("local", "submission", "note", NOTE)
+                .withMetadata("dc", "description", "provenance", PROVENANCE)
+                .withAuthor("Smith, Donald").withAuthor("Doe, John")
+                .withSubject("ExtraEntry")
+                .build();
+
+        context.restoreAuthSystemState();
+        Matcher<? super Object> notExistNoteLocalMetadataMatcher =
+                ItemMatcher.notMatchItemWithLocalNote(publicItem);
+
+        Matcher<? super Object> existNoteLocalMetadataMatcher = ItemMatcher.matchItemWithLocalNote(publicItem, NOTE);
+
+        Matcher<? super Object> notExistDescriptionProvenanceMetadataMatcher =
+                ItemMatcher.notMatchItemWithDescriptionProvenance(publicItem);
+
+        Matcher<? super Object> existDescriptionProvenanceMetadataMatcher = ItemMatcher
+                .matchItemWithDescriptionProvenance(publicItem,PROVENANCE);
+
+        // Anonymous user - should not see `local.submission.note` and `dc.description.provenance` also
+        getClient().perform(get("/api/core/items/" + publicItem.getID()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", HalMatcher.matchNoEmbeds()))
+                .andExpect(jsonPath("$", notExistNoteLocalMetadataMatcher))
+                .andExpect(jsonPath("$", notExistDescriptionProvenanceMetadataMatcher));
+
+        String submitterToken = getAuthToken(submitter.getEmail(), EPERSON_PASSWORD);
+        // Submitter user - should see `local.submission.note` but not `dc.local.provenance`
+        getClient(submitterToken).perform(get("/api/core/items/" + publicItem.getID()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", HalMatcher.matchNoEmbeds()))
+                .andExpect(jsonPath("$", existNoteLocalMetadataMatcher))
+                .andExpect(jsonPath("$", notExistDescriptionProvenanceMetadataMatcher));
+
+        String adminToken = getAuthToken(admin.getEmail(), password);
+        // Admin - should see `local.submission.note` and `dc.description.provenance`
+        getClient(adminToken).perform(get("/api/core/items/" + publicItem.getID()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", HalMatcher.matchNoEmbeds()))
+                .andExpect(jsonPath("$", existNoteLocalMetadataMatcher))
+                .andExpect(jsonPath("$", existDescriptionProvenanceMetadataMatcher));
+
+        // After the submitter is deleted, the response for the request made using the previously issued submitter
+        // token (which now authenticates as anonymous) should not contain
+        // `local.submission.note` and `dc.description.provenance` metadata
+        context.turnOffAuthorisationSystem();
+        EPersonBuilder.deleteEPerson(submitter.getID());
+        context.restoreAuthSystemState();
+
+        getClient(submitterToken).perform(get("/api/core/items/" + publicItem.getID()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", HalMatcher.matchNoEmbeds()))
+                .andExpect(jsonPath("$", notExistNoteLocalMetadataMatcher))
+                .andExpect(jsonPath("$", notExistDescriptionProvenanceMetadataMatcher));
+    }
+
+    /**
+     * If the local.approximateDate.issued has a value like 'cca 1938 - 1945', then dc.date.issued = 0000.
+     */
+    @Test
+    public void copyApproximateDateIntoDateIssued_whenApproximateDateHasMultipleValues() throws Exception {
+        context.turnOffAuthorisationSystem();
+        //** GIVEN **
+        parentCommunity = CommunityBuilder.createCommunity(context)
+                .withName("Parent Community")
+                .build();
+        Community child1 = CommunityBuilder.createSubCommunity(context, parentCommunity)
+                .withName("Sub Community")
+                .build();
+        Collection col1 = CollectionBuilder.createCollection(context, child1).withName("Collection 1").build();
+
+        Item publicItem = ItemBuilder.createItem(context, col1)
+                .withTitle("Item with dates")
+                .withIssueDate("2017-10-17")
+                .withMetadata("local", "approximateDate", "issued", "cca 1938 - 1945")
+                .withAuthor("Smith, Donald").withAuthor("Doe, John")
+                .withSubject("ExtraEntry")
+                .build();
+        context.restoreAuthSystemState();
+
+        String adminToken = getAuthToken(admin.getEmail(), password);
+        getClient(adminToken).perform(get("/api/core/items/" + publicItem.getID()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", HalMatcher.matchNoEmbeds()))
+                .andExpect(jsonPath("$.metadata", Matchers.allOf(
+                        matchMetadata("dc.date.issued", "0000"))));
+    }
+
+    /**
+     * If the local.approximateDate.issued has a value like '1938, 1945, 2022', then dc.date.issued = 2022.
+     */
+    @Test
+    public void copyApproximateDateIntoDateIssued_whenApproximateDateHasRangeOfValues() throws Exception {
+        context.turnOffAuthorisationSystem();
+        //** GIVEN **
+        parentCommunity = CommunityBuilder.createCommunity(context)
+                .withName("Parent Community")
+                .build();
+        Community child1 = CommunityBuilder.createSubCommunity(context, parentCommunity)
+                .withName("Sub Community")
+                .build();
+        Collection col1 = CollectionBuilder.createCollection(context, child1).withName("Collection 1").build();
+
+        Item publicItem = ItemBuilder.createItem(context, col1)
+                .withTitle("Item with dates")
+                .withIssueDate("2017-10-17")
+                .withMetadata("local", "approximateDate", "issued", "1938, 1945, 2022")
+                .withAuthor("Smith, Donald").withAuthor("Doe, John")
+                .withSubject("ExtraEntry")
+                .build();
+        context.restoreAuthSystemState();
+
+        String adminToken = getAuthToken(admin.getEmail(), password);
+        getClient(adminToken).perform(get("/api/core/items/" + publicItem.getID()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", HalMatcher.matchNoEmbeds()))
+                .andExpect(jsonPath("$.metadata", Matchers.allOf(
+                        matchMetadata("dc.date.issued", "2022"))));
+    }
+
+
+    /**
+     * Should find Item by the full handle identifier.
+     */
+    @Test
+    public void searchByHandle() throws Exception {
+        context.turnOffAuthorisationSystem();
+        //** GIVEN **
+        parentCommunity = CommunityBuilder.createCommunity(context)
+                .withName("Parent Community")
+                .build();
+        Community child1 = CommunityBuilder.createSubCommunity(context, parentCommunity)
+                .withName("Sub Community")
+                .build();
+        Collection col1 = CollectionBuilder.createCollection(context, child1).withName("Collection 1").build();
+        Collection col2 = CollectionBuilder.createCollection(context, child1).withName("Collection 2").build();
+
+        Item publicItem1 = ItemBuilder.createItem(context, col1)
+                .withTitle("Public item 1")
+                .withIssueDate("2017-10-17")
+                .withAuthor("Smith, Donald").withAuthor("Doe, John")
+                .withSubject("ExtraEntry")
+                .build();
+        context.restoreAuthSystemState();
+
+        String handlePrefix = configurationService.getProperty("handle.canonical.prefix");
+        String fullHandleIdentifier = handlePrefix + publicItem1.getHandle();
+        String token = getAuthToken(admin.getEmail(), password);
+        getClient(token).perform(get("/api/core/items/search/byHandle")
+                .param("handle", fullHandleIdentifier))
+        .andExpect(status().isOk())
+        .andExpect(content().contentType(contentType))
+        .andExpect(jsonPath("$._embedded.items", Matchers.containsInRelativeOrder(
+                ItemMatcher.matchItemProperties(publicItem1)
+        )));
+    }
 }

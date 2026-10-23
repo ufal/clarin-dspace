@@ -13,7 +13,7 @@
     <Appenders>
         <!-- A1 is for Handle Plugin activity -->
         <Appender name='A1'
-                  filePattern="${log.dir}/handle-plugin.log-%d{yyyy-MM-dd}"
+                  filePattern="${log.dir}/handle-plugin.log-%d{yyyy-MM-dd}.gz"
                   type='RollingFile'
                   fileName='${log.dir}/handle-plugin.log'
 

@@ -8,6 +8,14 @@ on:
   workflow_call:
     # Possible Inputs to this reusable job
     inputs:
+      python_version_script_dest:
+        required: false
+        default: version.txt
+        type: string
+      run_python_version_script:
+        required: false
+        default: false
+        type: boolean
       # Build name/id for this Docker build. Used for digest storage to avoid digest overlap between builds.
       build_id:
         required: true
@@ -120,6 +128,10 @@ jobs:
           registry: ${{ env.DOCKER_BUILD_REGISTRY }}
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add version
+        if: ${{ inputs.run_python_version_script }}
+        run: python scripts/sourceversion.py ${{ github.server_url }}/${{ github.repository }}/actions/runs/ ${{ github.run_id }} > ${{ inputs.python_version_script_dest }}
 
       # https://github.com/docker/setup-buildx-action
       - name: Setup Docker Buildx

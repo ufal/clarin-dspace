@@ -19,6 +19,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.ServletInputStream;
 import jakarta.servlet.http.HttpServletRequest;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -32,10 +33,12 @@ import org.dspace.app.rest.model.BundleRest;
 import org.dspace.app.rest.model.ItemRest;
 import org.dspace.app.rest.model.patch.Patch;
 import org.dspace.app.rest.repository.handler.service.UriListHandlerService;
+import org.dspace.app.rest.utils.SolrOAIReindexer;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.Bundle;
 import org.dspace.content.Collection;
 import org.dspace.content.Item;
+import org.dspace.content.MetadataField;
 import org.dspace.content.Relationship;
 import org.dspace.content.RelationshipType;
 import org.dspace.content.WorkspaceItem;
@@ -43,9 +46,11 @@ import org.dspace.content.service.BundleService;
 import org.dspace.content.service.CollectionService;
 import org.dspace.content.service.InstallItemService;
 import org.dspace.content.service.ItemService;
+import org.dspace.content.service.MetadataFieldService;
 import org.dspace.content.service.RelationshipService;
 import org.dspace.content.service.RelationshipTypeService;
 import org.dspace.content.service.WorkspaceItemService;
+import org.dspace.content.service.clarin.ClarinItemService;
 import org.dspace.core.Context;
 import org.dspace.discovery.SearchServiceException;
 import org.dspace.util.UUIDUtils;
@@ -100,6 +105,15 @@ public class ItemRestRepository extends DSpaceObjectRestRepository<Item, ItemRes
 
     @Autowired
     private ObjectMapper mapper;
+
+    @Autowired
+    private SolrOAIReindexer solrOAIReindexer;
+
+    @Autowired
+    private ClarinItemService clarinItemService;
+
+    @Autowired
+    private MetadataFieldService metadataFieldService;
 
     public ItemRestRepository(ItemService dsoService) {
         super(dsoService);
@@ -181,6 +195,7 @@ public class ItemRestRepository extends DSpaceObjectRestRepository<Item, ItemRes
         try {
             deleteMultipleRelationshipsCopyVirtualMetadata(context, copyVirtual, item);
             itemService.delete(context, item);
+            solrOAIReindexer.deleteItem(item);
         } catch (SQLException | IOException e) {
             throw new RuntimeException(e.getMessage(), e);
         }
@@ -389,6 +404,35 @@ public class ItemRestRepository extends DSpaceObjectRestRepository<Item, ItemRes
         HttpServletRequest req = getRequestService().getCurrentRequest().getHttpServletRequest();
         Item item = uriListHandlerService.handle(context, req, stringList, Item.class);
         return converter.toRest(item, utils.obtainProjection());
+    }
+
+    @SearchRestMethod(name = "byBitstream")
+    public Page<ItemRest> findByValue(@Parameter(value = "bitstreamUUID", required = true) UUID
+                                                                            bitstreamUUID,
+                                                                    Pageable pageable) throws SQLException {
+        Context context = obtainContext();
+
+        List<Item> itemList = clarinItemService.findByBitstreamUUID(context, bitstreamUUID);
+        if (CollectionUtils.isEmpty(itemList)) {
+            return null;
+        }
+
+        return converter.toRestPage(itemList, pageable, utils.obtainProjection());
+    }
+
+    @SearchRestMethod(name = "byHandle")
+    public Page<ItemRest> findByHandle(@Parameter(value = "handle", required = true) String
+                                              handle,
+                                      Pageable pageable) throws SQLException {
+        Context context = obtainContext();
+        MetadataField metadataField = metadataFieldService.findByString(context, "dc.identifier.uri", '.');
+        if (Objects.isNull(metadataField)) {
+            throw new UnprocessableEntityException("Cannot get item by handle because the metadata field ID for " +
+                    "`dc.identifier.uri` wasn't found.");
+        }
+
+        List<Item> itemList = clarinItemService.findByHandle(context, metadataField, handle);
+        return converter.toRestPage(itemList, pageable, utils.obtainProjection());
     }
 
 }

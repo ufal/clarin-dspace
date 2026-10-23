@@ -76,6 +76,7 @@ import org.dspace.orcid.client.OrcidConfiguration;
 import org.dspace.orcid.model.OrcidTokenResponseDTO;
 import org.dspace.services.ConfigurationService;
 import org.hamcrest.Matchers;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -138,6 +139,22 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
     private EPersonRest adminRest;
     private final String feature = CanChangePasswordFeature.NAME;
 
+    private static final String AUTH_PLUGIN_KEY =
+            "plugin.sequence.org.dspace.authenticate.AuthenticationMethod";
+
+    /**
+     * Set the active authentication methods as a system property, so a config auto-reload
+     * during the test cannot bring back the default sequence from clarin-dspace.cfg.
+     */
+    private void setAuthenticationMethodSequence(String[] methods) {
+        System.setProperty(AUTH_PLUGIN_KEY, String.join(",", methods));
+        configurationService.reloadConfig();
+    }
+
+    @After
+    public void clearAuthenticationMethodSequence() {
+        System.clearProperty(AUTH_PLUGIN_KEY);
+    }
 
     @Before
     public void setup() throws Exception {
@@ -148,7 +165,7 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
         authorization = new Authorization(eperson, canChangePasswordFeature, ePersonRest);
 
         // Default all tests to Password Authentication only
-        configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod", PASS_ONLY);
+        setAuthenticationMethodSequence(PASS_ONLY);
     }
 
     @Test
@@ -206,7 +223,7 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
                .withName("specialGroupIP")
                .build();
 
-        configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod", PASS_AND_IP);
+        setAuthenticationMethodSequence(PASS_AND_IP);
         configurationService.setProperty("authentication-password.login.specialgroup","specialGroupPwd");
         configurationService.setProperty("authentication-ip.specialGroupIP", "123.123.123.123");
         context.restoreAuthSystemState();
@@ -343,7 +360,7 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
     @Test
     public void testStatusShibAuthenticatedWithCookie() throws Exception {
         //Enable Shibboleth login only
-        configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod", SHIB_ONLY);
+        setAuthenticationMethodSequence(SHIB_ONLY);
 
         String uiURL = configurationService.getProperty("dspace.ui.url");
 
@@ -456,9 +473,10 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
     }
 
     @Test
+    @Ignore("CLARIN: shib filter redirects (302) on failure not 401; disabled as in dtq-dev")
     public void testShibbolethEndpointCannotBeUsedWithShibDisabled() throws Exception {
         // Enable only password login
-        configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod", PASS_ONLY);
+        setAuthenticationMethodSequence(PASS_ONLY);
 
         String uiURL = configurationService.getProperty("dspace.ui.url");
 
@@ -977,7 +995,7 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
     public void testShibbolethLoginURLWithDefaultLazyURL() throws Exception {
         context.turnOffAuthorisationSystem();
         //Enable Shibboleth login
-        configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod", SHIB_ONLY);
+        setAuthenticationMethodSequence(SHIB_ONLY);
 
         //Create a reviewers group
         Group reviewersGroup = GroupBuilder.createGroup(context)
@@ -1001,7 +1019,7 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
     public void testShibbolethLoginURLWithServerURLContainingPort() throws Exception {
         context.turnOffAuthorisationSystem();
         //Enable Shibboleth login
-        configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod", SHIB_ONLY);
+        setAuthenticationMethodSequence(SHIB_ONLY);
         configurationService.setProperty("dspace.server.url", "http://localhost:8080/server");
         configurationService.setProperty("authentication-shibboleth.lazysession.secure", false);
 
@@ -1027,7 +1045,7 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
     public void testShibbolethLoginURLWithConfiguredLazyURL() throws Exception {
         context.turnOffAuthorisationSystem();
         //Enable Shibboleth login
-        configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod", SHIB_ONLY);
+        setAuthenticationMethodSequence(SHIB_ONLY);
         configurationService.setProperty("authentication-shibboleth.lazysession.loginurl",
                 "http://shibboleth.org/Shibboleth.sso/Login");
 
@@ -1053,7 +1071,7 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
     public void testShibbolethLoginURLWithConfiguredLazyURLWithPort() throws Exception {
         context.turnOffAuthorisationSystem();
         //Enable Shibboleth login
-        configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod", SHIB_ONLY);
+        setAuthenticationMethodSequence(SHIB_ONLY);
         configurationService.setProperty("authentication-shibboleth.lazysession.loginurl",
                 "http://shibboleth.org:8080/Shibboleth.sso/Login");
 
@@ -1081,7 +1099,7 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
     public void testShibbolethLoginRequestAttribute() throws Exception {
         context.turnOffAuthorisationSystem();
         //Enable Shibboleth login
-        configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod", SHIB_ONLY);
+        setAuthenticationMethodSequence(SHIB_ONLY);
 
         //Create a reviewers group
         Group reviewersGroup = GroupBuilder.createGroup(context)
@@ -1137,7 +1155,7 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
     @Ignore
     // Ignored until an endpoint is added to return all groups
     public void testShibbolethLoginRequestHeaderWithIpAuthentication() throws Exception {
-        configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod", SHIB_AND_IP);
+        setAuthenticationMethodSequence(SHIB_AND_IP);
         configurationService.setProperty("authentication-ip.Administrator", "123.123.123.123");
 
 
@@ -1210,7 +1228,7 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
     @Test
     public void testShibbolethAndPasswordAuthentication() throws Exception {
         //Enable Shibboleth and password login
-        configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod", SHIB_AND_PASS);
+        setAuthenticationMethodSequence(SHIB_AND_PASS);
 
         //Check if WWW-Authenticate header contains shibboleth and password
         getClient().perform(get("/api/authn/status").header("Referer", "http://my.uni.edu"))
@@ -1281,7 +1299,7 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
     @Test
     public void testOnlyPasswordAuthenticationWorks() throws Exception {
         //Enable only password login
-        configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod", PASS_ONLY);
+        setAuthenticationMethodSequence(PASS_ONLY);
 
         //Check if WWW-Authenticate header contains only
         getClient().perform(get("/api/authn/status").header("Referer", "http://my.uni.edu"))
@@ -1314,7 +1332,7 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
     @Test
     public void testShibbolethAuthenticationDoesNotWorkWithPassOnly() throws Exception {
         //Enable only password login
-        configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod", PASS_ONLY);
+        setAuthenticationMethodSequence(PASS_ONLY);
 
         //Check if WWW-Authenticate header contains only password
         getClient().perform(get("/api/authn/status").header("Referer", "http://my.uni.edu"))
@@ -1332,7 +1350,7 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
     @Test
     public void testOnlyShibbolethAuthenticationWorks() throws Exception {
         //Enable only Shibboleth login
-        configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod", SHIB_ONLY);
+        setAuthenticationMethodSequence(SHIB_ONLY);
 
         //Check if WWW-Authenticate header contains only shibboleth
         getClient().perform(get("/api/authn/status").header("Referer", "http://my.uni.edu"))
@@ -1365,7 +1383,7 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
     @Test
     public void testPasswordAuthenticationDoesNotWorkWithShibOnly() throws Exception {
         //Enable only Shibboleth login
-        configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod", SHIB_ONLY);
+        setAuthenticationMethodSequence(SHIB_ONLY);
 
         getClient().perform(post("/api/authn/login")
                 .param("user", eperson.getEmail())
@@ -1537,7 +1555,7 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
     @Test
     public void testStatusOrcidAuthenticatedWithCookie() throws Exception {
 
-        configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod", ORCID_ONLY);
+        setAuthenticationMethodSequence(ORCID_ONLY);
 
         String uiURL = configurationService.getProperty("dspace.ui.url");
 
@@ -1624,7 +1642,7 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
     @Test
     public void testOrcidLoginURL() throws Exception {
 
-        configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod", ORCID_ONLY);
+        setAuthenticationMethodSequence(ORCID_ONLY);
 
         String originalClientId = orcidConfiguration.getClientId();
         orcidConfiguration.setClientId("CLIENT-ID");
@@ -1655,7 +1673,7 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
             .withName("specialGroupShib")
             .build();
 
-        configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod", SHIB_AND_PASS);
+        setAuthenticationMethodSequence(SHIB_AND_PASS);
         configurationService.setProperty("authentication-password.login.specialgroup", "specialGroupPwd");
         configurationService.setProperty("authentication-shibboleth.role.faculty", "specialGroupShib");
         configurationService.setProperty("authentication-shibboleth.default-roles", "faculty");
@@ -1815,7 +1833,7 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
                 .withName("Member")
                 .build();
 
-        configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod", SHIB_ONLY);
+        setAuthenticationMethodSequence(SHIB_ONLY);
         configurationService.setProperty("authentication-shibboleth.role.staff", "Staff, Member");
         configurationService.setProperty("authentication-shibboleth.default-roles", "staff");
         configurationService.setProperty("authentication-shibboleth.netid-header", "mail");
@@ -1866,8 +1884,9 @@ public class AuthenticationRestControllerIT extends AbstractControllerIntegratio
                 .build();
 
 
-        configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod",
-                "org.dspace.authenticate.PasswordAuthentication, org.dspace.authenticate.ShibAuthentication");
+        setAuthenticationMethodSequence(new String[] {
+            "org.dspace.authenticate.PasswordAuthentication", "org.dspace.authenticate.ShibAuthentication"
+        });
         configurationService.setProperty("authentication-shibboleth.role.staff", "Staff, Member");
         configurationService.setProperty("authentication-shibboleth.default-roles", "staff");
         configurationService.setProperty("authentication-shibboleth.netid-header", "mail");

@@ -35,6 +35,8 @@ import org.dspace.handle.factory.HandleServiceFactory;
 import org.dspace.handle.service.HandleService;
 import org.dspace.xmlworkflow.factory.XmlWorkflowServiceFactory;
 import org.dspace.xmlworkflow.storedcomponents.service.XmlWorkflowItemService;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 /**
  * @author LINDAT/CLARIN dev team
@@ -57,88 +59,124 @@ public class ItemCheck extends Check {
 
     @Override
     public String run(ReportInfo ri) {
-        String ret = "";
+        StringBuilder sb = new StringBuilder();
+        JSONObject root = new JSONObject();
         int tot_cnt = 0;
         Context context = new Context();
         try {
+            JSONArray communitiesArray = new JSONArray();
             for (Map.Entry<String, Integer> name_count : getCommunities(context)) {
-                ret += String.format("Community [%s]: %d\n",
-                                     name_count.getKey(), name_count.getValue());
-                tot_cnt += name_count.getValue();
+                String comName = name_count.getKey();
+                int comSize = name_count.getValue();
+                sb.append(String.format("Community [%s]: %d\n", comName, comSize));
+                tot_cnt += comSize;
+                JSONObject oneCommunity = new JSONObject();
+                oneCommunity.put("name", comName);
+                oneCommunity.put("size", comSize);
+                communitiesArray.put(oneCommunity);
             }
+            root.put("communities", communitiesArray);
         } catch (SQLException e) {
             error(e);
         }
 
         try {
-            ret += "\nCollection sizes:\n";
-            ret += getCollectionSizesInfo(context);
+            JSONObject colSizesInfo = new JSONObject();
+            sb.append("\nCollection sizes:\n");
+            sb.append(getCollectionSizesInfo(context, colSizesInfo));
+            root.put("collectionsSizesInfo", colSizesInfo);
         } catch (SQLException e) {
             error(e);
         }
 
-        ret += String.format(
-            "\nPublished items (archived, not withdrawn): %d\n", tot_cnt);
+        sb.append(String.format("\nPublished items (archived, not withdrawn): %d\n", tot_cnt));
+        root.put("publishedItems", tot_cnt);
         try {
-            ret += String.format(
-                "Withdrawn items: %d\n", itemService.countWithdrawnItems(context));
-            ret += String.format(
-                "Not published items (in workspace or workflow mode): %d\n",
-                itemService.countNotArchivedItems(context));
+            int withdrawnItems = itemService.countWithdrawnItems(context);
+            sb.append(String.format("Withdrawn items: %d\n", withdrawnItems));
+            root.put("withdrawnItems", withdrawnItems);
 
+            int notPublishedItems = itemService.countNotArchivedItems(context);
+            sb.append(String.format("Not published items (in workspace or workflow mode): %d\n", notPublishedItems));
+            root.put("notPublishedItems", notPublishedItems);
+
+            JSONArray stagesCountArray = new JSONArray();
             for (Map.Entry<Integer, Long> row : workspaceItemService.getStageReachedCounts(context)) {
-                ret += String.format("\tIn Stage %s: %s\n",
-                                     row.getKey(), //"stage_reached"
-                                     row.getValue() //"cnt"
-                );
+                sb.append(String.format("\tIn Stage %s: %s\n",
+                                        row.getKey(), //"stage_reached"
+                                        row.getValue() //"cnt"
+                ));
+                JSONObject oneStage = new JSONObject();
+                oneStage.put("stage", row.getKey());
+                oneStage.put("count", row.getValue());
+                stagesCountArray.put(oneStage);
             }
+            root.put("stagesCounts", stagesCountArray);
 
-            ret += String.format(
-                "\tWaiting for approval (workflow items): %d\n",
-                workflowItemService.countAll(context));
+            int waitingForApprovalCount = workflowItemService.countAll(context);
+            sb.append(String.format("\tWaiting for approval (workflow items): %d\n", waitingForApprovalCount));
+            root.put("waitingForApproval", waitingForApprovalCount);
 
         } catch (SQLException e) {
             error(e);
         }
 
         try {
-            ret += getObjectSizesInfo(context);
+            sb.append(getObjectSizesInfo(context, root));
             context.complete();
         } catch (SQLException e) {
             error(e);
         }
-        return ret;
-    }
 
-
-    public String getObjectSizesInfo(Context context) throws SQLException {
-        StringBuilder sb = new StringBuilder();
-        sb.append(String.format("Count %-14s: %s\n", "Bitstream",
-                                String.valueOf(bitstreamService.countTotal(context))));
-        sb.append(String.format("Count %-14s: %s\n", "Bundle",
-                                String.valueOf(bundleService.countTotal(context))));
-        sb.append(String.format("Count %-14s: %s\n", "Collection",
-                                String.valueOf(collectionService.countTotal(context))));
-        sb.append(String.format("Count %-14s: %s\n", "Community",
-                                String.valueOf(communityService.countTotal(context))));
-        sb.append(String.format("Count %-14s: %s\n", "MetadataValue",
-                                String.valueOf(metadataValueService.countTotal(context))));
-        sb.append(String.format("Count %-14s: %s\n", "EPerson",
-                                String.valueOf(ePersonService.countTotal(context))));
-        sb.append(String.format("Count %-14s: %s\n", "Item",
-                                String.valueOf(itemService.countTotal(context))));
-        sb.append(String.format("Count %-14s: %s\n", "Handle",
-                                String.valueOf(handleService.countTotal(context))));
-        sb.append(String.format("Count %-14s: %s\n", "Group",
-                                String.valueOf(groupService.countTotal(context))));
-        sb.append(String.format("Count %-14s: %s\n", "BasicWorkflowItem",
-                                String.valueOf(workflowItemService.countAll(context))));
-        sb.append(String.format("Count %-14s: %s\n", "WorkspaceItem",
-                                String.valueOf(workspaceItemService.countTotal(context))));
+        this.setReportJson(root);
         return sb.toString();
     }
 
-    public String getCollectionSizesInfo(final Context context) throws SQLException {
+
+    /**
+     * Appends the entity counts to the human-readable report and puts each of them into {@code jo} under
+     * the key {@code report-diff-fields.json} addresses it by.
+     *
+     * @param context current DSpace session
+     * @param jo the check's JSON report, extended in place
+     * @return the human-readable section of the report
+     * @throws SQLException passed through so that {@link #run(ReportInfo)} records it with
+     *         {@link Check#error(Throwable)} and still finishes the rest of the report
+     */
+    public String getObjectSizesInfo(Context context, JSONObject jo) throws SQLException {
+        StringBuilder sb = new StringBuilder();
+        sb.append(countLine(jo, "Bitstream", "bitstreamsCount", bitstreamService.countTotal(context)));
+        sb.append(countLine(jo, "Bundle", "bundlesCount", bundleService.countTotal(context)));
+        sb.append(countLine(jo, "Collection", "collectionsCount", collectionService.countTotal(context)));
+        sb.append(countLine(jo, "Community", "communitiesCount", communityService.countTotal(context)));
+        sb.append(countLine(jo, "MetadataValue", "metadataValuesCount", metadataValueService.countTotal(context)));
+        sb.append(countLine(jo, "EPerson", "ePersonsCount", ePersonService.countTotal(context)));
+        sb.append(countLine(jo, "Item", "itemsCount", itemService.countTotal(context)));
+        sb.append(countLine(jo, "Handle", "handlesCount", handleService.countTotal(context)));
+        sb.append(countLine(jo, "Group", "groupsCount", groupService.countTotal(context)));
+        sb.append(countLine(jo, "BasicWorkflowItem", "basicWorkflowItemsCount", workflowItemService.countAll(context)));
+        sb.append(countLine(jo, "WorkspaceItem", "workspaceItemsCount", workspaceItemService.countTotal(context)));
+        return sb.toString();
+    }
+
+    /**
+     * Emits one count into both halves of the report: the formatted text line and the JSON key.
+     */
+    private String countLine(JSONObject jo, String displayName, String jsonKey, int count) {
+        jo.put(jsonKey, count);
+        return String.format("Count %-20s: %s\n", displayName, String.valueOf(count));
+    }
+
+    /**
+     * Appends the per-collection sizes to the human-readable report and puts the aggregate numbers into
+     * {@code jo}, which {@link #run(ReportInfo)} stores under {@code collectionsSizesInfo}.
+     *
+     * @param context current DSpace session
+     * @param jo the {@code collectionsSizesInfo} object, extended in place
+     * @return the human-readable section of the report
+     * @throws SQLException passed through, see {@link #getObjectSizesInfo(Context, JSONObject)}
+     */
+    public String getCollectionSizesInfo(final Context context, JSONObject jo) throws SQLException {
         final StringBuffer ret = new StringBuffer();
         List<Map.Entry<Collection, Long>> colBitSizes = collectionService
             .getCollectionsWithBitstreamSizesTotal(context);
@@ -157,31 +195,52 @@ public class ItemCheck extends Check {
                 return 0;
             }
         });
+
+        JSONArray collectionsSizesArray = new JSONArray();
         for (Map.Entry<Collection, Long> row : colBitSizes) {
             Long size = row.getValue();
             total_size += size;
             Collection col = row.getKey();
+            String colPath = CollectionDropDown.collectionPath(context, col);
+            String colSize = FileUtils.byteCountToDisplaySize((long) size);
             ret.append(String.format(
-                "\t%s:  %s\n", CollectionDropDown.collectionPath(context, col),
-                FileUtils.byteCountToDisplaySize((long) size)));
+                "\t%s:  %s\n", colPath, colSize));
+            JSONObject oneColSize = new JSONObject();
+            oneColSize.put("path", colPath);
+            oneColSize.put("size", colSize);
+            collectionsSizesArray.put(oneColSize);
         }
-        ret.append(String.format(
-            "Total size:              %s\n", FileUtils.byteCountToDisplaySize(total_size)));
+        jo.put("collectionSizes", collectionsSizesArray);
 
+        String totalSizeToDisplay = FileUtils.byteCountToDisplaySize(total_size);
         ret.append(String.format(
-            "Resource without policy: %d\n", bitstreamService.countBitstreamsWithoutPolicy(context)));
+            "Total size:              %s\n", totalSizeToDisplay));
+        jo.put("totalSize", totalSizeToDisplay);
 
+        int resourceWOPolicyCount = bitstreamService.countBitstreamsWithoutPolicy(context);
         ret.append(String.format(
-            "Deleted bitstreams:      %d\n", bitstreamService.countDeletedBitstreams(context)));
+            "Resource without policy: %d\n", resourceWOPolicyCount));
+        jo.put("resourceWOPolicy", resourceWOPolicyCount);
+
+        int deletedBitstreamsCount = bitstreamService.countDeletedBitstreams(context);
+        ret.append(String.format(
+            "Deleted bitstreams:      %d\n", deletedBitstreamsCount));
+        jo.put("deletedBitstreams", deletedBitstreamsCount);
 
         String list_str = "";
+        JSONArray orphanBitstreamsArray = new JSONArray();
         List<Bitstream> bitstreamOrphans = bitstreamService.getNotReferencedBitstreams(context);
         for (Bitstream orphan : bitstreamOrphans) {
             UUID id = orphan.getID();
+            JSONObject oneOrphanBitstream = new JSONObject();
+            oneOrphanBitstream.put("uuid", id.toString());
+            orphanBitstreamsArray.put(oneOrphanBitstream);
             list_str += String.format("%s, ", id);
         }
         ret.append(String.format(
             "Orphan bitstreams:       %d [%s]\n", bitstreamOrphans.size(), list_str));
+        jo.put("orphanBitstreamsCount", bitstreamOrphans.size());
+        jo.put("orphanBitstreams", orphanBitstreamsArray);
 
         return ret.toString();
     }

@@ -38,7 +38,9 @@ import jakarta.annotation.PostConstruct;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.apache.commons.lang3.BooleanUtils;
 import org.apache.logging.log4j.Logger;
+import org.dspace.app.statistics.clarin.ClarinMatomoOAITracker;
 import org.dspace.core.Context;
 import org.dspace.services.ConfigurationService;
 import org.dspace.xoai.services.api.cache.XOAICacheService;
@@ -89,6 +91,8 @@ public class DSpaceOAIDataProvider {
     SetRepositoryResolver setRepositoryResolver;
     @Autowired
     ConfigurationService configurationService;
+    @Autowired
+    ClarinMatomoOAITracker matomoOAITracker;
 
     private DSpaceResumptionTokenFormatter resumptionTokenFormat = new DSpaceResumptionTokenFormatter();
 
@@ -135,6 +139,11 @@ public class DSpaceOAIDataProvider {
     public String contextAction(Model model, HttpServletRequest request, HttpServletResponse response,
             @PathVariable("context") String xoaiContext)
             throws IOException, ServletException, TransformerException {
+        // Track OAI statistics
+        if (BooleanUtils.isTrue(configurationService.getBooleanProperty("matomo.track.enabled"))) {
+            matomoOAITracker.trackOAIStatistics(request);
+        }
+
         Context context = null;
         try {
             request.setCharacterEncoding("UTF-8");
@@ -226,6 +235,9 @@ public class DSpaceOAIDataProvider {
             closeContext(context);
             response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
                                "Unexpected error while writing the output. For more information visit the log files.");
+        } catch (Exception e) {
+            log.error("Unexpected exception e: " + e.toString());
+
         } finally {
             closeContext(context);
         }

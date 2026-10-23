@@ -85,10 +85,13 @@ public class TikaTextExtractionFilter
             tika.setMaxStringLength(maxChars); // Tell Tika the maximum number of characters to extract
             extractedText = tika.parseToString(source);
         } catch (IOException e) {
-            System.err.format("Unable to extract text from bitstream in Item %s%n", currentItem.getID().toString());
-            e.printStackTrace(System.err);
-            log.error("Unable to extract text from bitstream in Item {}", currentItem.getID().toString(), e);
-            throw e;
+            // A malformed/non-standard source file (e.g. a PDF with a corrupt header, missing
+            // xref, or truncated content) is a data-quality issue in the bitstream, not a
+            // DSpace fault. Skip text extraction for it instead of failing the whole
+            // filter-media run.
+            log.warn("Unable to extract text from bitstream in Item {}: {}",
+                    currentItem.getHandle(), e.getMessage());
+            return null;
         } catch (OutOfMemoryError oe) {
             System.err.format("OutOfMemoryError occurred when extracting text from bitstream in Item %s. " +
                 "You may wish to enable 'textextractor.use-temp-file'.%n", currentItem.getID().toString());

@@ -20,8 +20,8 @@ import org.dspace.checker.service.ChecksumResultService;
 import org.dspace.checker.service.MostRecentChecksumService;
 import org.dspace.content.Bitstream;
 import org.dspace.core.Context;
+import org.dspace.storage.bitstore.SyncBitstreamStorageServiceImpl;
 import org.dspace.storage.bitstore.factory.StorageServiceFactory;
-import org.dspace.storage.bitstore.service.BitstreamStorageService;
 
 /**
  * <p>
@@ -55,7 +55,7 @@ public final class CheckerCommand {
      * Checksum history Data access object
      */
     private ChecksumHistoryService checksumHistoryService = null;
-    private BitstreamStorageService bitstreamStorageService = null;
+    private SyncBitstreamStorageServiceImpl bitstreamStorageService = null;
     private ChecksumResultService checksumResultService = null;
 
     /**
@@ -86,7 +86,7 @@ public final class CheckerCommand {
     public CheckerCommand(Context context) {
         checksumService = CheckerServiceFactory.getInstance().getMostRecentChecksumService();
         checksumHistoryService = CheckerServiceFactory.getInstance().getChecksumHistoryService();
-        bitstreamStorageService = StorageServiceFactory.getInstance().getBitstreamStorageService();
+        bitstreamStorageService = StorageServiceFactory.getInstance().getSyncBitstreamStorageService();
         checksumResultService = CheckerServiceFactory.getInstance().getChecksumResultService();
         this.context = context;
     }
@@ -245,7 +245,8 @@ public final class CheckerCommand {
         info.setProcessStartDate(Instant.now());
 
         try {
-            Map<String, Object> checksumMap = bitstreamStorageService.computeChecksum(context, info.getBitstream());
+            Bitstream bitstream = info.getBitstream();
+            Map<String, Object> checksumMap = bitstreamStorageService.computeChecksum(context, bitstream);
             if (MapUtils.isNotEmpty(checksumMap)) {
                 info.setBitstreamFound(true);
                 if (checksumMap.containsKey("checksum")) {
@@ -259,6 +260,7 @@ public final class CheckerCommand {
                 // compare new checksum to previous checksum
                 info.setChecksumResult(compareChecksums(info.getExpectedChecksum(), info.getCurrentChecksum()));
 
+                compareSynchronizedCopy(info, bitstream);
             } else {
                 info.setCurrentChecksum("");
                 info.setChecksumResult(getChecksumResultByCode(ChecksumResultCode.BITSTREAM_NOT_FOUND));
@@ -284,6 +286,42 @@ public final class CheckerCommand {
             // record new checksum and comparison result in db
             checksumService.update(context, info);
             checksumHistoryService.addHistory(context, info);
+        }
+    }
+
+    /**
+     * Second checksum pass for a bitstream that is held in two stores at once: the copy in the
+     * mirror store is checksummed as well and a divergence between the two copies is recorded as
+     * {@link ChecksumResultCode#CHECKSUM_SYNC_NO_MATCH}. A bitstream that already failed against the
+     * database is left alone, so the first pass's verdict is not overwritten by this one.
+     *
+     * @param info      the checksum record being filled in, already carrying the first pass's result
+     * @param bitstream the bitstream being checked
+     * @throws SQLException if database error
+     * @throws IOException  if the mirror store cannot be read
+     */
+    protected void compareSynchronizedCopy(MostRecentChecksum info, Bitstream bitstream)
+            throws SQLException, IOException {
+        if (info.getChecksumResult() == null
+                || ChecksumResultCode.CHECKSUM_NO_MATCH == info.getChecksumResult().getResultCode()) {
+            return;
+        }
+
+        int syncStoreNumber = bitstreamStorageService.getSynchronizedStoreNumber(bitstream);
+        if (syncStoreNumber == SyncBitstreamStorageServiceImpl.NO_SYNCHRONIZED_STORE) {
+            return;
+        }
+
+        Map<String, Object> syncChecksumMap =
+                bitstreamStorageService.computeChecksumSpecStore(context, bitstream, syncStoreNumber);
+        if (MapUtils.isEmpty(syncChecksumMap) || !syncChecksumMap.containsKey("checksum")) {
+            return;
+        }
+
+        ChecksumResult syncResult =
+                compareChecksums(info.getCurrentChecksum(), syncChecksumMap.get("checksum").toString());
+        if (ChecksumResultCode.CHECKSUM_MATCH != syncResult.getResultCode()) {
+            info.setChecksumResult(getChecksumResultByCode(ChecksumResultCode.CHECKSUM_SYNC_NO_MATCH));
         }
     }
 

@@ -8,6 +8,7 @@
 package org.dspace.app.mediafilter;
 
 import java.awt.image.BufferedImage;
+import java.io.IOException;
 import java.io.InputStream;
 
 import org.apache.logging.log4j.Logger;
@@ -78,6 +79,13 @@ public class PDFBoxThumbnail extends MediaFilter {
             buf = renderer.renderImage(0);
         } catch (InvalidPasswordException ex) {
             log.error("PDF is encrypted. Cannot create thumbnail (item: {})", currentItem::getHandle);
+            return null;
+        } catch (IOException ex) {
+            // A malformed/non-standard PDF (bad %PDF- header, missing xref, truncated file, etc.)
+            // is a data-quality issue in the source bitstream, not a DSpace fault. Skip the
+            // thumbnail instead of failing the whole filter-media run.
+            log.warn("PDF could not be parsed by PDFBox. Cannot create thumbnail (item: {}): {}",
+                    currentItem::getHandle, ex::getMessage);
             return null;
         }
 

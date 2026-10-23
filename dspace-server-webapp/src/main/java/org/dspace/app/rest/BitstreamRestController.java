@@ -9,9 +9,11 @@ package org.dspace.app.rest;
 
 import static org.dspace.app.rest.utils.ContextUtil.obtainContext;
 import static org.dspace.app.rest.utils.RegexUtils.REGEX_REQUESTMAPPING_IDENTIFIER_AS_UUID;
+import static org.dspace.core.Constants.CONTENT_BUNDLE_NAME;
 import static org.springframework.web.bind.annotation.RequestMethod.PUT;
 
 import java.io.IOException;
+import java.net.URI;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.UUID;
@@ -22,12 +24,11 @@ import jakarta.ws.rs.core.Response;
 import org.apache.catalina.connector.ClientAbortException;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
-import org.dspace.app.requestitem.RequestItem;
-import org.dspace.app.requestitem.service.RequestItemService;
 import org.dspace.app.rest.converter.ConverterService;
 import org.dspace.app.rest.exception.DSpaceBadRequestException;
 import org.dspace.app.rest.model.BitstreamRest;
 import org.dspace.app.rest.model.hateoas.BitstreamResource;
+import org.dspace.app.rest.security.ClarinBitstreamAccessTokenSecurityBean;
 import org.dspace.app.rest.utils.ContextUtil;
 import org.dspace.app.rest.utils.HttpHeadersInitializer;
 import org.dspace.app.rest.utils.Utils;
@@ -41,10 +42,13 @@ import org.dspace.disseminate.service.CitationDocumentService;
 import org.dspace.eperson.EPerson;
 import org.dspace.services.ConfigurationService;
 import org.dspace.services.EventService;
+import org.dspace.storage.bitstore.S3BitStoreService;
+import org.dspace.storage.bitstore.service.S3DirectDownloadService;
 import org.dspace.usage.UsageEvent;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.rest.webmvc.ResourceNotFoundException;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PostAuthorize;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -95,13 +99,19 @@ public class BitstreamRestController {
     private ConfigurationService configurationService;
 
     @Autowired
-    private RequestItemService requestItemService;
+    private ClarinBitstreamAccessTokenSecurityBean clarinBitstreamAccessTokenSecurity;
 
     @Autowired
     ConverterService converter;
 
     @Autowired
     Utils utils;
+
+    @Autowired
+    private S3DirectDownloadService s3DirectDownloadService;
+
+    @Autowired
+    private S3BitStoreService s3BitStoreService;
 
     /**
      * Retrieve bitstream. An access token (created by request a copy for some files, if enabled) can optionally
@@ -116,7 +126,11 @@ public class BitstreamRestController {
      * @throws SQLException
      * @throws AuthorizeException
      */
-    @PreAuthorize("#accessToken != null|| hasPermission(#uuid, 'BITSTREAM', 'READ')")
+    // CLARIN: the access token is accepted only through clarinBitstreamAccessTokenSecurity. The token opens
+    // only bitstreams of the item of its request, and the CLARIN licence still applies. Do not restore the
+    // short-circuiting "or #accessToken != null".
+    @PreAuthorize("hasPermission(#uuid, 'BITSTREAM', 'READ') "
+        + "or @clarinBitstreamAccessTokenSecurity.canDownloadWithAccessToken(#uuid, #accessToken)")
     @RequestMapping( method = {RequestMethod.GET, RequestMethod.HEAD}, value = "content")
     public ResponseEntity retrieve(@PathVariable UUID uuid,
                                    @Parameter(value = "accessToken", required = false) String accessToken,
@@ -147,10 +161,10 @@ public class BitstreamRestController {
         boolean authorizedByAccessToken = false;
         // There may be a way of checking enabled in preauth
         if (StringUtils.isNotBlank(accessToken) && requestACopyEnabled()) {
-            RequestItem requestItem = requestItemService.findByAccessToken(context, accessToken);
             // Try authorize by token. An AuthorizeException will be thrown if the token is invalid, expired,
-            // for the wrong bitstream, or does not match (see RequestItemService)
-            requestItemService.authorizeAccessByAccessToken(context, requestItem, bit, accessToken);
+            // for the wrong bitstream or item, does not match, or the CLARIN licence is not agreed
+            // (see ClarinBitstreamAccessTokenSecurityBean)
+            clarinBitstreamAccessTokenSecurity.authorizeAccessToken(context, bit, accessToken);
             authorizedByAccessToken = true;
             log.debug("Authorize access by token={} bitstream={}", accessToken, bit.getID());
         }
@@ -175,6 +189,11 @@ public class BitstreamRestController {
             // Check if a citation coverpage is valid for this download
             long filesize = bit.getSizeBytes();
             Boolean citationEnabledForBitstream = citationDocumentService.isCitationEnabledForBitstream(bit, context);
+
+            // Only ORIGINAL bundle files are redirected; a redirect breaks bundles the UI reads back itself.
+            // Resolved here because reading the bundles needs the context, closed further down.
+            boolean redirectToS3 = s3DirectDownloadEnabled() && bit.getBundles().stream()
+                    .anyMatch(bundle -> CONTENT_BUNDLE_NAME.equals(bundle.getName()));
 
 
 
@@ -230,6 +249,10 @@ public class BitstreamRestController {
             if (httpHeadersInitializer.isValid()) {
                 HttpHeaders httpHeaders = httpHeadersInitializer.initialiseHeaders();
 
+                if (redirectToS3) {
+                    return redirectToS3DownloadUrl(httpHeaders, name, bit.getInternalId());
+                }
+
                 if (RequestMethod.HEAD.name().equals(request.getMethod())) {
                     log.debug("HEAD request - no response body");
                     return ResponseEntity.ok().headers(httpHeaders).build();
@@ -245,6 +268,40 @@ public class BitstreamRestController {
             throw e;
         }
         return null;
+    }
+
+    private boolean s3DirectDownloadEnabled() {
+        return configurationService.getBooleanProperty("s3.download.direct.enabled")
+                && configurationService.getBooleanProperty("assetstore.s3.enabled");
+    }
+
+    /** Answer with a 302 to a presigned S3 URL instead of streaming the file through this backend. */
+    private ResponseEntity redirectToS3DownloadUrl(HttpHeaders httpHeaders, String bitName, String bitInternalId) {
+        try {
+            String bucket = configurationService.getProperty("assetstore.s3.bucketName", "");
+            if (StringUtils.isBlank(bucket)) {
+                throw new IllegalStateException("S3 bucket name is not configured");
+            }
+
+            String bitstreamPath = s3BitStoreService.getFullKey(bitInternalId);
+            if (StringUtils.isBlank(bitstreamPath)) {
+                throw new IllegalStateException("Failed to get bitstream path for internal ID: " + bitInternalId);
+            }
+
+            int expirationTime = configurationService.getIntProperty("s3.download.direct.expiration", 3600);
+            String presignedUrl =
+                    s3DirectDownloadService.generatePresignedUrl(bucket, bitstreamPath, expirationTime, bitName);
+
+            if (StringUtils.isBlank(presignedUrl)) {
+                throw new IllegalStateException("Failed to generate presigned URL for bitstream: " + bitInternalId);
+            }
+
+            httpHeaders.setLocation(URI.create(presignedUrl));
+            return ResponseEntity.status(HttpStatus.FOUND).headers(httpHeaders).build();
+        } catch (Exception e) {
+            throw new IllegalStateException(
+                    "Error generating S3 presigned URL for bitstream: " + bitInternalId, e);
+        }
     }
 
     /**

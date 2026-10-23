@@ -73,6 +73,12 @@ public class EPerson extends CacheableDSpaceObject implements DSpaceObjectLegacy
     @ManyToMany(fetch = FetchType.LAZY, mappedBy = "epeople")
     private final List<Group> groups = new ArrayList<>();
 
+    @Column(name = "welcome_info")
+    private String welcomeInfo;
+
+    @Column(name = "can_edit_submission_metadata")
+    private Boolean canEditSubmissionMetadata;
+
     /**
      * The e-mail field (for sorting)
      */
@@ -441,6 +447,22 @@ public class EPerson extends CacheableDSpaceObject implements DSpaceObjectLegacy
 
     public boolean hasPasswordSet() {
         return StringUtils.isNotBlank(getPassword());
+    }
+
+    public String getWelcomeInfo() {
+        return welcomeInfo;
+    }
+
+    public void setWelcomeInfo(String welcomeInfo) {
+        this.welcomeInfo = welcomeInfo;
+    }
+
+    public Boolean getCanEditSubmissionMetadata() {
+        return canEditSubmissionMetadata;
+    }
+
+    public void setCanEditSubmissionMetadata(Boolean canEditSubmissionMetadata) {
+        this.canEditSubmissionMetadata = canEditSubmissionMetadata;
     }
 
 }

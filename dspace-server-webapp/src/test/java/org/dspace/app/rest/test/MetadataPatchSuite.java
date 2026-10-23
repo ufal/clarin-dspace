@@ -11,8 +11,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.ws.rs.core.MediaType;
 import org.junit.Assert;
 import org.springframework.test.web.servlet.MockMvc;
@@ -23,6 +27,8 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * Utility class for performing metadata patch tests sourced from a common json file (see constructor).
  */
 public class MetadataPatchSuite {
+    static String PROVENANCE = "dc.description.provenance";
+
     private final ObjectMapper mapper;
 
     private final JsonNode suite;
@@ -36,6 +42,19 @@ public class MetadataPatchSuite {
     public MetadataPatchSuite(ObjectMapper mapper) throws Exception {
         this.mapper = mapper;
         suite = mapper.readTree(getClass().getResourceAsStream("metadata-patch-suite.json"));
+    }
+
+    /**
+     * Initializes the suite by parsing a specific json file of tests (e.g. the item variant, whose
+     * expectations include the CLARIN provenance values written on every item metadata patch).
+     *
+     * @param mapper the initialized ObjectMapper (e.g. from Spring Boot)
+     * @param name the classpath-relative json resource with the tests.
+     * @throws Exception if there is an error reading the file.
+     */
+    public MetadataPatchSuite(ObjectMapper mapper, String name) throws Exception {
+        this.mapper = mapper;
+        suite = mapper.readTree(getClass().getResourceAsStream(name));
     }
 
     /**
@@ -82,7 +101,19 @@ public class MetadataPatchSuite {
         if (expectedStatus >= 200 && expectedStatus < 300) {
           String responseBody = resultActions.andReturn().getResponse().getContentAsString();
           JsonNode responseJson =  mapper.readTree(responseBody);
-          String responseMetadata = responseJson.get("metadata").toString();
+          JsonNode responseMetadataJson = responseJson.get("metadata");
+          if (responseMetadataJson.get(PROVENANCE) != null) {
+              // The provenance value embeds the action timestamp; strip it before comparing.
+              String rspProvenance = responseMetadataJson.get(PROVENANCE).toString();
+              String datePattern = "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z";
+              Matcher matcher = Pattern.compile(datePattern).matcher(rspProvenance);
+              String rspModifiedProvenance = rspProvenance;
+              while (matcher.find()) {
+                  rspModifiedProvenance = rspModifiedProvenance.replaceAll(matcher.group(0), "");
+              }
+              ((ObjectNode) responseMetadataJson).set(PROVENANCE, mapper.readTree(rspModifiedProvenance));
+          }
+          String responseMetadata = responseMetadataJson.toString();
           if (!responseMetadata.equals(expectedMetadata)) {
               Assert.fail("Expected metadata in " + verb + " response: " + expectedMetadata
                       + "\nGot metadata in " + verb + " response: " + responseMetadata);

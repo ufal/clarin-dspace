@@ -48,11 +48,13 @@ import org.dspace.content.service.ItemService;
 import org.dspace.content.service.MetadataSchemaService;
 import org.dspace.content.service.RelationshipService;
 import org.dspace.content.service.WorkspaceItemService;
+import org.dspace.content.service.clarin.ClarinItemService;
 import org.dspace.content.virtual.VirtualMetadataPopulator;
 import org.dspace.contentreport.QueryPredicate;
 import org.dspace.core.Constants;
 import org.dspace.core.Context;
 import org.dspace.core.LogHelper;
+import org.dspace.core.ProvenanceService;
 import org.dspace.discovery.DiscoverQuery;
 import org.dspace.discovery.DiscoverResult;
 import org.dspace.discovery.SearchService;
@@ -108,6 +110,8 @@ public class ItemServiceImpl extends DSpaceObjectServiceImpl<Item> implements It
 
     @Autowired(required = true)
     protected CommunityService communityService;
+    @Autowired(required = true)
+    protected ProvenanceService provenanceService;
     @Autowired(required = true)
     protected GroupService groupService;
     @Autowired(required = true)
@@ -181,6 +185,9 @@ public class ItemServiceImpl extends DSpaceObjectServiceImpl<Item> implements It
 
     @Autowired
     private VersionHistoryService versionHistoryService;
+
+    @Autowired(required = true)
+    private ClarinItemService clarinItemService;
 
     protected ItemServiceImpl() {
     }
@@ -679,6 +686,11 @@ public class ItemServiceImpl extends DSpaceObjectServiceImpl<Item> implements It
         }
 
         if (item.isMetadataModified() || item.isModified()) {
+            // Derive dc.date.issued from local.approximateDate.issued when metadata changes
+            if (item.isMetadataModified()) {
+                clarinItemService.updateItemDatesMetadata(context, item);
+            }
+
             // Set the last modified date
             item.setLastModified(Instant.now());
 
@@ -1195,11 +1207,17 @@ public class ItemServiceImpl extends DSpaceObjectServiceImpl<Item> implements It
             context.addEvent(new Event(Event.MODIFY, Constants.ITEM, item.getID(),
                                        null, getIdentifiers(context, item)));
         }
+        provenanceService.moveItem(context, item, from);
     }
 
     @Override
     public boolean hasUploadedFiles(Item item) throws SQLException {
-        List<Bundle> bundles = getBundles(item, "ORIGINAL");
+        return hasUploadedFiles(item, "ORIGINAL");
+    }
+
+    @Override
+    public boolean hasUploadedFiles(Item item, String bundleName) throws SQLException {
+        List<Bundle> bundles = getBundles(item, bundleName);
         for (Bundle bundle : bundles) {
             if (CollectionUtils.isNotEmpty(bundle.getBitstreams())) {
                 return true;
