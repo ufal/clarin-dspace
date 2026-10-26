@@ -166,7 +166,7 @@ public class BitstreamRestController {
             // (see ClarinBitstreamAccessTokenSecurityBean)
             clarinBitstreamAccessTokenSecurity.authorizeAccessToken(context, bit, accessToken);
             authorizedByAccessToken = true;
-            log.debug("Authorize access by token={} bitstream={}", accessToken, bit.getID());
+            log.debug("Authorized access to bitstream {} by access token", bit.getID());
         }
         // If an authorization error was encountered it will be rethrown by this method even if the eperson
         // could technically READ the bitstream normally. This is for consistency and clarify of usage - if we
