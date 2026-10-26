@@ -25,7 +25,11 @@ CREATE TABLE IF NOT EXISTS authentication_identity
     CONSTRAINT authentication_identity_eperson_id_fkey
         FOREIGN KEY (eperson_id) REFERENCES eperson (uuid) ON DELETE CASCADE,
     CONSTRAINT authentication_identity_unique
-        UNIQUE (auth_method, provider, user_id)
+        UNIQUE (auth_method, provider, user_id),
+    -- an EPerson must not be linked to more than one identity of the same auth_method/provider; also
+    -- guards against two concurrent first logins with different user_id linking to the same EPerson
+    CONSTRAINT authentication_identity_eperson_auth_method_provider_unique
+        UNIQUE (eperson_id, auth_method, provider)
 );
 
 CREATE INDEX IF NOT EXISTS authentication_identity_eperson_id_idx ON authentication_identity (eperson_id);

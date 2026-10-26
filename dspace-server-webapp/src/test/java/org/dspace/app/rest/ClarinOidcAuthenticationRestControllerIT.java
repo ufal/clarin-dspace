@@ -58,6 +58,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.test.web.servlet.MvcResult;
 
 /**
@@ -76,6 +77,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     private final static String LAST_NAME = "family_name";
     private final static String ORGANIZATION = "voperson_external_affiliation";
     private final static String GROUPS = "eduperson_entitlement";
+    private final static String EMAIL_VERIFIED = "email_verified";
     private final static String PROVIDER = "oidc";
 
     private OidcClient originalOidcClient;
@@ -89,6 +91,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     private final List<EPerson> registeredEPersons = new ArrayList<>();
 
     @Autowired
+    @Qualifier("clarinOidcAuthentication")
     private OidcAuthenticationBean oidcAuthentication;
 
     @Autowired
@@ -108,13 +111,18 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         originalOidcClient = oidcAuthentication.getOidcClient();
         oidcAuthentication.setOidcClient(oidcClientMock);
 
+        // use CLARIN extension of the OIDC plugin, see org.dspace.authenticate.OidcAuthentication
+        configurationService.setProperty("authentication-oidc.type", "clarin");
+
         configurationService.setProperty("authentication-oidc.user-info.email", EMAIL);
         configurationService.setProperty("authentication-oidc.user-info.first-name", FIRST_NAME);
         configurationService.setProperty("authentication-oidc.user-info.last-name", LAST_NAME);
         configurationService.setProperty("authentication-oidc.user-info.id", SUB);
         configurationService.setProperty("authentication-oidc.user-info.organization", ORGANIZATION);
+        configurationService.setProperty("authentication-oidc.user-info.email-verified", EMAIL_VERIFIED);
         configurationService.setProperty("authentication-oidc.provider", PROVIDER);
         configurationService.setProperty("authentication-oidc.can-self-register", "true");
+        configurationService.setProperty("authentication-oidc.require-verified-email", "true");
         // disabled by default, enabled explicitly by the tests that need it
         configurationService.setProperty("authentication-oidc.user-info.groups", null);
         configurationService.setProperty("authentication-oidc.group.staff", null);
@@ -129,10 +137,13 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     @After
     public void after() throws Exception {
         oidcAuthentication.setOidcClient(originalOidcClient);
+        configurationService.setProperty("authentication-oidc.type", null);
 
         context.turnOffAuthorisationSystem();
         // user_registration has no foreign key to eperson, remove the registrations explicitly
-        for (EPerson ePerson : ePersons) {
+        List<EPerson> registrationOwners = new ArrayList<>(ePersons);
+        registrationOwners.addAll(registeredEPersons);
+        for (EPerson ePerson : registrationOwners) {
             for (ClarinUserRegistration registration :
                     clarinUserRegistrationService.findByEPersonUUID(context, ePerson.getID())) {
                 clarinUserRegistrationService.delete(context, registration);
@@ -270,6 +281,56 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     }
 
     @Test
+    public void testEPersonNotLinkedByEmailWhenNotVerified() throws Exception {
+        EPerson ePerson = createEPerson("perun@email.it", true);
+
+        Map<String, Object> userInfo = new HashMap<>();
+        userInfo.put(SUB, "perun1");
+        userInfo.put(EMAIL, "perun@email.it");
+        userInfo.put(EMAIL_VERIFIED, false);
+        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
+
+        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+
+        assertThat(authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER, "perun1"), nullValue());
+        assertThat(ePersonService.find(context, ePerson.getID()).getEmail(), equalTo("perun@email.it"));
+    }
+
+    @Test
+    public void testEPersonNotLinkedByEmailWhenVerifiedClaimMissing() throws Exception {
+        createEPerson("perun@email.it", true);
+
+        Map<String, Object> userInfo = new HashMap<>();
+        userInfo.put(SUB, "perun1");
+        userInfo.put(EMAIL, "perun@email.it");
+        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
+
+        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+
+        assertThat(authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER, "perun1"), nullValue());
+    }
+
+    @Test
+    public void testEPersonLinkedByEmailWhenVerificationNotRequired() throws Exception {
+        configurationService.setProperty("authentication-oidc.require-verified-email", "false");
+        EPerson ePerson = createEPerson("perun@email.it", true);
+
+        Map<String, Object> userInfo = new HashMap<>();
+        userInfo.put(SUB, "perun1");
+        userInfo.put(EMAIL, "perun@email.it");
+        userInfo.put(EMAIL_VERIFIED, false);
+        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
+
+        assertThat(login(), equalTo(ePerson.getID().toString()));
+        assertThat(authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER, "perun1").getEPerson(),
+                equalTo(ePerson));
+    }
+
+    @Test
     public void testNewEPersonRegistered() throws Exception {
         Map<String, Object> userInfo = new HashMap<>();
         userInfo.put(SUB, "perun1");
@@ -374,14 +435,16 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     }
 
     @Test
-    public void testOrganizationNotChangedWhenMissing() throws Exception {
+    public void testOrganizationSetToUnknownWhenMissingAndNoRegistration() throws Exception {
         EPerson ePerson = createEPerson("perun@email.it", true);
         createIdentity(ePerson, PROVIDER, "perun1");
 
         mockUserInfo("perun1", "perun@email.it", null);
         login();
 
-        assertThat(findRegistrations(ePerson), empty());
+        List<ClarinUserRegistration> registrations = findRegistrations(ePerson);
+        assertThat(registrations, hasSize(1));
+        assertThat(registrations.get(0).getOrganization(), equalTo(ClarinUserRegistration.UNKNOWN_USER_REGISTRATION));
     }
 
     @Test
@@ -543,13 +606,14 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     }
 
     @Test
-    public void testWithoutSubFallsBackToEmail() throws Exception {
-        EPerson ePerson = createEPerson("perun@email.it", true);
+    public void testLoginFailsWithoutSub() throws Exception {
+        createEPerson("perun@email.it", true);
 
         when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(Map.of(EMAIL, "perun@email.it"));
 
-        assertThat(login(), equalTo(ePerson.getID().toString()));
-        assertThat(authenticationIdentityService.findByEPerson(context, ePerson), empty());
+        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
     }
 
     private String login() throws Exception {
@@ -574,6 +638,9 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         Map<String, Object> userInfo = new HashMap<>();
         userInfo.put(SUB, sub);
         userInfo.put(EMAIL, email);
+        // most IdPs verify the email before issuing it in a claim; tests covering the unverified case
+        // build their own userInfo map instead of using this helper
+        userInfo.put(EMAIL_VERIFIED, true);
         if (organization != null) {
             userInfo.put(ORGANIZATION, organization);
         }

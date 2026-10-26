@@ -26,7 +26,8 @@ import org.dspace.eperson.EPerson;
 
 /**
  * Entity representing an external authentication identity (e.g. OIDC subject) linked to an EPerson.
- * The combination of authMethod, provider and userId is unique.
+ * The combination of authMethod, provider and userId is unique, and so is the combination of ePerson,
+ * authMethod and provider: an EPerson must not be linked to more than one identity of the same provider.
  *
  * @author Milan Kuchtiak
  */

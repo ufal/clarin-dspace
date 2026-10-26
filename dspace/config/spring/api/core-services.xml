@@ -169,7 +169,9 @@
     <bean class="org.dspace.discovery.indexobject.MetadataFieldIndexFactoryImpl" autowire-candidate="true"/>
 
     <!-- OIDC Authentication -->
-    <bean class="org.dspace.authenticate.clarin.ClarinOidcAuthenticationBean" id="oidcAuthentication"/>
+    <bean class="org.dspace.authenticate.OidcAuthenticationBean" id="oidcAuthentication" primary="true"/>
+    <!-- The CLARIN extension of OidcAuthenticationBean, only used when authentication-oidc.type = clarin -->
+    <bean class="org.dspace.authenticate.clarin.ClarinOidcAuthenticationBean" id="clarinOidcAuthentication"/>
     <bean class="org.dspace.authenticate.oidc.impl.OidcClientImpl" />
 
     <bean class="org.dspace.authorize.ValidatePasswordServiceImpl"/>
