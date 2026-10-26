@@ -67,13 +67,12 @@ public class ClarinOidcAuthenticationBean extends OidcAuthenticationBean {
     @Override
     protected int authenticateWithUserInfo(Context context, Map<String, Object> userInfo, HttpServletRequest request)
             throws SQLException {
-
-        String userId = getAttributeAsString(userInfo, getUserIdAttribute());
+        String userIdAttribute = getUserIdAttribute();
+        String userId = StringUtils.isBlank(userIdAttribute) || userInfo.get(userIdAttribute) == null
+                ? null : getAttributeAsString(userInfo, userIdAttribute);
         if (StringUtils.isBlank(userId)) {
-            // not expected, the "sub" claim is mandatory in OIDC
-            log.warn("No user ID attribute '{}' found in the user info attributes, falling back to email",
-                    getUserIdAttribute());
-            return super.authenticateWithUserInfo(context, userInfo, request);
+            log.warn("No user ID attribute '{}' found in the user info attributes", getUserIdAttribute());
+            return NO_SUCH_USER;
         }
         String provider = getProvider();
         String email = getAttributeAsString(userInfo, getEmailAttribute());
@@ -328,7 +327,10 @@ public class ClarinOidcAuthenticationBean extends OidcAuthenticationBean {
             throws SQLException, AuthorizeException {
 
         if (StringUtils.isBlank(organization)) {
-            return;
+            if (!clarinUserRegistrationService.findByEPersonUUID(context, ePerson.getID()).isEmpty()) {
+                return;
+            }
+            organization = ClarinUserRegistration.UNKNOWN_USER_REGISTRATION;
         }
         context.turnOffAuthorisationSystem();
         try {
