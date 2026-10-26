@@ -10,8 +10,11 @@ package org.dspace.authenticate.clarin;
 import static org.dspace.content.clarin.AuthenticationIdentity.AUTH_METHOD_OIDC;
 
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 import javax.servlet.http.HttpServletRequest;
 
 import org.apache.commons.lang3.StringUtils;
@@ -25,6 +28,8 @@ import org.dspace.content.service.clarin.AuthenticationIdentityService;
 import org.dspace.content.service.clarin.ClarinUserRegistrationService;
 import org.dspace.core.Context;
 import org.dspace.eperson.EPerson;
+import org.dspace.eperson.Group;
+import org.dspace.eperson.service.GroupService;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -56,6 +61,9 @@ public class ClarinOidcAuthenticationBean extends OidcAuthenticationBean {
     @Autowired
     private ClarinUserRegistrationService clarinUserRegistrationService;
 
+    @Autowired
+    private GroupService groupService;
+
     @Override
     protected int authenticateWithUserInfo(Context context, Map<String, Object> userInfo, HttpServletRequest request)
             throws SQLException {
@@ -69,7 +77,7 @@ public class ClarinOidcAuthenticationBean extends OidcAuthenticationBean {
         }
         String provider = getProvider();
         String email = getAttributeAsString(userInfo, getEmailAttribute());
-        String organization = getAttributeAsString(userInfo, getOrganizationAttribute());
+        String organization = getAttributeAsFirstValue(userInfo, getOrganizationAttribute());
 
         try {
             // 1. find the EPerson by the identity
@@ -77,7 +85,7 @@ public class ClarinOidcAuthenticationBean extends OidcAuthenticationBean {
                     authenticationIdentityService.find(context, AUTH_METHOD_OIDC, provider, userId);
             if (identity != null) {
                 EPerson ePerson = identity.getEPerson();
-                logIn(context, ePerson, request);
+                logIn(context, ePerson, userInfo, request);
                 // current user is set to the identity owner, who is allowed to update it
                 authenticationIdentityService.updateLastLogin(context, identity);
                 updateEmail(context, ePerson, email);
@@ -94,7 +102,7 @@ public class ClarinOidcAuthenticationBean extends OidcAuthenticationBean {
             // 2. link the identity to the existing EPerson with the same email
             EPerson ePerson = ePersonService.findByEmail(context, email);
             if (ePerson != null) {
-                return linkEPerson(context, ePerson, provider, userId, organization, request);
+                return linkEPerson(context, ePerson, userInfo, provider, userId, organization, request);
             }
 
             // 3. register a new EPerson
@@ -112,8 +120,9 @@ public class ClarinOidcAuthenticationBean extends OidcAuthenticationBean {
         }
     }
 
-    private int linkEPerson(Context context, EPerson ePerson, String provider, String userId, String organization,
-                            HttpServletRequest request) throws SQLException, AuthorizeException {
+    private int linkEPerson(Context context, EPerson ePerson, Map<String, Object> userInfo, String provider,
+                            String userId, String organization, HttpServletRequest request)
+            throws SQLException, AuthorizeException {
 
         // the EPerson already linked to another identity of this provider must not be taken over
         List<AuthenticationIdentity> identities =
@@ -131,7 +140,7 @@ public class ClarinOidcAuthenticationBean extends OidcAuthenticationBean {
             context.restoreAuthSystemState();
         }
 
-        logIn(context, ePerson, request);
+        logIn(context, ePerson, userInfo, request);
         updateOrganization(context, ePerson, organization);
         log.info("EPerson {} found by email was linked to the OIDC identity {}", ePerson.getID(), userId);
         return SUCCESS;
@@ -171,7 +180,7 @@ public class ClarinOidcAuthenticationBean extends OidcAuthenticationBean {
                     ClarinUserRegistration.UNKNOWN_USER_REGISTRATION);
             clarinUserRegistrationService.create(context, clarinUserRegistration);
 
-            logIn(context, ePerson, request);
+            logIn(context, ePerson, userInfo, request);
             context.dispatchEvents();
             log.info("New EPerson {} was registered for the OIDC identity {}", ePerson.getID(), userId);
             return SUCCESS;
@@ -180,9 +189,100 @@ public class ClarinOidcAuthenticationBean extends OidcAuthenticationBean {
         }
     }
 
-    private void logIn(Context context, EPerson ePerson, HttpServletRequest request) {
+    private void logIn(Context context, EPerson ePerson, Map<String, Object> userInfo, HttpServletRequest request)
+            throws SQLException {
         request.setAttribute(OIDC_AUTHENTICATED, true);
+        resolveSpecialGroups(context, userInfo);
         logInEPerson(context, ePerson);
+    }
+
+    /**
+     * Map the OIDC groups (attribute configured by authentication-oidc.user-info.groups) to DSpace groups
+     * (authentication-oidc.group.&lt;group value&gt;), and add the default authentication group
+     * (authentication-oidc.default.auth.group), caching them all as the context's special groups,
+     * the same way {@link ClarinShibAuthentication} does for Shibboleth attributes.
+     * The OIDC group claims are only available here, during the user info exchange, so unlike
+     * Shibboleth the special groups cannot be recomputed later from the request on every call
+     * to {@link #getSpecialGroups}.
+     */
+    private void resolveSpecialGroups(Context context, Map<String, Object> userInfo) throws SQLException {
+        String groupsAttribute = getGroupsAttribute();
+        if (StringUtils.isNotBlank(groupsAttribute)) {
+            for (String rawGroup : getAttributeAsList(userInfo, groupsAttribute)) {
+                String externalGroup = stripAuthoritySuffix(rawGroup);
+                String[] groupNames =
+                        configurationService.getArrayProperty("authentication-oidc.group." + externalGroup);
+                if (groupNames == null || groupNames.length == 0) {
+                    log.debug("No DSpace group mapping found for the OIDC group '{}', check " +
+                            "authentication-oidc.group.{} in authentication-oidc.cfg", externalGroup, externalGroup);
+                    continue;
+                }
+                for (String groupName : groupNames) {
+                    addSpecialGroup(context, groupName, "group '" + externalGroup + "'");
+                }
+            }
+        }
+
+        String defaultAuthGroup = configurationService.getProperty("authentication-oidc.default.auth.group");
+        if (StringUtils.isNotBlank(defaultAuthGroup)) {
+            addSpecialGroup(context, defaultAuthGroup, "authentication-oidc.default.auth.group");
+        }
+    }
+
+    /**
+     * Strips the authority suffix from a group value, i.e. everything from the first '#' onwards. AARC-style
+     * eduPersonEntitlement URNs append the responsible authority there (e.g. the issuing Perun instance), which
+     * is constant across all entitlements of the same IdP and, unlike the rest of the URN, often contains
+     * spaces that would otherwise have to be escaped in the authentication-oidc.group.&lt;group value&gt;
+     * configuration key. A value without '#' is returned unchanged.
+     */
+    private String stripAuthoritySuffix(String group) {
+        int hashIndex = group.indexOf('#');
+        return (hashIndex >= 0 ? group.substring(0, hashIndex) : group).trim();
+    }
+
+    /**
+     * Find the DSpace group by name and, if found, add it to the context's special groups.
+     *
+     * @param context   DSpace context
+     * @param groupName DSpace group name, matched exactly (case sensitive)
+     * @param source    description of where the group name came from, used in the warning when not found
+     */
+    private void addSpecialGroup(Context context, String groupName, String source) throws SQLException {
+        Group group = groupService.findByName(context, groupName.trim());
+        if (group != null) {
+            context.setSpecialGroup(group.getID());
+        } else {
+            log.warn("DSpace group '{}' configured by {} was not found", groupName.trim(), source);
+        }
+    }
+
+    /**
+     * Returns the values of the given user info attribute as a list of strings, whether the attribute is a
+     * single value (e.g. a string claim) or a JSON array claim (deserialized as a List).
+     */
+    @SuppressWarnings("unchecked")
+    private List<String> getAttributeAsList(Map<String, Object> userInfo, String attribute) {
+        if (StringUtils.isBlank(attribute) || !userInfo.containsKey(attribute)) {
+            return List.of();
+        }
+        Object value = userInfo.get(attribute);
+        if (value instanceof List) {
+            return ((List<Object>) value).stream()
+                    .filter(Objects::nonNull)
+                    .map(String::valueOf)
+                    .collect(Collectors.toList());
+        }
+        return value != null ? List.of(String.valueOf(value)) : List.of();
+    }
+
+    /**
+     * Returns the first value of a user info attribute that may contain multiple values, either as a JSON
+     * array claim or as a single comma-separated string (e.g. multiple organization affiliations).
+     */
+    private String getAttributeAsFirstValue(Map<String, Object> userInfo, String attribute) {
+        List<String> values = getAttributeAsList(userInfo, attribute);
+        return values.isEmpty() ? null : values.get(0).split(",", 2)[0].trim();
     }
 
     /**
@@ -273,6 +373,16 @@ public class ClarinOidcAuthenticationBean extends OidcAuthenticationBean {
     }
 
     /**
+     * Returns the name of the user info attribute containing the user's groups, used to assign special
+     * groups (authentication-oidc.group.&lt;group value&gt;), not set by default.
+     *
+     * @return groups attribute name or null
+     */
+    protected String getGroupsAttribute() {
+        return configurationService.getProperty("authentication-oidc.user-info.groups");
+    }
+
+    /**
      * Returns the stable label of the OIDC provider, stored together with the user ID.
      * It must not be changed after users have logged in, otherwise they won't be found by their user ID.
      *
@@ -280,5 +390,27 @@ public class ClarinOidcAuthenticationBean extends OidcAuthenticationBean {
      */
     protected String getProvider() {
         return configurationService.getProperty("authentication-oidc.provider", DEFAULT_PROVIDER);
+    }
+
+    /**
+     * Returns the special groups resolved from the OIDC groups and the default authentication group during
+     * {@link #authenticateWithUserInfo} and cached on the context, either just now (fresh login) or restored
+     * from the JWT token special groups claim of a previous OIDC login (see SpecialGroupClaimProvider).
+     */
+    @Override
+    public List<Group> getSpecialGroups(Context context, HttpServletRequest request) throws SQLException {
+        if (request == null || context.getCurrentUser() == null) {
+            return Collections.emptyList();
+        }
+        return context.getSpecialGroups();
+    }
+
+    /**
+     * Always true, as in {@link ClarinShibAuthentication}, because the context's authentication method is not
+     * necessarily "oidc" when the special groups are restored from the JWT token of a previous OIDC login.
+     */
+    @Override
+    public boolean areSpecialGroupsApplicable(Context context, HttpServletRequest request) {
+        return true;
     }
 }
