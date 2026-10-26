@@ -57,6 +57,11 @@ public class OidcAuthentication implements AuthenticationMethod {
     }
 
     @Override
+    public boolean areSpecialGroupsApplicable(Context context, HttpServletRequest request) {
+        return getOidcAuthentication().areSpecialGroupsApplicable(context, request);
+    }
+
+    @Override
     public int authenticate(Context context, String username, String password, String realm, HttpServletRequest request)
         throws SQLException {
         return getOidcAuthentication().authenticate(context, username, password, realm, request);
