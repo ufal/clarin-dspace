@@ -38,8 +38,8 @@ import org.springframework.beans.factory.annotation.Autowired;
  * table, instead of the email which may change:
  * <ol>
  *     <li>the EPerson linked to the (oidc, provider, user ID) identity is logged in</li>
- *     <li>otherwise the identity is linked to the existing EPerson with the same email (e.g. created by Shibboleth)
- *     </li>
+ *     <li>otherwise, if the provider confirms the email is verified (see {@link #isEmailVerified}), the identity
+ *     is linked to the existing EPerson with the same email (e.g. created by Shibboleth)</li>
  *     <li>otherwise a new EPerson is registered, together with the identity and CLARIN user registration</li>
  * </ol>
  * As in {@link ClarinShibAuthentication}, the EPerson canLogIn flag is not checked, because it only controls
@@ -54,6 +54,7 @@ public class ClarinOidcAuthenticationBean extends OidcAuthenticationBean {
 
     public static final String DEFAULT_PROVIDER = "oidc";
     public static final String DEFAULT_USER_ID_ATTRIBUTE = "sub";
+    public static final String DEFAULT_EMAIL_VERIFIED_ATTRIBUTE = "email_verified";
 
     @Autowired
     private AuthenticationIdentityService authenticationIdentityService;
@@ -75,7 +76,9 @@ public class ClarinOidcAuthenticationBean extends OidcAuthenticationBean {
             return NO_SUCH_USER;
         }
         String provider = getProvider();
-        String email = getAttributeAsString(userInfo, getEmailAttribute());
+        String emailAttribute = getEmailAttribute();
+        String email = StringUtils.isBlank(emailAttribute) || userInfo.get(emailAttribute) == null
+                ? null : getAttributeAsString(userInfo, emailAttribute);
         String organization = getAttributeAsFirstValue(userInfo, getOrganizationAttribute());
 
         try {
@@ -98,9 +101,17 @@ public class ClarinOidcAuthenticationBean extends OidcAuthenticationBean {
                 return NO_SUCH_USER;
             }
 
-            // 2. link the identity to the existing EPerson with the same email
+            // 2. link the identity to the existing EPerson with the same email, unless the provider doesn't
+            // confirm the email is verified: a verified ownership is required before trusting the claimed email
+            // enough to take over an existing account, e.g. one created by Shibboleth with password login disabled
             EPerson ePerson = ePersonService.findByEmail(context, email);
             if (ePerson != null) {
+                if (!isEmailVerified(userInfo)) {
+                    log.warn("EPerson {} with the same email as the OIDC identity {} was not linked, because the " +
+                            "provider did not confirm the email {} is verified (check " +
+                            "authentication-oidc.user-info.email-verified)", ePerson.getID(), userId, email);
+                    return NO_SUCH_USER;
+                }
                 return linkEPerson(context, ePerson, userInfo, provider, userId, organization, request);
             }
 
@@ -135,10 +146,26 @@ public class ClarinOidcAuthenticationBean extends OidcAuthenticationBean {
         context.turnOffAuthorisationSystem();
         try {
             authenticationIdentityService.create(context, ePerson, AUTH_METHOD_OIDC, provider, userId);
+            // commit immediately, so a concurrent first login of a different OIDC identity racing past the
+            // check above to link the same EPerson+provider is caught right here as a constraint violation
+            // (authentication_identity_eperson_auth_method_provider_unique), instead of silently succeeding
+            // or surfacing much later at the end-of-request commit. Depending on the database, the actual
+            // violation may surface as a plain RuntimeException rather than specifically a Hibernate
+            // ConstraintViolationException (e.g. once the broken Hibernate session is touched again by the
+            // post-commit entity reload), so any failure at this specific, narrowly-scoped commit is treated
+            // the same way: the identity was not reliably linked, so the login must not succeed.
+            context.commit();
+        } catch (RuntimeException ex) {
+            context.rollback();
+            log.warn("EPerson {} was not linked to the OIDC identity {} of provider {}, because creating the " +
+                    "authentication identity failed, possibly due to a concurrent login of a different identity " +
+                    "linking to the same EPerson and provider", ePerson.getID(), userId, provider, ex);
+            return BAD_ARGS;
         } finally {
             context.restoreAuthSystemState();
         }
 
+        ePerson = context.reloadEntity(ePerson);
         logIn(context, ePerson, userInfo, request);
         updateOrganization(context, ePerson, organization);
         log.info("EPerson {} found by email was linked to the OIDC identity {}", ePerson.getID(), userId);
@@ -363,6 +390,44 @@ public class ClarinOidcAuthenticationBean extends OidcAuthenticationBean {
      */
     protected String getUserIdAttribute() {
         return configurationService.getProperty("authentication-oidc.user-info.id", DEFAULT_USER_ID_ATTRIBUTE);
+    }
+
+    /**
+     * Returns the name of the boolean user info attribute confirming the email is verified, "email_verified"
+     * by default, as defined by the OIDC standard claims.
+     *
+     * @return email verified attribute name
+     */
+    protected String getEmailVerifiedAttribute() {
+        return configurationService.getProperty("authentication-oidc.user-info.email-verified",
+                DEFAULT_EMAIL_VERIFIED_ATTRIBUTE);
+    }
+
+    /**
+     * Returns whether a verified email is required to link the OIDC identity to an existing EPerson found by
+     * email (see {@link #isEmailVerified}). Enabled by default, since otherwise any OIDC provider that doesn't
+     * verify a claimed email could take over an existing account.
+     *
+     * @return true unless disabled by authentication-oidc.require-verified-email
+     */
+    protected boolean isVerifiedEmailRequired() {
+        return configurationService.getBooleanProperty("authentication-oidc.require-verified-email", true);
+    }
+
+    /**
+     * Returns whether the email in the user info attributes can be trusted to link the OIDC identity to an
+     * existing EPerson, i.e. whether a verified email is not required (see {@link #isVerifiedEmailRequired}),
+     * or the provider confirms it's verified by the {@link #getEmailVerifiedAttribute} attribute.
+     *
+     * @param userInfo attributes returned by the OIDC user info endpoint
+     * @return true when the email is trusted enough to link an existing EPerson
+     */
+    protected boolean isEmailVerified(Map<String, Object> userInfo) {
+        if (!isVerifiedEmailRequired()) {
+            return true;
+        }
+        Object emailVerified = userInfo.get(getEmailVerifiedAttribute());
+        return Boolean.TRUE.equals(emailVerified) || "true".equalsIgnoreCase(String.valueOf(emailVerified));
     }
 
     /**
