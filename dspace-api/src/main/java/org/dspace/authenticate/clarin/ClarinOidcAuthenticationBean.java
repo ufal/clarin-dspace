@@ -418,10 +418,10 @@ public class ClarinOidcAuthenticationBean extends OidcAuthenticationBean {
      * email (see {@link #isEmailVerified}). Enabled by default, since otherwise any OIDC provider that doesn't
      * verify a claimed email could take over an existing account.
      *
-     * @return true unless disabled by authentication-oidc.require-verified-email
+     * @return false unless enabled by authentication-oidc.require-verified-email
      */
     protected boolean isVerifiedEmailRequired() {
-        return configurationService.getBooleanProperty("authentication-oidc.require-verified-email", true);
+        return configurationService.getBooleanProperty("authentication-oidc.require-verified-email", false);
     }
 
     /**
