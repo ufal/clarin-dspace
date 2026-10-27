@@ -34,12 +34,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * CLARIN extension of the OIDC authentication.
- * The user is identified by the OIDC user ID (the "sub" claim by default) stored in the authentication_identity
- * table, instead of the email which may change:
+ * If the provider returns an email that it doesn't confirm is verified, authentication fails immediately
+ * (see {@link #isEmailVerified}). Otherwise, the user is identified by the OIDC user ID (the "sub" claim by
+ * default) stored in the authentication_identity table, instead of the email which may change:
  * <ol>
  *     <li>the EPerson linked to the (oidc, provider, user ID) identity is logged in</li>
- *     <li>otherwise, if the provider confirms the email is verified (see {@link #isEmailVerified}), the identity
- *     is linked to the existing EPerson with the same email (e.g. created by Shibboleth)</li>
+ *     <li>otherwise the identity is linked to the existing EPerson with the same email (e.g. created by Shibboleth)
+ *     </li>
  *     <li>otherwise a new EPerson is registered, together with the identity and CLARIN user registration</li>
  * </ol>
  * As in {@link ClarinShibAuthentication}, the EPerson canLogIn flag is not checked, because it only controls
@@ -81,6 +82,17 @@ public class ClarinOidcAuthenticationBean extends OidcAuthenticationBean {
                 ? null : getAttributeAsString(userInfo, emailAttribute);
         String organization = getAttributeAsFirstValue(userInfo, getOrganizationAttribute());
 
+        // A verified ownership is required before trusting the claimed email for anything: updating the
+        // email of an already logged-in EPerson, taking over an existing account found by email (e.g. one
+        // created by Shibboleth), or registering a new EPerson under an address its owner never confirmed
+        // (which could pre-empt the real owner, e.g. blocking them from later registering/linking via
+        // Shibboleth with that same email). A blank email isn't checked, since there is nothing to verify.
+        if (StringUtils.isNotBlank(email) && !isEmailVerified(userInfo)) {
+            log.warn("OIDC identity {} was not authenticated, because the provider did not confirm the email " +
+                    "{} is verified (check authentication-oidc.user-info.email-verified)", userId, email);
+            return BAD_CREDENTIALS;
+        }
+
         try {
             // 1. find the EPerson by the identity
             AuthenticationIdentity identity =
@@ -90,8 +102,12 @@ public class ClarinOidcAuthenticationBean extends OidcAuthenticationBean {
                 logIn(context, ePerson, userInfo, request);
                 // current user is set to the identity owner, who is allowed to update it
                 authenticationIdentityService.updateLastLogin(context, identity);
-                updateEmail(context, ePerson, email);
-                updateOrganization(context, ePerson, organization);
+                // neither is updated when the provider doesn't return an email this time, since the
+                // organization is only meaningful together with a (verified) email identifying its owner
+                if (StringUtils.isNotBlank(email)) {
+                    updateEmail(context, ePerson, email);
+                    updateOrganization(context, ePerson, organization);
+                }
                 log.info("EPerson {} logged in via OIDC identity {}", ePerson.getID(), userId);
                 return SUCCESS;
             }
@@ -101,17 +117,9 @@ public class ClarinOidcAuthenticationBean extends OidcAuthenticationBean {
                 return NO_SUCH_USER;
             }
 
-            // 2. link the identity to the existing EPerson with the same email, unless the provider doesn't
-            // confirm the email is verified: a verified ownership is required before trusting the claimed email
-            // enough to take over an existing account, e.g. one created by Shibboleth with password login disabled
+            // 2. link the identity to the existing EPerson with the same email
             EPerson ePerson = ePersonService.findByEmail(context, email);
             if (ePerson != null) {
-                if (!isEmailVerified(userInfo)) {
-                    log.warn("EPerson {} with the same email as the OIDC identity {} was not linked, because the " +
-                            "provider did not confirm the email {} is verified (check " +
-                            "authentication-oidc.user-info.email-verified)", ePerson.getID(), userId, email);
-                    return NO_SUCH_USER;
-                }
                 return linkEPerson(context, ePerson, userInfo, provider, userId, organization, request);
             }
 
@@ -314,11 +322,13 @@ public class ClarinOidcAuthenticationBean extends OidcAuthenticationBean {
     /**
      * Update the email of the EPerson and its CLARIN user registration, when changed by the OIDC provider.
      * The email is not updated when it is already used by another EPerson.
+     *
+     * @param email the OIDC provider's email, never blank (the only caller checks that already)
      */
     private void updateEmail(Context context, EPerson ePerson, String email)
             throws SQLException, AuthorizeException {
 
-        if (StringUtils.isBlank(email) || StringUtils.equalsIgnoreCase(email, ePerson.getEmail())) {
+        if (StringUtils.equalsIgnoreCase(email, ePerson.getEmail())) {
             return;
         }
         EPerson emailOwner = ePersonService.findByEmail(context, email);
