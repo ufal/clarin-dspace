@@ -213,6 +213,25 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     }
 
     @Test
+    public void testEPersonNotLoggedInWhenEmailNotVerified() throws Exception {
+        EPerson ePerson = createEPerson("perun@email.it", true);
+        AuthenticationIdentity identity = createIdentity(ePerson, PROVIDER, "perun1");
+
+        Map<String, Object> userInfo = new HashMap<>();
+        userInfo.put(SUB, "perun1");
+        userInfo.put(EMAIL, "perun@email.it");
+        userInfo.put(EMAIL_VERIFIED, false);
+        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
+
+        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+
+        // the login was rejected before any side effects, even though the identity is already linked
+        assertThat(context.reloadEntity(identity).getLastLogin().getTime(), equalTo(0L));
+    }
+
+    @Test
     public void testEPersonLoggedInBySubWhenPasswordLoginDisabled() throws Exception {
         // canLogIn flag only controls the password login, as for Shibboleth users
         EPerson ePerson = createEPerson("perun@email.it", false);
@@ -338,6 +357,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         userInfo.put(FIRST_NAME, "Master");
         userInfo.put(LAST_NAME, "Perun");
         userInfo.put(ORGANIZATION, "Charles University");
+        userInfo.put(EMAIL_VERIFIED, true);
         when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
 
         EPerson ePerson = ePersonService.find(context, UUIDUtils.fromString(login()));
@@ -367,6 +387,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         userInfo.put(SUB, "perun1");
         userInfo.put(EMAIL, "perun@email.it");
         userInfo.put(ORGANIZATION, List.of("affiliate@einfra.cesnet.cz", "affiliate@google.extidp.cesnet.cz"));
+        userInfo.put(EMAIL_VERIFIED, true);
         when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
 
         EPerson ePerson = ePersonService.find(context, UUIDUtils.fromString(login()));
@@ -395,6 +416,22 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     public void testWithoutSelfRegistrationEnabled() throws Exception {
         configurationService.setProperty("authentication-oidc.can-self-register", "false");
         mockUserInfo("perun1", "perun@email.it", null);
+
+        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+
+        assertThat(ePersonService.findByEmail(context, "perun@email.it"), nullValue());
+        assertThat(authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER, "perun1"), nullValue());
+    }
+
+    @Test
+    public void testNewEPersonNotRegisteredWhenEmailNotVerified() throws Exception {
+        Map<String, Object> userInfo = new HashMap<>();
+        userInfo.put(SUB, "perun1");
+        userInfo.put(EMAIL, "perun@email.it");
+        userInfo.put(EMAIL_VERIFIED, false);
+        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
 
         getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
                 .andExpect(status().isUnauthorized())
@@ -448,6 +485,23 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     }
 
     @Test
+    public void testOrganizationNotUpdatedWhenEmailMissing() throws Exception {
+        EPerson ePerson = createEPerson("perun@email.it", true);
+        createIdentity(ePerson, PROVIDER, "perun1");
+
+        Map<String, Object> userInfo = new HashMap<>();
+        userInfo.put(SUB, "perun1");
+        userInfo.put(ORGANIZATION, "New University");
+        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
+
+        assertThat(login(), equalTo(ePerson.getID().toString()));
+
+        // no email was returned, so neither the email nor the organization is updated
+        assertThat(context.reloadEntity(ePerson).getEmail(), equalTo("perun@email.it"));
+        assertThat(findRegistrations(ePerson), empty());
+    }
+
+    @Test
     public void testSpecialGroupsAssignedFromGroups() throws Exception {
         configurationService.setProperty("authentication-oidc.user-info.groups", GROUPS);
         configurationService.setProperty("authentication-oidc.group.staff", "Staff Test Group");
@@ -460,6 +514,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         userInfo.put(SUB, "perun1");
         userInfo.put(EMAIL, "perun@email.it");
         userInfo.put(GROUPS, List.of("staff", "unmapped-group"));
+        userInfo.put(EMAIL_VERIFIED, true);
         when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
 
         MvcResult mvcResult = getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
@@ -498,6 +553,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         userInfo.put(GROUPS, List.of(
                 "urn:geant:cesnet.cz:group:einfra#Perun Identity and Management System - Maintenance",
                 "urn:geant:cesnet.cz:group:einfra:members#Perun Identity and Management System - Maintenance"));
+        userInfo.put(EMAIL_VERIFIED, true);
         when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
 
         MvcResult mvcResult = getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
@@ -533,6 +589,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         userInfo.put(SUB, "perun1");
         userInfo.put(EMAIL, "perun@email.it");
         userInfo.put(GROUPS, List.of("staff"));
+        userInfo.put(EMAIL_VERIFIED, true);
         when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
 
         MvcResult mvcResult = getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
@@ -587,6 +644,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         userInfo.put(SUB, "perun1");
         userInfo.put(EMAIL, "perun@email.it");
         userInfo.put(GROUPS, List.of("staff"));
+        userInfo.put(EMAIL_VERIFIED, true);
         when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
 
         MvcResult mvcResult = getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
