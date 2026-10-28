@@ -16,6 +16,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
+import org.dspace.authenticate.AuthenticationMethod;
 import org.dspace.authenticate.clarin.ClarinShibAuthentication;
 import org.dspace.authenticate.clarin.ShibHeaders;
 import org.dspace.content.clarin.ClarinVerificationToken;
@@ -23,7 +24,6 @@ import org.dspace.content.service.clarin.ClarinVerificationTokenService;
 import org.dspace.core.Context;
 import org.dspace.core.Email;
 import org.dspace.core.I18nUtil;
-import org.dspace.core.Utils;
 import org.dspace.eperson.EPerson;
 import org.dspace.eperson.service.EPersonService;
 import org.dspace.services.ConfigurationService;
@@ -58,13 +58,15 @@ public class ClarinAutoRegistrationController {
 
     /**
      * Send the email with the verification token to the user.
-     * @param netid of the user, this information is retrieved from the IdP.
+     * @param registrationToken the one-time token the Shibboleth login without an e-mail handed to the browser in
+     *                          the redirect; it proves the caller owns the netid of the pending registration.
+     *                          The UI sends it back as the {@code netid} parameter.
      * @param email which the user has filled in.
      * @return Successful response or an error message.
      */
     @RequestMapping(method = RequestMethod.POST)
     public ResponseEntity sendEmail(HttpServletRequest request, HttpServletResponse response,
-                                    @RequestParam("netid") String netid,
+                                    @RequestParam("netid") String registrationToken,
                                     @RequestParam("email") String email) throws IOException, SQLException {
 
         Context context = ContextUtil.obtainCurrentRequestContext();
@@ -75,12 +77,12 @@ public class ClarinAutoRegistrationController {
 
         // The verification token object is created when the Shibboleth authentication is failed in the
         // ClarinShibbolethLoginFilter. It is created with the user `netid` and `shib_headers` which are passed
-        // from the IdP.
-        ClarinVerificationToken clarinVerificationToken = clarinVerificationTokenService.findByNetID(context, netid);
-        if (Objects.isNull(clarinVerificationToken)) {
-            // The verification token doesn't exist.
-            response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Cannot load the clarin verification " +
-                    "token class by net id: " + netid);
+        // from the IdP, and with the registration token the browser got in the redirect.
+        ClarinVerificationToken clarinVerificationToken =
+                clarinVerificationTokenService.findByToken(context, registrationToken);
+        if (Objects.isNull(clarinVerificationToken) || Objects.nonNull(clarinVerificationToken.getEmail())) {
+            // Unknown token, or its e-mail was already sent: only a new Shibboleth login issues another one.
+            response.sendError(HttpServletResponse.SC_FORBIDDEN, "Invalid registration token.");
             return null;
         }
 
@@ -96,7 +98,7 @@ public class ClarinAutoRegistrationController {
             throw new RuntimeException("Cannot load the `dspace.ui.url` property from the cfg.");
         }
         // Generate token
-        String verificationToken = Utils.generateHexKey();
+        String verificationToken = clarinVerificationTokenService.generateToken();
 
         // Compose the url with the verification token. The user will be redirected to the UI.
         String autoregistrationURL = uiUrl + "/login/autoregistration?verification-token=" + verificationToken;
@@ -129,8 +131,8 @@ public class ClarinAutoRegistrationController {
 
     /**
      * Confirm the verification token which the user received from the email. If the verification token is
-     * valid the user is registered and signed in or just signed in (if it exists). After successful
-     * signing in the verification token object is removed from the database.
+     * valid the user is registered (if it does not exist yet). The UI then signs the user in with the same token
+     * on {@code POST /api/authn/shibboleth}, which removes the verification token from the database.
      * @param token to verify.
      * @return Successful response or an error message.
      */
@@ -144,22 +146,30 @@ public class ClarinAutoRegistrationController {
             throw new RuntimeException("Cannot obtain the context from the request");
         }
 
-        // Check if the token is valid (if it exists in the database)
+        // Check if the token is valid (if it exists in the database). A registration token, whose e-mail was not
+        // verified yet, is not valid here.
         ClarinVerificationToken clarinVerificationToken = clarinVerificationTokenService.findByToken(context, token);
-        if (Objects.isNull(clarinVerificationToken)) {
+        if (Objects.isNull(clarinVerificationToken) || Objects.isNull(clarinVerificationToken.getEmail())) {
             response.sendError(HttpServletResponse.SC_NOT_FOUND, "Verification token doesn't exists.");
             return null;
         }
 
         // Set request attribute `shib.headers` for authentication method.
         // These headers are retrieved in the ClarinShibAuthentication.authenticate method.
-        request.setAttribute("shib.headers", clarinVerificationToken.getShibHeaders());
+        request.setAttribute(ClarinShibAuthentication.SHIB_HEADERS_ATTRIBUTE, clarinVerificationToken.getShibHeaders());
+        request.setAttribute(ClarinShibAuthentication.VERIFICATION_TOKEN_ATTRIBUTE, clarinVerificationToken.getToken());
+        int status;
         try {
-            new ClarinShibAuthentication().authenticate(context, "", "", "", request);
+            status = new ClarinShibAuthentication().authenticate(context, "", "", "", request);
         } catch (SQLException e) {
             log.error("Cannot authenticate the user by an autoregistration URL because: " + e.getSQLState());
             response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
                     "Cannot authenticate the user by an autoregistration URL.");
+            return null;
+        }
+        if (status != AuthenticationMethod.SUCCESS) {
+            // E.g. the verified e-mail belongs to an account that must not be bound to this netid.
+            response.sendError(HttpServletResponse.SC_FORBIDDEN, "The user cannot be registered by this token.");
             return null;
         }
         context.commit();
