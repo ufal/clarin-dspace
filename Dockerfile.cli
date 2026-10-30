@@ -13,7 +13,7 @@ ARG DSPACE_VERSION=dtq-dev-9-base
 ARG DOCKER_REGISTRY=docker.io
 
 # Step 1 - Run Maven Build
-FROM ${DOCKER_REGISTRY}/dataquest/dspace-dependencies:${DSPACE_VERSION} AS build
+FROM ${DOCKER_REGISTRY}/ufal/dspace-dependencies:${DSPACE_VERSION} AS build
 ARG TARGET_DIR=dspace-installer
 WORKDIR /app
 # The dspace-installer directory will be written to /install
