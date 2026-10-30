@@ -19,7 +19,8 @@
     <submission-map>
         <!-- Default submission process -->
         <name-map collection-handle="default" submission-name="traditional"/>
-
+        <name-map collection-handle="20.500.12800/3" submission-name="clariahSubmissions"/>
+        <name-map collection-handle="11234/5012" submission-name="teachingSubmissions"/>
         <!-- Sample Entities Collection configuration based on the demo Entities dataset available at:
              https://github.com/DSpace-Labs/AIP-Files/releases/tag/demo-entities-data
              This sets up the following Entity-based Collections in that dataset:
@@ -106,6 +107,16 @@
             <type>collection</type>
         </step-definition>
 
+        <step-definition id="clarin-notice">
+            <heading>submit.progressbar.clarin-notice</heading>
+            <processing-class>org.dspace.app.rest.submit.step.ClarinNoticeStep</processing-class>
+            <type>clarin-notice</type>
+        </step-definition>
+        <step-definition id="note">
+            <heading>submit.progressbar.describe.stepone</heading>
+            <processing-class>org.dspace.app.rest.submit.step.DescribeStep</processing-class>
+            <type>submission-form</type>
+        </step-definition>
         <!-- The following set of DescribeStep <step-definition>s all point to forms (of the same name) which are
              defined in submission-forms.xml -->
         <step-definition id="traditionalpageone" mandatory="true">
@@ -164,6 +175,11 @@
             <processing-class>org.dspace.app.rest.submit.step.LicenseStep</processing-class>
             <type>license</type>
             <scope visibilityOutside="read-only">submission</scope>
+        </step-definition>
+        <step-definition id="clarin-license">
+            <heading>submit.progressbar.clarin-license</heading>
+            <processing-class>org.dspace.app.rest.submit.step.ClarinLicenseResourceStep</processing-class>
+            <type>clarin-license</type>
         </step-definition>
 
         <!-- This optional step may allow the user to select a Creative Commons license -->
@@ -254,6 +270,42 @@
             <type>duplicates</type>
         </step-definition>
 
+        <step-definition id="clariahSubmissionsPageOne" mandatory="true">
+            <heading>submit.progressbar.describe.stepone</heading>
+            <processing-class>org.dspace.app.rest.submit.step.DescribeStep</processing-class>
+            <type>submission-form</type>
+        </step-definition>
+        <step-definition id="clariahSubmissionsPageTwo" mandatory="true">
+            <heading>submit.progressbar.describe.stepone</heading>
+            <processing-class>org.dspace.app.rest.submit.step.DescribeStep</processing-class>
+            <type>submission-form</type>
+        </step-definition>
+        <step-definition id="clariahSubmissionsPageThree" mandatory="true">
+            <heading>submit.progressbar.describe.stepone</heading>
+            <processing-class>org.dspace.app.rest.submit.step.DescribeStep</processing-class>
+            <type>submission-form</type>
+        </step-definition>
+
+        <step-definition id="teachingSubmissionsPageOne" mandatory="true">
+            <heading>submit.progressbar.describe.stepone</heading>
+            <processing-class>org.dspace.app.rest.submit.step.DescribeStep</processing-class>
+            <type>submission-form</type>
+        </step-definition>
+        <step-definition id="teachingSubmissionsPageTwo" mandatory="true">
+            <heading>submit.progressbar.describe.stepone</heading>
+            <processing-class>org.dspace.app.rest.submit.step.DescribeStep</processing-class>
+            <type>submission-form</type>
+        </step-definition>
+        <step-definition id="teachingSubmissionsPageThree" mandatory="true">
+            <heading>submit.progressbar.describe.stepone</heading>
+            <processing-class>org.dspace.app.rest.submit.step.DescribeStep</processing-class>
+            <type>submission-form</type>
+        </step-definition>
+        <step-definition id="specialFields" mandatory="true">
+            <heading>submit.progressbar.describe.stepone</heading>
+            <processing-class>org.dspace.app.rest.submit.step.DescribeStep</processing-class>
+            <type>submission-form</type>
+        </step-definition>
     </step-definitions>
 
     <!-- The submission-definitions map lays out the detailed definition of -->
@@ -280,7 +332,7 @@
             <step id="collection"/>
             <!-- To include the 'Show Identifiers' step, uncomment the line below. Make sure
                  that identifiers.cfg and identifier-service.xml are properly configured. -->
-            <!--<step id="identifiers"/>-->
+            <step id="identifiers"/>
             <!--Step will be to Describe the item. -->
             <step id="traditionalpageone"/>
             <step id="traditionalpagetwo"/>
@@ -309,6 +361,8 @@
 
             <!--Step will be to Sign off on the required DSpace License agreement -->
             <step id="license"/>
+            <step id="clarin-license"/>
+            <step id="specialFields"/>
         </submission-process>
 
         <!--
@@ -422,6 +476,29 @@
         <submission-process name="openaireOrganizationSubmission">
             <step id="collection"/>
             <step id="openaireOrganizationForm"/>
+        </submission-process>
+        <submission-process name="clariahSubmissions">
+            <step id="collection"/>
+            <step id="clarin-notice"/>
+            <step id="clariahSubmissionsPageOne"/>
+            <step id="clariahSubmissionsPageTwo"/>
+            <step id="clariahSubmissionsPageThree"/>
+            <step id="upload"/>
+            <step id="license"/>
+            <step id="clarin-license"/>
+            <step id="specialFields"/>
+        </submission-process>
+
+        <submission-process name="teachingSubmissions">
+            <step id="collection"/>
+            <step id="clarin-notice"/>
+            <step id="teachingSubmissionsPageOne"/>
+            <step id="teachingSubmissionsPageTwo"/>
+            <step id="teachingSubmissionsPageThree"/>
+            <step id="upload"/>
+            <step id="license"/>
+            <step id="clarin-license"/>
+            <step id="specialFields"/>
         </submission-process>
     </submission-definitions>
 

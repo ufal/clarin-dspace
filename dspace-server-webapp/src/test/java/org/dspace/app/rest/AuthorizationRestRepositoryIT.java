@@ -63,6 +63,7 @@ import org.dspace.eperson.EPerson;
 import org.dspace.eperson.Group;
 import org.dspace.services.ConfigurationService;
 import org.hamcrest.Matchers;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -133,6 +134,42 @@ public class AuthorizationRestRepositoryIT extends AbstractControllerIntegration
      * this hold a reference to the test feature {@link TrueForUsersInGroupTestFeature}
      */
     private AuthorizationFeature trueForUsersInGroupTest;
+
+    private static final String SSR_URL_KEY = "dspace.server.ssr.url";
+    private static final String SSR_URL = "http://ssr.example.com/api";
+    private static final String ALWAYS_THROW_TURNOFF_KEY =
+            "org.dspace.app.rest.authorization.AlwaysThrowExceptionFeature.turnoff";
+
+    /**
+     * Configure the SSR object-by-URI resolution used by the {@code search/object} tests (disarm the
+     * AlwaysThrowExceptionFeature and define the SSR base URL), setting both as JVM <em>system properties</em>
+     * (+ {@link ConfigurationService#reloadConfig()}) instead of {@code configurationService.setProperty(...)}.
+     *
+     * <p>A plain {@code setProperty(...)} override only lives in the in-memory combined-config view and is
+     * silently dropped whenever that view is rebuilt by the auto-reload listener (which fires when any
+     * reloadable cfg file's mtime changes, e.g. another test writing {@code local.cfg}). When that rebuild
+     * lands mid-test the SSR url disappears and {@code search/object} no longer resolves the uri -> 400 (and a
+     * dropped turnoff would let {@code alwaysexception} throw -> 500). A system property sits in the
+     * highest-precedence override layer and is re-read on every rebuild, so it survives auto-reload; it is
+     * cleared in {@link #clearSsrObjectResolution()}. Same pattern as
+     * AuthenticationRestControllerIT#setAuthenticationMethodSequence.</p>
+     */
+    private void enableSsrObjectResolution() {
+        System.setProperty(ALWAYS_THROW_TURNOFF_KEY, "true");
+        System.setProperty(SSR_URL_KEY, SSR_URL);
+        configurationService.reloadConfig();
+    }
+
+    /**
+     * Remove the system-property overrides set by {@link #enableSsrObjectResolution()} so they do not leak into
+     * other tests in the same JVM. Runs before the superclass {@code @After}, whose {@code reloadConfig()} then
+     * restores the on-disk defaults.
+     */
+    @After
+    public void clearSsrObjectResolution() {
+        System.clearProperty(SSR_URL_KEY);
+        System.clearProperty(ALWAYS_THROW_TURNOFF_KEY);
+    }
 
     @Override
     @Before
@@ -852,9 +889,9 @@ public class AuthorizationRestRepositoryIT extends AbstractControllerIntegration
         SiteRest siteRest = siteConverter.convert(site, DefaultProjection.DEFAULT);
         String siteUri = "http://ssr.example.com/api/core/sites/" + siteRest.getId();
 
-        // disarm the alwaysThrowExceptionFeature
-        configurationService.setProperty("org.dspace.app.rest.authorization.AlwaysThrowExceptionFeature.turnoff", true);
-        configurationService.setProperty("dspace.server.ssr.url", "http://ssr.example.com/api");
+        // Disarm the alwaysThrowExceptionFeature and define the SSR base URL via system properties so the
+        // overrides survive a mid-test config auto-reload (see enableSsrObjectResolution).
+        enableSsrObjectResolution();
 
         String adminToken = getAuthToken(admin.getEmail(), password);
         String epersonToken = getAuthToken(eperson.getEmail(), password);
@@ -969,9 +1006,9 @@ public class AuthorizationRestRepositoryIT extends AbstractControllerIntegration
      */
     @Test
     public void findByObjectBadRequestSSRTest() throws Exception {
-        // disarm the alwaysThrowExceptionFeature
-        configurationService.setProperty("org.dspace.app.rest.authorization.AlwaysThrowExceptionFeature.turnoff", true);
-        configurationService.setProperty("dspace.server.ssr.url", "http://ssr.example.com/api");
+        // Disarm the alwaysThrowExceptionFeature and define the SSR base URL via system properties so the
+        // overrides survive a mid-test config auto-reload (see enableSsrObjectResolution).
+        enableSsrObjectResolution();
         String[] invalidUris = new String[] {
             "invalid-uri",
             "",
@@ -1050,9 +1087,9 @@ public class AuthorizationRestRepositoryIT extends AbstractControllerIntegration
     public void findByNotExistingObjectSSSTest() throws Exception {
         String wrongSiteUri = "http://localhost/api/core/sites/" + UUID.randomUUID();
 
-        // disarm the alwaysThrowExceptionFeature
-        configurationService.setProperty("org.dspace.app.rest.authorization.AlwaysThrowExceptionFeature.turnoff", true);
-        configurationService.setProperty("dspace.server.ssr.url", "http://ssr.example.com/api");
+        // Disarm the alwaysThrowExceptionFeature and define the SSR base URL via system properties so the
+        // overrides survive a mid-test config auto-reload (see enableSsrObjectResolution).
+        enableSsrObjectResolution();
 
         String adminToken = getAuthToken(admin.getEmail(), password);
 

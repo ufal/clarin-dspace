@@ -1,0 +1,1349 @@
+/**
+ * The contents of this file are subject to the license and copyright
+ * detailed in the LICENSE and NOTICE files at the root of the source
+ * tree and available online at
+ *
+ * http://www.dspace.org/license/
+ */
+package org.dspace.app.rest;
+
+import static org.dspace.app.rest.repository.ClarinLicenseRestRepository.OPERATION_PATH_LICENSE_RESOURCE;
+import static org.dspace.content.InstallItemServiceImpl.SET_OWNING_COLLECTION_EVENT_DETAIL;
+import static org.dspace.content.clarin.ClarinLicense.Confirmation;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.hasProperty;
+import static org.hamcrest.Matchers.is;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import java.io.File;
+import java.io.InputStream;
+import java.io.RandomAccessFile;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+
+import jakarta.ws.rs.core.MediaType;
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.dspace.app.rest.model.patch.AddOperation;
+import org.dspace.app.rest.model.patch.Operation;
+import org.dspace.app.rest.model.patch.ReplaceOperation;
+import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
+import org.dspace.authorize.AuthorizeException;
+import org.dspace.builder.ClarinLicenseBuilder;
+import org.dspace.builder.ClarinLicenseLabelBuilder;
+import org.dspace.builder.CollectionBuilder;
+import org.dspace.builder.CommunityBuilder;
+import org.dspace.builder.WorkspaceItemBuilder;
+import org.dspace.content.Collection;
+import org.dspace.content.Community;
+import org.dspace.content.Item;
+import org.dspace.content.MetadataValue;
+import org.dspace.content.WorkspaceItem;
+import org.dspace.content.clarin.ClarinLicense;
+import org.dspace.content.clarin.ClarinLicenseLabel;
+import org.dspace.content.service.InstallItemService;
+import org.dspace.content.service.ItemService;
+import org.dspace.content.service.clarin.ClarinLicenseLabelService;
+import org.dspace.content.service.clarin.ClarinLicenseResourceMappingService;
+import org.dspace.content.service.clarin.ClarinLicenseService;
+import org.dspace.core.Constants;
+import org.dspace.event.Event;
+import org.dspace.handle.PIDConfiguration;
+import org.dspace.services.ConfigurationService;
+import org.junit.Assert;
+import org.junit.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+
+/**
+ * Added CLARIN/DSpace modifications for WorkspaceItemRestRepositoryIT class.
+ *
+ * @author Milan Majchrak (milan.majchrak at dataquest.sk)
+ */
+public class ClarinWorkspaceItemRestRepositoryIT extends AbstractControllerIntegrationTest {
+
+    public static final String REST_SERVER_URL = "http://localhost/api/";
+    public static final String EU_SPONSOR = "EU;Test funding code;Test funding organization;Test funding name;" +
+            "info:eu-repo/grantAgreement/Test funding code";
+    private static final String NON_EU_SPONSOR = "No EU;Test funding code;Test funding organization;Test funding name";
+    private static final String EU_SPONSOR_RELATION = "info:eu-repo/grantAgreement/Test funding code";
+
+    @Autowired
+    private ConfigurationService configurationService;
+    @Autowired
+    private ClarinLicenseService clarinLicenseService;
+    @Autowired
+    private ClarinLicenseLabelService clarinLicenseLabelService;
+    @Autowired
+    private ClarinLicenseResourceMappingService clarinLicenseResourceMappingService;
+    @Autowired
+    private InstallItemService installItemService;
+    @Autowired
+    private ItemService itemService;
+
+    @Test
+    public void uploadFileBiggerThanUploadFileSizeLimit() throws Exception {
+        // Create a big file in the /temp folder
+        String TMP_DIR = System.getProperty("java.io.tmpdir");
+        String FILE_NAME = "test.txt";
+        Long SIZE_IN_BYTES = 2000000000L;
+        File file = null;
+
+        try {
+            file = new File(TMP_DIR, FILE_NAME);
+
+            RandomAccessFile raf = new RandomAccessFile(file, "rw");
+            raf.setLength(SIZE_IN_BYTES);
+            raf.close();
+
+            context.turnOffAuthorisationSystem();
+
+            // A community-collection structure with one parent community and one collection
+            parentCommunity = CommunityBuilder.createCommunity(context)
+                    .withName("Parent Community")
+                    .build();
+            Collection col = CollectionBuilder.createCollection(context, parentCommunity)
+                    .withName("Collection").build();
+
+            WorkspaceItem wItem = WorkspaceItemBuilder.createWorkspaceItem(context, col)
+                    .withTitle("Test WorkspaceItem")
+                    .withIssueDate("2017-10-17")
+                    .withMetadata("local", "bitstream", "redirectToURL", file.getAbsolutePath())
+                    .build();
+
+            context.restoreAuthSystemState();
+            String tokenAdmin = getAuthToken(admin.getEmail(), password);
+
+            List<Operation> addAccessCondition = new ArrayList<Operation>();
+            List<Map<String, String>> accessConditions = new ArrayList<Map<String, String>>();
+
+            Map<String, String> accessCondition1 = new HashMap<String, String>();
+            accessCondition1.put("name", "administrator");
+            accessConditions.add(accessCondition1);
+
+            addAccessCondition.add(new AddOperation("/sections/defaultAC/accessConditions",
+                    accessConditions));
+
+            String patchBody = getPatchContent(addAccessCondition);
+            // add access conditions
+            getClient(tokenAdmin).perform(patch("/api/submission/workspaceitems/" + wItem.getID())
+                            .content(patchBody)
+                            .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.sections.upload.files[0]"
+                                    + ".metadata['dc.title'][0].value",
+                            is(FILE_NAME)))
+                    .andExpect(jsonPath("$.sections.upload.files[0].sizeBytes",
+                            is(SIZE_IN_BYTES.intValue())));
+        } catch (Exception e) {
+            throw new Exception("Cannot upload file bigger than upload file size limit, " + e.getMessage());
+        } finally {
+            // the big file should be deleted
+            File checkFile = null;
+
+            String shouldDeleteFile = configurationService.getProperty("delete.big.file.after.upload");
+            if (!Objects.isNull(file) && StringUtils.equals("true", shouldDeleteFile)) {
+                checkFile = new File(file.getAbsolutePath());
+                Assert.assertFalse(checkFile.exists());
+            }
+
+            try {
+                // if is not deleted, delete that test big file
+                if (!Objects.isNull(checkFile) && checkFile.exists()) {
+                    FileUtils.forceDelete(file);
+                }
+            } catch (Exception e) {
+                throw new Exception("Cannot delete the file in the end of the test: " + e.getMessage());
+            }
+        }
+    }
+
+    @Test
+    public void patchAddEUFundingMetadataOnItemStillInSubmissionTest() throws Exception {
+        WorkspaceItem witem = this.createSimpleWorkspaceItem();
+
+        List<Operation> addTitle = new ArrayList<Operation>();
+        // create a list of values to use in add operation
+        List<Map<String, String>> titleValues = new ArrayList<Map<String, String>>();
+        Map<String, String> value = new HashMap<String, String>();
+        value.put("value", EU_SPONSOR);
+        titleValues.add(value);
+        addTitle.add(new AddOperation("/sections/traditionalpageone/local.sponsor", titleValues));
+
+        String patchBody = getPatchContent(addTitle);
+
+        // Verify submitter cannot modify metadata via item PATCH. They must use submission forms.
+        String tokenEperson = getAuthToken(admin.getEmail(), password);
+        getClient(tokenEperson).perform(patch("/api/submission/workspaceitems/" + witem.getID())
+                        .content(patchBody)
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk());
+        assertClarinLicenseMetadata(witem, "local", "sponsor", null, EU_SPONSOR, false);
+        assertClarinLicenseMetadata(witem, "dc", "relation", null, EU_SPONSOR_RELATION, false);
+    }
+
+    @Test
+    public void patchAddNonEUFundingMetadataOnItemStillInSubmissionTest() throws Exception {
+        WorkspaceItem witem = this.createSimpleWorkspaceItem();
+
+        List<Operation> addTitle = new ArrayList<Operation>();
+        // create a list of values to use in add operation
+        List<Map<String, String>> titleValues = new ArrayList<Map<String, String>>();
+        Map<String, String> value = new HashMap<String, String>();
+        value.put("value", NON_EU_SPONSOR);
+        titleValues.add(value);
+        addTitle.add(new AddOperation("/sections/traditionalpageone/local.sponsor", titleValues));
+
+        String patchBody = getPatchContent(addTitle);
+
+        // Verify submitter cannot modify metadata via item PATCH. They must use submission forms.
+        String tokenEperson = getAuthToken(admin.getEmail(), password);
+        getClient(tokenEperson).perform(patch("/api/submission/workspaceitems/" + witem.getID())
+                        .content(patchBody)
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk());
+        assertClarinLicenseMetadata(witem, "local", "sponsor", null, NON_EU_SPONSOR, false);
+    }
+
+    @Test
+    public void patchAddMoreNonEUWithEUFundingMetadataOnItemStillInSubmissionTest() throws Exception {
+        WorkspaceItem witem = this.createSimpleWorkspaceItem();
+        String secondNonEUSponsor = "2" + NON_EU_SPONSOR;
+        String secondEUSponsor = "2" + EU_SPONSOR;
+
+        List<Operation> addSponsorOperations = new ArrayList<Operation>();
+
+        // create a list of values to use in add operation
+        List<Map<String, String>> firstSponsorValues = new ArrayList<Map<String, String>>();
+        Map<String, String> firstSponsor = new HashMap<String, String>();
+        firstSponsor.put("value", EU_SPONSOR);
+        firstSponsorValues.add(firstSponsor);
+
+        Map<String, String> secondSponsor = new HashMap<String, String>();
+        secondSponsor.put("value", NON_EU_SPONSOR);
+
+        Map<String, String> thirdSponsor = new HashMap<String, String>();
+        thirdSponsor.put("value", secondNonEUSponsor);
+
+        Map<String, String> fourthSponsor = new HashMap<String, String>();
+        fourthSponsor.put("value", secondEUSponsor);
+
+        addSponsorOperations.add(new AddOperation("/sections/traditionalpageone/local.sponsor", firstSponsorValues));
+        addSponsorOperations.add(new AddOperation("/sections/traditionalpageone/local.sponsor/1", secondSponsor));
+        addSponsorOperations.add(new AddOperation("/sections/traditionalpageone/local.sponsor/2", thirdSponsor));
+        addSponsorOperations.add(new AddOperation("/sections/traditionalpageone/local.sponsor/3", fourthSponsor));
+
+        String patchBody = getPatchContent(addSponsorOperations);
+
+        // Verify submitter cannot modify metadata via item PATCH. They must use submission forms.
+        String tokenEperson = getAuthToken(admin.getEmail(), password);
+        getClient(tokenEperson).perform(patch("/api/submission/workspaceitems/" + witem.getID())
+                        .content(patchBody)
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sections.traditionalpageone['local.sponsor'][0].value",
+                        is(EU_SPONSOR)))
+                .andExpect(jsonPath("$.sections.traditionalpageone['local.sponsor'][1].value",
+                        is(NON_EU_SPONSOR)))
+                .andExpect(jsonPath("$.sections.traditionalpageone['local.sponsor'][2].value",
+                        is(secondNonEUSponsor)))
+                .andExpect(jsonPath("$.sections.traditionalpageone['local.sponsor'][3].value",
+                        is(secondEUSponsor)));
+        witem = context.reloadEntity(witem);
+        List<MetadataValue> metadataValues = itemService.getMetadata(witem.getItem(), "dc", "relation", null, Item.ANY);
+        assertThat(metadataValues.get(0).getValue(), is(EU_SPONSOR_RELATION));
+        assertThat(metadataValues.get(1).getValue(), is(EU_SPONSOR_RELATION));
+    }
+
+    @Test
+    public void patchAddMoreEUWithNonEUFundingMetadataOnItemStillInSubmissionTest() throws Exception {
+        WorkspaceItem witem = this.createSimpleWorkspaceItem();
+        String secondNonEUSponsor = "2" + NON_EU_SPONSOR;
+        String secondEUSponsor = "2" + EU_SPONSOR;
+
+        List<Operation> addSponsorOperations = new ArrayList<Operation>();
+
+        // create a list of values to use in add operation
+        List<Map<String, String>> firstSponsorValues = new ArrayList<Map<String, String>>();
+        Map<String, String> firstSponsor = new HashMap<String, String>();
+        firstSponsor.put("value", NON_EU_SPONSOR);
+        firstSponsorValues.add(firstSponsor);
+
+        Map<String, String> secondSponsor = new HashMap<String, String>();
+        secondSponsor.put("value", EU_SPONSOR);
+
+        Map<String, String> thirdSponsor = new HashMap<String, String>();
+        thirdSponsor.put("value", secondEUSponsor);
+
+        Map<String, String> fourthSponsor = new HashMap<String, String>();
+        fourthSponsor.put("value", secondNonEUSponsor);
+
+        addSponsorOperations.add(new AddOperation("/sections/traditionalpageone/local.sponsor", firstSponsorValues));
+        addSponsorOperations.add(new AddOperation("/sections/traditionalpageone/local.sponsor/1", secondSponsor));
+        addSponsorOperations.add(new AddOperation("/sections/traditionalpageone/local.sponsor/2", thirdSponsor));
+        addSponsorOperations.add(new AddOperation("/sections/traditionalpageone/local.sponsor/3", fourthSponsor));
+
+        String patchBody = getPatchContent(addSponsorOperations);
+
+        // Verify submitter cannot modify metadata via item PATCH. They must use submission forms.
+        String tokenEperson = getAuthToken(admin.getEmail(), password);
+        getClient(tokenEperson).perform(patch("/api/submission/workspaceitems/" + witem.getID())
+                        .content(patchBody)
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sections.traditionalpageone['local.sponsor'][0].value",
+                        is(NON_EU_SPONSOR)))
+                .andExpect(jsonPath("$.sections.traditionalpageone['local.sponsor'][1].value",
+                        is(EU_SPONSOR)))
+                .andExpect(jsonPath("$.sections.traditionalpageone['local.sponsor'][2].value",
+                        is(secondEUSponsor)))
+                .andExpect(jsonPath("$.sections.traditionalpageone['local.sponsor'][3].value",
+                        is(secondNonEUSponsor)));
+        witem = context.reloadEntity(witem);
+        List<MetadataValue> metadataValues = itemService.getMetadata(witem.getItem(), "dc", "relation", null, Item.ANY);
+        assertThat(metadataValues.get(0).getValue(), containsString(EU_SPONSOR_RELATION));
+        assertThat(metadataValues.get(1).getValue(), containsString(EU_SPONSOR_RELATION));
+    }
+
+    // replace nonEU - should do not have relation
+    @Test
+    public void patchReplaceNonEUFundingMetadataOnItemStillInSubmissionTest() throws Exception {
+        WorkspaceItem witem = this.createSimpleWorkspaceItem();
+        String updatedSponsor = "updated" + NON_EU_SPONSOR;
+
+        List<Operation> addSponsorOperations = new ArrayList<Operation>();
+        List<Operation> replaceSponsorOperations = new ArrayList<Operation>();
+
+        // create a list of values to use in add operation
+        List<Map<String, String>> firstSponsorValues = new ArrayList<Map<String, String>>();
+        Map<String, String> firstSponsor = new HashMap<String, String>();
+        firstSponsor.put("value", NON_EU_SPONSOR);
+        firstSponsorValues.add(firstSponsor);
+
+        // creating replace operation
+        Map<String, String> updatedSponsorValue = new HashMap<String, String>();
+        updatedSponsorValue.put("value", updatedSponsor);
+
+        addSponsorOperations.add(new AddOperation("/sections/traditionalpageone/local.sponsor",
+                firstSponsorValues));
+        replaceSponsorOperations.add(new ReplaceOperation("/sections/traditionalpageone/local.sponsor/0",
+                updatedSponsorValue));
+
+        String patchBody = getPatchContent(addSponsorOperations);
+        String updateBody = getPatchContent(replaceSponsorOperations);
+
+        String tokenEperson = getAuthToken(admin.getEmail(), password);
+        // Add operation
+        getClient(tokenEperson).perform(patch("/api/submission/workspaceitems/" + witem.getID())
+                        .content(patchBody)
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk());
+        assertClarinLicenseMetadata(witem, "local", "sponsor", null, NON_EU_SPONSOR, false);
+        assertClarinLicenseMetadata(witem, "dc", "relation", null, null, true);
+
+        // Replace operation
+        getClient(tokenEperson).perform(patch("/api/submission/workspaceitems/" + witem.getID())
+                        .content(updateBody)
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk());
+        assertClarinLicenseMetadata(witem, "local", "sponsor", null, updatedSponsor, false);
+        assertClarinLicenseMetadata(witem, "dc", "relation", null, null, true);
+    }
+
+    // replace EU - should do not have relation
+    @Test
+    public void patchReplaceEUFundingMetadataOnItemStillInSubmissionTest() throws Exception {
+        WorkspaceItem witem = this.createSimpleWorkspaceItem();
+        String updatedSponsor = "updated" + EU_SPONSOR;
+
+        List<Operation> addSponsorOperations = new ArrayList<Operation>();
+        List<Operation> replaceSponsorOperations = new ArrayList<Operation>();
+
+        // create a list of values to use in add operation
+        List<Map<String, String>> firstSponsorValues = new ArrayList<Map<String, String>>();
+        Map<String, String> firstSponsor = new HashMap<String, String>();
+        firstSponsor.put("value", EU_SPONSOR);
+        firstSponsorValues.add(firstSponsor);
+
+        // creating replace operation
+        Map<String, String> updatedSponsorValue = new HashMap<String, String>();
+        updatedSponsorValue.put("value", updatedSponsor);
+
+        addSponsorOperations.add(new AddOperation("/sections/traditionalpageone/local.sponsor",
+                firstSponsorValues));
+        replaceSponsorOperations.add(new ReplaceOperation("/sections/traditionalpageone/local.sponsor/0",
+                updatedSponsorValue));
+
+        String patchBody = getPatchContent(addSponsorOperations);
+        String updateBody = getPatchContent(replaceSponsorOperations);
+
+        String tokenEperson = getAuthToken(admin.getEmail(), password);
+        // Add operation
+        getClient(tokenEperson).perform(patch("/api/submission/workspaceitems/" + witem.getID())
+                        .content(patchBody)
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk());
+        assertClarinLicenseMetadata(witem, "local", "sponsor", null, EU_SPONSOR, false);
+        assertClarinLicenseMetadata(witem, "dc", "relation", null, EU_SPONSOR_RELATION, false);
+
+        // Replace operation
+        getClient(tokenEperson).perform(patch("/api/submission/workspaceitems/" + witem.getID())
+                        .content(updateBody)
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk());
+        assertClarinLicenseMetadata(witem, "local", "sponsor", null, updatedSponsor, false);
+        assertClarinLicenseMetadata(witem, "dc", "relation", null, EU_SPONSOR_RELATION, false);
+    }
+
+    // replace non EU to EU - should have relation
+    @Test
+    public void patchReplaceFromNonEUToEUFundingMetadataOnItemStillInSubmissionTest() throws Exception {
+        WorkspaceItem witem = this.createSimpleWorkspaceItem();
+
+        List<Operation> addSponsorOperations = new ArrayList<Operation>();
+        List<Operation> replaceSponsorOperations = new ArrayList<Operation>();
+
+        // create a list of values to use in add operation
+        List<Map<String, String>> firstSponsorValues = new ArrayList<Map<String, String>>();
+        Map<String, String> firstSponsor = new HashMap<String, String>();
+        firstSponsor.put("value", NON_EU_SPONSOR);
+        firstSponsorValues.add(firstSponsor);
+
+        // creating replace operation
+        Map<String, String> updatedSponsorValue = new HashMap<String, String>();
+        updatedSponsorValue.put("value", EU_SPONSOR);
+
+        addSponsorOperations.add(new AddOperation("/sections/traditionalpageone/local.sponsor",
+                firstSponsorValues));
+        replaceSponsorOperations.add(new ReplaceOperation("/sections/traditionalpageone/local.sponsor/0",
+                updatedSponsorValue));
+
+        String patchBody = getPatchContent(addSponsorOperations);
+        String updateBody = getPatchContent(replaceSponsorOperations);
+
+        String tokenEperson = getAuthToken(admin.getEmail(), password);
+        // Add operation
+        getClient(tokenEperson).perform(patch("/api/submission/workspaceitems/" + witem.getID())
+                        .content(patchBody)
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk());
+        assertClarinLicenseMetadata(witem, "local", "sponsor", null, NON_EU_SPONSOR, false);
+        assertClarinLicenseMetadata(witem, "dc", "relation", null, null, true);
+
+        // Replace operation
+        getClient(tokenEperson).perform(patch("/api/submission/workspaceitems/" + witem.getID())
+                        .content(updateBody)
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk());
+        assertClarinLicenseMetadata(witem, "local", "sponsor", null, EU_SPONSOR, false);
+        assertClarinLicenseMetadata(witem, "dc", "relation", null, EU_SPONSOR_RELATION, false);
+    }
+
+    // replace EU to non EU - should do not have relation
+    @Test
+    public void patchReplaceFromRUToNonEUFundingMetadataOnItemStillInSubmissionTest() throws Exception {
+        WorkspaceItem witem = this.createSimpleWorkspaceItem();
+
+        List<Operation> addSponsorOperations = new ArrayList<Operation>();
+        List<Operation> replaceSponsorOperations = new ArrayList<Operation>();
+
+        // create a list of values to use in add operation
+        List<Map<String, String>> firstSponsorValues = new ArrayList<Map<String, String>>();
+        Map<String, String> firstSponsor = new HashMap<String, String>();
+        firstSponsor.put("value", EU_SPONSOR);
+        firstSponsorValues.add(firstSponsor);
+
+        // creating replace operation
+        Map<String, String> updatedSponsorValue = new HashMap<String, String>();
+        updatedSponsorValue.put("value", NON_EU_SPONSOR);
+
+        addSponsorOperations.add(new AddOperation("/sections/traditionalpageone/local.sponsor", firstSponsorValues));
+        replaceSponsorOperations.add(new ReplaceOperation("/sections/traditionalpageone/local.sponsor/0",
+                updatedSponsorValue));
+
+        String patchBody = getPatchContent(addSponsorOperations);
+        String updateBody = getPatchContent(replaceSponsorOperations);
+
+        String tokenEperson = getAuthToken(admin.getEmail(), password);
+        // Add operation
+        getClient(tokenEperson).perform(patch("/api/submission/workspaceitems/" + witem.getID())
+                        .content(patchBody)
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$._embedded.item.metadata['dc.relation'][1].value").doesNotExist());
+
+        witem = context.reloadEntity(witem);
+        // Assert sponsor metadata
+        List<MetadataValue> sponsors = itemService.getMetadata(witem.getItem(), "local", "sponsor", null, Item.ANY);
+        assertThat(sponsors, hasItem(hasProperty("value", is(EU_SPONSOR))));
+
+        // Assert relation metadata
+        List<MetadataValue> relations = itemService.getMetadata(witem.getItem(), "dc", "relation", null, Item.ANY);
+        assertThat(relations, hasItem(hasProperty("value", is(EU_SPONSOR_RELATION))));
+
+        // Replace operation
+        getClient(tokenEperson).perform(patch("/api/submission/workspaceitems/" + witem.getID())
+                        .content(updateBody)
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk());
+        assertClarinLicenseMetadata(witem, "local", "sponsor", null, NON_EU_SPONSOR, false);
+    }
+
+    // add EU, add nonEU, changee EU to nonEU, change nonEU to EU
+    @Test
+    public void patchAddMoreEUAndNonEUAndReplaceEachOtherOnItemStillInSubmissionTest() throws Exception {
+        WorkspaceItem witem = this.createSimpleWorkspaceItem();
+        String secondEuSponsor = "2" + EU_SPONSOR;
+
+        List<Operation> addSponsorOperations = new ArrayList<Operation>();
+        List<Operation> replaceSponsorOperations = new ArrayList<Operation>();
+
+        // create a list of values to use in add operation
+        List<Map<String, String>> firstSponsorValues = new ArrayList<Map<String, String>>();
+        Map<String, String> firstSponsor = new HashMap<String, String>();
+        firstSponsor.put("value", EU_SPONSOR);
+        firstSponsorValues.add(firstSponsor);
+
+        Map<String, String> secondSponsor = new HashMap<String, String>();
+        secondSponsor.put("value", NON_EU_SPONSOR);
+
+        // creating replace operation
+        Map<String, String> updatedSponsorValue = new HashMap<String, String>();
+        updatedSponsorValue.put("value", secondEuSponsor);
+
+        addSponsorOperations.add(new AddOperation("/sections/traditionalpageone/local.sponsor", firstSponsorValues));
+        addSponsorOperations.add(new AddOperation("/sections/traditionalpageone/local.sponsor/1", secondSponsor));
+        replaceSponsorOperations.add(new ReplaceOperation("/sections/traditionalpageone/local.sponsor/1",
+                updatedSponsorValue));
+
+        String patchBody = getPatchContent(addSponsorOperations);
+        String updateBody = getPatchContent(replaceSponsorOperations);
+
+        String tokenEperson = getAuthToken(admin.getEmail(), password);
+        // Add operation
+        getClient(tokenEperson).perform(patch("/api/submission/workspaceitems/" + witem.getID())
+                        .content(patchBody)
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sections.traditionalpageone['local.sponsor'][0].value",
+                        is(EU_SPONSOR)))
+                .andExpect(jsonPath("$.sections.traditionalpageone['local.sponsor'][1].value",
+                        is(NON_EU_SPONSOR)));
+        witem = context.reloadEntity(witem);
+        List<MetadataValue> metadataValues = itemService.getMetadata(witem.getItem(), "dc", "relation", null, Item.ANY);
+        assertThat(metadataValues.get(0).getValue(), containsString(EU_SPONSOR_RELATION));
+        assertThat(metadataValues.size(), is(1));
+
+        // Replace operation
+        getClient(tokenEperson).perform(patch("/api/submission/workspaceitems/" + witem.getID())
+                        .content(updateBody)
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sections.traditionalpageone['local.sponsor'][0].value",
+                        is(EU_SPONSOR)))
+                .andExpect(jsonPath("$.sections.traditionalpageone['local.sponsor'][1].value",
+                        is(secondEuSponsor)));
+
+        witem = context.reloadEntity(witem);
+        metadataValues = itemService.getMetadata(witem.getItem(), "dc", "relation", null, Item.ANY);
+        assertThat(metadataValues.get(0).getValue(), containsString(EU_SPONSOR_RELATION));
+        assertThat(metadataValues.get(1).getValue(), containsString(EU_SPONSOR_RELATION));
+    }
+
+    // add EU, add nonEU, changee EU to nonEU, change nonEU to EU
+    @Test
+    public void patchAddMoreNonEUAndEUAndReplaceEachOtherOnItemStillInSubmissionTest() throws Exception {
+        WorkspaceItem witem = this.createSimpleWorkspaceItem();
+        String secondNonEuSponsor = "2" + NON_EU_SPONSOR;
+
+        List<Operation> addSponsorOperations = new ArrayList<Operation>();
+        List<Operation> replaceSponsorOperations = new ArrayList<Operation>();
+
+        // create a list of values to use in add operation
+        List<Map<String, String>> firstSponsorValues = new ArrayList<Map<String, String>>();
+        Map<String, String> firstSponsor = new HashMap<String, String>();
+        firstSponsor.put("value", NON_EU_SPONSOR);
+        firstSponsorValues.add(firstSponsor);
+
+        Map<String, String> secondSponsor = new HashMap<String, String>();
+        secondSponsor.put("value", EU_SPONSOR);
+
+        // creating replace operation
+        Map<String, String> updatedSponsorValue = new HashMap<String, String>();
+        updatedSponsorValue.put("value", secondNonEuSponsor);
+
+        addSponsorOperations.add(new AddOperation("/sections/traditionalpageone/local.sponsor", firstSponsorValues));
+        addSponsorOperations.add(new AddOperation("/sections/traditionalpageone/local.sponsor/1", secondSponsor));
+        replaceSponsorOperations.add(new ReplaceOperation("/sections/traditionalpageone/local.sponsor/1",
+                updatedSponsorValue));
+
+        String patchBody = getPatchContent(addSponsorOperations);
+        String updateBody = getPatchContent(replaceSponsorOperations);
+
+        String tokenEperson = getAuthToken(admin.getEmail(), password);
+        // Add operation
+        getClient(tokenEperson).perform(patch("/api/submission/workspaceitems/" + witem.getID())
+                        .content(patchBody)
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sections.traditionalpageone['local.sponsor'][0].value",
+                        is(NON_EU_SPONSOR)))
+                .andExpect(jsonPath("$.sections.traditionalpageone['local.sponsor'][1].value",
+                        is(EU_SPONSOR)));
+        witem = context.reloadEntity(witem);
+        List<MetadataValue> metadataValues = itemService.getMetadata(witem.getItem(), "dc", "relation", null, Item.ANY);
+        assertThat(metadataValues.get(0).getValue(), containsString(EU_SPONSOR_RELATION));
+        assertThat(metadataValues.size(), is(1));
+
+        // Replace operation
+        getClient(tokenEperson).perform(patch("/api/submission/workspaceitems/" + witem.getID())
+                        .content(updateBody)
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sections.traditionalpageone['local.sponsor'][0].value",
+                        is(NON_EU_SPONSOR)))
+                .andExpect(jsonPath("$.sections.traditionalpageone['local.sponsor'][1].value",
+                        is(secondNonEuSponsor)));
+        witem = context.reloadEntity(witem);
+        metadataValues = itemService.getMetadata(witem.getItem(), "dc", "relation", null, Item.ANY);
+        assertThat(metadataValues.size(), is(0));
+    }
+
+    /**
+     * Add Clarin License to the WorkspaceItem. The Clarin License name should be added to the
+     * item's metadata `dc.rights` and the Clarin License should be attached to the actual bitstream.
+     */
+    @Test
+    public void addClarinLicenseToWI() throws Exception {
+        // 1. Create Workspace Item with uploaded file
+        // 2. Create Clarin License
+        // 3. Send request to add Clarin License to the Workspace Item
+        // 4. Check if the Clarin License name was added to the Item's metadata `dc.rights`
+        // 5. Check if the Clarin License was attached to the Bitstream
+
+        // 1. Create WI with uploaded file
+        context.turnOffAuthorisationSystem();
+        WorkspaceItem witem = createWorkspaceItemWithFile();
+
+        List<Operation> replaceOperations = new ArrayList<Operation>();
+        String clarinLicenseName = "Test Clarin License";
+
+        // 2. Create clarin license with clarin license label
+        ClarinLicense clarinLicense = createClarinLicense(clarinLicenseName, "Test Def", "Test R Info", "lbl",
+                Confirmation.NOT_REQUIRED);
+
+        // creating replace operation
+        Map<String, String> licenseReplaceOpValue = new HashMap<String, String>();
+        licenseReplaceOpValue.put("value", clarinLicenseName);
+        replaceOperations.add(new ReplaceOperation("/" + OPERATION_PATH_LICENSE_RESOURCE,
+                licenseReplaceOpValue));
+
+        context.restoreAuthSystemState();
+        String updateBody = getPatchContent(replaceOperations);
+
+        // 3. Send request to add Clarin License to the Workspace Item
+        String tokenAdmin = getAuthToken(admin.getEmail(), password);
+        getClient(tokenAdmin).perform(patch("/api/submission/workspaceitems/" + witem.getID())
+                        .content(updateBody)
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk());
+
+        // 4. Check if the Clarin License name was added to the Item's metadata `dc.rights`
+        assertClarinLicenseMetadata(witem, "dc", "rights", null, clarinLicenseName, false);
+
+        // 5. Check if the Clarin License was attached to the Bitstream
+        getClient(tokenAdmin).perform(get("/api/core/clarinlicenses/" + clarinLicense.getID()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bitstreams", is(1)));
+
+    }
+
+    /**
+     * The Clarin License should be detached from the bitstream and the Clarin License name should be removed from the
+     * item's metadata `dc.rights` on removing Clarin License from the Workspace Item.
+     */
+    @Test
+    public void removeClarinLicenseFromWI() throws Exception {
+        // 1. Create Workspace Item with uploaded file
+        // 2. Create Clarin License
+        // 3. Send request to add Clarin License to the Workspace Item
+        // 4. Check if the Clarin License name was added to the Item's metadata `dc.rights`
+        // 5. Check if the Clarin License was attached to the Bitstream
+        // 6. Send request to remove Clarin License from the Workspace Item (the clarin license name is empty string)
+        // 7. Check if the Clarin License name was cleared from the Item's `dc.rights` metadata
+        // 8. Check if the Clarin License was detached from the Workspace Item bitstream
+
+        context.turnOffAuthorisationSystem();
+        // 1. Create Workspace Item with uploaded file
+        WorkspaceItem witem = this.createWorkspaceItemWithFile();
+        List<Operation> replaceOperations = new ArrayList<Operation>();
+        // 2. Create Clarin License
+        String clarinLicenseName = "Test Clarin License";
+        ClarinLicense clarinLicense = createClarinLicense(clarinLicenseName, "Test Def", "Test R Info", "lbl",
+                Confirmation.NOT_REQUIRED);
+        context.restoreAuthSystemState();
+
+        // Creating replace operation
+        Map<String, String> licenseReplaceOpValue = new HashMap<String, String>();
+        licenseReplaceOpValue.put("value", clarinLicenseName);
+        replaceOperations.add(new ReplaceOperation("/" + OPERATION_PATH_LICENSE_RESOURCE,
+                licenseReplaceOpValue));
+
+        String updateBody = getPatchContent(replaceOperations);
+
+        // 3. Send request to add Clarin License to the Workspace Item
+        String tokenAdmin = getAuthToken(admin.getEmail(), password);
+        getClient(tokenAdmin).perform(patch("/api/submission/workspaceitems/" + witem.getID())
+                        .content(updateBody)
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk());
+
+        // 4. Check if the Clarin License name was added to the Item's metadata `dc.rights`
+        assertClarinLicenseMetadata(witem, "dc", "rights", null, clarinLicenseName, false);
+
+        // 5. Check if the Clarin License was attached to the Bitstream
+        getClient(tokenAdmin).perform(get("/api/core/clarinlicenses/" + clarinLicense.getID()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bitstreams", is(1)));
+
+
+        // Creating of replace operation with empty clarin license name
+        Map<String, String> licenseReplaceEmptyOpValue = new HashMap<String, String>();
+        licenseReplaceEmptyOpValue.put("value", "");
+        replaceOperations.clear();
+        replaceOperations.add(new ReplaceOperation("/" + OPERATION_PATH_LICENSE_RESOURCE,
+                licenseReplaceEmptyOpValue));
+
+        String updateToEmptyBody = getPatchContent(replaceOperations);
+        // 6. Send request to remove Clarin License from the Workspace Item (the clarin license name is empty string)
+        getClient(tokenAdmin).perform(patch("/api/submission/workspaceitems/" + witem.getID())
+                        .content(updateToEmptyBody)
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk());
+
+        // 7. Check if the Item has cleared `dc.rights` metadata
+        assertClarinLicenseMetadata(witem, "dc", "rights", null, null, true);
+
+        // 8. Check if the Clarin License was detached from the Workspace Item bitstream
+        getClient(tokenAdmin).perform(get("/api/core/clarinlicenses/" + clarinLicense.getID()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bitstreams", is(0)));
+    }
+
+    /**
+     * Change the Item's `dc.rights` metadata and change the attached Workspace Item bitstream when the
+     * Clarin License is changed in the Workspace Item.
+     */
+    @Test
+    public void updateClarinLicenseInWI() throws Exception {
+        // 1. Create Workspace Item with uploaded file
+        // 2. Create Clarin Licenses
+        // 3. Send request to add Clarin License to the Workspace Item
+        // 4. Check if the Clarin License name was added to the Item's metadata `dc.rights`
+        // 5. Check if the Clarin License was attached to the Bitstream
+        // 6. Send request to change Clarin License in the Workspace Item
+        // 7. Check if the Clarin License name was updated in the Item's `dc.rights` metadata
+        // 8. Check if the first Clarin License was detached from the Workspace Item bitstream
+        // 9. Check if the updated Clarin License was attached to the Workspace Item bitstream
+
+        context.turnOffAuthorisationSystem();
+        // 1. Create Workspace Item with uploaded file
+        WorkspaceItem witem = this.createWorkspaceItemWithFile();
+        List<Operation> replaceOperations = new ArrayList<Operation>();
+        String clarinLicenseName = "Test Clarin License";
+        String updateClarinLicenseName = "Updated Clarin License";
+
+        // 2. Create Clarin Licenses
+        ClarinLicense clarinLicense = createClarinLicense(clarinLicenseName, "Test Def", "Test R Info", "lbl1",
+                Confirmation.NOT_REQUIRED);
+        ClarinLicense updatedClarinLicense =
+                createClarinLicense(updateClarinLicenseName, "Test Def2", "Test R Info2", "lbl2",
+                        Confirmation.NOT_REQUIRED);
+        context.restoreAuthSystemState();
+
+        // Creating replace operation
+        Map<String, String> licenseReplaceOpValue = new HashMap<String, String>();
+        licenseReplaceOpValue.put("value", clarinLicenseName);
+        replaceOperations.add(new ReplaceOperation("/" + OPERATION_PATH_LICENSE_RESOURCE,
+                licenseReplaceOpValue));
+
+        String updateBody = getPatchContent(replaceOperations);
+
+        // 3. Send request to add Clarin License to the Workspace Item
+        String tokenAdmin = getAuthToken(admin.getEmail(), password);
+        getClient(tokenAdmin).perform(patch("/api/submission/workspaceitems/" + witem.getID())
+                        .content(updateBody)
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk());
+
+        // 4. Check if the Clarin License name was added to the Item's metadata `dc.rights`
+        assertClarinLicenseMetadata(witem, "dc", "rights", null, clarinLicenseName, false);
+
+        // 5. Check if the Clarin License was attached to the Bitstream
+        getClient(tokenAdmin).perform(get("/api/core/clarinlicenses/" + clarinLicense.getID()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bitstreams", is(1)));
+
+        // Creating replace operation with updated clarin license name
+        Map<String, String> licenseReplaceNewOpValue = new HashMap<String, String>();
+        licenseReplaceNewOpValue.put("value", updateClarinLicenseName);
+        replaceOperations.clear();
+        replaceOperations.add(new ReplaceOperation("/" + OPERATION_PATH_LICENSE_RESOURCE,
+                licenseReplaceNewOpValue));
+
+        String updateToNewBody = getPatchContent(replaceOperations);
+        // 6. Send request to change Clarin License in the Workspace Item
+        getClient(tokenAdmin).perform(patch("/api/submission/workspaceitems/" + witem.getID())
+                        .content(updateToNewBody)
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk());
+
+        // 7. Check if the Clarin License name was updated in the Item's `dc.rights` metadata
+        assertClarinLicenseMetadata(witem, "dc", "rights", null, updateClarinLicenseName, false);
+
+        // 8. Check if the Clarin License was detached from the Workspace Item bitstream
+        getClient(tokenAdmin).perform(get("/api/core/clarinlicenses/" + clarinLicense.getID()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bitstreams", is(0)));
+
+        // 9. Check if the updated Clarin License was attached to the Workspace Item bitstream
+        getClient(tokenAdmin).perform(get("/api/core/clarinlicenses/" + updatedClarinLicense.getID()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bitstreams", is(1)));
+    }
+
+    /**
+     * Applying the CLARIN license via the section-scoped path
+     * `/sections/clarin-license/select` must work exactly like the legacy
+     * top-level `/license` path.
+     */
+    @Test
+    public void addClarinLicenseViaSectionPatch() throws Exception {
+        context.turnOffAuthorisationSystem();
+        WorkspaceItem witem = createWorkspaceItemWithFile();
+
+        String clarinLicenseName = "Test Section Clarin License";
+        ClarinLicense clarinLicense = createClarinLicense(clarinLicenseName, "Test Def", "Test R Info",
+                "lbl", Confirmation.NOT_REQUIRED);
+        context.restoreAuthSystemState();
+
+        List<Operation> replaceOperations = new ArrayList<Operation>();
+        Map<String, String> licenseReplaceOpValue = new HashMap<String, String>();
+        licenseReplaceOpValue.put("value", clarinLicenseName);
+        replaceOperations.add(new ReplaceOperation("/sections/clarin-license/select",
+                licenseReplaceOpValue));
+        String updateBody = getPatchContent(replaceOperations);
+
+        String tokenAdmin = getAuthToken(admin.getEmail(), password);
+        getClient(tokenAdmin).perform(patch("/api/submission/workspaceitems/" + witem.getID())
+                        .content(updateBody)
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk());
+
+        // Item metadata `dc.rights` must contain the CLARIN license name
+        assertClarinLicenseMetadata(witem, "dc", "rights", null, clarinLicenseName, false);
+
+        // Bitstream must be attached to the CLARIN license
+        getClient(tokenAdmin).perform(get("/api/core/clarinlicenses/" + clarinLicense.getID()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bitstreams", is(1)));
+    }
+
+    /**
+     * After applying a CLARIN license, GET on the workspace item must expose
+     * distinct payloads for the standard `license` section
+     * (CC license: url/acceptanceDate/granted) and the `clarin-license`
+     * section (name/definition/label/granted from `dc.rights*`).
+     */
+    @Test
+    public void getWorkspaceItemReturnsDistinctLicenseSections() throws Exception {
+        context.turnOffAuthorisationSystem();
+        WorkspaceItem witem = createWorkspaceItemWithFile();
+
+        String clarinLicenseName = "Distinct Sections Clarin License";
+        createClarinLicense(clarinLicenseName, "Test Def", "Test R Info",
+                "lbl", Confirmation.NOT_REQUIRED);
+        context.restoreAuthSystemState();
+
+        // Apply the CLARIN license through the section-scoped path
+        List<Operation> replaceOperations = new ArrayList<Operation>();
+        Map<String, String> licenseReplaceOpValue = new HashMap<String, String>();
+        licenseReplaceOpValue.put("value", clarinLicenseName);
+        replaceOperations.add(new ReplaceOperation("/sections/clarin-license/select",
+                licenseReplaceOpValue));
+        String updateBody = getPatchContent(replaceOperations);
+
+        String tokenAdmin = getAuthToken(admin.getEmail(), password);
+        getClient(tokenAdmin).perform(patch("/api/submission/workspaceitems/" + witem.getID())
+                        .content(updateBody)
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk());
+
+        // GET the workspace item and assert the two sections are distinct
+        getClient(tokenAdmin).perform(get("/api/submission/workspaceitems/" + witem.getID()))
+                .andExpect(status().isOk())
+                // clarin-license section reflects CLARIN-specific fields
+                .andExpect(jsonPath("$.sections['clarin-license'].name", is(clarinLicenseName)))
+                .andExpect(jsonPath("$.sections['clarin-license'].definition").isNotEmpty())
+                .andExpect(jsonPath("$.sections['clarin-license'].label").isNotEmpty())
+                .andExpect(jsonPath("$.sections['clarin-license'].granted", is(true)))
+                .andExpect(jsonPath("$.sections.license.granted", is(false)))
+                .andExpect(jsonPath("$.sections.license.acceptanceDate").isEmpty())
+                .andExpect(jsonPath("$.sections.license.url").isEmpty());
+    }
+
+    /**
+     * PATCH on `/sections/clarin-license/select` with an empty value must clear
+     * the previously selected license: `dc.rights*` metadata is removed and the
+     * license is detached from the uploaded bitstream.
+     */
+    @Test
+    public void patchSelectWithEmptyValueClearsLicense() throws Exception {
+        context.turnOffAuthorisationSystem();
+        WorkspaceItem witem = createWorkspaceItemWithFile();
+
+        String clarinLicenseName = "Empty Value Clarin License";
+        ClarinLicense clarinLicense = createClarinLicense(clarinLicenseName, "Test Def", "Test R Info",
+                "lbl", Confirmation.NOT_REQUIRED);
+        context.restoreAuthSystemState();
+
+        String tokenAdmin = getAuthToken(admin.getEmail(), password);
+
+        // First select the license through the new section path
+        List<Operation> ops = new ArrayList<Operation>();
+        Map<String, String> selectValue = new HashMap<String, String>();
+        selectValue.put("value", clarinLicenseName);
+        ops.add(new ReplaceOperation("/sections/clarin-license/select", selectValue));
+        getClient(tokenAdmin).perform(patch("/api/submission/workspaceitems/" + witem.getID())
+                        .content(getPatchContent(ops))
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk());
+        assertClarinLicenseMetadata(witem, "dc", "rights", null, clarinLicenseName, false);
+        getClient(tokenAdmin).perform(get("/api/core/clarinlicenses/" + clarinLicense.getID()))
+                .andExpect(jsonPath("$.bitstreams", is(1)));
+
+        // Now clear the selection with an empty value
+        ops.clear();
+        Map<String, String> emptyValue = new HashMap<String, String>();
+        emptyValue.put("value", "");
+        ops.add(new ReplaceOperation("/sections/clarin-license/select", emptyValue));
+        getClient(tokenAdmin).perform(patch("/api/submission/workspaceitems/" + witem.getID())
+                        .content(getPatchContent(ops))
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk());
+
+        // Item metadata cleared and license detached from bitstream
+        assertClarinLicenseMetadata(witem, "dc", "rights", null, null, true);
+        getClient(tokenAdmin).perform(get("/api/core/clarinlicenses/" + clarinLicense.getID()))
+                .andExpect(jsonPath("$.bitstreams", is(0)));
+    }
+
+    /**
+     * Two consecutive PATCHes on `/sections/clarin-license/select` must replace
+     * the previously selected license: `dc.rights` reflects the latest name and
+     * the bitstream is moved from the first license to the second one.
+     */
+    @Test
+    public void patchSelectReplacesPreviousLicense() throws Exception {
+        context.turnOffAuthorisationSystem();
+        WorkspaceItem witem = createWorkspaceItemWithFile();
+
+        String firstName = "First Clarin License";
+        String secondName = "Second Clarin License";
+        ClarinLicense first = createClarinLicense(firstName, "Def1", "Info1", "lbl1", Confirmation.NOT_REQUIRED);
+        ClarinLicense second = createClarinLicense(secondName, "Def2", "Info2", "lbl2", Confirmation.NOT_REQUIRED);
+        context.restoreAuthSystemState();
+
+        String tokenAdmin = getAuthToken(admin.getEmail(), password);
+
+        // Select first license
+        List<Operation> ops = new ArrayList<Operation>();
+        Map<String, String> v1 = new HashMap<String, String>();
+        v1.put("value", firstName);
+        ops.add(new ReplaceOperation("/sections/clarin-license/select", v1));
+        getClient(tokenAdmin).perform(patch("/api/submission/workspaceitems/" + witem.getID())
+                        .content(getPatchContent(ops))
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk());
+        assertClarinLicenseMetadata(witem, "dc", "rights", null, firstName, false);
+        getClient(tokenAdmin).perform(get("/api/core/clarinlicenses/" + first.getID()))
+                .andExpect(jsonPath("$.bitstreams", is(1)));
+
+        // Replace with second license through the same section path
+        ops.clear();
+        Map<String, String> v2 = new HashMap<String, String>();
+        v2.put("value", secondName);
+        ops.add(new ReplaceOperation("/sections/clarin-license/select", v2));
+        getClient(tokenAdmin).perform(patch("/api/submission/workspaceitems/" + witem.getID())
+                        .content(getPatchContent(ops))
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isOk());
+
+        assertClarinLicenseMetadata(witem, "dc", "rights", null, secondName, false);
+        getClient(tokenAdmin).perform(get("/api/core/clarinlicenses/" + first.getID()))
+                .andExpect(jsonPath("$.bitstreams", is(0)));
+        getClient(tokenAdmin).perform(get("/api/core/clarinlicenses/" + second.getID()))
+                .andExpect(jsonPath("$.bitstreams", is(1)));
+    }
+
+    /**
+     * PATCH on `/sections/clarin-license/select` with a name that does not
+     * resolve to an existing CLARIN license must fail with 422 and must not
+     * mutate the item's `dc.rights*` metadata.
+     */
+    @Test
+    public void patchSelectWithUnknownLicenseNameFails() throws Exception {
+        context.turnOffAuthorisationSystem();
+        WorkspaceItem witem = createWorkspaceItemWithFile();
+                List<MetadataValue> rightsBefore = itemService.getMetadata(witem.getItem(), "dc", "rights", null,
+                                null, Item.ANY);
+                List<String> rightsBeforeValues = new ArrayList<String>();
+                for (MetadataValue metadataValue : rightsBefore) {
+                        rightsBeforeValues.add(metadataValue.getValue());
+                }
+        context.restoreAuthSystemState();
+
+        List<Operation> ops = new ArrayList<Operation>();
+        Map<String, String> v = new HashMap<String, String>();
+        v.put("value", "Definitely Not An Existing License");
+        ops.add(new ReplaceOperation("/sections/clarin-license/select", v));
+
+        String tokenAdmin = getAuthToken(admin.getEmail(), password);
+        getClient(tokenAdmin).perform(patch("/api/submission/workspaceitems/" + witem.getID())
+                        .content(getPatchContent(ops))
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isUnprocessableEntity());
+
+        witem = context.reloadEntity(witem);
+        List<MetadataValue> rightsAfter = itemService.getMetadata(witem.getItem(), "dc", "rights", null,
+                null, Item.ANY);
+        List<String> rightsAfterValues = new ArrayList<String>();
+        for (MetadataValue metadataValue : rightsAfter) {
+            rightsAfterValues.add(metadataValue.getValue());
+        }
+        Assert.assertEquals(rightsBeforeValues, rightsAfterValues);
+    }
+
+    /**
+     * Anonymous PATCH on `/sections/clarin-license/select` must be rejected
+     * (the user is not authenticated to modify the submission).
+     */
+    @Test
+    public void patchSelectAsAnonymousIsUnauthorized() throws Exception {
+        context.turnOffAuthorisationSystem();
+        WorkspaceItem witem = createWorkspaceItemWithFile();
+        String clarinLicenseName = "Anon Clarin License";
+        createClarinLicense(clarinLicenseName, "Def", "Info", "lbl", Confirmation.NOT_REQUIRED);
+        context.restoreAuthSystemState();
+
+        List<Operation> ops = new ArrayList<Operation>();
+        Map<String, String> v = new HashMap<String, String>();
+        v.put("value", clarinLicenseName);
+        ops.add(new ReplaceOperation("/sections/clarin-license/select", v));
+
+        getClient().perform(patch("/api/submission/workspaceitems/" + witem.getID())
+                        .content(getPatchContent(ops))
+                        .contentType(MediaType.APPLICATION_JSON_PATCH_JSON))
+                .andExpect(status().isUnauthorized());
+    }
+
+    /**
+     * Create Item with standard handle. The handle definition for every community is configured
+     * by the `lr.pid.community.configurations` properties.
+     */
+    @Test
+    public void createItemWithConfiguredNormalHandle() throws Exception {
+        context.turnOffAuthorisationSystem();
+        parentCommunity = CommunityBuilder.createCommunity(context)
+                .withName("Parent Community")
+                .build();
+        Collection col = CollectionBuilder.createCollection(context, parentCommunity)
+                .withName("Collection").build();
+        WorkspaceItem wItem = WorkspaceItemBuilder.createWorkspaceItem(context, col)
+                .withTitle("Item with custom handle")
+                .withIssueDate("2017-10-17")
+                .build();
+
+        Item installedItem = installItemService.installItem(context, wItem);
+        context.restoreAuthSystemState();
+
+        Assert.assertNotNull(installedItem);
+        Assert.assertTrue(installedItem.getHandle().startsWith("123456789/"));
+    }
+
+    /**
+     * Create Item with specific handle. The handle definition for special community is configured
+     * by the `lr.pid.community.configurations` properties.
+     */
+    @Test
+    public void createItemWithConfiguredSpecificHandle() throws Exception {
+        context.turnOffAuthorisationSystem();
+        parentCommunity = CommunityBuilder.createCommunity(context)
+                .withName("Parent Community")
+                .build();
+
+        // Set property in the cfg
+        String specificCommunityHandleDef = "community=" + parentCommunity.getID() + ",prefix=LRT," +
+                "type=local,canonical_prefix=http://hdl.handle.net/,subprefix=100";
+        configurationService.setProperty("lr.pid.community.configurations", specificCommunityHandleDef);
+
+        // Reload the set property in the hash map.
+        PIDConfiguration pidConfiguration = PIDConfiguration.getInstance();
+        pidConfiguration.reloadPidCommunityConfigurations();
+
+        Collection col = CollectionBuilder.createCollection(context, parentCommunity)
+                .withName("Collection").build();
+        WorkspaceItem wItem = WorkspaceItemBuilder.createWorkspaceItem(context, col)
+                .withTitle("Item with custom handle")
+                .withIssueDate("2017-10-17")
+                .build();
+
+        // Add event here, because the `build()` remove all events.
+        context.addEvent(new Event(Event.MODIFY, Constants.ITEM, wItem.getItem().getID(),
+                SET_OWNING_COLLECTION_EVENT_DETAIL + col.getID()));
+
+        Item installedItem = installItemService.installItem(context, wItem);
+        context.restoreAuthSystemState();
+
+        Assert.assertNotNull(installedItem);
+        Assert.assertTrue(installedItem.getHandle().startsWith("LRT/100"));
+
+        // Restore community configuration
+        context.turnOffAuthorisationSystem();
+        // Set property in the cfg
+        String restoreAllCommunityHandleDef = "community=*, prefix=123456789, " +
+                "type=local, canonical_prefix=http://hdl.handle.net/, subprefix=2";
+        String restoreSpecificCommunityHandleDef = "community=09f09b11-cba1-4c43-9e01-29fe919991ab, " +
+                "prefix=123456789, " + "type=local, canonical_prefix=http://hdl.handle.net/, subprefix=2";
+        ArrayList<String> configArrayCommunityConfig = new ArrayList<>(2);
+        configArrayCommunityConfig.add(restoreAllCommunityHandleDef);
+        configArrayCommunityConfig.add(restoreSpecificCommunityHandleDef);
+        configurationService.setProperty("lr.pid.community.configurations", configArrayCommunityConfig);
+
+        // Reload the set property in the hash map.
+        pidConfiguration.reloadPidCommunityConfigurations();
+        context.restoreAuthSystemState();
+    }
+
+    /**
+     * The `lr.pid.community.configurations` property is null.
+     */
+    @Test
+    public void createItemWhenSpecificHandleIsNotConfigured() throws Exception {
+        context.turnOffAuthorisationSystem();
+        parentCommunity = CommunityBuilder.createCommunity(context)
+                .withName("Parent Community")
+                .build();
+
+        // Keep the value of the current configuration property
+        String[] currentCommunityConfig = configurationService.getArrayProperty("lr.pid.community.configurations");
+        // Set property in the cfg
+        configurationService.setProperty("lr.pid.community.configurations", null);
+        // Reload the set property in the hash map.
+        PIDConfiguration pidConfiguration = PIDConfiguration.getInstance();
+        pidConfiguration.reloadPidCommunityConfigurations();
+
+        Collection col = CollectionBuilder.createCollection(context, parentCommunity)
+                .withName("Collection").build();
+        WorkspaceItem wItem = WorkspaceItemBuilder.createWorkspaceItem(context, col)
+                .withTitle("Item with custom handle")
+                .withIssueDate("2017-10-17")
+                .build();
+
+        // Installing the Item assign a new Handle to the Item
+        Item installedItem = installItemService.installItem(context, wItem);
+        // It should not throw an exception
+        Assert.assertNotNull(installedItem);
+
+        // Restore the configuration property
+        configurationService.setProperty("lr.pid.community.configurations", currentCommunityConfig);
+        pidConfiguration.reloadPidCommunityConfigurations();
+        context.restoreAuthSystemState();
+    }
+
+    /**
+     * The `lr.pid.community.configurations` has no subprefix. That means the handle won't contain the `-` character.
+     */
+    @Test
+    public void createItemWhenSpecificHandleHasNoSubprefix() throws Exception {
+        context.turnOffAuthorisationSystem();
+        parentCommunity = CommunityBuilder.createCommunity(context)
+                .withName("Parent Community")
+                .build();
+
+        // Keep the value of the current configuration property
+        String[] currentCommunityConfig = configurationService.getArrayProperty("lr.pid.community.configurations");
+
+        // Set property in the cfg
+        String specificCommunityHandleDef = "community=*,prefix=LRT," +
+                "type=local,canonical_prefix=http://hdl.handle.net/,subprefix=";
+        configurationService.setProperty("lr.pid.community.configurations", specificCommunityHandleDef);
+        // Reload the set property in the hash map.
+        PIDConfiguration pidConfiguration = PIDConfiguration.getInstance();
+        pidConfiguration.reloadPidCommunityConfigurations();
+
+        Collection col = CollectionBuilder.createCollection(context, parentCommunity)
+                .withName("Collection").build();
+        WorkspaceItem wItem = WorkspaceItemBuilder.createWorkspaceItem(context, col)
+                .withTitle("Item with custom handle")
+                .withIssueDate("2017-10-17")
+                .build();
+
+        // Installing the Item assign a new Handle to the Item
+        Item installedItem = installItemService.installItem(context, wItem);
+        // It should not throw an exception
+        Assert.assertNotNull(installedItem);
+        Assert.assertTrue(installedItem.getHandle().startsWith("LRT/"));
+        Assert.assertFalse(installedItem.getHandle().contains("-"));
+
+        // Restore the configuration property
+        configurationService.setProperty("lr.pid.community.configurations", currentCommunityConfig);
+        // Reload the set property in the hash map.
+        pidConfiguration.reloadPidCommunityConfigurations();
+        context.restoreAuthSystemState();
+    }
+
+    @Test
+    public void testWsiWithShareToken() throws Exception {
+        String shareToken = "1234567890";
+        context.turnOffAuthorisationSystem();
+        parentCommunity = CommunityBuilder.createCommunity(context)
+                .withName("Parent Community")
+                .build();
+        Collection col = CollectionBuilder.createCollection(context, parentCommunity)
+                .withName("Collection").build();
+        WorkspaceItem wItem = WorkspaceItemBuilder.createWorkspaceItem(context, col)
+                .withTitle("Item with custom handle")
+                .withIssueDate("2017-10-17")
+                .withShareToken(shareToken)
+                .build();
+        context.restoreAuthSystemState();
+
+        String adminToken = getAuthToken(admin.getEmail(), password);
+        getClient(adminToken).perform(get("/api/submission/workspaceitems/search/shareToken")
+                        .param("shareToken", shareToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$._embedded.workspaceitems[0].id", is(wItem.getID())));
+
+        // test BadRequest response for invalid token
+        getClient(adminToken).perform(get("/api/submission/workspaceitems/search/shareToken")
+                        .param("shareToken", "invalid_token"))
+                .andExpect(status().isBadRequest())
+                .andExpect(status().reason(containsString("invalid_token does not exist")));
+    }
+
+    /**
+     * Create Clarin License Label object for testing purposes.
+     */
+    private ClarinLicenseLabel createClarinLicenseLabel(String label, boolean extended, String title)
+            throws SQLException, AuthorizeException {
+        ClarinLicenseLabel clarinLicenseLabel = ClarinLicenseLabelBuilder.createClarinLicenseLabel(context).build();
+        clarinLicenseLabel.setLabel(label);
+        clarinLicenseLabel.setExtended(extended);
+        clarinLicenseLabel.setTitle(title);
+
+        clarinLicenseLabelService.update(context, clarinLicenseLabel);
+        return clarinLicenseLabel;
+    }
+
+    /**
+     * Create ClarinLicense object with ClarinLicenseLabel object for testing purposes.
+     */
+    private ClarinLicense createClarinLicense(String name, String definition, String requiredInfo, String label,
+                                              Confirmation confirmation) throws SQLException, AuthorizeException {
+        ClarinLicense clarinLicense = ClarinLicenseBuilder.createClarinLicense(context).build();
+        clarinLicense.setConfirmation(confirmation);
+        clarinLicense.setDefinition(definition);
+        clarinLicense.setRequiredInfo(requiredInfo);
+        clarinLicense.setName(name);
+
+        // add ClarinLicenseLabels to the ClarinLicense
+        HashSet<ClarinLicenseLabel> clarinLicenseLabels = new HashSet<>();
+        ClarinLicenseLabel clarinLicenseLabel = createClarinLicenseLabel(label, false, label + " Title");
+        clarinLicenseLabels.add(clarinLicenseLabel);
+        clarinLicense.setLicenseLabels(clarinLicenseLabels);
+
+        clarinLicenseService.update(context, clarinLicense);
+        return clarinLicense;
+    }
+
+    private WorkspaceItem createWorkspaceItemWithFile() {
+        parentCommunity = CommunityBuilder.createCommunity(context)
+                .withName("Parent Community")
+                .build();
+        Community child1 = CommunityBuilder.createSubCommunity(context, parentCommunity)
+                .withName("Sub Community")
+                .build();
+        Collection col1 = CollectionBuilder.createCollection(context, child1)
+                .withName("Collection 1")
+                .build();
+
+        context.setCurrentUser(eperson);
+        InputStream pdf = getClass().getResourceAsStream("simple-article.pdf");
+
+        WorkspaceItem witem = WorkspaceItemBuilder.createWorkspaceItem(context, col1)
+                .withTitle("Test WorkspaceItem")
+                .withIssueDate("2017-10-17")
+                .withFulltext("simple-article.pdf", "/local/path/simple-article.pdf", pdf)
+                .build();
+
+        return witem;
+    }
+
+    private WorkspaceItem createSimpleWorkspaceItem() {
+        context.turnOffAuthorisationSystem();
+
+        parentCommunity = CommunityBuilder.createCommunity(context)
+                .withName("Parent Community")
+                .build();
+        Community child1 = CommunityBuilder.createSubCommunity(context, parentCommunity)
+                .withName("Sub Community")
+                .build();
+        Collection col1 = CollectionBuilder.createCollection(context, child1)
+                .withName("Collection 1")
+                .build();
+
+        context.setCurrentUser(eperson);
+        WorkspaceItem witem = WorkspaceItemBuilder.createWorkspaceItem(context, col1)
+                .withTitle("Workspace Item 1")
+                .withIssueDate("2017-10-17")
+                .withSubject("ExtraEntry")
+                .build();
+
+        context.restoreAuthSystemState();
+
+        return witem;
+    }
+
+    /**
+     * Assert that the Clarin License metadata is present in the Workspace Item.
+     * @param witem the Workspace Item to check
+     * @param schema the metadata schema (e.g., "dc")
+     * @param element the metadata element (e.g., "rights")
+     * @param qualifier the metadata qualifier (e.g., null for no qualifier)
+     * @param valueToCompare the expected value of the metadata
+     * @param isEmpty true if the metadata should be empty, false otherwise
+     */
+    private void assertClarinLicenseMetadata(WorkspaceItem witem, String schema, String element, String qualifier,
+                                             String valueToCompare, boolean isEmpty)
+            throws SQLException {
+        witem = context.reloadEntity(witem);
+        List<MetadataValue> rightsMetadata = itemService.getMetadata(witem.getItem(), schema, element, qualifier,
+                null, Item.ANY);
+        if (isEmpty) {
+            Assert.assertTrue(rightsMetadata.isEmpty());
+            return;
+        }
+        Assert.assertFalse(rightsMetadata.isEmpty());
+        Assert.assertEquals(valueToCompare, rightsMetadata.get(0).getValue());
+    }
+}

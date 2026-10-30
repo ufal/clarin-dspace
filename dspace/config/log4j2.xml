@@ -23,7 +23,7 @@
     <Appenders>
         <!-- A1 is for most DSpace activity -->
         <Appender name='A1'
-                  filePattern="${log.dir}/dspace.log-%d{yyyy-MM-dd}"
+                  filePattern="${log.dir}/dspace.log-%d{yyyy-MM-dd}.gz"
                   type='RollingFile'
                   fileName='${log.dir}/dspace.log'
 
@@ -44,6 +44,21 @@
             </DefaultRolloverStrategy>
             -->
         </Appender>
+
+        <!-- A4 is for Warns and errors -->
+        <Appender name='A4'
+                  filePattern="${log.dir}/warn.log-%d{yyyy-MM-dd}.gz"
+                  type='RollingFile'
+                  fileName='${log.dir}/warn.log'
+        >
+            <!-- NOTE: The %equals patterns are providing a default value of "unknown" if "correlationID" or
+                 "requestID" are not currently set in the ThreadContext. -->
+            <Layout type='PatternLayout'
+                    pattern='%d %-5p %equals{%X{correlationID}}{}{unknown} %equals{%X{requestID}}{}{unknown} %c @ %m%n'/>
+            <policies>
+                <policy type='TimeBasedTriggeringPolicy'>yyyy-MM-dd</policy>
+            </policies>
+        </Appender>
     </Appenders>
 
     <Loggers>
@@ -53,6 +68,7 @@
                 level='${loglevel.dspace}'
                 additivity='false'>
             <AppenderRef ref='A1'/>
+            <AppenderRef ref="A4" level="WARN"/>
         </Logger>
 
         <!-- Block services logging except on exceptions -->
@@ -73,6 +89,14 @@
         <!-- Anything not a part of DSpace -->
         <Root level='${loglevel.other}'>
             <AppenderRef ref='A1'/>
+            <AppenderRef ref="A4" level="WARN"/>
         </Root>
+
+        <!-- 404 NOT_FOUND responses. Set to WARN to see 404s in logs. -->
+        <Logger name='org.dspace.app.rest.exception.DSpaceApiExceptionControllerAdvice.NotFound'
+                level='OFF'
+                additivity='false'>
+            <AppenderRef ref='A1'/>
+        </Logger>
     </Loggers>
 </Configuration>

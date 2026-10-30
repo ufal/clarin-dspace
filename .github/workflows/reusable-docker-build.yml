@@ -8,6 +8,14 @@ on:
   workflow_call:
     # Possible Inputs to this reusable job
     inputs:
+      python_version_script_dest:
+        required: false
+        default: version.txt
+        type: string
+      run_python_version_script:
+        required: false
+        default: false
+        type: boolean
       # Build name/id for this Docker build. Used for digest storage to avoid digest overlap between builds.
       build_id:
         required: true
@@ -54,12 +62,14 @@ env:
   # For a new commit on default branch (main), use the literal tag 'latest' on Docker image.
   # For a new commit on other branches, use the branch name as the tag for Docker image.
   # For a new tag, copy that tag name as the tag for Docker image.
+  # For every build, also tag the image with the commit SHA (tag-release.yml retags that image on release).
   # For a pull request, use the name of the base branch that the PR was created against or "latest" (for main).
   #   e.g. PR against 'main' will use "latest". a PR against 'dspace-7_x' will use 'dspace-7_x'.
   IMAGE_TAGS: |
     type=raw,value=latest,enable=${{ github.ref_name == github.event.repository.default_branch }}
     type=ref,event=branch,enable=${{ github.ref_name != github.event.repository.default_branch }}
     type=ref,event=tag
+    type=raw,value=${{ github.sha }}
     type=raw,value=${{ (github.event.pull_request.base.ref == github.event.repository.default_branch && 'latest') || github.event.pull_request.base.ref }},enable=${{ github.event_name == 'pull_request' }}
   # Define default tag "flavor" for docker/metadata-action per
   # https://github.com/docker/metadata-action#flavor-input
@@ -120,6 +130,10 @@ jobs:
           registry: ${{ env.DOCKER_BUILD_REGISTRY }}
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add version
+        if: ${{ inputs.run_python_version_script }}
+        run: python scripts/sourceversion.py ${{ github.server_url }}/${{ github.repository }}/actions/runs/ ${{ github.run_id }} > ${{ inputs.python_version_script_dest }}
 
       # https://github.com/docker/setup-buildx-action
       - name: Setup Docker Buildx

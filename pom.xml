@@ -580,7 +580,9 @@
                 </property>
             </activation>
             <properties>
-                <test.argLine>-Xmx1024m -Dfile.encoding=UTF-8</test.argLine>
+                <!-- CLARIN: fork kernel (extra beans/config) exceeds the vanilla 1024m during long
+                     unit runs on CI (OutOfMemoryError: Java heap space in AccessStatusServiceTest etc.) -->
+                <test.argLine>-Xmx2048m -Dfile.encoding=UTF-8</test.argLine>
             </properties>
         </profile>
 

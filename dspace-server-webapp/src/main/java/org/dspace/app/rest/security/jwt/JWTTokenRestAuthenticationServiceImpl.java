@@ -20,6 +20,7 @@ import jakarta.ws.rs.core.HttpHeaders;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.dspace.administer.ClarinTokenUtils;
 import org.dspace.app.rest.model.wrapper.AuthenticationToken;
 import org.dspace.app.rest.security.DSpaceAuthentication;
 import org.dspace.app.rest.security.DSpaceCsrfAuthenticationStrategy;
@@ -27,6 +28,8 @@ import org.dspace.app.rest.security.RestAuthenticationService;
 import org.dspace.app.rest.utils.ContextUtil;
 import org.dspace.authenticate.AuthenticationMethod;
 import org.dspace.authenticate.service.AuthenticationService;
+import org.dspace.content.clarin.ClarinToken;
+import org.dspace.content.service.clarin.ClarinTokenService;
 import org.dspace.core.Context;
 import org.dspace.eperson.EPerson;
 import org.dspace.eperson.service.EPersonService;
@@ -63,6 +66,9 @@ public class JWTTokenRestAuthenticationServiceImpl implements RestAuthentication
 
     @Autowired
     private AuthenticationService authenticationService;
+
+    @Autowired
+    ClarinTokenService clarinTokenService;
 
     @Lazy
     @Autowired
@@ -127,7 +133,15 @@ public class JWTTokenRestAuthenticationServiceImpl implements RestAuthentication
                 token = getShortLivedToken(request);
                 ePerson = shortLivedJWTTokenHandler.parseEPersonFromToken(token, request, context);
             } else {
-                ePerson = loginJWTTokenHandler.parseEPersonFromToken(token, request, context);
+                if (ClarinTokenUtils.isClarinToken(token)) {
+                    ePerson = clarinTokenService.getEPersonFromClarinToken(context, token);
+                    if (ePerson != null) {
+                        context.setCurrentUser(ePerson);
+                        context.setAuthenticationMethod(ClarinToken.AUTHENTICATION_METHOD);
+                    }
+                } else {
+                    ePerson = loginJWTTokenHandler.parseEPersonFromToken(token, request, context);
+                }
             }
             return ePerson;
         } catch (JOSEException e) {

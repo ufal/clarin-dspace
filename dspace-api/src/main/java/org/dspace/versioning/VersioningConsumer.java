@@ -38,6 +38,8 @@ import org.dspace.orcid.OrcidQueue;
 import org.dspace.orcid.factory.OrcidServiceFactory;
 import org.dspace.orcid.service.OrcidHistoryService;
 import org.dspace.orcid.service.OrcidQueueService;
+import org.dspace.services.ConfigurationService;
+import org.dspace.services.factory.DSpaceServicesFactory;
 import org.dspace.versioning.factory.VersionServiceFactory;
 import org.dspace.versioning.service.VersionHistoryService;
 import org.dspace.versioning.utils.RelationshipVersioningUtils;
@@ -65,6 +67,7 @@ public class VersioningConsumer implements Consumer {
     private RelationshipVersioningUtils relationshipVersioningUtils;
     private OrcidQueueService orcidQueueService;
     private OrcidHistoryService orcidHistoryService;
+    private ConfigurationService configurationService;
 
     @Override
     public void initialize() throws Exception {
@@ -76,6 +79,7 @@ public class VersioningConsumer implements Consumer {
         relationshipVersioningUtils = VersionServiceFactory.getInstance().getRelationshipVersioningUtils();
         this.orcidQueueService = OrcidServiceFactory.getInstance().getOrcidQueueService();
         this.orcidHistoryService = OrcidServiceFactory.getInstance().getOrcidHistoryService();
+        configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
     }
 
     @Override
@@ -140,9 +144,13 @@ public class VersioningConsumer implements Consumer {
         }
 
         // unarchive previous item
-        unarchiveItem(ctx, previousItem);
-        // handles versions for ORCID publications waiting to be shipped, or already published (history-queue).
-        handleOrcidSynchronization(ctx, previousItem, latestItem);
+        // the "versioning.unarchive.previous.version" property controls whether previous item is unarchived or not
+        if (configurationService.getBooleanProperty("versioning.unarchive.previous.version", true)) {
+            unarchiveItem(ctx, previousItem);
+            // handles versions for ORCID publications waiting to be shipped, or already published (history-queue).
+            handleOrcidSynchronization(ctx, previousItem, latestItem);
+        }
+
         // update relationships
         updateRelationships(ctx, latestItem, previousItem);
     }

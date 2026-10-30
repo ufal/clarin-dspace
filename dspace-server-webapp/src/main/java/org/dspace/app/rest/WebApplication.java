@@ -12,6 +12,7 @@ import java.sql.SQLException;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.TimeZone;
+import java.util.function.Predicate;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.servlet.Filter;
@@ -20,6 +21,7 @@ import org.dspace.app.ldn.LDNQueueTimeoutChecker;
 import org.dspace.app.rest.filter.DSpaceRequestContextFilter;
 import org.dspace.app.rest.model.hateoas.DSpaceLinkRelationProvider;
 import org.dspace.app.rest.parameter.resolver.SearchFilterResolver;
+import org.dspace.app.rest.security.clarin.ClarinShibbolethLoginFilter;
 import org.dspace.app.rest.utils.ApplicationConfig;
 import org.dspace.app.rest.utils.DSpaceAPIRequestLoggingFilter;
 import org.dspace.app.sitemap.GenerateSitemaps;
@@ -36,6 +38,8 @@ import org.springframework.hateoas.server.LinkRelationProvider;
 import org.springframework.lang.NonNull;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.security.web.firewall.HttpFirewall;
+import org.springframework.security.web.firewall.StrictHttpFirewall;
 import org.springframework.web.context.request.RequestContextListener;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
@@ -152,6 +156,23 @@ public class WebApplication {
         return new DSpaceLinkRelationProvider();
     }
 
+    /**
+     * StrictHttpFirewall doesn't allow ISO header values by default. It could throw an error during Shibboleth
+     * authentication if the user has UTF-8 characters in the name.
+     * Updated allowedHeaderValues without any regex - it allows every character.
+     * @return
+     */
+    @Bean
+    public HttpFirewall allowUrlEncodedSlashHttpFirewall() {
+        StrictHttpFirewall firewall = new StrictHttpFirewall();
+        Predicate<String> test = (s) -> {
+            return true;
+        };
+
+        firewall.setAllowedHeaderValues(test);
+        return firewall;
+    }
+
     @Bean
     public WebMvcConfigurer webMvcConfigurer() {
 
@@ -183,7 +204,7 @@ public class WebApplication {
                             // Allow list of request preflight headers allowed to be sent to us from the client
                             .allowedHeaders("Accept", "Authorization", "Content-Type", "Origin", "X-On-Behalf-Of",
                                 "X-Requested-With", "X-XSRF-TOKEN", "X-CORRELATION-ID", "X-REFERRER",
-                                "x-captcha-payload")
+                                "x-captcha-payload", ClarinShibbolethLoginFilter.VERIFICATION_TOKEN_HEADER)
                             // Allow list of response headers allowed to be sent by us (the server) to the client
                             .exposedHeaders("Authorization", "DSPACE-XSRF-TOKEN", "Location", "WWW-Authenticate");
                 }
@@ -195,7 +216,7 @@ public class WebApplication {
                             // Allow list of request preflight headers allowed to be sent to us from the client
                             .allowedHeaders("Accept", "Authorization", "Content-Type", "Origin", "X-On-Behalf-Of",
                                 "X-Requested-With", "X-XSRF-TOKEN", "X-CORRELATION-ID", "X-REFERRER",
-                                "x-captcha-payload")
+                                "x-captcha-payload", ClarinShibbolethLoginFilter.VERIFICATION_TOKEN_HEADER)
                             // Allow list of response headers allowed to be sent by us (the server) to the client
                             .exposedHeaders("Authorization", "DSPACE-XSRF-TOKEN", "Location", "WWW-Authenticate");
                 }

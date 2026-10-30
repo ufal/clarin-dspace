@@ -20,6 +20,8 @@ public class DiscoveryConfigurationParameters {
     public static final String TYPE_AC = "ac";
     public static final String TYPE_AUTHORITY = "authority";
     public static final String TYPE_STANDARD = "standard";
+    // CLARIN/LINDAT: facet type that stores the full ISO language name instead of the iso code
+    public static final String TYPE_ISO_LANG = "iso_language";
 
     public static enum SORT { VALUE, COUNT }
 

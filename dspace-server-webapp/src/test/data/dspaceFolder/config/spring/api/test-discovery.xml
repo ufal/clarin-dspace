@@ -34,6 +34,13 @@
                 <!-- Same as the "default" configuration, but does NOT filter out older versions of items -->
                 <!-- Used to display related items on single-item pages, because a relationship does not always point to the latest version of the related item -->
                 <entry key="default-relationships" value-ref="defaultRelationshipsConfiguration" />
+                <!-- CLARIN: the home page uses its own configuration; this bean definition replaces the one in
+                     discovery.xml, so the entry has to be repeated here or ?configuration=homepage is unknown -->
+                <entry key="homepage" value-ref="homepageConfiguration" />
+                <!-- CLARIN: the items-only configurations, repeated for the same reason -->
+                <entry key="items" value-ref="itemsConfiguration" />
+                <entry key="community" value-ref="communityConfiguration" />
+                <entry key="collection" value-ref="collectionConfiguration" />
                 <!--<entry key="123456789/7621" value-ref="defaultConfiguration"/>-->
                 <!-- Used to show filters and results on MyDSpace -->
                 <!-- Do not change the id of special entries or else they won't work -->

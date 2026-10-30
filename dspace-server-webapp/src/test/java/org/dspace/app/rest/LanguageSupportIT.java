@@ -39,7 +39,7 @@ public class LanguageSupportIT extends AbstractControllerIntegrationTest {
     @Test
     public void checkDefaultLanguageAnonymousTest() throws Exception {
         getClient().perform(get("/api"))
-                   .andExpect(header().stringValues("Content-Language","en"));
+                   .andExpect(header().stringValues("Content-Language","en,cs"));
     }
 
     @Test

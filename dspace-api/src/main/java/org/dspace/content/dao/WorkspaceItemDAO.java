@@ -47,4 +47,7 @@ public interface WorkspaceItemDAO extends GenericDAO<WorkspaceItem> {
 
     public int countRows(Context context, EPerson ep) throws SQLException;
 
+
+    public List<WorkspaceItem> findByShareToken(Context context, String shareToken) throws SQLException;
+
 }

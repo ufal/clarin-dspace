@@ -67,4 +67,9 @@
 
     <bean id="captchaServiceFactory" class="org.dspace.eperson.factory.CaptchaServiceFactoryImpl"/>
 
+
+    <!-- CLARIN/LINDAT (UFAL) factories (ported for DSpace 9) -->
+    <bean id="clarinServiceFactory" class="org.dspace.content.factory.ClarinServiceFactoryImpl"/>
+    <bean id="handleClarinServiceFactory" class="org.dspace.handle.factory.HandleClarinServiceFactoryImpl"/>
+
 </beans>

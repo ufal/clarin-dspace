@@ -124,6 +124,10 @@ public class IIIFCacheEventConsumer implements Consumer {
     }
 
     private void addToCacheEviction(DSpaceObject subject, DSpaceObject subject2, int type) {
+        if (subject == null) {
+            log.warn("IIIF event consumer cannot evict from cache when subject is null.");
+            return;
+        }
         if (type == Constants.BITSTREAM) {
             toEvictFromCanvasCache.add(subject2);
         }

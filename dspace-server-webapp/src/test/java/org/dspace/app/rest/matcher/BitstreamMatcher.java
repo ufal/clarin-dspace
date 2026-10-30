@@ -101,6 +101,8 @@ public class BitstreamMatcher {
     public static Matcher<? super Object> matchFullEmbeds() {
         return matchEmbeds(
                 "bundle",
+                // CLARIN: BitstreamRest exposes an embeddable checksum link rel
+                "checksum",
                 "format",
                 "thumbnail",
                 "accessStatus"
@@ -113,6 +115,8 @@ public class BitstreamMatcher {
     public static Matcher<? super Object> matchLinks(UUID uuid) {
         return HalMatcher.matchLinks(REST_SERVER_URL + "core/bitstreams/" + uuid,
                 "bundle",
+                // CLARIN: BitstreamRest exposes an embeddable checksum link rel
+                "checksum",
                 "content",
                 "format",
                 "self",

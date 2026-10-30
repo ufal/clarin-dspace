@@ -24,5 +24,7 @@ public enum ChecksumResultCode {
     CHECKSUM_MATCH,
     CHECKSUM_NO_MATCH,
     CHECKSUM_PREV_NOT_FOUND,
-    CHECKSUM_ALGORITHM_INVALID
+    CHECKSUM_ALGORITHM_INVALID,
+    // Recorded when a synchronized bitstream's two copies disagree; see CheckerCommand's second pass.
+    CHECKSUM_SYNC_NO_MATCH
 }

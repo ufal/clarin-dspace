@@ -27,6 +27,7 @@ import org.hibernate.SessionFactory;
 import org.hibernate.Transaction;
 import org.hibernate.engine.spi.SessionFactoryImplementor;
 import org.hibernate.resource.transaction.spi.TransactionStatus;
+import org.hibernate.stat.Statistics;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.orm.hibernate5.SessionFactoryUtils;
@@ -347,4 +348,20 @@ public class HibernateDBConnection implements DBConnection<Session> {
             getSession().flush();
         }
     }
+
+    /**
+     * Get Hibernate statistics as a string
+     * @return the Hibernate statistics as a String
+     */
+    public String getHibernateStatistics() {
+        if (sessionFactory != null) {
+            Statistics stats = sessionFactory.getStatistics();
+            return "Hibernate Statistics - Open Sessions: " + stats.getSessionOpenCount() + ", Closed Sessions: " +
+                    stats.getSessionCloseCount() + ", Transactions: " + stats.getTransactionCount() +
+                    ", Connections Obtained: " + stats.getConnectCount();
+        } else {
+            return "SessionFactory is not available for logging Hibernate statistics.";
+        }
+    }
+
 }

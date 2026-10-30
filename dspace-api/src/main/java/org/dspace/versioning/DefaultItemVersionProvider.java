@@ -9,12 +9,15 @@ package org.dspace.versioning;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 import org.apache.logging.log4j.Logger;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.authorize.ResourcePolicy;
 import org.dspace.content.Item;
+import org.dspace.content.MetadataSchemaEnum;
 import org.dspace.content.Relationship;
 import org.dspace.content.WorkspaceItem;
 import org.dspace.content.service.RelationshipService;
@@ -35,6 +38,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 public class DefaultItemVersionProvider extends AbstractVersionProvider implements ItemVersionProvider {
 
     Logger log = org.apache.logging.log4j.LogManager.getLogger(DefaultItemVersionProvider.class);
+    private static final String UNTITLED = "Untitled"; // Default title for items without a name
 
     @Autowired(required = true)
     protected WorkspaceItemService workspaceItemService;
@@ -122,6 +126,22 @@ public class DefaultItemVersionProvider extends AbstractVersionProvider implemen
             List<ResourcePolicy> policies =
                 authorizeService.findPoliciesByDSOAndType(c, previousItem, ResourcePolicy.TYPE_CUSTOM);
             authorizeService.addPolicies(c, policies, itemNew);
+
+            // Add metadata `dc.relation.replaces` to the new item. The metadata `dc.relation.isreplacedby`
+            // are added to the previous item in the VersionRestRepository.
+            manageRelationMetadata(c, itemNew, previousItem);
+
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+            String formattedDate = LocalDate.now().format(formatter);
+            String itemName = itemNew.getName();
+            if (itemName == null) {
+                itemName = UNTITLED;
+            }
+            String titleWithDate = itemName + " (" + formattedDate + ")";
+            // Set the item's title with the formatted date appended
+            itemService.setMetadataSingleValue(c, itemNew, MetadataSchemaEnum.DC.getName(),
+                    "title", null, Item.ANY, titleWithDate);
+
             itemService.update(c, itemNew);
             return itemNew;
         } catch (IOException | SQLException | AuthorizeException e) {
@@ -138,6 +158,21 @@ public class DefaultItemVersionProvider extends AbstractVersionProvider implemen
      * @param newItem the new version of the item.
      * @param oldItem the old version of the item.
      */
+    /**
+     * Add metadata `dc.relation.replaces` to the new item.
+     */
+    private void manageRelationMetadata(Context c, Item itemNew, Item previousItem) throws SQLException {
+        // Remove copied `dc.relation.replaces` metadata for the new item.
+        itemService.clearMetadata(c, itemNew, "dc", "relation", "replaces", Item.ANY);
+
+        // Add metadata `dc.relation.replaces` to the new item.
+        // The metadata value is: `dc.identifier.uri` from the previous item.
+        String identifierUriPrevItem = itemService.getMetadataFirstValue(previousItem, "dc",
+                "identifier","uri", Item.ANY);
+        itemService.addMetadata(c, itemNew, "dc", "relation", "replaces", null,
+                identifierUriPrevItem);
+    }
+
     protected void copyRelationships(
         Context context, Item newItem, Item oldItem
     ) throws SQLException, AuthorizeException {

@@ -62,6 +62,13 @@ public class DSpaceApiExceptionControllerAdvice extends ResponseEntityExceptionH
     private static final Logger log = LogManager.getLogger();
 
     /**
+     * Dedicated logger for 404 NOT_FOUND responses. Kept separate so that the noisy stream of 404s can be
+     * suppressed independently of other client errors. Set to OFF by default in log4j2.xml.
+     */
+    private static final Logger notFoundLog =
+            LogManager.getLogger("org.dspace.app.rest.exception.DSpaceApiExceptionControllerAdvice.NotFound");
+
+    /**
      * Default collection of HTTP error codes to log as ERROR with full stack trace.
      */
     private static final String[] LOG_AS_ERROR_DEFAULT = { "422" };
@@ -233,7 +240,13 @@ public class DSpaceApiExceptionControllerAdvice extends ResponseEntityExceptionH
         } else {
             returnCode = HttpServletResponse.SC_INTERNAL_SERVER_ERROR;
         }
-        sendErrorResponse(request, response, ex, "An exception has occurred", returnCode);
+        if (HttpStatus.valueOf(returnCode).is4xxClientError()) {
+            // CLARIN: expose the exception message to REST clients for 4xx errors
+            sendErrorResponse(request, response, ex,
+                    ex.getMessage() != null ? ex.getMessage() : "An exception has occurred", returnCode);
+        } else {
+            sendErrorResponse(request, response, ex, "An exception has occurred", returnCode);
+        }
 
     }
 
@@ -288,12 +301,26 @@ public class DSpaceApiExceptionControllerAdvice extends ResponseEntityExceptionH
                 StackTraceElement[] trace = ex.getStackTrace();
                 location = trace.length <= 0 ? "unknown" : trace[0].toString();
             }
-            log.warn("{} (status:{} exception: {} at: {})", message, statusCode,
-                    exceptionMessage, location);
+            logClientError(statusCode, message, exceptionMessage, location);
         }
 
         //Exception properties will be set by org.springframework.boot.web.support.ErrorPageFilter
         response.sendError(statusCode, message);
+    }
+
+    /**
+     * Log a 4xx client error. 404 NOT_FOUND is sent to a dedicated logger ({@link #notFoundLog})
+     * at WARN level, but the logger is set to OFF by default in log4j2.xml (suppressed).
+     * Set logger to WARN in log4j2.xml to see 404 responses in logs.
+     */
+    private void logClientError(int statusCode, String message, String exceptionMessage, String location) {
+        if (statusCode == HttpServletResponse.SC_NOT_FOUND) {
+            notFoundLog.warn("{} (status:{} exception: {} at: {})", message, statusCode,
+                    exceptionMessage, location);
+        } else {
+            log.warn("{} (status:{} exception: {} at: {})", message, statusCode,
+                    exceptionMessage, location);
+        }
     }
 
 }

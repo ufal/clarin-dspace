@@ -122,6 +122,18 @@ public interface CommunityService extends DSpaceObjectService<Community>, DSpace
         IOException, SQLException;
 
     /**
+     * Set an existing bitstream as the logo for this community (CLARIN import).
+     *
+     * @param context   context
+     * @param community community
+     * @param newLogo   existing bitstream to use as the logo
+     * @throws SQLException       if database error
+     * @throws AuthorizeException if authorization error
+     */
+    public void addLogo(Context context, Community community, Bitstream newLogo)
+            throws SQLException, AuthorizeException;
+
+    /**
      * Create a default administrators group if one does not already exist.
      * Returns either the newly created group or the previously existing one.
      * Note that other groups may also be administrators.

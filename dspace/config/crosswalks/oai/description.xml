@@ -2,5 +2,5 @@
 <scheme>oai</scheme>
 <repositoryIdentifier>${oai.identifier.prefix}</repositoryIdentifier>
 <delimiter>:</delimiter>
-<sampleIdentifier>oai:${oai.identifier.prefix}:${handle.prefix}/1234</sampleIdentifier>
+<sampleIdentifier>${oai.sample.identifier}</sampleIdentifier>
 </oai-identifier>

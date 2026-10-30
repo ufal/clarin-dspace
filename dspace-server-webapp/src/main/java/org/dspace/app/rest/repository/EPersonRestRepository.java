@@ -7,6 +7,8 @@
  */
 package org.dspace.app.rest.repository;
 
+import static org.dspace.content.clarin.ClarinUserRegistration.UNKNOWN_USER_REGISTRATION;
+
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Arrays;
@@ -36,6 +38,8 @@ import org.dspace.app.util.AuthorizeUtil;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.authorize.service.AuthorizeService;
 import org.dspace.authorize.service.ValidatePasswordService;
+import org.dspace.content.clarin.ClarinUserRegistration;
+import org.dspace.content.service.clarin.ClarinUserRegistrationService;
 import org.dspace.core.Context;
 import org.dspace.eperson.EPerson;
 import org.dspace.eperson.EmptyWorkflowGroupException;
@@ -90,6 +94,9 @@ public class EPersonRestRepository extends DSpaceObjectRestRepository<EPerson, E
 
     private final EPersonService es;
 
+    @Autowired
+    ClarinUserRegistrationService clarinUserRegistrationService;
+
 
     public EPersonRestRepository(EPersonService dsoService) {
         super(dsoService);
@@ -133,6 +140,8 @@ public class EPersonRestRepository extends DSpaceObjectRestRepository<EPerson, E
             eperson.setRequireCertificate(epersonRest.isRequireCertificate());
             eperson.setEmail(epersonRest.getEmail());
             eperson.setNetid(epersonRest.getNetid());
+            eperson.setWelcomeInfo(epersonRest.getWelcomeInfo());
+            eperson.setCanEditSubmissionMetadata(epersonRest.getCanEditSubmissionMetadata());
             if (epersonRest.getPassword() != null) {
                 if (!validatePasswordService.isPasswordValid(epersonRest.getPassword())) {
                     throw new PasswordNotValidException();
@@ -141,6 +150,14 @@ public class EPersonRestRepository extends DSpaceObjectRestRepository<EPerson, E
             }
             es.update(context, eperson);
             metadataConverter.setMetadata(context, eperson, epersonRest.getMetadata());
+
+            // Create user registration
+            ClarinUserRegistration clarinUserRegistration = new ClarinUserRegistration();
+            clarinUserRegistration.setOrganization(UNKNOWN_USER_REGISTRATION);
+            clarinUserRegistration.setConfirmation(true);
+            clarinUserRegistration.setEmail(eperson.getEmail());
+            clarinUserRegistration.setPersonID(eperson.getID());
+            clarinUserRegistrationService.create(context, clarinUserRegistration);
         } catch (SQLException e) {
             throw new RuntimeException(e.getMessage(), e);
         }
@@ -376,7 +393,7 @@ public class EPersonRestRepository extends DSpaceObjectRestRepository<EPerson, E
         } catch (EmptyWorkflowGroupException e) {
             throw new RESTEmptyWorkflowGroupException(e);
         } catch (IllegalStateException e) {
-            throw new UnprocessableEntityException(e.getMessage(), e);
+            throw new DSpaceBadRequestException(e.getMessage(), e);
         }
     }
 

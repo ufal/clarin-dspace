@@ -12,6 +12,7 @@ import java.io.InputStream;
 import java.sql.SQLException;
 import java.time.Period;
 import java.util.List;
+import java.util.UUID;
 
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.Bitstream;
@@ -48,6 +49,15 @@ public class BitstreamBuilder extends AbstractDSpaceObjectBuilder<Bitstream> {
         return builder.create(context, item, is);
     }
 
+    public static BitstreamBuilder createBitstream(Context context, Item item, InputStream is, boolean hasBundle)
+            throws SQLException, AuthorizeException, IOException {
+        BitstreamBuilder builder = new BitstreamBuilder(context);
+        if (hasBundle) {
+            return builder.create(context, item, is, true);
+        }
+        return builder.create(context, item, is, false);
+    }
+
     public static BitstreamBuilder createBitstream(Context context, Bundle bundle, InputStream is)
             throws SQLException, AuthorizeException, IOException {
         BitstreamBuilder builder = new BitstreamBuilder(context);
@@ -75,6 +85,19 @@ public class BitstreamBuilder extends AbstractDSpaceObjectBuilder<Bitstream> {
         Bundle originalBundle = getOriginalBundle(item);
 
         bitstream = bitstreamService.create(context, originalBundle, is);
+
+        return this;
+    }
+
+    private BitstreamBuilder create(Context context, Item item, InputStream is, boolean hasBundle)
+            throws SQLException, AuthorizeException, IOException {
+        if (hasBundle) {
+            return create(context, item, is);
+        }
+        this.context = context;
+        this.item = item;
+
+        bitstream = bitstreamService.create(context, is);
 
         return this;
     }
@@ -182,6 +205,12 @@ public class BitstreamBuilder extends AbstractDSpaceObjectBuilder<Bitstream> {
         return this;
     }
 
+    public BitstreamBuilder withCustomMimeType(String mimeType) throws AuthorizeException, SQLException {
+        bitstream.setFormat(context, bitstreamFormatService.create(context));
+        bitstream.getFormat(context).setMIMEType(mimeType);
+        return this;
+    }
+
     public BitstreamBuilder withFormat(String format) throws SQLException {
         return withMetadata("dc", "format", null, null, format);
     }
@@ -283,4 +312,28 @@ public class BitstreamBuilder extends AbstractDSpaceObjectBuilder<Bitstream> {
         return bitstreamService;
     }
 
+
+    /**
+     * Delete the Test bitstream referred to by the given uuid.
+     * Implemented for Clarin Dspace.
+     * @param uuid UUID of Test Bitstream to delete
+     * @throws SQLException
+     * @throws IOException
+     */
+    public static void deleteBitstream(UUID uuid) throws SQLException, IOException {
+        try (Context c = new Context()) {
+            c.turnOffAuthorisationSystem();
+            Bitstream bitstream = bitstreamService.find(c, uuid);
+            if (bitstream != null) {
+                try {
+                    bitstreamService.delete(c, bitstream);
+                    bitstreamService.expunge(c, bitstream);
+                    c.commit();
+                } catch (AuthorizeException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+            c.complete();
+        }
+    }
 }

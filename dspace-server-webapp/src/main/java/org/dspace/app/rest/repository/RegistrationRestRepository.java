@@ -141,7 +141,8 @@ public class RegistrationRestRepository extends DSpaceRestRepository<Registratio
         try {
             eperson = ePersonService.findByEmail(context, registrationRest.getEmail());
         } catch (SQLException e) {
-            log.error("Something went wrong retrieving EPerson for email: " + registrationRest.getEmail(), e);
+            log.error("Something went wrong retrieving EPerson for email: " +
+                org.dspace.core.Utils.maskEmail(registrationRest.getEmail()), e);
         }
         if (eperson != null && accountType.equalsIgnoreCase(TYPE_FORGOT)) {
             try {
@@ -155,7 +156,7 @@ public class RegistrationRestRepository extends DSpaceRestRepository<Registratio
                 accountService.sendForgotPasswordInfo(context, registrationRest.getEmail());
             } catch (SQLException | IOException | MessagingException | AuthorizeException e) {
                 log.error("Something went wrong with sending forgot password info email: "
-                              + registrationRest.getEmail(), e);
+                              + org.dspace.core.Utils.maskEmail(registrationRest.getEmail()), e);
             }
         } else if (accountType.equalsIgnoreCase(TYPE_REGISTER)) {
             if (eperson == null) {
@@ -175,7 +176,7 @@ public class RegistrationRestRepository extends DSpaceRestRepository<Registratio
                     accountService.sendRegistrationInfo(context, registrationRest.getEmail());
                 } catch (SQLException | IOException | MessagingException | AuthorizeException e) {
                     log.error("Something went wrong with sending registration info email: "
-                            + registrationRest.getEmail(), e);
+                            + org.dspace.core.Utils.maskEmail(registrationRest.getEmail()), e);
                 }
             } else {
                 // if an eperson with this email already exists then send "forgot password" email instead
@@ -183,7 +184,7 @@ public class RegistrationRestRepository extends DSpaceRestRepository<Registratio
                     accountService.sendForgotPasswordInfo(context, registrationRest.getEmail());
                 }  catch (SQLException | IOException | MessagingException | AuthorizeException e) {
                     log.error("Something went wrong with sending forgot password info email: "
-                            + registrationRest.getEmail(), e);
+                            + org.dspace.core.Utils.maskEmail(registrationRest.getEmail()), e);
                 }
             }
         }

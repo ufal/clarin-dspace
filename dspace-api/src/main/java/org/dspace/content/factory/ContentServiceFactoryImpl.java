@@ -18,6 +18,7 @@ import org.dspace.content.service.CollectionService;
 import org.dspace.content.service.CommunityService;
 import org.dspace.content.service.DSpaceObjectLegacySupportService;
 import org.dspace.content.service.DSpaceObjectService;
+import org.dspace.content.service.DspaceObjectClarinService;
 import org.dspace.content.service.DuplicateDetectionService;
 import org.dspace.content.service.EntityService;
 import org.dspace.content.service.EntityTypeService;
@@ -26,10 +27,13 @@ import org.dspace.content.service.ItemService;
 import org.dspace.content.service.MetadataFieldService;
 import org.dspace.content.service.MetadataSchemaService;
 import org.dspace.content.service.MetadataValueService;
+import org.dspace.content.service.PreviewContentService;
 import org.dspace.content.service.RelationshipService;
 import org.dspace.content.service.RelationshipTypeService;
+import org.dspace.content.service.ReportResultService;
 import org.dspace.content.service.SiteService;
 import org.dspace.content.service.WorkspaceItemService;
+import org.dspace.core.ProvenanceService;
 import org.dspace.eperson.service.SubscribeService;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -50,6 +54,12 @@ public class ContentServiceFactoryImpl extends ContentServiceFactory {
     private BitstreamFormatService bitstreamFormatService;
     @Autowired(required = true)
     private BitstreamService bitstreamService;
+    @Autowired(required = true)
+    private ReportResultService reportResultService;
+    @Autowired(required = true)
+    private DspaceObjectClarinService dspaceObjectClarinService;
+    @Autowired(required = true)
+    private PreviewContentService previewContentService;
     @Autowired(required = true)
     private BundleService bundleService;
     @Autowired(required = true)
@@ -85,6 +95,9 @@ public class ContentServiceFactoryImpl extends ContentServiceFactory {
     @Autowired(required = true)
     private DuplicateDetectionService duplicateDetectionService;
 
+    @Autowired(required = true)
+    private ProvenanceService provenanceService;
+
     @Override
     public List<DSpaceObjectService<? extends DSpaceObject>> getDSpaceObjectServices() {
         return dSpaceObjectServices;
@@ -103,6 +116,21 @@ public class ContentServiceFactoryImpl extends ContentServiceFactory {
     @Override
     public BitstreamService getBitstreamService() {
         return bitstreamService;
+    }
+
+    @Override
+    public ReportResultService getReportResultService() {
+        return reportResultService;
+    }
+
+    @Override
+    public DspaceObjectClarinService getDspaceObjectClarinService() {
+        return dspaceObjectClarinService;
+    }
+
+    @Override
+    public PreviewContentService getPreviewContentService() {
+        return previewContentService;
     }
 
     @Override
@@ -188,5 +216,10 @@ public class ContentServiceFactoryImpl extends ContentServiceFactory {
     @Override
     public DuplicateDetectionService getDuplicateDetectionService() {
         return duplicateDetectionService;
+    }
+
+    @Override
+    public ProvenanceService getProvenanceService() {
+        return provenanceService;
     }
 }

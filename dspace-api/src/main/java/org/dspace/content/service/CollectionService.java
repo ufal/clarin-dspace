@@ -132,6 +132,18 @@ public interface CollectionService
         IOException, SQLException;
 
     /**
+     * Set an existing bitstream as the logo for this collection (CLARIN import).
+     *
+     * @param context    context
+     * @param collection collection
+     * @param newLogo    existing bitstream to use as the logo
+     * @throws SQLException       if database error
+     * @throws AuthorizeException if authorization error
+     */
+    public void addLogo(Context context, Collection collection, Bitstream newLogo)
+            throws SQLException, AuthorizeException;
+
+    /**
      * Create a workflow group for the given step if one does not already exist.
      * Returns either the newly created group or the previously existing one.
      * Note that while the new group is created in the database, the association

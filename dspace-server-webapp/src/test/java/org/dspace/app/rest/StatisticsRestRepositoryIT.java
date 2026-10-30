@@ -54,6 +54,7 @@ import org.dspace.content.Community;
 import org.dspace.content.DSpaceObject;
 import org.dspace.content.Item;
 import org.dspace.content.Site;
+import org.dspace.content.service.SiteService;
 import org.dspace.core.Constants;
 import org.dspace.eperson.EPerson;
 import org.dspace.services.ConfigurationService;
@@ -79,6 +80,9 @@ public class StatisticsRestRepositoryIT extends AbstractControllerIntegrationTes
     protected AuthorizeService authorizeService;
 
     @Autowired
+    protected SiteService siteService;
+
+    @Autowired
     private ObjectMapper mapper;
 
     private Community communityNotVisited;
@@ -89,6 +93,8 @@ public class StatisticsRestRepositoryIT extends AbstractControllerIntegrationTes
     private Item itemVisited;
     private Bitstream bitstreamNotVisited;
     private Bitstream bitstreamVisited;
+    private Bitstream bitstream1;
+    private Bitstream bitstream2;
 
     private String loggedInToken;
     private String adminToken;
@@ -123,6 +129,18 @@ public class StatisticsRestRepositoryIT extends AbstractControllerIntegrationTes
         bitstreamVisited = BitstreamBuilder
             .createBitstream(context, itemNotVisitedWithBitstreams, toInputStream("test", UTF_8))
             .withName("BitstreamVisitedName").build();
+
+        // Create bitstreams for `usageReportsSearch_ItemVisited_FilesVisited` here, before getClient()'s
+        // context.commit() detaches itemVisited — otherwise Hibernate fails with
+        // `deleted object would be re-saved by cascade` when the CLARIN addBitstream hooks run mid-test.
+        bitstream1 = BitstreamBuilder
+                .createBitstream(context, itemVisited, toInputStream("test", UTF_8))
+                .withName("bitstream1")
+                .build();
+        bitstream2 = BitstreamBuilder
+                .createBitstream(context, itemVisited, toInputStream("test", UTF_8))
+                .withName("bitstream2")
+                .build();
 
         loggedInToken = getAuthToken(eperson.getEmail(), password);
         adminToken = getAuthToken(admin.getEmail(), password);
@@ -384,6 +402,10 @@ public class StatisticsRestRepositoryIT extends AbstractControllerIntegrationTes
             .content(mapper.writeValueAsBytes(viewEventRest))
             .contentType(contentType))
                                 .andExpect(status().isCreated());
+
+        // Commit the view event waiting for a new searcher so it is visible to the report query
+        // below (same race and fix as in topCountriesReport_Community_Visited).
+        StatisticsServiceFactory.getInstance().getSolrLoggerService().commit();
 
         // And request that collection's TotalVisits stat report
         getClient(adminToken).perform(
@@ -906,6 +928,13 @@ public class StatisticsRestRepositoryIT extends AbstractControllerIntegrationTes
             .contentType(contentType))
                                 .andExpect(status().isCreated());
 
+        // Force a commit that waits for a new searcher so the two just-posted view events are guaranteed to be
+        // flushed and visible to the report query below. This covers both ways the report could otherwise come
+        // back empty: postView()'s own commit uses waitSearcher=false (can return before the searcher reopens),
+        // and if the solr-statistics.autoCommit=false override were dropped by a mid-test config reload then
+        // postView() skips its commit entirely (Solr's own autoCommit only fires after 10s).
+        StatisticsServiceFactory.getInstance().getSolrLoggerService().commit();
+
         // And request that collection's TopCountries report
         getClient(adminToken).perform(
             get("/api/statistics/usagereports/" + communityVisited.getID() + "_" + TOP_COUNTRIES_REPORT_ID))
@@ -1354,15 +1383,6 @@ public class StatisticsRestRepositoryIT extends AbstractControllerIntegrationTes
 
     @Test
     public void usageReportsSearch_ItemVisited_FilesVisited() throws Exception {
-        context.turnOffAuthorisationSystem();
-        Bitstream bitstream1 =
-            BitstreamBuilder.createBitstream(context, itemVisited, toInputStream("test", UTF_8)).withName("bitstream1")
-                            .build();
-        Bitstream bitstream2 =
-            BitstreamBuilder.createBitstream(context, itemVisited, toInputStream("test", UTF_8)).withName("bitstream2")
-                            .build();
-        context.restoreAuthSystemState();
-
         // ** WHEN **
         // We visit an item
         ViewEventRest viewEventRest = new ViewEventRest();
@@ -1495,6 +1515,22 @@ public class StatisticsRestRepositoryIT extends AbstractControllerIntegrationTes
                     expectedTotalVisits
                 )
             )));
+    }
+
+    // Show usage reports for the Anonymous user - it could be configured by cfg property
+    // `site.usage-reports.enable.auth.anonymous`
+    @Test
+    public void usageReportsSearch_Site_For_Anonymous() throws Exception {
+        // This property is set to `true` before each test
+        configurationService.setProperty("usage-statistics.authorization.admin.usage", false);
+
+        // Get the site object UUID
+        Site site = siteService.findSite(context);
+        // Allow accessing Site usage reports for anonymous
+        getClient()
+                .perform(get("/api/statistics/usagereports/search/object?uri=http://localhost:8080/server/api/core" +
+                        "/sites/" + site.getID()))
+                .andExpect(status().isOk());
     }
 
     // Create expected points from -6 months to now, with given number of views in current month

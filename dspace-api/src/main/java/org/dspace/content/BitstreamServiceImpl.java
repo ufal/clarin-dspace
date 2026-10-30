@@ -7,6 +7,7 @@
  */
 package org.dspace.content;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.sql.SQLException;
@@ -30,6 +31,8 @@ import org.dspace.content.service.BitstreamFormatService;
 import org.dspace.content.service.BitstreamService;
 import org.dspace.content.service.BundleService;
 import org.dspace.content.service.ItemService;
+import org.dspace.content.service.clarin.ClarinItemService;
+import org.dspace.content.service.clarin.ClarinLicenseResourceMappingService;
 import org.dspace.core.Constants;
 import org.dspace.core.Context;
 import org.dspace.core.LogHelper;
@@ -61,6 +64,10 @@ public class BitstreamServiceImpl extends DSpaceObjectServiceImpl<Bitstream> imp
 
     @Autowired(required = true)
     protected AuthorizeService authorizeService;
+    @Autowired(required = true)
+    protected ClarinLicenseResourceMappingService clarinLicenseResourceMappingService;
+    @Autowired(required = true)
+    protected ClarinItemService clarinItemService;
     @Autowired(required = true)
     protected BitstreamFormatService bitstreamFormatService;
     @Autowired(required = true)
@@ -290,6 +297,8 @@ public class BitstreamServiceImpl extends DSpaceObjectServiceImpl<Bitstream> imp
             bundle.removeBitstream(bitstream);
         }
 
+        clarinItemService.updateItemFilesMetadata(context, bitstream);
+
         //Remove all bundles from the bitstream object, clearing the connection in 2 ways
         bundles.clear();
 
@@ -302,6 +311,9 @@ public class BitstreamServiceImpl extends DSpaceObjectServiceImpl<Bitstream> imp
 
         // Remove policies only after the bitstream has been updated (otherwise the current user has not WRITE rights)
         authorizeService.removeAllPolicies(context, bitstream);
+
+        // Detach the license from the bitstream
+        clarinLicenseResourceMappingService.detachLicenses(context, bitstream);
     }
 
     @Override
@@ -541,4 +553,14 @@ public class BitstreamServiceImpl extends DSpaceObjectServiceImpl<Bitstream> imp
                      .collect(Collectors.toSet());
         return bundleNames.stream().anyMatch(bundles::contains);
     }
+
+    @Override
+    public File retrieveFile(Context context, Bitstream bitstream, boolean authorization)
+            throws IOException, SQLException, AuthorizeException {
+        if (authorization) {
+            authorizeService.authorizeAction(context, bitstream, Constants.READ);
+        }
+        return bitstreamStorageService.retrieveFile(context, bitstream);
+    }
+
 }

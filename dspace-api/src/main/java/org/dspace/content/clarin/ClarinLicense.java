@@ -1,0 +1,232 @@
+/**
+ * The contents of this file are subject to the license and copyright
+ * detailed in the LICENSE and NOTICE files at the root of the source
+ * tree and available online at
+ *
+ * http://www.dspace.org/license/
+ */
+package org.dspace.content.clarin;
+
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.SequenceGenerator;
+import jakarta.persistence.Table;
+import org.apache.logging.log4j.Logger;
+import org.dspace.content.Bitstream;
+import org.dspace.core.ReloadableEntity;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
+
+/**
+ * Class representing a clarin license in DSpace.
+ * Clarin License is license for the bitstreams of the item. The item could have only one type of the Clarin License.
+ * The Clarin License is selected in the submission process.
+ * Admin could manage Clarin Licenses in the License Administration page.
+ *
+ * @author Milan Majchrak (milan.majchrak at dataquest.sk)
+ */
+@JsonIgnoreProperties(ignoreUnknown = true)
+@Entity
+@Table(name = "license_definition")
+public class ClarinLicense implements ReloadableEntity<Integer> {
+
+    private static Logger log = org.apache.logging.log4j.LogManager.getLogger(ClarinLicense.class);
+
+    /**
+     * Required info key word.
+     */
+    public static final String SEND_TOKEN = "SEND_TOKEN";
+    public static final String EXTRA_EMAIL = "EXTRA_EMAIL";
+
+    @Id
+    @Column(name = "license_id")
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "license_definition_license_id_seq")
+    @SequenceGenerator(name = "license_definition_license_id_seq", sequenceName = "license_definition_license_id_seq",
+            allocationSize = 1)
+    private Integer id;
+
+    @ManyToMany(fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST})
+    @JoinTable(
+            name = "license_label_extended_mapping",
+            joinColumns = @JoinColumn(name = "license_id"),
+            inverseJoinColumns = @JoinColumn(name = "label_id"))
+    Set<ClarinLicenseLabel> clarinLicenseLabels = new HashSet<>();
+
+    @OneToMany(fetch = FetchType.LAZY, mappedBy = "license", cascade = CascadeType.PERSIST)
+    private List<ClarinLicenseResourceMapping> clarinLicenseResourceMappings = new ArrayList<>();
+
+    @ManyToOne(fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST})
+    @JoinColumn(name = "user_registration_id")
+    private ClarinUserRegistration eperson;
+
+    @Column(name = "name")
+    private String name = null;
+
+    @Column(name = "definition")
+    private String definition = null;
+
+    @Column(name = "confirmation")
+    @Enumerated(EnumType.ORDINAL)
+    // Hibernate 6 maps ORDINAL enums to TINYINT by default; the column is INTEGER (see Lindat
+    // schema migration), so pin the JDBC type to INTEGER to keep schema validation + upgrades working.
+    @JdbcTypeCode(SqlTypes.INTEGER)
+    private Confirmation confirmation = Confirmation.NOT_REQUIRED;
+
+    @Column(name = "required_info")
+    private String requiredInfo = null;
+
+    public ClarinLicense() {
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public void setId(Integer id) {
+        this.id = id;
+    }
+
+    public String getDefinition() {
+        return definition;
+    }
+
+    public void setDefinition(String definition) {
+        this.definition = definition;
+    }
+
+    public Confirmation getConfirmation() {
+        return confirmation == null ? Confirmation.NOT_REQUIRED : confirmation;
+    }
+
+    public void setConfirmation(Confirmation confirmation) {
+        this.confirmation = confirmation;
+    }
+
+    public String getRequiredInfo() {
+        return requiredInfo;
+    }
+
+    public void setRequiredInfo(String requiredInfo) {
+        this.requiredInfo = requiredInfo;
+    }
+
+    public List<ClarinLicenseLabel> getLicenseLabels() {
+        ClarinLicenseLabel[] output = clarinLicenseLabels.toArray(new ClarinLicenseLabel[] {});
+        // the labels live in an unordered set - sort by id so every REST response (and the
+        // license icons rendered from it) has a stable order
+        Arrays.sort(output, Comparator.comparing(ClarinLicenseLabel::getID,
+                Comparator.nullsLast(Comparator.naturalOrder())));
+        return Arrays.asList(output);
+    }
+
+    public void setLicenseLabels(Set<ClarinLicenseLabel> clarinLicenseLabels) {
+        this.clarinLicenseLabels = clarinLicenseLabels;
+    }
+
+    public List<ClarinLicenseResourceMapping> getClarinLicenseResourceMappings() {
+        return clarinLicenseResourceMappings;
+    }
+
+    /**
+     * The bitstream is not removed from the database after deleting the item, but is set as `deleted`.
+     * Do not count deleted bitstreams for the clarin license.
+     * @return count of the non deleted bitstream assigned to the current clarin license.
+     */
+    public int getNonDeletedBitstreams() {
+        int counter = 0;
+
+        for (ClarinLicenseResourceMapping clrm : clarinLicenseResourceMappings) {
+            Bitstream bitstream = clrm.getBitstream();
+            try {
+                if (bitstream.isDeleted()) {
+                    continue;
+                }
+                counter++;
+            } catch (SQLException e) {
+                log.error("Cannot find out if the bitstream: " + bitstream.getID() + " is deleted.");
+            }
+        }
+        return counter;
+    }
+
+    public ClarinLicenseLabel getNonExtendedClarinLicenseLabel() {
+        for (ClarinLicenseLabel cll : getLicenseLabels()) {
+            if (!cll.isExtended()) {
+                return cll;
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public Integer getID() {
+        return id;
+    }
+
+    public Set<ClarinLicenseLabel> getClarinLicenseLabels() {
+        return clarinLicenseLabels;
+    }
+
+    public void setClarinLicenseLabels(Set<ClarinLicenseLabel> clarinLicenseLabels) {
+        this.clarinLicenseLabels = clarinLicenseLabels;
+    }
+
+    public ClarinUserRegistration getEperson() {
+        return eperson;
+    }
+
+    public void setEperson(ClarinUserRegistration eperson) {
+        this.eperson = eperson;
+    }
+
+    public enum Confirmation {
+
+        // if new Confirmation value is needed, add it to the end of this list, to not break the backward compatibility
+        NOT_REQUIRED(0), ASK_ONLY_ONCE(1), ASK_ALWAYS(2), ALLOW_ANONYMOUS(3);
+
+        private final int value;
+
+        Confirmation(int value) {
+            this.value = value;
+        }
+
+        public int getValue() {
+            return value;
+        }
+
+        public static Confirmation getConfirmation(int value) {
+            return Arrays.stream(values())
+                    .filter(v -> (v.getValue() == value))
+                    .findFirst()
+                    .orElseThrow(() ->
+                            new IllegalArgumentException("No license confirmation found for value: " + value));
+        }
+
+    }
+}

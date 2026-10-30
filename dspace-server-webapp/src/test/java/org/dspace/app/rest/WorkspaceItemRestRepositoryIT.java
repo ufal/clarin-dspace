@@ -3777,6 +3777,9 @@ public class WorkspaceItemRestRepositoryIT extends AbstractControllerIntegration
 
         //disable file upload mandatory
         configurationService.setProperty("webui.submit.upload.required", false);
+        // enable distribution license validation (CLARIN ClarinLicenseDistributionValidation is gated
+        // on this key, which the test local.cfg sets to false)
+        configurationService.setProperty("webui.submit.distribution.license.required", true);
 
         context.restoreAuthSystemState();
 

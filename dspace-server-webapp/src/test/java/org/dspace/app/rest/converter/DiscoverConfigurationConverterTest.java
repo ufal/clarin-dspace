@@ -21,6 +21,7 @@ import org.dspace.discovery.configuration.DiscoveryConfiguration;
 import org.dspace.discovery.configuration.DiscoverySearchFilter;
 import org.dspace.discovery.configuration.DiscoverySortConfiguration;
 import org.dspace.discovery.configuration.DiscoverySortFieldConfiguration;
+import org.dspace.services.ConfigurationService;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -45,6 +46,9 @@ public class DiscoverConfigurationConverterTest {
     @Mock
     private DiscoveryConfiguration discoveryConfiguration;
 
+    @Mock
+    private ConfigurationService configurationService;
+
     @Before
     public void setUp() throws Exception {
     }
@@ -57,20 +61,30 @@ public class DiscoverConfigurationConverterTest {
     @Test
     public void testReturnType() throws Exception {
         populateDiscoveryConfigurationWithEmptyList();
-        searchConfigurationRest = discoverConfigurationConverter.convert(discoveryConfiguration, Projection.DEFAULT);
+        searchConfigurationRest = discoverConfigurationConverter.convert(null, null, discoveryConfiguration,
+                                                                        Projection.DEFAULT);
         assertTrue(searchConfigurationRest.getFilters().isEmpty());
         assertEquals(SearchConfigurationRest.class, searchConfigurationRest.getClass());
     }
 
     @Test
     public void testConvertWithNullParamter() throws Exception {
-        assertNotNull(discoverConfigurationConverter.convert(null, Projection.DEFAULT));
+        assertNotNull(discoverConfigurationConverter.convert(null, null, null, Projection.DEFAULT));
+    }
+
+    @Test
+    public void testRequestedConfigurationAndScopeAreKept() throws Exception {
+        searchConfigurationRest = discoverConfigurationConverter.convert("personOrOrgunit", "a-scope-uuid",
+                                                                        discoveryConfiguration, Projection.DEFAULT);
+        assertEquals("personOrOrgunit", searchConfigurationRest.getConfiguration());
+        assertEquals("a-scope-uuid", searchConfigurationRest.getScope());
     }
 
     @Test
     public void testNoSearchSortConfigurationReturnObjectNotNull() throws Exception {
         discoveryConfiguration.setSearchFilters(new LinkedList<>());
-        searchConfigurationRest = discoverConfigurationConverter.convert(discoveryConfiguration, Projection.DEFAULT);
+        searchConfigurationRest = discoverConfigurationConverter.convert(null, null, discoveryConfiguration,
+                                                                        Projection.DEFAULT);
         assertTrue(discoveryConfiguration.getSearchFilters().isEmpty());
         assertTrue(searchConfigurationRest.getFilters().isEmpty());
         assertNotNull(searchConfigurationRest);
@@ -79,7 +93,8 @@ public class DiscoverConfigurationConverterTest {
     @Test
     public void testNoSearchFilterReturnObjectNotNull() throws Exception {
         discoveryConfiguration.setSearchSortConfiguration(new DiscoverySortConfiguration());
-        searchConfigurationRest = discoverConfigurationConverter.convert(discoveryConfiguration, Projection.DEFAULT);
+        searchConfigurationRest = discoverConfigurationConverter.convert(null, null, discoveryConfiguration,
+                                                                        Projection.DEFAULT);
         assertTrue(searchConfigurationRest.getFilters().isEmpty());
         assertNotNull(searchConfigurationRest);
     }
@@ -88,7 +103,8 @@ public class DiscoverConfigurationConverterTest {
     // are null
     @Test
     public void testNoSearchSortConfigurationAndNoSearchFilterReturnObjectNotNull() throws Exception {
-        searchConfigurationRest = discoverConfigurationConverter.convert(discoveryConfiguration, Projection.DEFAULT);
+        searchConfigurationRest = discoverConfigurationConverter.convert(null, null, discoveryConfiguration,
+                                                                        Projection.DEFAULT);
         assertNotNull(searchConfigurationRest);
     }
 
@@ -111,7 +127,8 @@ public class DiscoverConfigurationConverterTest {
         when(discoveryConfiguration.getSearchSortConfiguration()).thenReturn(discoverySortConfiguration);
         when(discoverySortConfiguration.getSortFields()).thenReturn(mockedList);
 
-        searchConfigurationRest = discoverConfigurationConverter.convert(discoveryConfiguration, Projection.DEFAULT);
+        searchConfigurationRest = discoverConfigurationConverter.convert(null, null, discoveryConfiguration,
+                                                                        Projection.DEFAULT);
 
         int counter = 0;
         for (SearchConfigurationRest.SortOption sortOption : searchConfigurationRest.getSortOptions()) {
@@ -126,7 +143,8 @@ public class DiscoverConfigurationConverterTest {
     @Test
     public void testEmptySortOptionsAfterConvertWithConfigurationWithEmptySortFields() throws Exception {
         populateDiscoveryConfigurationWithEmptyList();
-        searchConfigurationRest = discoverConfigurationConverter.convert(discoveryConfiguration, Projection.DEFAULT);
+        searchConfigurationRest = discoverConfigurationConverter.convert(null, null, discoveryConfiguration,
+                                                                        Projection.DEFAULT);
         assertEquals(0, searchConfigurationRest.getSortOptions().size());
 
     }
@@ -135,7 +153,8 @@ public class DiscoverConfigurationConverterTest {
     public void testEmptySortOptionsAfterConvertWithConfigurationWithNullSortFields() throws Exception {
         populateDiscoveryConfigurationWithEmptyList();
         when(discoveryConfiguration.getSearchSortConfiguration()).thenReturn(null);
-        searchConfigurationRest = discoverConfigurationConverter.convert(discoveryConfiguration, Projection.DEFAULT);
+        searchConfigurationRest = discoverConfigurationConverter.convert(null, null, discoveryConfiguration,
+                                                                        Projection.DEFAULT);
 
         assertEquals(0, searchConfigurationRest.getSortOptions().size());
     }
@@ -154,7 +173,8 @@ public class DiscoverConfigurationConverterTest {
         mockedList.add(discoverySearchFilter1);
         when(discoveryConfiguration.getSearchFilters()).thenReturn(mockedList);
 
-        searchConfigurationRest = discoverConfigurationConverter.convert(discoveryConfiguration, Projection.DEFAULT);
+        searchConfigurationRest = discoverConfigurationConverter.convert(null, null, discoveryConfiguration,
+                                                                        Projection.DEFAULT);
 
         int counter = 0;
         for (SearchConfigurationRest.Filter filter : searchConfigurationRest.getFilters()) {
@@ -172,7 +192,8 @@ public class DiscoverConfigurationConverterTest {
     @Test
     public void testEmptySearchFilterAfterConvertWithConfigurationWithEmptySearchFilters() throws Exception {
         populateDiscoveryConfigurationWithEmptyList();
-        searchConfigurationRest = discoverConfigurationConverter.convert(discoveryConfiguration, Projection.DEFAULT);
+        searchConfigurationRest = discoverConfigurationConverter.convert(null, null, discoveryConfiguration,
+                                                                        Projection.DEFAULT);
         assertEquals(0, searchConfigurationRest.getFilters().size());
     }
 
@@ -181,7 +202,8 @@ public class DiscoverConfigurationConverterTest {
         populateDiscoveryConfigurationWithEmptyList();
 
         when(discoveryConfiguration.getSearchFilters()).thenReturn(null);
-        searchConfigurationRest = discoverConfigurationConverter.convert(discoveryConfiguration, Projection.DEFAULT);
+        searchConfigurationRest = discoverConfigurationConverter.convert(null, null, discoveryConfiguration,
+                                                                        Projection.DEFAULT);
 
         assertEquals(0, searchConfigurationRest.getFilters().size());
     }

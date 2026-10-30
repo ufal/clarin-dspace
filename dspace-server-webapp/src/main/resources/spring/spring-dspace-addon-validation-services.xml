@@ -32,7 +32,14 @@
         <property name="name" value="cclicense"/>
     </bean>
 
-    <bean name="licenseValidation" class="org.dspace.app.rest.submit.step.validation.LicenseValidation">
+    <bean name="clarinLicenseValidation" class="org.dspace.app.rest.submit.step.validation.ClarinLicenseResourceValidation" scope="prototype">
+        <property name="name" value="clarin-license"/>
+        <property name="itemService" ref="org.dspace.content.ItemServiceImpl"/>
+    </bean>
+
+    <!-- This is default DSpace validation, but we replaced it by ClarinLicenseResourceValidation and
+    ClarinLicenseDistributionValidation -->
+    <bean name="licenseValidation" class="org.dspace.app.rest.submit.step.validation.ClarinLicenseDistributionValidation">
         <property name="name" value="license"/>
     </bean>
 

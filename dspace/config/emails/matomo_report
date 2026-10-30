@@ -1,0 +1,22 @@
+## E-mail item monthly statistics
+##
+## Parameters: {0} Item Title
+##             {1} User Name
+##
+## See org.dspace.core.Email for information on the format of this file.
+##
+#set($subject = "Monthly Item Statistics for ${params[0]}")
+#set($phone = ${config.get('mail.message.helpdesk.telephone')})
+
+Dear ${params[1]},
+
+Your monthly statistics report for "${params[0]}" is ready.
+
+_____________________________________
+${config.get('dspace.shortname')},
+WWW: ${config.get('dspace.ui.url')}
+Email: ${config.get('lr.help.mail')}
+#if( $phone )
+Tel.: ${phone}
+#end
+

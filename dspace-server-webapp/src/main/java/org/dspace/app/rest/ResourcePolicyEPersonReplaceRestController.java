@@ -25,6 +25,7 @@ import org.dspace.authorize.ResourcePolicy;
 import org.dspace.authorize.service.ResourcePolicyService;
 import org.dspace.content.DSpaceObject;
 import org.dspace.core.Context;
+import org.dspace.core.ProvenanceService;
 import org.dspace.eperson.EPerson;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.rest.webmvc.ControllerUtils;
@@ -52,6 +53,9 @@ public class ResourcePolicyEPersonReplaceRestController {
     @Autowired
     private ResourcePolicyService resourcePolicyService;
 
+    @Autowired
+    private ProvenanceService provenanceService;
+
     @PreAuthorize("hasPermission(#id, 'resourcepolicy', 'ADMIN')")
     @RequestMapping(method = PUT, consumes = {"text/uri-list"})
     public ResponseEntity<RepresentationModel<?>> replaceEPersonOfResourcePolicy(@PathVariable Integer id,
@@ -76,6 +80,7 @@ public class ResourcePolicyEPersonReplaceRestController {
         EPerson newEPerson = (EPerson) dsoList.get(0);
         resourcePolicy.setEPerson(newEPerson);
         resourcePolicyService.update(context, resourcePolicy);
+        provenanceService.updateResourcePolicy(context, resourcePolicy);
         context.commit();
         return ControllerUtils.toEmptyResponse(HttpStatus.NO_CONTENT);
     }
