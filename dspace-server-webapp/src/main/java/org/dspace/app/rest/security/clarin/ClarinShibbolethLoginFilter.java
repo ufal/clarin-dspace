@@ -219,6 +219,7 @@ public class ClarinShibbolethLoginFilter extends StatelessLoginFilter {
         response.sendRedirect(redirectUrl);
         log.error("Authentication failed (status:{})",
                 HttpServletResponse.SC_UNAUTHORIZED, failed);
+        this.closeOpenContext(request);
     }
 
     /**
