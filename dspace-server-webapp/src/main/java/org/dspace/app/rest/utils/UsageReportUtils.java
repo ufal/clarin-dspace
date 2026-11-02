@@ -20,10 +20,12 @@ import org.dspace.app.rest.model.UsageReportPointCountryRest;
 import org.dspace.app.rest.model.UsageReportPointDateRest;
 import org.dspace.app.rest.model.UsageReportPointDsoTotalVisitsRest;
 import org.dspace.app.rest.model.UsageReportRest;
+import org.dspace.authorize.service.AuthorizeService;
 import org.dspace.content.Bitstream;
 import org.dspace.content.DSpaceObject;
 import org.dspace.content.Item;
 import org.dspace.content.Site;
+import org.dspace.content.service.BitstreamService;
 import org.dspace.core.Constants;
 import org.dspace.core.Context;
 import org.dspace.handle.service.HandleService;
@@ -48,6 +50,12 @@ public class UsageReportUtils {
 
     @Autowired
     private HandleService handleService;
+
+    @Autowired
+    private AuthorizeService authorizeService;
+
+    @Autowired
+    private BitstreamService bitstreamService;
 
     public static final String TOTAL_VISITS_REPORT_ID = "TotalVisits";
     public static final String TOTAL_VISITS_PER_MONTH_REPORT_ID = "TotalVisitsPerMonth";
@@ -155,10 +163,13 @@ public class UsageReportUtils {
                 String handle = StringUtils.substringAfterLast(urlOfItem, "handle/");
                 if (handle != null) {
                     DSpaceObject dso = handleService.resolveToObject(context, handle);
-                    totalVisitPoint.setId(dso != null ? dso.getID().toString() : urlOfItem);
-                    totalVisitPoint.setLabel(dso != null ? dso.getName() : urlOfItem);
-                    totalVisitPoint.addValue("views", Integer.valueOf(dataset.getMatrix()[0][i]));
-                    usageReportRest.addPoint(totalVisitPoint);
+                    // Only expose items the current user is allowed to read
+                    if (dso != null && authorizeService.authorizeActionBoolean(context, dso, Constants.READ)) {
+                        totalVisitPoint.setId(dso.getID().toString());
+                        totalVisitPoint.setLabel(dso.getName());
+                        totalVisitPoint.addValue("views", Integer.valueOf(dataset.getMatrix()[0][i]));
+                        usageReportRest.addPoint(totalVisitPoint);
+                    }
                 }
             }
         }
@@ -249,10 +260,20 @@ public class UsageReportUtils {
 
             UsageReportRest usageReportRest = new UsageReportRest();
             for (int i = 0; i < dataset.getColLabels().size(); i++) {
+                String bitstreamId = dataset.getColLabelsAttrs().get(i).get("id");
+                // Only expose bitstreams the current user is allowed to read; resolve in a
+                // legacy-id-safe way so migrated statistics rows don't break the report
+                Bitstream bitstream = StringUtils.isBlank(bitstreamId)
+                    ? null : bitstreamService.findByIdOrLegacyId(context, bitstreamId);
+                if (bitstream == null
+                    || !authorizeService.authorizeActionBoolean(context, bitstream, Constants.READ)) {
+                    continue;
+                }
+
                 UsageReportPointDsoTotalVisitsRest totalDownloadsPoint = new UsageReportPointDsoTotalVisitsRest();
                 totalDownloadsPoint.setType("bitstream");
 
-                totalDownloadsPoint.setId(dataset.getColLabelsAttrs().get(i).get("id"));
+                totalDownloadsPoint.setId(bitstream.getID().toString());
                 totalDownloadsPoint.setLabel(dataset.getColLabels().get(i));
 
                 totalDownloadsPoint.addValue("views", Integer.valueOf(dataset.getMatrix()[0][i]));
