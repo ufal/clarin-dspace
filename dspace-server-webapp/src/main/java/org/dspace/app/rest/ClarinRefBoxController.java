@@ -43,7 +43,12 @@ import com.lyncode.xoai.dataprovider.exceptions.InvalidContextException;
 import com.lyncode.xoai.dataprovider.exceptions.OAIException;
 import com.lyncode.xoai.dataprovider.exceptions.WritingXmlException;
 import com.lyncode.xoai.dataprovider.xml.XmlOutputContext;
+import com.lyncode.xoai.dataprovider.xml.oaipmh.GetRecordType;
+import com.lyncode.xoai.dataprovider.xml.oaipmh.MetadataType;
 import com.lyncode.xoai.dataprovider.xml.oaipmh.OAIPMH;
+import com.lyncode.xoai.dataprovider.xml.oaipmh.OAIPMHerrorType;
+import com.lyncode.xoai.dataprovider.xml.oaipmh.RecordType;
+import com.lyncode.xoai.dataprovider.xml.oaipmh.StatusType;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
@@ -254,17 +259,27 @@ public class ClarinRefBoxController {
             // Get the OAI-PMH data.
             oaipmh = dataProvider.handle(parameters);
 
+            // If the identifier could not be resolved, or the record exists but currently has no
+            // metadata to disseminate (flagged "deleted" in OAI-PMH terms - withdrawn,
+            // non-discoverable, or no longer publicly readable after having been public; see
+            // OAIConsumer/XOAI), there is nothing to write. Handle this explicitly and return a
+            // clean, human-readable message instead of falling back to serializing the raw
+            // OAI-PMH protocol envelope, which produces unusable, concatenated/garbled output.
+            GetRecordType getRecordType = oaipmh.getInfo().getGetRecord();
+            RecordType record = getRecordType != null ? getRecordType.getRecord() : null;
+            MetadataType metadata = record != null ? record.getMetadata() : null;
+
+            if (metadata == null) {
+                log.info("No citation metadata available for handle '{}' (type '{}'): {}",
+                        handle, type, describeMissingMetadataReason(oaipmh, record));
+                return new ResponseEntity<>(new OaiMetadataWrapper(buildUnavailableMessage(record)),
+                        HttpStatus.valueOf(SC_OK));
+            }
+
             // XMLOutputObject which has our Clarin output object.
             XmlOutputContext xmlOutContext = XmlOutputContext.emptyContext(output);
             xmlOutContext.getWriter().writeStartDocument();
-
-            // Try to obtain just the metadata, if that fails return "normal" response
-            try {
-                oaipmh.getInfo().getGetRecord().getRecord().getMetadata().write(xmlOutContext);
-            } catch (Exception e) {
-                oaipmh.write(xmlOutContext);
-            }
-
+            metadata.write(xmlOutContext);
             xmlOutContext.getWriter().writeEndDocument();
             xmlOutContext.getWriter().flush();
             xmlOutContext.getWriter().close();
@@ -485,6 +500,38 @@ public class ClarinRefBoxController {
             ));
         }
         return featuredServiceList;
+    }
+
+    /**
+     * Build a short, log-only description of why no citation metadata is available for a request -
+     * either an explicit OAI-PMH error (e.g. the identifier does not exist), or a record that
+     * exists but is currently flagged as deleted (no longer disseminated) in OAI-PMH terms.
+     */
+    private String describeMissingMetadataReason(OAIPMH oaipmh, RecordType record) {
+        List<OAIPMHerrorType> errors = oaipmh.getInfo().getError();
+        if (errors != null && !errors.isEmpty()) {
+            return errors.get(0).getCode() + ": " + errors.get(0).getValue();
+        }
+        if (record != null && record.getHeader() != null
+                && record.getHeader().getStatus() == StatusType.DELETED) {
+            return "the record is flagged as deleted (no longer publicly disseminated)";
+        }
+        return "unknown reason";
+    }
+
+    /**
+     * Build a short, human-readable message explaining why no citation is available, to show in
+     * place of the citation content itself. Note this bypasses the frontend own i18n/translation
+     * system (it's always returned in English) - a more complete fix would have the frontend
+     * detect an empty/unavailable response itself and show its own translated message instead.
+     */
+    private String buildUnavailableMessage(RecordType record) {
+        if (record != null && record.getHeader() != null
+                && record.getHeader().getStatus() == StatusType.DELETED) {
+            return "Citation information is not available because this item is not currently "
+                    + "publicly accessible.";
+        }
+        return "Citation information is not available for this item.";
     }
 
     private void closeContext(Context context) {

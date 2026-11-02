@@ -453,4 +453,42 @@ public class ClarinRefBoxControllerIT extends AbstractControllerIntegrationTest 
                         .param("type", "bibtex"))
                 .andExpect(status().is4xxClientError());
     }
+
+    @Test
+    public void testCitationsEndpointWithUnknownHandle() throws Exception {
+        // Covers the "no metadata available" branch for an identifier that doesn't resolve to any
+        // OAI record at all (GetRecordHandler throws IdDoesNotExistException before a GetRecordType
+        // is ever built). The response must still be a clean 200 with a human-readable message,
+        // not the garbled raw OAI-PMH envelope the old code used to fall back to.
+        getClient().perform(get("/api/core/refbox/citations")
+                        .param("type", "bibtex")
+                        .param("handle", "123456789/999999"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.metadata",
+                        containsString("Citation information is not available for this item.")));
+    }
+
+    @Test
+    public void testCitationsEndpointWithWithdrawnItem() throws Exception {
+        // Covers the "no metadata available" branch for a record that is found but flagged as
+        // deleted (OAI-PMH tombstone) - here via withdrawal, which unconditionally sets
+        // item.deleted regardless of embargo/public state, for a simple, deterministic setup.
+        context.turnOffAuthorisationSystem();
+        Item withdrawnItem = ItemBuilder.createItem(context, collection)
+                .withTitle("Withdrawn Item")
+                .withIssueDate("2016-02-13")
+                .withdrawn()
+                .build();
+        context.restoreAuthSystemState();
+        solrOAIReindexer.reindexItem(withdrawnItem);
+
+        getClient().perform(get("/api/core/refbox/citations")
+                        .param("type", "bibtex")
+                        .param("handle", withdrawnItem.getHandle()))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.metadata", containsString("Citation information is not "
+                        + "available because this item is not currently publicly accessible.")));
+    }
 }
