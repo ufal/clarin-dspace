@@ -223,12 +223,33 @@ public class ClarinItemServiceImpl implements ClarinItemService {
             return;
         }
 
+        String derivedDate = deriveDateIssuedFromApproximateDate(item);
+        if (derivedDate == null) {
+            log.debug("Cannot update item dates metadata because the approximate date is empty.");
+            return;
+        }
+
+        // Skip the write only when dc.date.issued already holds exactly the single derived value.
+        // A multi-valued field must still be normalized down to the single derived value.
+        List<MetadataValue> currentDateIssued =
+                itemService.getMetadata(item, "dc", "date", "issued", Item.ANY, false);
+        if (currentDateIssued.size() == 1
+                && derivedDate.equals(currentDateIssued.get(0).getValue())) {
+            return;
+        }
+
+        // Clear the current `dc.date.issued` metadata and set it to the derived value
+        itemService.clearMetadata(context, item, "dc", "date", "issued", Item.ANY);
+        itemService.addMetadata(context, item, "dc", "date", "issued", Item.ANY, derivedDate);
+    }
+
+    @Override
+    public String deriveDateIssuedFromApproximateDate(Item item) {
         List<MetadataValue> approximatedDates =
                 itemService.getMetadata(item, "local", "approximateDate", "issued", Item.ANY, false);
 
         if (CollectionUtils.isEmpty(approximatedDates) || StringUtils.isBlank(approximatedDates.get(0).getValue())) {
-            log.debug("Cannot update item dates metadata because the approximate date is empty.");
-            return;
+            return null;
         }
 
         // Get the approximate date value from the metadata
@@ -239,21 +260,11 @@ public class ClarinItemServiceImpl implements ClarinItemService {
         // Trim the list of years - remove leading and trailing whitespaces
         listOfYearValues.replaceAll(String::trim);
 
-        try {
-            // Clear the current `dc.date.issued` metadata
-            itemService.clearMetadata(context, item, "dc", "date", "issued", Item.ANY);
-
-            // Update the `dc.date.issued` metadata with a new value: `0000` or the last year from the sequence
-            if (CollectionUtils.isNotEmpty(listOfYearValues) && isListOfNumbers(listOfYearValues)) {
-                // Take the last year from the list of years and add it to the `dc.date.issued` metadata
-                itemService.addMetadata(context, item, "dc", "date", "issued", Item.ANY,
-                        getLastNumber(listOfYearValues));
-            } else {
-                // Add the `0000` value to the `dc.date.issued` metadata
-                itemService.addMetadata(context, item, "dc", "date", "issued", Item.ANY, NO_YEAR);
-            }
-        } catch (SQLException e) {
-            log.error("Cannot remove `dc.date.issued` metadata because: {}", e.getMessage());
+        // `0000` when the approximate date is not a list of numbers, otherwise the last year in the sequence
+        if (CollectionUtils.isNotEmpty(listOfYearValues) && isListOfNumbers(listOfYearValues)) {
+            return getLastNumber(listOfYearValues);
+        } else {
+            return NO_YEAR;
         }
     }
 
