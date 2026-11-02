@@ -75,25 +75,32 @@ public class Curation extends DSpaceRunnable<CurationScriptConfiguration> {
         }
 
         Curator curator = initCurator();
-
-        // load curation tasks
-        if (curationClientOptions == CurationClientOptions.TASK) {
-            long start = System.currentTimeMillis();
-            handleCurationTask(curator);
-            this.endScript(start);
-        }
-
-        // process task queue
-        if (curationClientOptions == CurationClientOptions.QUEUE) {
-            // process the task queue
-            TaskQueue taskQueue = (TaskQueue) CoreServiceFactory.getInstance().getPluginService()
-                                                            .getSinglePlugin(TaskQueue.class);
-            if (taskQueue == null) {
-                super.handler.logError("No implementation configured for queue");
-                throw new UnsupportedOperationException("No queue service available");
+        try {
+            // load curation tasks
+            if (curationClientOptions == CurationClientOptions.TASK) {
+                long start = System.currentTimeMillis();
+                handleCurationTask(curator);
+                this.endScript(start);
             }
-            long timeRun = this.runQueue(taskQueue, curator);
-            this.endScript(timeRun);
+
+            // process task queue
+            if (curationClientOptions == CurationClientOptions.QUEUE) {
+                // process the task queue
+                TaskQueue taskQueue = (TaskQueue) CoreServiceFactory.getInstance().getPluginService()
+                                                                .getSinglePlugin(TaskQueue.class);
+                if (taskQueue == null) {
+                    super.handler.logError("No implementation configured for queue");
+                    throw new UnsupportedOperationException("No queue service available");
+                }
+                long timeRun = this.runQueue(taskQueue, curator);
+                this.endScript(timeRun);
+            }
+        } finally {
+            try {
+                outputReporter.close();
+            } catch (Exception e) {
+                handler.handleException("Something went wrong trying to close the reporter", e);
+            }
         }
     }
 
@@ -185,20 +192,10 @@ public class Curation extends DSpaceRunnable<CurationScriptConfiguration> {
      * @throws SQLException If DSpace context can't complete
      */
     private void endScript(long timeRun) throws SQLException {
-        try {
-            context.complete();
-            if (verbose) {
-                long elapsed = System.currentTimeMillis() - timeRun;
-                this.handler.logInfo("Ending curation. Elapsed time: " + elapsed);
-            }
-        } finally {
-            if (outputReporter != null) {
-                try {
-                    outputReporter.close();
-                } catch (Exception e) {
-                    handler.handleException("Something went wrong trying to close the reporter", e);
-                }
-            }
+        context.complete();
+        if (verbose) {
+            long elapsed = System.currentTimeMillis() - timeRun;
+            this.handler.logInfo("Ending curation. Elapsed time: " + elapsed);
         }
     }
 
