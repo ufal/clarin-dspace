@@ -10,6 +10,7 @@ package org.dspace.app.itemupdate;
 import java.util.Iterator;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -20,6 +21,7 @@ import org.apache.commons.cli.ParseException;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.dspace.content.Bitstream;
 import org.dspace.content.Bundle;
 import org.dspace.content.Collection;
 import org.dspace.content.Item;
@@ -40,6 +42,13 @@ import org.dspace.eperson.factory.EPersonServiceFactory;
 public class ItemFilesMetadataRepair {
 
     private static final Logger log = LogManager.getLogger(ItemFilesMetadataRepair.class);
+
+    private static final int BATCH_SIZE = 100;
+    private static final String LOCAL_SCHEMA = "local";
+    private static final String FILES_ELEMENT = "files";
+    private static final String HAS_ELEMENT = "has";
+    private static final String COUNT_QUALIFIER = "count";
+    private static final String SIZE_QUALIFIER = "size";
 
     private ItemFilesMetadataRepair() {
     }
@@ -112,11 +121,13 @@ public class ItemFilesMetadataRepair {
                 if (collection == null) {
                     throw new IllegalArgumentException("Invalid Collection UUID");
                 }
+                // Read the name now: the collection is detached by the batch uncaching in updateItems.
+                String collectionName = collection.getName();
                 Iterator<Item> itemIterator = itemService.findAllByCollection(context, collection);
                 Results results =
                         updateItems(itemIterator, context,  clarinItemService, itemService, dryRun, verboseOutput);
                 System.out.printf("Checked %d items in Collection: \"%s\".\n",
-                        results.getItemsCount(), collection.getName());
+                        results.getItemsCount(), collectionName);
                 System.out.printf("%s %d items.\n", messagePrefix, results.getUpdatedItemsCount());
             } else {
                 // fixing all items
@@ -147,6 +158,13 @@ public class ItemFilesMetadataRepair {
             if (updated) {
                 updatedItemsCount++;
             }
+            if (itemsCount % BATCH_SIZE == 0) {
+                // Keep the transaction and the Hibernate session bounded on a full-repository run.
+                if (!dryRun) {
+                    context.commit();
+                }
+                context.uncacheEntities();
+            }
         }
 
         return new Results(itemsCount, updatedItemsCount);
@@ -158,75 +176,60 @@ public class ItemFilesMetadataRepair {
                                       ItemService itemService,
                                       boolean dryRun,
                                       boolean verboseOutput) throws Exception {
-        boolean updated = false;
-
-        List<MetadataValue>  filesCountValues =
-                itemService.getMetadata(item, "local", "files", "count", Item.ANY);
-        List<MetadataValue>  filesSizeValues =
-                itemService.getMetadata(item, "local", "files", "size", Item.ANY);
-        List<MetadataValue>  hasFilesValues =
-                itemService.getMetadata(item, "local", "has", "files", Item.ANY);
-
-        int filesCount = 0;
-        String filesCountValue = "undefined";
-        if (!filesCountValues.isEmpty()) {
-            filesCountValue = filesCountValues.get(0).getValue();
-            try {
-                filesCount = Integer.parseInt(filesCountValue);
-            } catch (NumberFormatException ex) {
-                // filesCount = 0
-            }
-        }
-        long filesSize = 0;
-        String filesSizeValue = "undefined";
-        if (!filesSizeValues.isEmpty()) {
-            filesSizeValue = filesSizeValues.get(0).getValue();
-            try {
-                filesSize = Long.parseLong(filesSizeValue);
-            } catch (NumberFormatException ex) {
-                // filesSize = 0
-            }
-        }
-        String hasFiles = hasFilesValues.isEmpty() ? "no" : hasFilesValues.get(0).getValue();
-
         List<Bundle> originalBundles = item.getBundles(Constants.CONTENT_BUNDLE_NAME);
-        if (!CollectionUtils.isEmpty(originalBundles)) {
-            Bundle bundle = originalBundles.get(0);
-            boolean hasBitstreams = !CollectionUtils.isEmpty(bundle.getBitstreams());
-            if (hasBitstreams && (filesCount == 0 || filesSize == 0 || !"yes".equals(hasFiles))) {
-                if (verboseOutput) {
-                    String message = "Incorrect metadata: [files.count: %s, files.size: %s, has.files: %s], " +
-                            "in item '%s' with files.";
-                    System.out.printf((message) + "%n", filesCountValue, filesSizeValue, hasFiles, item.getHandle());
-                }
-                if (!dryRun) {
-                    clarinItemService.updateItemFilesMetadata(context, item, bundle);
-                }
-                updated = true;
-            } else if (!hasBitstreams && (filesCount > 0 || filesSize > 0 || "yes".equals(hasFiles))) {
-                if (verboseOutput) {
-                    String message = "Incorrect metadata: [files.count: %s, files.size: %s, has.files: %s], " +
-                            "in item '%s' without files.";
-                    System.out.printf((message) + "%n", filesCountValue, filesSizeValue, hasFiles, item.getHandle());
-                }
-                if (!dryRun) {
-                    itemService.clearMetadata(
-                            context, item, "local", "has", "files", Item.ANY);
-                    itemService.clearMetadata(
-                            context, item, "local", "files", "count", Item.ANY);
-                    itemService.clearMetadata(
-                            context, item, "local", "files", "size", Item.ANY);
-                    itemService.addMetadata(
-                            context, item, "local", "has", "files", Item.ANY, "no");
-                    itemService.addMetadata(
-                            context, item, "local", "files", "count", Item.ANY, "0");
-                    itemService.addMetadata(
-                            context, item, "local", "files", "size", Item.ANY, "0");
-                }
-                updated = true;
+        if (CollectionUtils.isEmpty(originalBundles)) {
+            return false;
+        }
+
+        // Compare against the values `updateItemFilesMetadata` would write, not only against zero:
+        // an item can carry a non-zero but stale size (e.g. the last imported file was not counted).
+        int expectedCount = 0;
+        long expectedSize = 0;
+        for (Bundle bundle : originalBundles) {
+            for (Bitstream bitstream : bundle.getBitstreams()) {
+                expectedCount++;
+                expectedSize += bitstream.getSizeBytes();
             }
         }
-        return updated;
+        String expectedHasFiles = expectedCount > 0 ? "yes" : "no";
+
+        List<String> filesCountValues = getValues(itemService, item, FILES_ELEMENT, COUNT_QUALIFIER);
+        List<String> filesSizeValues = getValues(itemService, item, FILES_ELEMENT, SIZE_QUALIFIER);
+        List<String> hasFilesValues = getValues(itemService, item, HAS_ELEMENT, FILES_ELEMENT);
+        boolean correct = isSingleValue(filesCountValues, String.valueOf(expectedCount))
+                && isSingleValue(filesSizeValues, String.valueOf(expectedSize))
+                && isSingleValue(hasFilesValues, expectedHasFiles);
+        if (correct) {
+            return false;
+        }
+
+        if (verboseOutput) {
+            System.out.printf("Incorrect metadata in item '%s': " +
+                            "[files.count: %s, files.size: %s, has.files: %s], " +
+                            "expected [files.count: %d, files.size: %d, has.files: %s].%n",
+                    item.getHandle(), describe(filesCountValues), describe(filesSizeValues), describe(hasFilesValues),
+                    expectedCount, expectedSize, expectedHasFiles);
+        }
+        if (!dryRun) {
+            clarinItemService.updateItemFilesMetadata(context, item, originalBundles.get(0));
+            // Fire the metadata-modified event so search and OAI indexes pick up the new values.
+            itemService.update(context, item);
+        }
+        return true;
+    }
+
+    private static List<String> getValues(ItemService itemService, Item item, String element, String qualifier) {
+        return itemService.getMetadata(item, LOCAL_SCHEMA, element, qualifier, Item.ANY).stream()
+                .map(MetadataValue::getValue)
+                .collect(Collectors.toList());
+    }
+
+    private static boolean isSingleValue(List<String> values, String expected) {
+        return values.size() == 1 && expected.equals(values.get(0));
+    }
+
+    private static String describe(List<String> values) {
+        return values.isEmpty() ? "undefined" : String.join(" | ", values);
     }
 
     private static void printHelpAndExit(Options options) {
