@@ -410,6 +410,10 @@ public class StatisticsRestRepositoryIT extends AbstractControllerIntegrationTes
             .contentType(contentType))
                                 .andExpect(status().isCreated());
 
+        // Commit the view event waiting for a new searcher so it is visible to the report query
+        // below (same race and fix as in topCountriesReport_Community_Visited).
+        StatisticsServiceFactory.getInstance().getSolrLoggerService().commit();
+
         // And request that collection's TotalVisits stat report
         getClient(adminToken).perform(
             get("/api/statistics/usagereports/" + itemVisited.getID() + "_" + TOTAL_VISITS_REPORT_ID))

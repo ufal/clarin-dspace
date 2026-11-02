@@ -21,6 +21,7 @@ import org.apache.commons.io.IOUtils;
 import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.builder.BitstreamBuilder;
+import org.dspace.builder.BitstreamFormatBuilder;
 import org.dspace.builder.BundleBuilder;
 import org.dspace.builder.CollectionBuilder;
 import org.dspace.builder.CommunityBuilder;
@@ -33,7 +34,6 @@ import org.dspace.content.Collection;
 import org.dspace.content.Community;
 import org.dspace.content.Item;
 import org.dspace.content.PreviewContent;
-import org.dspace.content.service.BitstreamFormatService;
 import org.dspace.content.service.PreviewContentService;
 import org.dspace.util.FileInfo;
 import org.junit.After;
@@ -46,8 +46,6 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
 
     @Autowired
     PreviewContentService previewContentService;
-    @Autowired
-    BitstreamFormatService bitstreamFormatService;
 
     PreviewContent previewContent0;
     PreviewContent previewContent1;
@@ -256,11 +254,15 @@ public class PreviewContentServiceImplIT extends AbstractControllerIntegrationTe
         BitstreamBuilder.deleteBitstream(tarXzFileWithIncorrectMimeType.getID());
 
         // removing custom mime type format created for tarXGzipFile and tgzFileWithGzipMimeType files
-        if (customMimeTypeFormat != null) {
-            bitstreamFormatService.delete(context, customMimeTypeFormat);
-        }
+        Integer customMimeTypeFormatId = customMimeTypeFormat == null ? null : customMimeTypeFormat.getID();
 
         super.destroy();
+
+        // Must run in its own Context after super.destroy(): a delete through the shared test
+        // context is never committed here, which leaked one format row per test.
+        if (customMimeTypeFormatId != null) {
+            BitstreamFormatBuilder.deleteBitstreamFormat(customMimeTypeFormatId);
+        }
     }
 
     @Test
