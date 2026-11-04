@@ -68,7 +68,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
@@ -77,6 +76,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MvcResult;
 
 /**
@@ -114,7 +114,6 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     private final List<EPerson> registeredEPersons = new ArrayList<>();
 
     @Autowired
-    @Qualifier("clarinOidcAuthentication")
     private ClarinOidcAuthenticationBean oidcAuthentication;
 
     @Autowired
@@ -133,7 +132,8 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     public void setup() throws Exception {
         originalOidcClient = oidcAuthentication.getOidcClient();
         oidcAuthentication.setOidcClient(oidcClientMock);
-        oidcAuthentication.setJwtDecoder(buildTestJwtDecoder());
+        // The jwtDecoder is set to a test decoder by using ReflectionTestUtils
+        ReflectionTestUtils.setField(oidcAuthentication, "jwtDecoder", buildTestJwtDecoder());
 
         // use CLARIN extension of the OIDC plugin, see org.dspace.authenticate.OidcAuthentication
         configurationService.setProperty("authentication-oidc.type", "clarin");
@@ -161,7 +161,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     @After
     public void after() throws Exception {
         oidcAuthentication.setOidcClient(originalOidcClient);
-        oidcAuthentication.setJwtDecoder(null);
+        ReflectionTestUtils.setField(oidcAuthentication, "jwtDecoder", null);
         configurationService.setProperty("authentication-oidc.type", null);
 
         context.turnOffAuthorisationSystem();
