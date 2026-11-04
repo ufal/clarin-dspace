@@ -169,18 +169,14 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
 
     /**
      * Returns the {@link JwtDecoder} used to verify the signature, issuer, audience and expiry of the ID
-     * token, built on first use from authentication-oidc.jwks-uri/issuer/client-id and cached. Exposed so
-     * tests can substitute a decoder backed by a locally-generated key pair via {@link #setJwtDecoder}.
+     * token, built on first use from authentication-oidc.jwks-uri/issuer/client-id and cached.
+     * Synchronized because this bean is a singleton invoked concurrently by authenticate() across requests.
      */
-    public JwtDecoder getJwtDecoder() {
+    private synchronized JwtDecoder getJwtDecoder() {
         if (jwtDecoder == null) {
             jwtDecoder = buildJwtDecoder();
         }
         return jwtDecoder;
-    }
-
-    public void setJwtDecoder(JwtDecoder jwtDecoder) {
-        this.jwtDecoder = jwtDecoder;
     }
 
     private JwtDecoder buildJwtDecoder() {
@@ -529,26 +525,26 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
         }
     }
 
-    protected String getAttributeAsString(Map<String, Object> userInfo, String attribute) {
+    private String getAttributeAsString(Map<String, Object> userInfo, String attribute) {
         if (isBlank(attribute)) {
             return null;
         }
         return userInfo.containsKey(attribute) ? String.valueOf(userInfo.get(attribute)) : null;
     }
 
-    protected String getEmailAttribute() {
+    private String getEmailAttribute() {
         return configurationService.getProperty("authentication-oidc.user-info.email", "email");
     }
 
-    protected String getFirstNameAttribute() {
+    private String getFirstNameAttribute() {
         return configurationService.getProperty("authentication-oidc.user-info.first-name", "given_name");
     }
 
-    protected String getLastNameAttribute() {
+    private String getLastNameAttribute() {
         return configurationService.getProperty("authentication-oidc.user-info.last-name", "family_name");
     }
 
-    protected boolean canSelfRegister() {
+    private boolean canSelfRegister() {
         String canSelfRegister = configurationService.getProperty("authentication-oidc.can-self-register", "true");
         if (isBlank(canSelfRegister)) {
             return true;
@@ -561,7 +557,7 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
      *
      * @return user ID attribute name
      */
-    protected String getUserIdAttribute() {
+    private String getUserIdAttribute() {
         return configurationService.getProperty("authentication-oidc.user-info.id", DEFAULT_USER_ID_ATTRIBUTE);
     }
 
@@ -571,7 +567,7 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
      *
      * @return email verified attribute name
      */
-    protected String getEmailVerifiedAttribute() {
+    private String getEmailVerifiedAttribute() {
         return configurationService.getProperty("authentication-oidc.user-info.email-verified",
                 DEFAULT_EMAIL_VERIFIED_ATTRIBUTE);
     }
@@ -584,7 +580,7 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
      *
      * @return false unless enabled by authentication-oidc.require-verified-email
      */
-    protected boolean isVerifiedEmailRequired() {
+    private boolean isVerifiedEmailRequired() {
         return configurationService.getBooleanProperty("authentication-oidc.require-verified-email", false);
     }
 
@@ -596,7 +592,7 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
      * @param userInfo attributes returned by the OIDC user info endpoint
      * @return true when the email is trusted enough to link an existing EPerson
      */
-    protected boolean isEmailVerified(Map<String, Object> userInfo) {
+    private boolean isEmailVerified(Map<String, Object> userInfo) {
         if (!isVerifiedEmailRequired()) {
             return true;
         }
@@ -609,7 +605,7 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
      *
      * @return organization attribute name or null
      */
-    protected String getOrganizationAttribute() {
+    private String getOrganizationAttribute() {
         return configurationService.getProperty("authentication-oidc.user-info.organization");
     }
 
@@ -619,7 +615,7 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
      *
      * @return groups attribute name or null
      */
-    protected String getGroupsAttribute() {
+    private String getGroupsAttribute() {
         return configurationService.getProperty("authentication-oidc.user-info.groups");
     }
 
@@ -629,11 +625,11 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
      *
      * @return provider label
      */
-    protected String getProvider() {
+    private String getProvider() {
         return configurationService.getProperty("authentication-oidc.provider", DEFAULT_PROVIDER);
     }
 
-    protected OidcTokenResponseDTO getOidcAccessToken(String code) {
+    private OidcTokenResponseDTO getOidcAccessToken(String code) {
         try {
             return oidcClient.getAccessToken(code);
         } catch (Exception ex) {
@@ -642,7 +638,7 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
         }
     }
 
-    protected Map<String, Object> getOidcUserInfo(String accessToken) {
+    private Map<String, Object> getOidcUserInfo(String accessToken) {
         try {
             return oidcClient.getUserInfo(accessToken);
         } catch (Exception ex) {
@@ -651,9 +647,8 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
         }
     }
 
-    protected int logInEPerson(Context context, EPerson ePerson) {
+    private void logInEPerson(Context context, EPerson ePerson) {
         context.setCurrentUser(ePerson);
-        return SUCCESS;
     }
 
     @Override
