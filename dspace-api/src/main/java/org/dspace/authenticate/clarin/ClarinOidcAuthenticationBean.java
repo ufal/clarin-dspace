@@ -415,8 +415,9 @@ public class ClarinOidcAuthenticationBean extends OidcAuthenticationBean {
 
     /**
      * Returns whether a verified email is required to link the OIDC identity to an existing EPerson found by
-     * email (see {@link #isEmailVerified}). Enabled by default, since otherwise any OIDC provider that doesn't
-     * verify a claimed email could take over an existing account.
+     * email (see {@link #isEmailVerified}). Disabled by default, since not all providers emit a verified-email
+     * claim; enable this if the configured provider does, since otherwise an OIDC provider that doesn't verify
+     * a claimed email could take over an existing account.
      *
      * @return false unless enabled by authentication-oidc.require-verified-email
      */
