@@ -88,10 +88,10 @@ public class OidcAuthentication implements AuthenticationMethod {
         return getOidcAuthentication().getName();
     }
 
-    private OidcAuthenticationBean getOidcAuthentication() {
+    private AuthenticationMethod getOidcAuthentication() {
         String beanName = CLARIN_TYPE.equals(configurationService.getProperty("authentication-oidc.type"))
                 ? "clarinOidcAuthentication" : "oidcAuthentication";
-        return serviceManager.getServiceByName(beanName, OidcAuthenticationBean.class);
+        return serviceManager.getServiceByName(beanName, AuthenticationMethod.class);
     }
 
     @Override

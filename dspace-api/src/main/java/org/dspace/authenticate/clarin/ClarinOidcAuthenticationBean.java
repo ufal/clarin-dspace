@@ -7,20 +7,33 @@
  */
 package org.dspace.authenticate.clarin;
 
+import static java.lang.String.format;
+import static java.net.URLEncoder.encode;
+import static org.apache.commons.lang.BooleanUtils.toBoolean;
+import static org.apache.commons.lang3.StringUtils.isAnyBlank;
+import static org.apache.commons.lang3.StringUtils.isBlank;
 import static org.dspace.content.clarin.AuthenticationIdentity.AUTH_METHOD_OIDC;
 
+import java.io.UnsupportedEncodingException;
 import java.sql.SQLException;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.dspace.authenticate.AuthenticationMethod;
 import org.dspace.authenticate.OidcAuthenticationBean;
+import org.dspace.authenticate.oidc.OidcClient;
+import org.dspace.authenticate.oidc.model.OidcTokenResponseDTO;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.clarin.AuthenticationIdentity;
 import org.dspace.content.clarin.ClarinUserRegistration;
@@ -29,11 +42,31 @@ import org.dspace.content.service.clarin.ClarinUserRegistrationService;
 import org.dspace.core.Context;
 import org.dspace.eperson.EPerson;
 import org.dspace.eperson.Group;
+import org.dspace.eperson.service.EPersonService;
 import org.dspace.eperson.service.GroupService;
+import org.dspace.services.ConfigurationService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2Error;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
+import org.springframework.security.oauth2.core.oidc.OidcIdToken;
+import org.springframework.security.oauth2.core.oidc.OidcUserInfo;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtException;
+import org.springframework.security.oauth2.jwt.JwtValidators;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 
 /**
- * CLARIN extension of the OIDC authentication.
+ * CLARIN extension of the OIDC authentication, implemented independently of {@link OidcAuthenticationBean}
+ * (not by extending it) so that it can verify the ID token instead of only trusting the user info endpoint
+ * response. The ID token's signature is verified against the provider's JSON Web Key Set
+ * (authentication-oidc.jwks-uri), and its "iss" and "aud" claims are checked against
+ * authentication-oidc.issuer and authentication-oidc.client-id; expiry is checked as part of the same
+ * verification. The verified ID token claims and the user info endpoint claims are then merged (user info
+ * claims take precedence on overlapping keys, per OIDC Core 5.3.2) into the same claims map used below.
+ * <p>
  * If the provider returns an email that it doesn't confirm is verified, authentication fails immediately
  * (see {@link #isEmailVerified}). Otherwise, the user is identified by the OIDC user ID (the "sub" claim by
  * default) stored in the authentication_identity table, instead of the email which may change:
@@ -49,13 +82,26 @@ import org.springframework.beans.factory.annotation.Autowired;
  *
  * @author Milan Kuchtiak
  */
-public class ClarinOidcAuthenticationBean extends OidcAuthenticationBean {
+public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
 
     private static final Logger log = LogManager.getLogger(ClarinOidcAuthenticationBean.class);
+
+    private static final String LOGIN_PAGE_URL_FORMAT = "%s?client_id=%s&response_type=code&scope=%s&redirect_uri=%s";
+
+    private static final String OIDC_AUTHENTICATED = "oidc.authenticated";
 
     public static final String DEFAULT_PROVIDER = "oidc";
     public static final String DEFAULT_USER_ID_ATTRIBUTE = "sub";
     public static final String DEFAULT_EMAIL_VERIFIED_ATTRIBUTE = "email_verified";
+
+    @Autowired
+    private ConfigurationService configurationService;
+
+    @Autowired
+    private OidcClient oidcClient;
+
+    @Autowired
+    private EPersonService ePersonService;
 
     @Autowired
     private AuthenticationIdentityService authenticationIdentityService;
@@ -66,8 +112,98 @@ public class ClarinOidcAuthenticationBean extends OidcAuthenticationBean {
     @Autowired
     private GroupService groupService;
 
+    private JwtDecoder jwtDecoder;
+
     @Override
-    protected int authenticateWithUserInfo(Context context, Map<String, Object> userInfo, HttpServletRequest request)
+    public int authenticate(Context context, String username, String password, String realm, HttpServletRequest request)
+            throws SQLException {
+
+        if (request == null) {
+            log.warn("Unable to authenticate using OIDC because the request object is null.");
+            return BAD_ARGS;
+        }
+
+        if (request.getAttribute(OidcAuthenticationBean.OIDC_AUTH_ATTRIBUTE) == null) {
+            return NO_SUCH_USER;
+        }
+
+        String code = request.getParameter("code");
+        if (StringUtils.isEmpty(code)) {
+            log.warn("The incoming request has not code parameter");
+            return NO_SUCH_USER;
+        }
+
+        return authenticateWithOidc(context, code, request);
+    }
+
+    private int authenticateWithOidc(Context context, String code, HttpServletRequest request) throws SQLException {
+        OidcTokenResponseDTO tokenResponse = getOidcAccessToken(code);
+        if (tokenResponse == null || StringUtils.isBlank(tokenResponse.getIdToken())) {
+            log.warn("No access/ID token retrieved by code");
+            return NO_SUCH_USER;
+        }
+
+        OidcIdToken idToken;
+        try {
+            Jwt jwt = getJwtDecoder().decode(tokenResponse.getIdToken());
+            idToken = new OidcIdToken(jwt.getTokenValue(), jwt.getIssuedAt(), jwt.getExpiresAt(), jwt.getClaims());
+        } catch (JwtException ex) {
+            log.warn("OIDC authentication failed, because the ID token could not be verified", ex);
+            return BAD_CREDENTIALS;
+        }
+
+        OidcUserInfo userInfo = new OidcUserInfo(getOidcUserInfo(tokenResponse.getAccessToken()));
+        if (StringUtils.isNotBlank(userInfo.getSubject()) && !userInfo.getSubject().equals(idToken.getSubject())) {
+            log.warn("OIDC authentication failed, because the sub claim of the user info ({}) does not match the " +
+                    "verified ID token ({})", userInfo.getSubject(), idToken.getSubject());
+            return BAD_CREDENTIALS;
+        }
+
+        // The ID token claims are signature-verified and form the trusted base; user info claims (only
+        // TLS-trusted, not signature-verified) take precedence for overlapping keys, per OIDC Core 5.3.2.
+        Map<String, Object> claims = new HashMap<>(idToken.getClaims());
+        claims.putAll(userInfo.getClaims());
+
+        return authenticateWithClaims(context, claims, request);
+    }
+
+    /**
+     * Returns the {@link JwtDecoder} used to verify the signature, issuer, audience and expiry of the ID
+     * token, built on first use from authentication-oidc.jwks-uri/issuer/client-id and cached. Exposed so
+     * tests can substitute a decoder backed by a locally-generated key pair via {@link #setJwtDecoder}.
+     */
+    public JwtDecoder getJwtDecoder() {
+        if (jwtDecoder == null) {
+            jwtDecoder = buildJwtDecoder();
+        }
+        return jwtDecoder;
+    }
+
+    public void setJwtDecoder(JwtDecoder jwtDecoder) {
+        this.jwtDecoder = jwtDecoder;
+    }
+
+    private JwtDecoder buildJwtDecoder() {
+        String jwksUri = configurationService.getProperty("authentication-oidc.jwks-uri");
+        String issuer = configurationService.getProperty("authentication-oidc.issuer");
+        String clientId = configurationService.getProperty("authentication-oidc.client-id");
+        if (isAnyBlank(jwksUri, issuer, clientId)) {
+            throw new IllegalStateException("authentication-oidc.jwks-uri, authentication-oidc.issuer and "
+                    + "authentication-oidc.client-id must all be set to use the CLARIN OIDC extension");
+        }
+
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(jwksUri).build();
+        OAuth2TokenValidator<Jwt> withIssuer = JwtValidators.createDefaultWithIssuer(issuer);
+        OAuth2TokenValidator<Jwt> withAudience = jwt -> jwt.getAudience() != null
+                && jwt.getAudience().contains(clientId)
+                ? OAuth2TokenValidatorResult.success()
+                : OAuth2TokenValidatorResult.failure(new OAuth2Error("invalid_token",
+                        "The aud claim does not contain the configured client ID", null));
+        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(withIssuer, withAudience));
+        return decoder;
+    }
+
+    private int authenticateWithClaims(Context context, Map<String, Object> userInfo, HttpServletRequest request)
             throws SQLException {
         String userIdAttribute = getUserIdAttribute();
         String userId = StringUtils.isBlank(userIdAttribute) || userInfo.get(userIdAttribute) == null
@@ -393,6 +529,33 @@ public class ClarinOidcAuthenticationBean extends OidcAuthenticationBean {
         }
     }
 
+    protected String getAttributeAsString(Map<String, Object> userInfo, String attribute) {
+        if (isBlank(attribute)) {
+            return null;
+        }
+        return userInfo.containsKey(attribute) ? String.valueOf(userInfo.get(attribute)) : null;
+    }
+
+    protected String getEmailAttribute() {
+        return configurationService.getProperty("authentication-oidc.user-info.email", "email");
+    }
+
+    protected String getFirstNameAttribute() {
+        return configurationService.getProperty("authentication-oidc.user-info.first-name", "given_name");
+    }
+
+    protected String getLastNameAttribute() {
+        return configurationService.getProperty("authentication-oidc.user-info.last-name", "family_name");
+    }
+
+    protected boolean canSelfRegister() {
+        String canSelfRegister = configurationService.getProperty("authentication-oidc.can-self-register", "true");
+        if (isBlank(canSelfRegister)) {
+            return true;
+        }
+        return toBoolean(canSelfRegister);
+    }
+
     /**
      * Returns the name of the user info attribute containing the unique user ID, "sub" by default.
      *
@@ -470,9 +633,122 @@ public class ClarinOidcAuthenticationBean extends OidcAuthenticationBean {
         return configurationService.getProperty("authentication-oidc.provider", DEFAULT_PROVIDER);
     }
 
+    protected OidcTokenResponseDTO getOidcAccessToken(String code) {
+        try {
+            return oidcClient.getAccessToken(code);
+        } catch (Exception ex) {
+            log.error("An error occurs retriving the OIDC access_token", ex);
+            return null;
+        }
+    }
+
+    protected Map<String, Object> getOidcUserInfo(String accessToken) {
+        try {
+            return oidcClient.getUserInfo(accessToken);
+        } catch (Exception ex) {
+            log.error("An error occurs retriving the OIDC user info", ex);
+            return Map.of();
+        }
+    }
+
+    protected int logInEPerson(Context context, EPerson ePerson) {
+        context.setCurrentUser(ePerson);
+        return SUCCESS;
+    }
+
+    @Override
+    public String loginPageURL(Context context, HttpServletRequest request, HttpServletResponse response) {
+
+        String authorizeUrl = configurationService.getProperty("authentication-oidc.authorize-endpoint");
+        String clientId = configurationService.getProperty("authentication-oidc.client-id");
+        String clientSecret = configurationService.getProperty("authentication-oidc.client-secret");
+        String redirectUri = configurationService.getProperty("authentication-oidc.redirect-url");
+        String tokenUrl = configurationService.getProperty("authentication-oidc.token-endpoint");
+        String userInfoUrl = configurationService.getProperty("authentication-oidc.user-info-endpoint");
+        String[] defaultScopes =
+            new String[] {
+                "openid", "email", "profile"
+            };
+        String scopes = String.join(" ", configurationService.getArrayProperty("authentication-oidc.scopes",
+            defaultScopes));
+
+        if (isAnyBlank(authorizeUrl, clientId, redirectUri, clientSecret, tokenUrl, userInfoUrl)) {
+            log.error("Missing mandatory configuration properties for ClarinOidcAuthenticationBean");
+
+            // prepare a Map of the properties which can not have sane defaults, but are still required
+            final Map<String, String> map = Map.of("authorizeUrl", authorizeUrl, "clientId", clientId, "redirectUri",
+                redirectUri, "clientSecret", clientSecret, "tokenUrl", tokenUrl, "userInfoUrl", userInfoUrl);
+            final Iterator<Entry<String, String>> iterator = map.entrySet().iterator();
+
+            while (iterator.hasNext()) {
+                final Entry<String, String> entry = iterator.next();
+
+                if (isBlank(entry.getValue())) {
+                    log.error(" * {} is missing", entry.getKey());
+                }
+            }
+            return "";
+        }
+
+        try {
+            return format(LOGIN_PAGE_URL_FORMAT, authorizeUrl, clientId, scopes, encode(redirectUri, "UTF-8"));
+        } catch (UnsupportedEncodingException e) {
+            log.error(e.getMessage(), e);
+            return "";
+        }
+
+    }
+
+    public OidcClient getOidcClient() {
+        return this.oidcClient;
+    }
+
+    public void setOidcClient(OidcClient oidcClient) {
+        this.oidcClient = oidcClient;
+    }
+
+    @Override
+    public boolean allowSetPassword(Context context, HttpServletRequest request, String username) throws SQLException {
+        return false;
+    }
+
+    @Override
+    public boolean isImplicit() {
+        return false;
+    }
+
+    @Override
+    public boolean canSelfRegister(Context context, HttpServletRequest request, String username) throws SQLException {
+        return canSelfRegister();
+    }
+
+    @Override
+    public void initEPerson(Context context, HttpServletRequest request, EPerson eperson) throws SQLException {
+    }
+
+    @Override
+    public String getName() {
+        return OidcAuthenticationBean.OIDC_AUTH_ATTRIBUTE;
+    }
+
+    @Override
+    public boolean isUsed(final Context context, final HttpServletRequest request) {
+        if (request != null &&
+                context.getCurrentUser() != null &&
+                request.getAttribute(OIDC_AUTHENTICATED) != null) {
+            return true;
+        }
+        return false;
+    }
+
+    @Override
+    public boolean canChangePassword(Context context, EPerson ePerson, String currentPassword) {
+        return false;
+    }
+
     /**
      * Returns the special groups resolved from the OIDC groups and the default authentication group during
-     * {@link #authenticateWithUserInfo} and cached on the context, either just now (fresh login) or restored
+     * {@link #authenticateWithClaims} and cached on the context, either just now (fresh login) or restored
      * from the JWT token special groups claim of a previous OIDC login (see SpecialGroupClaimProvider).
      */
     @Override

@@ -25,8 +25,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.NoSuchAlgorithmException;
+import java.security.interfaces.RSAPrivateKey;
+import java.security.interfaces.RSAPublicKey;
 import java.sql.SQLException;
 import java.text.ParseException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -35,12 +41,16 @@ import java.util.Map;
 import javax.servlet.http.Cookie;
 
 import com.nimbusds.jose.JOSEException;
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.JWSHeader;
+import com.nimbusds.jose.crypto.RSASSASigner;
+import com.nimbusds.jose.jwk.RSAKey;
+import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import org.dspace.app.rest.matcher.GroupMatcher;
 import org.dspace.app.rest.model.AuthnRest;
 import org.dspace.app.rest.security.jwt.EPersonClaimProvider;
 import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
-import org.dspace.authenticate.OidcAuthenticationBean;
 import org.dspace.authenticate.clarin.ClarinOidcAuthenticationBean;
 import org.dspace.authenticate.oidc.OidcClient;
 import org.dspace.authenticate.oidc.model.OidcTokenResponseDTO;
@@ -59,6 +69,14 @@ import org.junit.Before;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2Error;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtValidators;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.test.web.servlet.MvcResult;
 
 /**
@@ -80,6 +98,11 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     private final static String EMAIL_VERIFIED = "email_verified";
     private final static String PROVIDER = "oidc";
 
+    // used to build and verify signed test ID tokens, see buildIdToken()/buildTestJwtDecoder()
+    private final static String ISSUER = "https://issuer.example.org";
+    private final static String CLIENT_ID = "clarin-client";
+    private final static RSAKey RSA_JWK = generateRsaKey();
+
     private OidcClient originalOidcClient;
 
     private final OidcClient oidcClientMock = mock(OidcClient.class);
@@ -92,7 +115,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
 
     @Autowired
     @Qualifier("clarinOidcAuthentication")
-    private OidcAuthenticationBean oidcAuthentication;
+    private ClarinOidcAuthenticationBean oidcAuthentication;
 
     @Autowired
     private AuthenticationIdentityService authenticationIdentityService;
@@ -110,6 +133,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     public void setup() throws Exception {
         originalOidcClient = oidcAuthentication.getOidcClient();
         oidcAuthentication.setOidcClient(oidcClientMock);
+        oidcAuthentication.setJwtDecoder(buildTestJwtDecoder());
 
         // use CLARIN extension of the OIDC plugin, see org.dspace.authenticate.OidcAuthentication
         configurationService.setProperty("authentication-oidc.type", "clarin");
@@ -131,12 +155,13 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod",
                 asList("org.dspace.authenticate.OidcAuthentication", "org.dspace.authenticate.PasswordAuthentication"));
 
-        when(oidcClientMock.getAccessToken(CODE)).thenReturn(buildOidcTokenResponse());
+        when(oidcClientMock.getAccessToken(CODE)).thenReturn(buildOidcTokenResponse(buildIdToken("perun1")));
     }
 
     @After
     public void after() throws Exception {
         oidcAuthentication.setOidcClient(originalOidcClient);
+        oidcAuthentication.setJwtDecoder(null);
         configurationService.setProperty("authentication-oidc.type", null);
 
         context.turnOffAuthorisationSystem();
@@ -667,7 +692,68 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     public void testLoginFailsWithoutSub() throws Exception {
         createEPerson("perun@email.it", true);
 
+        // sub is a required ID token claim, so it must be missing from both sources to exercise this case
+        when(oidcClientMock.getAccessToken(CODE)).thenReturn(buildOidcTokenResponse(buildIdToken(null)));
         when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(Map.of(EMAIL, "perun@email.it"));
+
+        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+    }
+
+    @Test
+    public void testLoginFailsWithBadIdTokenSignature() throws Exception {
+        RSAKey otherKey = generateRsaKey();
+        when(oidcClientMock.getAccessToken(CODE)).thenReturn(
+                buildOidcTokenResponse(buildIdToken("perun1", ISSUER, CLIENT_ID, Instant.now().plusSeconds(3600),
+                        otherKey)));
+        mockUserInfo("perun1", "perun@email.it", null);
+
+        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+    }
+
+    @Test
+    public void testLoginFailsWithExpiredIdToken() throws Exception {
+        when(oidcClientMock.getAccessToken(CODE)).thenReturn(
+                buildOidcTokenResponse(buildIdToken("perun1", ISSUER, CLIENT_ID, Instant.now().minusSeconds(3600))));
+        mockUserInfo("perun1", "perun@email.it", null);
+
+        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+    }
+
+    @Test
+    public void testLoginFailsWithWrongIssuer() throws Exception {
+        when(oidcClientMock.getAccessToken(CODE)).thenReturn(
+                buildOidcTokenResponse(buildIdToken("perun1", "https://wrong-issuer.example.org", CLIENT_ID,
+                        Instant.now().plusSeconds(3600))));
+        mockUserInfo("perun1", "perun@email.it", null);
+
+        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+    }
+
+    @Test
+    public void testLoginFailsWithWrongAudience() throws Exception {
+        when(oidcClientMock.getAccessToken(CODE)).thenReturn(
+                buildOidcTokenResponse(buildIdToken("perun1", ISSUER, "wrong-client-id",
+                        Instant.now().plusSeconds(3600))));
+        mockUserInfo("perun1", "perun@email.it", null);
+
+        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+    }
+
+    @Test
+    public void testLoginFailsWhenUserInfoSubDoesNotMatchIdToken() throws Exception {
+        when(oidcClientMock.getAccessToken(CODE)).thenReturn(buildOidcTokenResponse(buildIdToken("perun1")));
+        // the sub returned by /userinfo doesn't match the verified ID token's sub
+        mockUserInfo("other-sub", "perun@email.it", null);
 
         getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
                 .andExpect(status().isUnauthorized())
@@ -729,11 +815,68 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         return identity;
     }
 
-    private OidcTokenResponseDTO buildOidcTokenResponse() {
+    private OidcTokenResponseDTO buildOidcTokenResponse(String idToken) {
         OidcTokenResponseDTO token = new OidcTokenResponseDTO();
         token.setAccessToken(ACCESS_TOKEN);
         token.setTokenType("Bearer");
+        token.setIdToken(idToken);
         return token;
+    }
+
+    private static RSAKey generateRsaKey() {
+        try {
+            KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
+            keyPairGenerator.initialize(2048);
+            KeyPair keyPair = keyPairGenerator.generateKeyPair();
+            return new RSAKey.Builder((RSAPublicKey) keyPair.getPublic())
+                    .privateKey((RSAPrivateKey) keyPair.getPrivate())
+                    .keyID("test-key-" + System.identityHashCode(keyPair))
+                    .build();
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * Builds a {@link JwtDecoder} that verifies ID tokens signed by {@link #RSA_JWK} and checks the issuer/
+     * audience, mirroring the validator composition of ClarinOidcAuthenticationBean#buildJwtDecoder (with a
+     * directly configured public key instead of a JWKS endpoint, since no real OIDC provider is available).
+     */
+    private JwtDecoder buildTestJwtDecoder() throws JOSEException {
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withPublicKey(RSA_JWK.toRSAPublicKey()).build();
+        OAuth2TokenValidator<Jwt> withIssuer = JwtValidators.createDefaultWithIssuer(ISSUER);
+        OAuth2TokenValidator<Jwt> withAudience = jwt -> jwt.getAudience() != null
+                && jwt.getAudience().contains(CLIENT_ID)
+                ? OAuth2TokenValidatorResult.success()
+                : OAuth2TokenValidatorResult.failure(
+                        new OAuth2Error("invalid_token", "The aud claim does not contain the client ID", null));
+        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(withIssuer, withAudience));
+        return decoder;
+    }
+
+    private String buildIdToken(String sub) throws JOSEException {
+        return buildIdToken(sub, ISSUER, CLIENT_ID, Instant.now().plusSeconds(3600));
+    }
+
+    private String buildIdToken(String sub, String issuer, String audience, Instant expirationTime)
+            throws JOSEException {
+        return buildIdToken(sub, issuer, audience, expirationTime, RSA_JWK);
+    }
+
+    private String buildIdToken(String sub, String issuer, String audience, Instant expirationTime,
+                                RSAKey signingKey) throws JOSEException {
+        JWTClaimsSet.Builder claims = new JWTClaimsSet.Builder()
+                .issuer(issuer)
+                .audience(audience)
+                .issueTime(new Date())
+                .expirationTime(Date.from(expirationTime));
+        if (sub != null) {
+            claims.subject(sub);
+        }
+        SignedJWT signedJwt = new SignedJWT(
+                new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(signingKey.getKeyID()).build(), claims.build());
+        signedJwt.sign(new RSASSASigner(signingKey));
+        return signedJwt.serialize();
     }
 
     private String getEPersonIdFromAuthorizationCookie(MvcResult mvcResult) throws ParseException, JOSEException {
