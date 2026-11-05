@@ -12,7 +12,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import javax.servlet.http.HttpServletRequest;
 
 import org.dspace.authenticate.service.AuthenticationService;
@@ -175,23 +177,23 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     public List<Group> getSpecialGroups(Context context,
                                         HttpServletRequest request)
         throws SQLException {
-        List<Group> result = new ArrayList<>();
-        int totalLen = 0;
+        // Use a set to avoid duplicates: some AuthenticationMethod implementations (e.g. ClarinShibAuthentication,
+        // ClarinOidcAuthenticationBean) are applicable regardless of the current authentication method, and
+        // simply echo back the context's already-resolved special groups, so the same groups can otherwise be
+        // added once per such method found in the stack.
+        Set<Group> result = new LinkedHashSet<>();
 
         for (AuthenticationMethod method : getAuthenticationMethodStack()) {
 
             if (method.areSpecialGroupsApplicable(context, request)) {
 
                 List<Group> gl = method.getSpecialGroups(context, request);
-                if (gl.size() > 0) {
-                    result.addAll(gl);
-                    totalLen += gl.size();
-                }
+                result.addAll(gl);
 
             }
         }
 
-        return result;
+        return new ArrayList<>(result);
     }
 
     @Override
