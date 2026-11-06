@@ -82,6 +82,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.util.HtmlUtils;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 import org.xml.sax.SAXException;
@@ -379,24 +380,40 @@ public class ClarinRefBoxController {
         }
 
         // 6. Format
-        // Using html tags to format the output because this display text will be rendered in the UI
+        // Using html tags to format the output because this display text will be rendered in the UI.
+        // Metadata values are escaped, so they cannot add markup of their own.
         StringBuilder sb = new StringBuilder();
         if (authorText != null && !authorText.isEmpty()) {
-            sb.append(authorText);
+            sb.append(escapeHtml(authorText));
         }
         if (year != null && !year.isEmpty()) {
             if (sb.length() > 0) {
                 sb.append(", ");
             }
-            sb.append(year);
+            sb.append(escapeHtml(year));
         }
-        sb.append(", \n  <i>").append(title != null ? title : "").append("</i>");
+        sb.append(", \n  <i>").append(escapeHtml(title)).append("</i>");
         if (repository != null && !repository.isEmpty()) {
-            sb.append(", ").append(repository);
+            sb.append(", ").append(escapeHtml(repository));
         }
-        sb.append(", \n  <a href=\"").append(identifier != null ? identifier : "").append("\">")
-                .append(identifier != null ? identifier : "").append("</a>.");
+        sb.append(", \n  ").append(formatIdentifier(identifier)).append(".");
         return sb.toString();
+    }
+
+    /**
+     * Link the identifier only when it is an http(s) URL, so a `javascript:` value never becomes a link.
+     */
+    private String formatIdentifier(String identifier) {
+        String text = escapeHtml(identifier);
+        if (!StringUtils.startsWithIgnoreCase(identifier, "http://") &&
+                !StringUtils.startsWithIgnoreCase(identifier, "https://")) {
+            return text;
+        }
+        return "<a href=\"" + text + "\">" + text + "</a>";
+    }
+
+    private String escapeHtml(String value) {
+        return value == null ? "" : HtmlUtils.htmlEscape(value, StandardCharsets.UTF_8.name());
     }
 
     /**

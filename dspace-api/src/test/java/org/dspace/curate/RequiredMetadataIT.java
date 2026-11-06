@@ -15,7 +15,6 @@ import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.Random;
 
 import org.dspace.AbstractIntegrationTestWithDatabase;
 import org.dspace.authorize.AuthorizeException;
@@ -44,7 +43,9 @@ import org.junit.Test;
 public class RequiredMetadataIT extends AbstractIntegrationTestWithDatabase {
     private static final String TASK_NAME = "requiredmetadata";
 
-    private static final String HANDLE_COLLECTION = "123456789/" + randomString();
+    // Non-numeric suffix the handle sequence can never mint, unique to this class so it cannot
+    // clash with leftover handle rows of other tests either.
+    private static final String HANDLE_COLLECTION = "123456789/required-metadata-test";
     private static final String HANDLE_ITEM1 = HANDLE_COLLECTION + "-1";
     private static final String HANDLE_ITEM2 = HANDLE_COLLECTION + "-2";
     private static final String HANDLE_ITEM3 = HANDLE_COLLECTION + "-3";
@@ -152,12 +153,6 @@ public class RequiredMetadataIT extends AbstractIntegrationTestWithDatabase {
 
     private static String successResultForItem(Item item) {
         return "Item: " + item.getHandle() + " has all required fields";
-    }
-
-    private static String randomString() {
-        Random r = new Random();
-        // Generate random integers in range 1000 to 1999
-        return String.valueOf(1000 + r.nextInt(1000));
     }
 
 }

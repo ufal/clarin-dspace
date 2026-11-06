@@ -11,9 +11,12 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
+import java.io.ByteArrayInputStream;
 import javax.mail.Address;
 import javax.mail.Message;
+import javax.mail.Multipart;
 import javax.mail.Provider;
 import javax.mail.Session;
 import javax.mail.internet.InternetAddress;
@@ -22,13 +25,16 @@ import org.dspace.AbstractUnitTest;
 import org.dspace.app.requestitem.factory.RequestItemServiceFactory;
 import org.dspace.app.requestitem.service.RequestItemService;
 import org.dspace.builder.AbstractBuilder;
+import org.dspace.builder.BitstreamBuilder;
 import org.dspace.builder.CollectionBuilder;
 import org.dspace.builder.CommunityBuilder;
 import org.dspace.builder.ItemBuilder;
+import org.dspace.content.Bitstream;
 import org.dspace.content.Collection;
 import org.dspace.content.Community;
 import org.dspace.content.Item;
 import org.dspace.content.factory.ContentServiceFactory;
+import org.dspace.content.service.BitstreamFormatService;
 import org.dspace.content.service.BitstreamService;
 import org.dspace.handle.factory.HandleServiceFactory;
 import org.dspace.handle.service.HandleService;
@@ -57,6 +63,7 @@ public class RequestItemEmailNotifierTest
 
     private static ConfigurationService configurationService;
     private static BitstreamService bitstreamService;
+    private static BitstreamFormatService bitstreamFormatService;
     private static HandleService handleService;
     private static RequestItemService requestItemService;
 
@@ -72,6 +79,8 @@ public class RequestItemEmailNotifierTest
                 = DSpaceServicesFactory.getInstance().getConfigurationService();
         bitstreamService
                 = ContentServiceFactory.getInstance().getBitstreamService();
+        bitstreamFormatService
+                = ContentServiceFactory.getInstance().getBitstreamFormatService();
         handleService
                 = HandleServiceFactory.getInstance().getHandleService();
         requestItemService
@@ -125,7 +134,6 @@ public class RequestItemEmailNotifierTest
         // Configure the help desk strategy.
         configurationService.setProperty("mail.helpdesk", HELPDESK_ADDRESS);
         configurationService.setProperty("mail.helpdesk.name", HELPDESK_NAME);
-        configurationService.setProperty("request.item.helpdesk.override", "true");
 
         // Ensure that mail is "sent".
         configurationService.setProperty("mail.server.disabled", "false");
@@ -210,7 +218,6 @@ public class RequestItemEmailNotifierTest
         // Configure the help desk strategy.
         configurationService.setProperty("mail.helpdesk", HELPDESK_ADDRESS);
         configurationService.setProperty("mail.helpdesk.name", HELPDESK_NAME);
-        configurationService.setProperty("request.item.helpdesk.override", "true");
 
         // Ensure that mail is "sent".
         configurationService.setProperty("mail.server.disabled", "false");
@@ -258,6 +265,164 @@ public class RequestItemEmailNotifierTest
         // FIXME Note that this depends on the content of the rejection template!
         assertThat("Should contain the word 'denied'.",
                 (String)content, containsString("denied"));
+    }
+
+    /**
+     * A single-file approval must not attach a bitstream that does not belong to
+     * the requested item. The message body must stay a single text
+     * part, with no attachment multipart.
+     *
+     * @throws java.lang.Exception passed through.
+     */
+    @Test
+    public void testSendResponseDoesNotAttachForeignBitstream() throws Exception {
+        context.turnOffAuthorisationSystem();
+        Community com = CommunityBuilder.createCommunity(context)
+                .withName("Top Community")
+                .build();
+        Collection col = CollectionBuilder.createCollection(context, com).build();
+        Item requestedItem = ItemBuilder.createItem(context, col)
+                .withTitle("Requested Item")
+                .build();
+        Item foreignItem = ItemBuilder.createItem(context, col)
+                .withTitle("Foreign Item")
+                .build();
+        Bitstream foreignBitstream = BitstreamBuilder
+                .createBitstream(context, foreignItem,
+                        new ByteArrayInputStream("secret".getBytes()))
+                .withName("secret.txt")
+                .build();
+        context.restoreAuthSystemState();
+
+        // Single-file request naming the requested item but a foreign bitstream.
+        RequestItem ri = new RequestItem();
+        ri.setAccept_request(true);
+        ri.setItem(requestedItem);
+        ri.setBitstream(foreignBitstream);
+        ri.setAllfiles(false);
+        ri.setReqEmail(REQUESTOR_ADDRESS);
+        ri.setReqName(REQUESTOR_NAME);
+
+        RequestItemEmailNotifier notifier = newGrantingNotifier();
+        notifier.sendResponse(context, ri, null, TEST_MESSAGE);
+
+        // No attachment: body stays a single text part, not a multipart.
+        Object content = JavaMailTestTransport.getMessage().getContent();
+        assertThat("Foreign bitstream must not be attached",
+                content, instanceOf(String.class));
+    }
+
+    /**
+     * A single-file approval for a bitstream that belongs to the requested item
+     * still attaches the file.
+     *
+     * @throws java.lang.Exception passed through.
+     */
+    @Test
+    public void testSendResponseAttachesOwnBitstream() throws Exception {
+        context.turnOffAuthorisationSystem();
+        Community com = CommunityBuilder.createCommunity(context)
+                .withName("Top Community")
+                .build();
+        Collection col = CollectionBuilder.createCollection(context, com).build();
+        Item item = ItemBuilder.createItem(context, col)
+                .withTitle("Requested Item")
+                .build();
+        Bitstream bitstream = BitstreamBuilder
+                .createBitstream(context, item,
+                        new ByteArrayInputStream("payload".getBytes()))
+                .withName("file.txt")
+                .build();
+        context.restoreAuthSystemState();
+
+        RequestItem ri = new RequestItem();
+        ri.setAccept_request(true);
+        ri.setItem(item);
+        ri.setBitstream(bitstream);
+        ri.setAllfiles(false);
+        ri.setReqEmail(REQUESTOR_ADDRESS);
+        ri.setReqName(REQUESTOR_NAME);
+
+        RequestItemEmailNotifier notifier = newGrantingNotifier();
+        notifier.sendResponse(context, ri, null, TEST_MESSAGE);
+
+        // The owned bitstream is attached: body becomes a multipart.
+        Object content = JavaMailTestTransport.getMessage().getContent();
+        assertThat("Item-owned bitstream must be attached",
+                content, instanceOf(Multipart.class));
+    }
+
+    /**
+     * A single-file approval must not attach a bitstream in an internal format,
+     * even when it belongs to the requested item.
+     *
+     * @throws java.lang.Exception passed through.
+     */
+    @Test
+    public void testSendResponseDoesNotAttachInternalFormat() throws Exception {
+        context.turnOffAuthorisationSystem();
+        Community com = CommunityBuilder.createCommunity(context)
+                .withName("Top Community")
+                .build();
+        Collection col = CollectionBuilder.createCollection(context, com).build();
+        Item item = ItemBuilder.createItem(context, col)
+                .withTitle("Requested Item")
+                .build();
+        Bitstream license = BitstreamBuilder
+                .createBitstream(context, item,
+                        new ByteArrayInputStream("license".getBytes()))
+                .withName("license.txt")
+                .build();
+        license.setFormat(context, bitstreamFormatService.findByShortDescription(context, "License"));
+        bitstreamService.update(context, license);
+        context.restoreAuthSystemState();
+        assertTrue("License format must be internal", license.getFormat(context).isInternal());
+
+        RequestItem ri = new RequestItem();
+        ri.setAccept_request(true);
+        ri.setItem(item);
+        ri.setBitstream(license);
+        ri.setAllfiles(false);
+        ri.setReqEmail(REQUESTOR_ADDRESS);
+        ri.setReqName(REQUESTOR_NAME);
+
+        RequestItemEmailNotifier notifier = newGrantingNotifier();
+        notifier.sendResponse(context, ri, null, TEST_MESSAGE);
+
+        Object content = JavaMailTestTransport.getMessage().getContent();
+        assertThat("Internal-format bitstream must not be attached",
+                content, instanceOf(String.class));
+    }
+
+    /**
+     * Install the fake transport and build a notifier wired with the help-desk
+     * strategy, ready to "send" a granting response.
+     *
+     * @return an initialized notifier.
+     */
+    private RequestItemEmailNotifier newGrantingNotifier() throws Exception {
+        Session session = DSpaceServicesFactory.getInstance().getEmailService().getSession();
+        Provider transportProvider = new Provider(Provider.Type.TRANSPORT,
+                DUMMY_PROTO, JavaMailTestTransport.class.getCanonicalName(),
+                "DSpace", "1.0");
+        session.addProvider(transportProvider);
+        session.setProvider(transportProvider);
+        session.setProtocolForAddress("rfc822", DUMMY_PROTO);
+
+        configurationService.setProperty("mail.helpdesk", HELPDESK_ADDRESS);
+        configurationService.setProperty("mail.helpdesk.name", HELPDESK_NAME);
+        configurationService.setProperty("mail.server.disabled", "false");
+
+        RequestItemEmailNotifier notifier = new RequestItemEmailNotifier(
+                DSpaceServicesFactory.getInstance()
+                        .getServiceManager()
+                        .getServiceByName(RequestItemHelpdeskStrategy.class.getName(),
+                                RequestItemAuthorExtractor.class));
+        notifier.bitstreamService = bitstreamService;
+        notifier.configurationService = configurationService;
+        notifier.handleService = handleService;
+        notifier.requestItemService = requestItemService;
+        return notifier;
     }
 
     /**

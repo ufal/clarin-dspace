@@ -7,8 +7,12 @@
  */
 package org.dspace.app.rest;
 
+import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import java.util.List;
 
 import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
 import org.dspace.builder.ClarinLicenseBuilder;
@@ -113,5 +117,65 @@ public class ClarinUserRegistrationRestRepositoryIT extends AbstractControllerIn
         getClient(userToken).perform(get("/api/core/clarinuserregistrations/" +
                         otherClarinUserRegistration.getID()))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    public void findByEPersonTest() throws Exception {
+        context.turnOffAuthorisationSystem();
+        ClarinUserRegistrationBuilder.createClarinUserRegistration(context)
+                .withEPersonID(eperson.getID())
+                .build();
+        EPerson otherEPerson = EPersonBuilder.createEPerson(context)
+                .withEmail("otherEperson@mail.com")
+                .withPassword(password)
+                .build();
+        context.restoreAuthSystemState();
+
+        String search = "/api/core/clarinuserregistrations/search/byEPerson?userUUID=" + eperson.getID();
+
+        getClient().perform(get(search))
+                .andExpect(status().isUnauthorized());
+
+        String userToken = getAuthToken(eperson.getEmail(), password);
+        getClient(userToken).perform(get(search))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements", is(1)));
+
+        String otherUserToken = getAuthToken(otherEPerson.getEmail(), password);
+        getClient(otherUserToken).perform(get(search))
+                .andExpect(status().isForbidden());
+
+        String adminToken = getAuthToken(admin.getEmail(), password);
+        getClient(adminToken).perform(get(search))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    public void linksTest() throws Exception {
+        context.turnOffAuthorisationSystem();
+        ClarinUserRegistration clarinUserRegistration = ClarinUserRegistrationBuilder
+                .createClarinUserRegistration(context)
+                .withEPersonID(eperson.getID())
+                .build();
+        EPerson otherEPerson = EPersonBuilder.createEPerson(context)
+                .withEmail("otherEperson@mail.com")
+                .withPassword(password)
+                .build();
+        context.restoreAuthSystemState();
+
+        String userToken = getAuthToken(eperson.getEmail(), password);
+        String otherUserToken = getAuthToken(otherEPerson.getEmail(), password);
+        for (String link : List.of("userMetadata", "clarinLicenses")) {
+            String url = "/api/core/clarinuserregistrations/" + clarinUserRegistration.getID() + "/" + link;
+
+            getClient().perform(get(url))
+                    .andExpect(status().isUnauthorized());
+
+            getClient(otherUserToken).perform(get(url))
+                    .andExpect(status().isForbidden());
+
+            getClient(userToken).perform(get(url))
+                    .andExpect(status().isOk());
+        }
     }
 }

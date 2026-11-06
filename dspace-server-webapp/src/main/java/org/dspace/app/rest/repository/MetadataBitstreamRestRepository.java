@@ -19,10 +19,12 @@ import org.dspace.app.rest.Parameter;
 import org.dspace.app.rest.SearchRestMethod;
 import org.dspace.app.rest.converter.MetadataBitstreamWrapperConverter;
 import org.dspace.app.rest.exception.DSpaceBadRequestException;
+import org.dspace.app.rest.exception.RESTAuthorizationException;
 import org.dspace.app.rest.exception.UnprocessableEntityException;
 import org.dspace.app.rest.model.MetadataBitstreamWrapperRest;
 import org.dspace.app.rest.model.wrapper.MetadataBitstreamWrapper;
 import org.dspace.authorize.AuthorizeException;
+import org.dspace.authorize.service.AuthorizeService;
 import org.dspace.content.Bitstream;
 import org.dspace.content.Bundle;
 import org.dspace.content.DSpaceObject;
@@ -31,6 +33,7 @@ import org.dspace.content.PreviewContent;
 import org.dspace.content.Thumbnail;
 import org.dspace.content.service.ItemService;
 import org.dspace.content.service.PreviewContentService;
+import org.dspace.core.Constants;
 import org.dspace.core.Context;
 import org.dspace.handle.service.HandleService;
 import org.dspace.services.ConfigurationService;
@@ -64,6 +67,14 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
     @Autowired
     ConfigurationService configurationService;
 
+    @Autowired
+    AuthorizeService authorizeService;
+
+    /**
+     * List the bitstreams of the item identified by the handle, with their preview content.
+     * The caller needs READ on that item (401 for anonymous, 403 otherwise); the check runs before any preview
+     * content is generated or stored.
+     */
     @SearchRestMethod(name = "byHandle")
     public Page<MetadataBitstreamWrapperRest> findByHandle(@Parameter(value = "handle", required = true) String handle,
                                                            @Parameter(value = "fileGrpType") String fileGrpType,
@@ -93,6 +104,12 @@ public class MetadataBitstreamRestRepository extends DSpaceRestRepository<Metada
         }
 
         Item item = (Item) dso;
+        // The handle is resolved here rather than by a uuid path variable, so no @PreAuthorize covers this item.
+        try {
+            authorizeService.authorizeAction(context, item, Constants.READ);
+        } catch (AuthorizeException e) {
+            throw new RESTAuthorizationException(e);
+        }
         List<String> fileGrpTypes = (fileGrpType == null ? List.of() : Arrays.asList(fileGrpType.split(",")));
         List<Bundle> bundles = findEnabledBundles(fileGrpTypes, item);
         for (Bundle bundle : bundles) {

@@ -25,7 +25,7 @@
     select="fn:stringReplace(/doc:metadata/doc:element[@name='dc']/doc:element[@name='identifier']/doc:element[@name='uri']/doc:element/doc:field[@name='value'])"/>
     <xsl:variable name="modifyDate" select="/doc:metadata/doc:element[@name='others']/doc:field[@name='lastModifyDate']/text()"/>
     <xsl:variable name="dc_rights_uri" select="/doc:metadata/doc:element[@name='dc']/doc:element[@name='rights']/doc:element[@name='uri']/doc:element/doc:field[@name='value']" />
-    <xsl:variable name="dsURL" select="fn:getProperty('dspace.ui.url')"/>
+    <xsl:variable name="serverURL" select="fn:getProperty('dspace.server.url')"/>
     <xsl:variable name="newProfile" select="'clarin.eu:cr1:p_1403526079380'"/>
     <xsl:variable name="oldProfile" select="'clarin.eu:cr1:p_1349361150622'"/>
     
@@ -108,13 +108,13 @@
 		</cmd:Resources>
 	</xsl:template>
 	
-	<!-- Omit the special "ORE" bitstream and also the consent to publish the data -->
+	<!-- List only the data files (ORIGINAL bundle); the download endpoint below serves nothing else -->
 	<xsl:template name="ProcessBitstreams">
-	   <xsl:for-each select="/doc:metadata/doc:element[@name='bundles']/doc:element[@name='bundle']/doc:field[@name='name' and text()!='ORE' and text()!='LICENSE']/../doc:element[@name='bitstreams']/doc:element[@name='bitstream']">
+	   <xsl:for-each select="/doc:metadata/doc:element[@name='bundles']/doc:element[@name='bundle']/doc:field[@name='name' and text()='ORIGINAL']/../doc:element[@name='bitstreams']/doc:element[@name='bitstream']">
 	       <cmd:ResourceProxy>
 	                   <xsl:attribute name="id">_<xsl:value-of select="./doc:field[@name='id']/text()"/></xsl:attribute>
                        <cmd:ResourceType><xsl:attribute name="mimetype"><xsl:value-of select="./doc:field[@name='format']/text()"/></xsl:attribute>Resource</cmd:ResourceType>
-			   <cmd:ResourceRef><xsl:attribute name="lindat:md5_checksum"><xsl:value-of select="./doc:field[@name='checksum']/text()"/></xsl:attribute><xsl:value-of select="concat($dsURL,'/bitstream/handle/',$handle,'/',./doc:field[@name='name']/text(),'?sequence=',./doc:field[@name='sid']/text())"/></cmd:ResourceRef>
+			   <cmd:ResourceRef><xsl:attribute name="lindat:md5_checksum"><xsl:value-of select="./doc:field[@name='checksum']/text()"/></xsl:attribute><xsl:value-of select="concat($serverURL,'/api/core/bitstreams/handle/',$handle,'/',fnx:encode-for-uri(./doc:field[@name='name']/text()))"/></cmd:ResourceRef>
            </cmd:ResourceProxy>
 	   </xsl:for-each>
 	</xsl:template>

@@ -21,6 +21,7 @@ import org.dspace.xmlworkflow.storedcomponents.service.ClaimedTaskService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.rest.webmvc.ResourceNotFoundException;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Component;
 
 /**
@@ -44,6 +45,7 @@ public class ClaimedTaskStepLinkRepository extends AbstractDSpaceRestRepository 
      * @return                  The {@link WorkflowStepRest} object related to the {@link ClaimedTask} specified by
      *                          the given ID
      */
+    @PreAuthorize("hasPermission(#claimedTaskId, 'CLAIMEDTASK', 'READ')")
     public WorkflowStepRest getStep(@Nullable HttpServletRequest request,
                                     Integer claimedTaskId,
                                     @Nullable Pageable optionalPageable,

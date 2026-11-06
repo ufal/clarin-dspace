@@ -33,6 +33,8 @@ import org.dspace.builder.ItemBuilder;
 import org.dspace.content.Bitstream;
 import org.dspace.content.Collection;
 import org.dspace.content.Item;
+import org.dspace.eperson.Group;
+import org.dspace.eperson.service.GroupService;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -49,6 +51,8 @@ public class MetadataBitstreamControllerIT extends AbstractControllerIntegration
 
     @Autowired
     AuthorizeService authorizeService;
+    @Autowired
+    GroupService groupService;
 
 
     @Override
@@ -110,17 +114,15 @@ public class MetadataBitstreamControllerIT extends AbstractControllerIntegration
     public void downloadAllZipWithDoubleQuotesInItemName() throws Exception {
         context.turnOffAuthorisationSystem();
 
-        // Create an item with double quotes in the name — reproduces the
-        // ERR_RESPONSE_HEADERS_MULTIPLE_CONTENT_DISPOSITION browser error.
+        // Double quotes in the name used to close the header's quoted-string early, which browsers
+        // reported as ERR_RESPONSE_HEADERS_MULTIPLE_CONTENT_DISPOSITION.
         Item itemWithQuotes = ItemBuilder.createItem(context, col)
                 .withTitle("Supported data for manuscript \"Thermally-induced evolution\"")
                 .withAuthor(AUTHOR)
                 .build();
 
-        String bitstreamContent = "QuotedItemContent";
-        try (InputStream is = IOUtils.toInputStream(bitstreamContent, CharEncoding.UTF_8)) {
-            BitstreamBuilder
-                    .createBitstream(context, itemWithQuotes, is)
+        try (InputStream is = IOUtils.toInputStream("QuotedItemContent", CharEncoding.UTF_8)) {
+            BitstreamBuilder.createBitstream(context, itemWithQuotes, is)
                     .withName("data.csv")
                     .withMimeType("text/csv")
                     .build();
@@ -131,7 +133,6 @@ public class MetadataBitstreamControllerIT extends AbstractControllerIntegration
         getClient(token).perform(get(METADATABITSTREAM_ENDPOINT + "/" + itemWithQuotes.getID() +
                         "/" + ALL_ZIP_PATH).param(HANDLE_PARAM, itemWithQuotes.getHandle()))
                 .andExpect(status().isOk())
-                // The filename must have escaped quotes so the header is valid
                 .andExpect(header().string("Content-Disposition",
                         "attachment; filename=\"Supported data for manuscript"
                         + " \\\"Thermally-induced evolution\\\".zip\";"
@@ -148,8 +149,7 @@ public class MetadataBitstreamControllerIT extends AbstractControllerIntegration
                 .withAuthor(AUTHOR)
                 .build();
 
-        String bitstreamContent = "DiacriticsContent";
-        try (InputStream is = IOUtils.toInputStream(bitstreamContent, CharEncoding.UTF_8)) {
+        try (InputStream is = IOUtils.toInputStream("DiacriticsContent", CharEncoding.UTF_8)) {
             BitstreamBuilder.createBitstream(context, itemWithDiacritics, is)
                     .withName("file.txt")
                     .withMimeType("text/plain")
@@ -161,10 +161,63 @@ public class MetadataBitstreamControllerIT extends AbstractControllerIntegration
         getClient(token).perform(get(METADATABITSTREAM_ENDPOINT + "/" + itemWithDiacritics.getID() +
                         "/" + ALL_ZIP_PATH).param(HANDLE_PARAM, itemWithDiacritics.getHandle()))
                 .andExpect(status().isOk())
-                // Non-ASCII chars replaced with _ in filename, full UTF-8 in filename*
+                // fallback transliterates the diacritics away; filename* carries the real name
                 .andExpect(header().string("Content-Disposition",
-                        "attachment; filename=\"P__li_ _lu_ou_k_ k__.zip\";"
+                        "attachment; filename=\"Prilis zlutoucky kun.zip\";"
                         + " filename*=UTF-8''P%C5%99%C3%ADli%C5%A1%20%C5%BElu%C5%A5ou%C4%8Dk%C3%BD"
                         + "%20k%C5%AF%C5%88.zip"));
+    }
+
+    /**
+     * READ is checked on {uuid}, so the zip must not be built from an item identified by another handle:
+     * neither its files nor its title in Content-Disposition may reach the caller.
+     */
+    @Test
+    public void downloadAllZipRefusesHandleOfAnotherItem() throws Exception {
+        context.turnOffAuthorisationSystem();
+        Item privateItem = ItemBuilder.createItem(context, col)
+                .withTitle("Private item title")
+                .withAuthor(AUTHOR)
+                .withReaderGroup(groupService.findByName(context, Group.ADMIN))
+                .build();
+        try (InputStream is = IOUtils.toInputStream("PrivateContent", CharEncoding.UTF_8)) {
+            BitstreamBuilder.createBitstream(context, privateItem, is)
+                    .withName("private.txt")
+                    .withMimeType("text/plain")
+                    .build();
+        }
+        context.restoreAuthSystemState();
+
+        // uuid of a readable item + handle of a private one
+        getClient().perform(get(METADATABITSTREAM_ENDPOINT + "/" + publicItem.getID() +
+                        "/" + ALL_ZIP_PATH).param(HANDLE_PARAM, privateItem.getHandle()))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(header().doesNotExist("Content-Disposition"));
+        // an unknown handle gets the same answer
+        getClient().perform(get(METADATABITSTREAM_ENDPOINT + "/" + publicItem.getID() +
+                        "/" + ALL_ZIP_PATH).param(HANDLE_PARAM, "123456789/does-not-exist"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(header().doesNotExist("Content-Disposition"));
+        // the reverse is refused by the READ check on {uuid}
+        getClient().perform(get(METADATABITSTREAM_ENDPOINT + "/" + privateItem.getID() +
+                        "/" + ALL_ZIP_PATH).param(HANDLE_PARAM, publicItem.getHandle()))
+                .andExpect(status().isUnauthorized());
+        // a mismatch is refused for an admin too
+        String token = getAuthToken(admin.getEmail(), password);
+        getClient(token).perform(get(METADATABITSTREAM_ENDPOINT + "/" + publicItem.getID() +
+                        "/" + ALL_ZIP_PATH).param(HANDLE_PARAM, privateItem.getHandle()))
+                .andExpect(status().isUnprocessableEntity());
+
+        // the matching pair still works, for an anonymous caller on the public item and for an admin on the
+        // private one
+        getClient().perform(get(METADATABITSTREAM_ENDPOINT + "/" + publicItem.getID() +
+                        "/" + ALL_ZIP_PATH).param(HANDLE_PARAM, publicItem.getHandle()))
+                .andExpect(status().isOk());
+        getClient(token).perform(get(METADATABITSTREAM_ENDPOINT + "/" + privateItem.getID() +
+                        "/" + ALL_ZIP_PATH).param(HANDLE_PARAM, privateItem.getHandle()))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition",
+                        "attachment; filename=\"Private item title.zip\";"
+                        + " filename*=UTF-8''Private%20item%20title.zip"));
     }
 }

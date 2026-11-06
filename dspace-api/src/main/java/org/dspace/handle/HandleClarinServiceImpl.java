@@ -483,7 +483,7 @@ public class HandleClarinServiceImpl implements HandleClarinService {
         }
         org.dspace.handle.external.Handle magicHandle =
                 new org.dspace.handle.external.Handle(h.getHandle(), h.getUrl());
-        if (magicHandle.token.equals(token)) {
+        if (StringUtils.equals(magicHandle.getToken(), token)) {
             return h;
         } else {
             return null;

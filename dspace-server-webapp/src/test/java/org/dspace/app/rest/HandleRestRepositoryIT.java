@@ -126,7 +126,9 @@ public class HandleRestRepositoryIT extends AbstractControllerIntegrationTest {
     public void findOne() throws Exception {
         Handle handle = publicItem.getHandles().get(0);
 
-        getClient().perform(get(HANDLES_ENDPOINT + handle.getID()))
+        String adminToken = getAuthToken(admin.getEmail(), password);
+
+        getClient(adminToken).perform(get(HANDLES_ENDPOINT + handle.getID()))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(contentType))
                 .andExpect(jsonPath("$", Matchers.is(
@@ -139,16 +141,53 @@ public class HandleRestRepositoryIT extends AbstractControllerIntegrationTest {
     }
 
     @Test
-    public void deleteSuccess() throws Exception {
+    public void findAllUnauthorized() throws Exception {
+        getClient().perform(get("/api/core/handles"))
+                .andExpect(status().isUnauthorized());
+        this.cleanHandles();
+    }
+
+    @Test
+    public void findAllForbidden() throws Exception {
+        String epersonToken = getAuthToken(eperson.getEmail(), password);
+
+        getClient(epersonToken).perform(get("/api/core/handles"))
+                .andExpect(status().isForbidden());
+        this.cleanHandles();
+    }
+
+    @Test
+    public void findOneUnauthorized() throws Exception {
         Handle handle = publicItem.getHandles().get(0);
 
         getClient().perform(get(HANDLES_ENDPOINT + handle.getID()))
+                .andExpect(status().isUnauthorized());
+        this.cleanHandles();
+    }
+
+    @Test
+    public void findOneForbidden() throws Exception {
+        Handle handle = publicItem.getHandles().get(0);
+        String epersonToken = getAuthToken(eperson.getEmail(), password);
+
+        getClient(epersonToken).perform(get(HANDLES_ENDPOINT + handle.getID()))
+                .andExpect(status().isForbidden());
+        this.cleanHandles();
+    }
+
+    @Test
+    public void deleteSuccess() throws Exception {
+        Handle handle = publicItem.getHandles().get(0);
+
+        String adminToken = getAuthToken(admin.getEmail(), password);
+
+        getClient(adminToken).perform(get(HANDLES_ENDPOINT + handle.getID()))
                 .andExpect(status().isOk());
-        getClient(getAuthToken(admin.getEmail(), password))
+        getClient(adminToken)
                 .perform(delete(HANDLES_ENDPOINT + handle.getID()))
                 .andExpect(status().isNoContent());
 
-        getClient().perform(get(HANDLES_ENDPOINT + handle.getID()))
+        getClient(adminToken).perform(get(HANDLES_ENDPOINT + handle.getID()))
                 .andExpect(status().isNotFound());
 
         //Item handle was deleted in test

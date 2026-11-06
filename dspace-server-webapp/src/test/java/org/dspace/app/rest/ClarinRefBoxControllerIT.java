@@ -398,6 +398,23 @@ public class ClarinRefBoxControllerIT extends AbstractControllerIntegrationTest 
                         "First Author; et al.")));
     }
 
+    @Test
+    public void testDisplayTextEscapesMetadataMarkup() throws Exception {
+        context.turnOffAuthorisationSystem();
+        Item itemMarkup = ItemBuilder.createItem(context, collection)
+                .withTitle("<img src=x onerror=alert(1)>")
+                .withAuthor("<b>Author</b>")
+                .build();
+        context.restoreAuthSystemState();
+
+        getClient().perform(get("/api/core/refbox?handle=" + itemMarkup.getHandle()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.displayText").value(containsString("&lt;b&gt;Author&lt;/b&gt;")))
+                .andExpect(jsonPath("$.displayText").value(
+                        containsString("<i>&lt;img src=x onerror=alert(1)&gt;</i>")))
+                .andExpect(jsonPath("$.displayText").value(not(containsString("<img"))));
+    }
+
     // --- Citations endpoint tests (#1366) ---
 
     @Test
