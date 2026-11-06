@@ -872,7 +872,7 @@
             	</exclusion>
             </exclusions>
         </dependency>
-        
+
         <dependency>
             <groupId>io.findify</groupId>
             <artifactId>s3mock_2.13</artifactId>
@@ -900,24 +900,6 @@
             <groupId>com.flipkart.zjsonpatch</groupId>
             <artifactId>zjsonpatch</artifactId>
             <version>0.4.16</version>
-        </dependency>
-
-        <dependency>
-            <groupId>net.minidev</groupId>
-            <artifactId>json-smart</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>com.nimbusds</groupId>
-            <artifactId>nimbus-jose-jwt</artifactId>
-            <version>${nimbus-jose-jwt.version}</version>
-            <exclusions>
-                <!-- We pull in a later version below -->
-                <exclusion>
-                    <groupId>net.minidev</groupId>
-                    <artifactId>json-smart</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
 
         <dependency>

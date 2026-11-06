@@ -29,6 +29,8 @@
                         <!-- Ignore license header requirements on CSS/images/HTML/XSL -->
                         <exclude>src/main/resources/**</exclude>
                         <exclude>**/*.xsl</exclude>
+                        <!-- Preserve upstream schema content and notices. -->
+                        <exclude>src/test/resources/cmdi/*.xsd</exclude>
                     </excludes>
                 </configuration>
             </plugin>
