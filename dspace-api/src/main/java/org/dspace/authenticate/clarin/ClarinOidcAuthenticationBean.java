@@ -433,7 +433,7 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
 
             ClarinUserRegistration clarinUserRegistration = new ClarinUserRegistration();
             clarinUserRegistration.setConfirmation(true);
-            clarinUserRegistration.setEmail(email);
+            clarinUserRegistration.setEmail(ePerson.getEmail());
             clarinUserRegistration.setPersonID(ePerson.getID());
             clarinUserRegistration.setOrganization(StringUtils.isNotBlank(organization) ? organization :
                     ClarinUserRegistration.UNKNOWN_USER_REGISTRATION);
