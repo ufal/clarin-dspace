@@ -765,6 +765,58 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     }
 
     @Test
+    public void testLoginFailsWithIdTokenMissingExpiration() throws Exception {
+        when(oidcClientMock.getAccessToken(CODE)).thenReturn(
+                buildOidcTokenResponse(buildIdTokenWithoutExpiration("perun1")));
+        mockUserInfo("perun1", "perun@email.it", null);
+
+        getClient().perform(oidcCallback(CODE))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+    }
+
+    @Test
+    public void testLoginFailsWhenUserInfoHasNoSub() throws Exception {
+        when(oidcClientMock.getAccessToken(CODE)).thenReturn(buildOidcTokenResponse(buildIdToken("perun1")));
+        // user info omits sub entirely (as opposed to supplying a mismatching one); its email must not be
+        // trusted without confirming it belongs to the authenticated subject
+        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(Map.of(EMAIL, "perun@email.it"));
+
+        getClient().perform(oidcCallback(CODE))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+    }
+
+    @Test
+    public void testLoginFailsWhenUserInfoRequestFails() throws Exception {
+        when(oidcClientMock.getAccessToken(CODE)).thenReturn(buildOidcTokenResponse(buildIdToken("perun1")));
+        // simulates OidcClientImpl#getUserInfo catching a provider failure (timeout, non-2xx response,
+        // empty body) and ClarinOidcAuthenticationBean#getOidcUserInfo returning an empty map as a result
+        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(Map.of());
+
+        getClient().perform(oidcCallback(CODE))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+    }
+
+    @Test
+    public void testEmailVerifiedNotInheritedWhenUserInfoChangesEmail() throws Exception {
+        // the ID token itself vouches for "old@email.it" being verified...
+        when(oidcClientMock.getAccessToken(CODE)).thenReturn(
+                buildOidcTokenResponse(buildIdTokenWithEmail("perun1", "old@email.it", true)));
+        // ...but user info overrides with a DIFFERENT email, without re-confirming it is verified
+        Map<String, Object> userInfo = new HashMap<>();
+        userInfo.put(SUB, "perun1");
+        userInfo.put(EMAIL, "new@email.it");
+        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
+
+        // the inherited "verified" flag must not be allowed to vouch for the new, unconfirmed email
+        getClient().perform(oidcCallback(CODE))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+    }
+
+    @Test
     public void testLoginFailsWithMissingStateCookie() throws Exception {
         mockUserInfo("perun1", "perun@email.it", null);
 
@@ -889,12 +941,55 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
                 ? OAuth2TokenValidatorResult.success()
                 : OAuth2TokenValidatorResult.failure(
                         new OAuth2Error("invalid_token", "The aud claim does not contain the client ID", null));
-        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(withIssuer, withAudience));
+        OAuth2TokenValidator<Jwt> withRequiredClaims = jwt -> jwt.getExpiresAt() != null
+                && jwt.getIssuedAt() != null
+                && org.apache.commons.lang3.StringUtils.isNotBlank(jwt.getSubject())
+                ? OAuth2TokenValidatorResult.success()
+                : OAuth2TokenValidatorResult.failure(
+                        new OAuth2Error("invalid_token", "The exp, iat and sub claims are required", null));
+        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(withIssuer, withAudience, withRequiredClaims));
         return decoder;
     }
 
     private String buildIdToken(String sub) throws JOSEException {
         return buildIdToken(sub, ISSUER, CLIENT_ID, Instant.now().plusSeconds(3600));
+    }
+
+    /**
+     * Builds a signed ID token with no "exp" claim at all (as opposed to {@link #buildIdToken}, which always
+     * sets one), to verify that a missing (not just expired) exp is rejected.
+     */
+    private String buildIdTokenWithoutExpiration(String sub) throws JOSEException {
+        JWTClaimsSet claims = new JWTClaimsSet.Builder()
+                .issuer(ISSUER)
+                .audience(CLIENT_ID)
+                .subject(sub)
+                .issueTime(new Date())
+                .build();
+        SignedJWT signedJwt = new SignedJWT(
+                new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(RSA_JWK.getKeyID()).build(), claims);
+        signedJwt.sign(new RSASSASigner(RSA_JWK));
+        return signedJwt.serialize();
+    }
+
+    /**
+     * Builds a signed ID token carrying its own email/email_verified claims, to verify that user info
+     * overriding the email doesn't inherit the ID token's verified flag for a different email value.
+     */
+    private String buildIdTokenWithEmail(String sub, String email, boolean emailVerified) throws JOSEException {
+        JWTClaimsSet claims = new JWTClaimsSet.Builder()
+                .issuer(ISSUER)
+                .audience(CLIENT_ID)
+                .subject(sub)
+                .issueTime(new Date())
+                .expirationTime(Date.from(Instant.now().plusSeconds(3600)))
+                .claim(EMAIL, email)
+                .claim(EMAIL_VERIFIED, emailVerified)
+                .build();
+        SignedJWT signedJwt = new SignedJWT(
+                new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(RSA_JWK.getKeyID()).build(), claims);
+        signedJwt.sign(new RSASSASigner(RSA_JWK));
+        return signedJwt.serialize();
     }
 
     private String buildIdToken(String sub, String issuer, String audience, Instant expirationTime)
