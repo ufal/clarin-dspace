@@ -203,8 +203,20 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
             return BAD_CREDENTIALS;
         }
 
-        OidcUserInfo userInfo = new OidcUserInfo(getOidcUserInfo(tokenResponse.getAccessToken()));
-        if (StringUtils.isNotBlank(userInfo.getSubject()) && !userInfo.getSubject().equals(idToken.getSubject())) {
+        Map<String, Object> userInfoClaims = getOidcUserInfo(tokenResponse.getAccessToken());
+        if (userInfoClaims == null || userInfoClaims.isEmpty()) {
+            // OidcUserInfo rejects an empty claims map with IllegalArgumentException; getOidcUserInfo()
+            // already returns an empty map on any provider failure (timeout, non-2xx, empty body), so this
+            // must be treated as an authentication failure here rather than letting that exception escape
+            // as an unhandled server error
+            log.warn("OIDC authentication failed, because no user info could be retrieved for the access token");
+            return BAD_CREDENTIALS;
+        }
+        OidcUserInfo userInfo = new OidcUserInfo(userInfoClaims);
+        // the sub claim is REQUIRED in the user info response (OIDC Core 5.3.2) and MUST match the verified
+        // ID token's subject; a blank sub is not skipped, since that would let its email/group claims be
+        // used without confirming they belong to the authenticated subject
+        if (StringUtils.isBlank(userInfo.getSubject()) || !userInfo.getSubject().equals(idToken.getSubject())) {
             log.warn("OIDC authentication failed, because the sub claim of the user info ({}) does not match the " +
                     "verified ID token ({})", userInfo.getSubject(), idToken.getSubject());
             return BAD_CREDENTIALS;
@@ -213,7 +225,16 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
         // The ID token claims are signature-verified and form the trusted base; user info claims (only
         // TLS-trusted, not signature-verified) take precedence for overlapping keys, per OIDC Core 5.3.2.
         Map<String, Object> claims = new HashMap<>(idToken.getClaims());
-        claims.putAll(userInfo.getClaims());
+        String emailAttribute = getEmailAttribute();
+        String emailVerifiedAttribute = getEmailVerifiedAttribute();
+        if (StringUtils.isNotBlank(emailAttribute) && userInfoClaims.containsKey(emailAttribute)
+                && !userInfoClaims.containsKey(emailVerifiedAttribute)) {
+            // user info overrides the email without (re-)confirming it is verified; the inherited verified
+            // flag from the ID token was only ever vouching for the ID token's own email value, so it must
+            // not be allowed to carry over and apply to a different, unverified email from user info
+            claims.remove(emailVerifiedAttribute);
+        }
+        claims.putAll(userInfoClaims);
 
         return authenticateWithClaims(context, claims, request);
     }
@@ -246,7 +267,16 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
                 ? OAuth2TokenValidatorResult.success()
                 : OAuth2TokenValidatorResult.failure(new OAuth2Error("invalid_token",
                         "The aud claim does not contain the configured client ID", null));
-        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(withIssuer, withAudience));
+        // JwtValidators.createDefaultWithIssuer only checks exp/nbf when present, it doesn't require them;
+        // exp, iat and sub are REQUIRED ID token claims (OIDC Core 2), so a token omitting them must not
+        // be trusted, e.g. a correctly signed token with no exp would otherwise never expire
+        OAuth2TokenValidator<Jwt> withRequiredClaims = jwt -> jwt.getExpiresAt() != null
+                && jwt.getIssuedAt() != null
+                && StringUtils.isNotBlank(jwt.getSubject())
+                ? OAuth2TokenValidatorResult.success()
+                : OAuth2TokenValidatorResult.failure(new OAuth2Error("invalid_token",
+                        "The exp, iat and sub claims are required", null));
+        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(withIssuer, withAudience, withRequiredClaims));
         return decoder;
     }
 
