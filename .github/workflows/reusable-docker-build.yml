@@ -66,8 +66,8 @@ env:
   # For a pull request, use the name of the base branch that the PR was created against or "latest" (for main).
   #   e.g. PR against 'main' will use "latest". a PR against 'dspace-7_x' will use 'dspace-7_x'.
   IMAGE_TAGS: |
-    type=raw,value=latest,enable=${{ github.ref_name == github.event.repository.default_branch }}
-    type=ref,event=branch,enable=${{ github.ref_name != github.event.repository.default_branch }}
+    type=raw,value=dspace-9_x,enable=${{ github.ref_name == 'dtq-dev-9-base-test' }}
+    type=ref,event=branch,enable=${{ github.ref_name != 'dtq-dev-9-base-test' }}
     type=ref,event=tag
     type=raw,value=${{ github.sha }}
     type=raw,value=${{ (github.event.pull_request.base.ref == github.event.repository.default_branch && 'latest') || github.event.pull_request.base.ref }},enable=${{ github.event_name == 'pull_request' }}
