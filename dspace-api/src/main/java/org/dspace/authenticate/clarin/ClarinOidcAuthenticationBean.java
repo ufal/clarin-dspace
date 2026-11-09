@@ -15,7 +15,11 @@ import static org.apache.commons.lang3.StringUtils.isBlank;
 import static org.dspace.content.clarin.AuthenticationIdentity.AUTH_METHOD_OIDC;
 
 import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.sql.SQLException;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -24,6 +28,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
@@ -86,13 +91,26 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
 
     private static final Logger log = LogManager.getLogger(ClarinOidcAuthenticationBean.class);
 
-    private static final String LOGIN_PAGE_URL_FORMAT = "%s?client_id=%s&response_type=code&scope=%s&redirect_uri=%s";
+    private static final String LOGIN_PAGE_URL_FORMAT =
+            "%s?client_id=%s&response_type=code&scope=%s&redirect_uri=%s&state=%s";
 
     private static final String OIDC_AUTHENTICATED = "oidc.authenticated";
 
     public static final String DEFAULT_PROVIDER = "oidc";
     public static final String DEFAULT_USER_ID_ATTRIBUTE = "sub";
     public static final String DEFAULT_EMAIL_VERIFIED_ATTRIBUTE = "email_verified";
+
+    /**
+     * Name of the cookie binding the OIDC authorization request to the browser that initiated it, to
+     * prevent login CSRF (an attacker completing their own login, then tricking a victim's browser into
+     * loading the resulting callback URL, logging the victim into the attacker's account). Public so
+     * {@link org.dspace.app.rest.security.OidcLoginFilter} can clear it after a successful login.
+     */
+    public static final String STATE_COOKIE_NAME = "dspace.oidc.state";
+
+    private static final int STATE_COOKIE_MAX_AGE_SECONDS = 600;
+
+    private static final SecureRandom STATE_RANDOM = new SecureRandom();
 
     @Autowired
     private ConfigurationService configurationService;
@@ -127,6 +145,12 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
             return NO_SUCH_USER;
         }
 
+        if (!isStateValid(request)) {
+            log.warn("OIDC authentication failed, because the state parameter is missing or does not match " +
+                    "the " + STATE_COOKIE_NAME + " cookie set when the login was initiated");
+            return BAD_CREDENTIALS;
+        }
+
         String code = request.getParameter("code");
         if (StringUtils.isEmpty(code)) {
             log.warn("The incoming request has not code parameter");
@@ -134,6 +158,33 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
         }
 
         return authenticateWithOidc(context, code, request);
+    }
+
+    /**
+     * Returns whether the "state" request parameter returned by the OIDC provider matches the value this
+     * bean set in the {@link #STATE_COOKIE_NAME} cookie when it built the authorization redirect URL (see
+     * {@link #loginPageURL}). This binds the authorization request to the browser that initiated it,
+     * preventing an attacker from tricking a victim's browser into completing the attacker's own login
+     * (login CSRF / authorization code injection, see RFC 9700).
+     */
+    private boolean isStateValid(HttpServletRequest request) {
+        String state = request.getParameter("state");
+        if (StringUtils.isBlank(state)) {
+            return false;
+        }
+        Cookie[] cookies = request.getCookies();
+        if (cookies == null) {
+            return false;
+        }
+        for (Cookie cookie : cookies) {
+            if (STATE_COOKIE_NAME.equals(cookie.getName())) {
+                // constant-time comparison, so a timing side-channel can't be used to guess the cookie
+                // value one character at a time
+                return MessageDigest.isEqual(state.getBytes(StandardCharsets.UTF_8),
+                        cookie.getValue().getBytes(StandardCharsets.UTF_8));
+            }
+        }
+        return false;
     }
 
     private int authenticateWithOidc(Context context, String code, HttpServletRequest request) throws SQLException {
@@ -685,13 +736,55 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
             return "";
         }
 
+        String state = getOrCreateState(request, response);
+
         try {
-            return format(LOGIN_PAGE_URL_FORMAT, authorizeUrl, clientId, scopes, encode(redirectUri, "UTF-8"));
+            return format(LOGIN_PAGE_URL_FORMAT, authorizeUrl, clientId, scopes, encode(redirectUri, "UTF-8"),
+                    encode(state, "UTF-8"));
         } catch (UnsupportedEncodingException e) {
             log.error(e.getMessage(), e);
             return "";
         }
 
+    }
+
+    /**
+     * Returns the value of the {@link #STATE_COOKIE_NAME} cookie already set on this browser, or generates
+     * a new unpredictable one if absent, (re-)setting the cookie either way so its expiry keeps extending
+     * while the browser keeps checking the authentication status (see {@link #loginPageURL}'s callers,
+     * which run on every unauthenticated request, not only when the user deliberately starts an OIDC
+     * login). Reusing rather than always regenerating avoids invalidating an in-flight login started in
+     * another tab/request.
+     */
+    private String getOrCreateState(HttpServletRequest request, HttpServletResponse response) {
+        String state = null;
+        Cookie[] cookies = request.getCookies();
+        if (cookies != null) {
+            for (Cookie cookie : cookies) {
+                if (STATE_COOKIE_NAME.equals(cookie.getName()) && StringUtils.isNotBlank(cookie.getValue())) {
+                    state = cookie.getValue();
+                    break;
+                }
+            }
+        }
+        if (state == null) {
+            byte[] randomBytes = new byte[32];
+            STATE_RANDOM.nextBytes(randomBytes);
+            state = Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+        }
+        response.addHeader("Set-Cookie", buildStateCookieHeader(state, STATE_COOKIE_MAX_AGE_SECONDS));
+        return state;
+    }
+
+    /**
+     * Builds a Set-Cookie header value for the {@link #STATE_COOKIE_NAME} cookie, matching the attributes
+     * used elsewhere in DSpace for similar cookies (HttpOnly, Secure, SameSite=None, since the UI and REST
+     * API are typically cross-origin), built manually since dspace-api does not depend on spring-web's
+     * ResponseCookie.
+     */
+    private String buildStateCookieHeader(String value, int maxAgeSeconds) {
+        return STATE_COOKIE_NAME + "=" + value + "; Max-Age=" + maxAgeSeconds
+                + "; Path=/; HttpOnly; Secure; SameSite=None";
     }
 
     public OidcClient getOidcClient() {

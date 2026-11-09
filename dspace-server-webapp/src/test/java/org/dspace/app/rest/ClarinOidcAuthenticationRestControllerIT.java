@@ -78,6 +78,7 @@ import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
  * Integration tests for {@link ClarinOidcAuthenticationBean}.
@@ -102,6 +103,9 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     private final static String ISSUER = "https://issuer.example.org";
     private final static String CLIENT_ID = "clarin-client";
     private final static RSAKey RSA_JWK = generateRsaKey();
+
+    // used to simulate the state cookie set by loginPageURL() when the login was initiated, see oidcCallback()
+    private final static String TEST_STATE = "test-state-value";
 
     private OidcClient originalOidcClient;
 
@@ -248,7 +252,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         userInfo.put(EMAIL_VERIFIED, false);
         when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
 
-        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        getClient().perform(oidcCallback(CODE))
                 .andExpect(status().isUnauthorized())
                 .andExpect(cookie().doesNotExist("Authorization-cookie"));
 
@@ -317,7 +321,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
 
         mockUserInfo("perun1", "perun@email.it", null);
 
-        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        getClient().perform(oidcCallback(CODE))
                 .andExpect(status().isUnauthorized())
                 .andExpect(cookie().doesNotExist("Authorization-cookie"));
 
@@ -334,7 +338,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         userInfo.put(EMAIL_VERIFIED, false);
         when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
 
-        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        getClient().perform(oidcCallback(CODE))
                 .andExpect(status().isUnauthorized())
                 .andExpect(cookie().doesNotExist("Authorization-cookie"));
 
@@ -351,7 +355,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         userInfo.put(EMAIL, "perun@email.it");
         when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
 
-        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        getClient().perform(oidcCallback(CODE))
                 .andExpect(status().isUnauthorized())
                 .andExpect(cookie().doesNotExist("Authorization-cookie"));
 
@@ -442,7 +446,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         configurationService.setProperty("authentication-oidc.can-self-register", "false");
         mockUserInfo("perun1", "perun@email.it", null);
 
-        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        getClient().perform(oidcCallback(CODE))
                 .andExpect(status().isUnauthorized())
                 .andExpect(cookie().doesNotExist("Authorization-cookie"));
 
@@ -458,7 +462,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         userInfo.put(EMAIL_VERIFIED, false);
         when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
 
-        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        getClient().perform(oidcCallback(CODE))
                 .andExpect(status().isUnauthorized())
                 .andExpect(cookie().doesNotExist("Authorization-cookie"));
 
@@ -470,7 +474,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     public void testWithoutEmailAndIdentity() throws Exception {
         when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(Map.of(SUB, "perun1"));
 
-        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        getClient().perform(oidcCallback(CODE))
                 .andExpect(status().isUnauthorized())
                 .andExpect(cookie().doesNotExist("Authorization-cookie"));
     }
@@ -542,7 +546,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         userInfo.put(EMAIL_VERIFIED, true);
         when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
 
-        MvcResult mvcResult = getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        MvcResult mvcResult = getClient().perform(oidcCallback(CODE))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(cookie().exists("Authorization-cookie"))
                 .andReturn();
@@ -581,7 +585,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         userInfo.put(EMAIL_VERIFIED, true);
         when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
 
-        MvcResult mvcResult = getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        MvcResult mvcResult = getClient().perform(oidcCallback(CODE))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(cookie().exists("Authorization-cookie"))
                 .andReturn();
@@ -617,7 +621,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         userInfo.put(EMAIL_VERIFIED, true);
         when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
 
-        MvcResult mvcResult = getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        MvcResult mvcResult = getClient().perform(oidcCallback(CODE))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(cookie().exists("Authorization-cookie"))
                 .andReturn();
@@ -643,7 +647,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
 
         mockUserInfo("perun1", "perun@email.it", null);
 
-        MvcResult mvcResult = getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        MvcResult mvcResult = getClient().perform(oidcCallback(CODE))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(cookie().exists("Authorization-cookie"))
                 .andReturn();
@@ -672,7 +676,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         userInfo.put(EMAIL_VERIFIED, true);
         when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
 
-        MvcResult mvcResult = getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        MvcResult mvcResult = getClient().perform(oidcCallback(CODE))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(cookie().exists("Authorization-cookie"))
                 .andReturn();
@@ -696,7 +700,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         when(oidcClientMock.getAccessToken(CODE)).thenReturn(buildOidcTokenResponse(buildIdToken(null)));
         when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(Map.of(EMAIL, "perun@email.it"));
 
-        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        getClient().perform(oidcCallback(CODE))
                 .andExpect(status().isUnauthorized())
                 .andExpect(cookie().doesNotExist("Authorization-cookie"));
     }
@@ -709,7 +713,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
                         otherKey)));
         mockUserInfo("perun1", "perun@email.it", null);
 
-        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        getClient().perform(oidcCallback(CODE))
                 .andExpect(status().isUnauthorized())
                 .andExpect(cookie().doesNotExist("Authorization-cookie"));
     }
@@ -720,7 +724,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
                 buildOidcTokenResponse(buildIdToken("perun1", ISSUER, CLIENT_ID, Instant.now().minusSeconds(3600))));
         mockUserInfo("perun1", "perun@email.it", null);
 
-        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        getClient().perform(oidcCallback(CODE))
                 .andExpect(status().isUnauthorized())
                 .andExpect(cookie().doesNotExist("Authorization-cookie"));
     }
@@ -732,7 +736,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
                         Instant.now().plusSeconds(3600))));
         mockUserInfo("perun1", "perun@email.it", null);
 
-        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        getClient().perform(oidcCallback(CODE))
                 .andExpect(status().isUnauthorized())
                 .andExpect(cookie().doesNotExist("Authorization-cookie"));
     }
@@ -744,7 +748,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
                         Instant.now().plusSeconds(3600))));
         mockUserInfo("perun1", "perun@email.it", null);
 
-        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        getClient().perform(oidcCallback(CODE))
                 .andExpect(status().isUnauthorized())
                 .andExpect(cookie().doesNotExist("Authorization-cookie"));
     }
@@ -755,18 +759,53 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         // the sub returned by /userinfo doesn't match the verified ID token's sub
         mockUserInfo("other-sub", "perun@email.it", null);
 
-        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        getClient().perform(oidcCallback(CODE))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+    }
+
+    @Test
+    public void testLoginFailsWithMissingStateCookie() throws Exception {
+        mockUserInfo("perun1", "perun@email.it", null);
+
+        // valid code and state query param, but no state cookie at all (e.g. a forged callback URL
+        // replayed in a different browser that never received the Set-Cookie from loginPageURL())
+        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc")
+                        .param("code", CODE)
+                        .param("state", TEST_STATE))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+    }
+
+    @Test
+    public void testLoginFailsWithMismatchedState() throws Exception {
+        mockUserInfo("perun1", "perun@email.it", null);
+
+        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc")
+                        .param("code", CODE)
+                        .param("state", TEST_STATE)
+                        .cookie(new Cookie(ClarinOidcAuthenticationBean.STATE_COOKIE_NAME, "a-different-value")))
                 .andExpect(status().isUnauthorized())
                 .andExpect(cookie().doesNotExist("Authorization-cookie"));
     }
 
     private String login() throws Exception {
-        MvcResult mvcResult = getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc")
-                        .param("code", CODE))
+        MvcResult mvcResult = getClient().perform(oidcCallback(CODE))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(cookie().exists("Authorization-cookie"))
                 .andReturn();
         return getEPersonIdFromAuthorizationCookie(mvcResult);
+    }
+
+    /**
+     * Builds the OIDC callback request, including the state cookie/param pair ClarinOidcAuthenticationBean
+     * requires (set by loginPageURL() when the login is initiated, see TEST_STATE).
+     */
+    private MockHttpServletRequestBuilder oidcCallback(String code) {
+        return get("/api/" + AuthnRest.CATEGORY + "/oidc")
+                .param("code", code)
+                .param("state", TEST_STATE)
+                .cookie(new Cookie(ClarinOidcAuthenticationBean.STATE_COOKIE_NAME, TEST_STATE));
     }
 
     private List<ClarinUserRegistration> findRegistrations(EPerson ePerson) throws Exception {
