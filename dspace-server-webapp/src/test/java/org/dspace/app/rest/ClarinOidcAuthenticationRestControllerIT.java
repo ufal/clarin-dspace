@@ -38,6 +38,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import javax.servlet.http.Cookie;
 
 import com.nimbusds.jose.JOSEException;
@@ -68,13 +69,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
-import org.springframework.security.oauth2.core.OAuth2Error;
-import org.springframework.security.oauth2.core.OAuth2TokenValidator;
-import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MvcResult;
@@ -754,6 +749,19 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     }
 
     @Test
+    public void testLoginFailsWithMismatchedAzp() throws Exception {
+        // aud correctly contains CLIENT_ID, but azp (authorized party) names a different client; per
+        // OIDC Core 2, when present azp must also identify the client the token was issued to
+        when(oidcClientMock.getAccessToken(CODE)).thenReturn(
+                buildOidcTokenResponse(buildIdTokenWithAzp("perun1", "wrong-client-id")));
+        mockUserInfo("perun1", "perun@email.it", null);
+
+        getClient().perform(oidcCallback(CODE))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+    }
+
+    @Test
     public void testLoginFailsWhenUserInfoSubDoesNotMatchIdToken() throws Exception {
         when(oidcClientMock.getAccessToken(CODE)).thenReturn(buildOidcTokenResponse(buildIdToken("perun1")));
         // the sub returned by /userinfo doesn't match the verified ID token's sub
@@ -929,25 +937,17 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     }
 
     /**
-     * Builds a {@link JwtDecoder} that verifies ID tokens signed by {@link #RSA_JWK} and checks the issuer/
-     * audience, mirroring the validator composition of ClarinOidcAuthenticationBean#buildJwtDecoder (with a
-     * directly configured public key instead of a JWKS endpoint, since no real OIDC provider is available).
+     * Builds a decoder backed by the local test key (no real JWKS endpoint available in tests), but reuses
+     * ClarinOidcAuthenticationBean's actual production validator chain (issuer/audience/required-claims)
+     * rather than a separately duplicated copy, so these tests actually exercise that production logic.
+     * buildJwtValidator() is private, so it's invoked via ReflectionTestUtils.
      */
     private JwtDecoder buildTestJwtDecoder() throws JOSEException {
         NimbusJwtDecoder decoder = NimbusJwtDecoder.withPublicKey(RSA_JWK.toRSAPublicKey()).build();
-        OAuth2TokenValidator<Jwt> withIssuer = JwtValidators.createDefaultWithIssuer(ISSUER);
-        OAuth2TokenValidator<Jwt> withAudience = jwt -> jwt.getAudience() != null
-                && jwt.getAudience().contains(CLIENT_ID)
-                ? OAuth2TokenValidatorResult.success()
-                : OAuth2TokenValidatorResult.failure(
-                        new OAuth2Error("invalid_token", "The aud claim does not contain the client ID", null));
-        OAuth2TokenValidator<Jwt> withRequiredClaims = jwt -> jwt.getExpiresAt() != null
-                && jwt.getIssuedAt() != null
-                && org.apache.commons.lang3.StringUtils.isNotBlank(jwt.getSubject())
-                ? OAuth2TokenValidatorResult.success()
-                : OAuth2TokenValidatorResult.failure(
-                        new OAuth2Error("invalid_token", "The exp, iat and sub claims are required", null));
-        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(withIssuer, withAudience, withRequiredClaims));
+        decoder.setJwtValidator(Objects.requireNonNull(
+                ReflectionTestUtils.invokeMethod(
+                        ClarinOidcAuthenticationBean.class, "buildJwtValidator", ISSUER, CLIENT_ID))
+        );
         return decoder;
     }
 
@@ -985,6 +985,25 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
                 .expirationTime(Date.from(Instant.now().plusSeconds(3600)))
                 .claim(EMAIL, email)
                 .claim(EMAIL_VERIFIED, emailVerified)
+                .build();
+        SignedJWT signedJwt = new SignedJWT(
+                new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(RSA_JWK.getKeyID()).build(), claims);
+        signedJwt.sign(new RSASSASigner(RSA_JWK));
+        return signedJwt.serialize();
+    }
+
+    /**
+     * Builds a signed ID token with a valid "aud" (matching CLIENT_ID) but an "azp" (authorized party)
+     * claim set to a different value, to verify that azp is checked too when present, not just aud.
+     */
+    private String buildIdTokenWithAzp(String sub, String azp) throws JOSEException {
+        JWTClaimsSet claims = new JWTClaimsSet.Builder()
+                .issuer(ISSUER)
+                .audience(CLIENT_ID)
+                .subject(sub)
+                .issueTime(new Date())
+                .expirationTime(Date.from(Instant.now().plusSeconds(3600)))
+                .claim("azp", azp)
                 .build();
         SignedJWT signedJwt = new SignedJWT(
                 new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(RSA_JWK.getKeyID()).build(), claims);

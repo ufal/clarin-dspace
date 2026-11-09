@@ -228,7 +228,8 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
         String emailAttribute = getEmailAttribute();
         String emailVerifiedAttribute = getEmailVerifiedAttribute();
         if (StringUtils.isNotBlank(emailAttribute) && userInfoClaims.containsKey(emailAttribute)
-                && !userInfoClaims.containsKey(emailVerifiedAttribute)) {
+                && !userInfoClaims.containsKey(emailVerifiedAttribute)
+                && !Objects.equals(claims.get(emailAttribute), userInfoClaims.get(emailAttribute))) {
             // user info overrides the email without (re-)confirming it is verified; the inherited verified
             // flag from the ID token was only ever vouching for the ID token's own email value, so it must
             // not be allowed to carry over and apply to a different, unverified email from user info
@@ -261,12 +262,24 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
         }
 
         NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(jwksUri).build();
+        decoder.setJwtValidator(buildJwtValidator(issuer, clientId));
+        return decoder;
+    }
+
+    /**
+     * Builds the ID token validator chain (issuer, audience, required claims), kept separate from
+     * {@link #buildJwtDecoder} so tests can exercise this exact production validator logic (via
+     * ReflectionTestUtils) against a decoder backed by a local test key, instead of maintaining a
+     * separately duplicated copy that wouldn't notice if a validator were ever removed here.
+     */
+    private static OAuth2TokenValidator<Jwt> buildJwtValidator(String issuer, String clientId) {
         OAuth2TokenValidator<Jwt> withIssuer = JwtValidators.createDefaultWithIssuer(issuer);
         OAuth2TokenValidator<Jwt> withAudience = jwt -> jwt.getAudience() != null
                 && jwt.getAudience().contains(clientId)
+                && (!jwt.getClaims().containsKey("azp") || clientId.equals(jwt.getClaimAsString("azp")))
                 ? OAuth2TokenValidatorResult.success()
                 : OAuth2TokenValidatorResult.failure(new OAuth2Error("invalid_token",
-                        "The aud claim does not contain the configured client ID", null));
+                        "The aud or azp claim does not identify the configured client ID", null));
         // JwtValidators.createDefaultWithIssuer only checks exp/nbf when present, it doesn't require them;
         // exp, iat and sub are REQUIRED ID token claims (OIDC Core 2), so a token omitting them must not
         // be trusted, e.g. a correctly signed token with no exp would otherwise never expire
@@ -276,8 +289,7 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
                 ? OAuth2TokenValidatorResult.success()
                 : OAuth2TokenValidatorResult.failure(new OAuth2Error("invalid_token",
                         "The exp, iat and sub claims are required", null));
-        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(withIssuer, withAudience, withRequiredClaims));
-        return decoder;
+        return new DelegatingOAuth2TokenValidator<>(withIssuer, withAudience, withRequiredClaims);
     }
 
     private int authenticateWithClaims(Context context, Map<String, Object> userInfo, HttpServletRequest request)
@@ -655,14 +667,15 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
 
     /**
      * Returns whether a verified email is required to link the OIDC identity to an existing EPerson found by
-     * email (see {@link #isEmailVerified}). Disabled by default, since not all providers emit a verified-email
-     * claim; enable this if the configured provider does, since otherwise an OIDC provider that doesn't verify
-     * a claimed email could take over an existing account.
+     * email (see {@link #isEmailVerified}). Enabled by default, since otherwise any OIDC provider that doesn't
+     * actually verify a claimed email (or a user who can set their own email at the provider) could take over
+     * an existing account, including an administrator's. Only disable this for a deployment whose provider is
+     * known not to emit the verified-email claim at all (see authentication-oidc.cfg).
      *
-     * @return false unless enabled by authentication-oidc.require-verified-email
+     * @return true unless disabled by authentication-oidc.require-verified-email
      */
     private boolean isVerifiedEmailRequired() {
-        return configurationService.getBooleanProperty("authentication-oidc.require-verified-email", false);
+        return configurationService.getBooleanProperty("authentication-oidc.require-verified-email", true);
     }
 
     /**
