@@ -38,6 +38,7 @@ import org.dspace.app.rest.model.RequestItemRest;
 import org.dspace.app.rest.projection.Projection;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.Bitstream;
+import org.dspace.content.Bundle;
 import org.dspace.content.Item;
 import org.dspace.content.service.BitstreamService;
 import org.dspace.content.service.ItemService;
@@ -151,6 +152,20 @@ public class RequestItemRepository
         Item item = itemService.find(ctx, UUID.fromString(itemId));
         if (null == item) {
             throw new IncompleteItemRequestException("That item does not exist");
+        }
+
+        // Only archived, non-withdrawn items may be requested. Reuse the "does not
+        // exist" message so the response cannot be used to probe for hidden items.
+        if (!item.isArchived() || item.isWithdrawn()) {
+            throw new IncompleteItemRequestException("That item does not exist");
+        }
+
+        // A single-bitstream request must name a bitstream that actually belongs to
+        // the requested item. Without this check a caller can name a foreign,
+        // restricted bitstream together with an item they submitted and have the
+        // file mailed to them on self-approval. Reuse the "does not exist" message.
+        if (!allFiles && !bitstreamBelongsToItem(ctx, bitstream, item)) {
+            throw new IncompleteItemRequestException("That bitstream does not exist");
         }
 
         // Requester's email address.
@@ -308,5 +323,26 @@ public class RequestItemRepository
 
         // Build and return the URL from segments (or throw exception)
         return uriBuilder.setPathSegments(segments).build().toURL().toExternalForm();
+    }
+
+    /**
+     * Does the given bitstream belong to the given item?
+     *
+     * @param ctx current DSpace session.
+     * @param bitstream the requested bitstream (never {@code null} here).
+     * @param item the requested item.
+     * @return {@code true} if the bitstream is contained in one of the item's bundles.
+     * @throws SQLException passed through.
+     */
+    private boolean bitstreamBelongsToItem(Context ctx, Bitstream bitstream, Item item)
+            throws SQLException {
+        for (Bundle bundle : bitstream.getBundles()) {
+            for (Item owner : bundle.getItems()) {
+                if (owner.getID().equals(item.getID())) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 }

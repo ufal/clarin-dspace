@@ -41,6 +41,9 @@ import org.dspace.app.rest.model.BitstreamRest;
 import org.dspace.app.rest.model.ClarinUserMetadataRest;
 import org.dspace.app.rest.model.ItemRest;
 import org.dspace.authorize.AuthorizeException;
+import org.dspace.authorize.DownloadTokenExpiredException;
+import org.dspace.authorize.MissingLicenseAgreementException;
+import org.dspace.authorize.service.AuthorizeService;
 import org.dspace.content.Bitstream;
 import org.dspace.content.Bundle;
 import org.dspace.content.DSpaceObject;
@@ -57,6 +60,7 @@ import org.dspace.content.service.clarin.ClarinLicenseResourceMappingService;
 import org.dspace.content.service.clarin.ClarinLicenseResourceUserAllowanceService;
 import org.dspace.content.service.clarin.ClarinUserMetadataService;
 import org.dspace.content.service.clarin.ClarinUserRegistrationService;
+import org.dspace.core.Constants;
 import org.dspace.core.Context;
 import org.dspace.core.Email;
 import org.dspace.core.I18nUtil;
@@ -98,6 +102,8 @@ public class ClarinUserMetadataRestController {
 
     @Autowired
     ConfigurationService configurationService;
+    @Autowired
+    AuthorizeService authorizeService;
 
     @Autowired
     ObjectMapper objectMapper;
@@ -130,6 +136,7 @@ public class ClarinUserMetadataRestController {
             log.error("Cannot find the item with ID: " + itemUUID);
             throw new NotFoundException("Cannot find the item with ID: " + itemUUID);
         }
+        authorizeService.authorizeAction(context, item, Constants.READ);
         // Load the name because it is used in the email, and it must be loaded before the `sendEmailWithDownloadLink`
         // method otherwise it will throw an exception about Lazy loading.
         item.getName();
@@ -147,6 +154,19 @@ public class ClarinUserMetadataRestController {
                 clarinLicense = getClarinLicense(clarinLicenseResourceMapping);
                 shouldEmailToken = this.shouldEmailToken(clarinLicenseResourceMapping);
                 requiredInfoKeys.addAll(getRequiredInfoKeys(clarinLicense));
+            }
+        }
+
+        // Check every file before any user metadata or download token is written, so the strictest licence wins.
+        for (Bundle original : bundles) {
+            for (Bitstream bitstream : original.getBitstreams()) {
+                this.authorizeBitstreamRead(context, bitstream);
+                ClarinLicense bitstreamLicense =
+                        this.getClarinLicense(this.getLicenseResourceMapping(context, bitstream.getID()));
+                if (Objects.isNull(currentUser) &&
+                        (bitstreamLicense.getConfirmation() != Confirmation.ALLOW_ANONYMOUS)) {
+                    throw new AuthorizeException("Anonymous user is not allowed to get access token");
+                }
             }
         }
 
@@ -217,6 +237,10 @@ public class ClarinUserMetadataRestController {
             log.error("Cannot find the bitstream with ID: " + bitstreamUUID);
             return null;
         }
+        // The parent item's name and handle go into the e-mails, so the user must be able to read it too.
+        authorizeService.authorizeAction(context, bitstreamService.getParentObject(context, bitstream),
+                Constants.READ);
+        this.authorizeBitstreamRead(context, bitstream);
         // Load the name because it is used in the email, and it must be loaded before the `sendEmailWithDownloadLink`
         // method otherwise it will throw an exception about Lazy loading.
         bitstream.getName();
@@ -584,6 +608,20 @@ public class ClarinUserMetadataRestController {
                     + clarinLicenseResourceMapping.getID() + "is null.");
         }
         return clarinLicense;
+    }
+
+    /**
+     * Check that the current user has READ on the bitstream. A bitstream READ check also runs the CLARIN licence
+     * check, which fails until the user confirms the licence. Confirming the licence is what this controller is
+     * for, so only the READ policy check is enforced here.
+     */
+    private void authorizeBitstreamRead(Context context, Bitstream bitstream)
+            throws SQLException, AuthorizeException {
+        try {
+            authorizeService.authorizeAction(context, bitstream, Constants.READ);
+        } catch (MissingLicenseAgreementException | DownloadTokenExpiredException e) {
+            // Thrown only by the CLARIN licence check, which runs after the READ policy check has passed.
+        }
     }
 
     private boolean shouldEmailToken(ClarinLicenseResourceMapping clarinLicenseResourceMapping) {

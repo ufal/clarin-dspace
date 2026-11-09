@@ -21,7 +21,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.util.Arrays;
 import java.util.Map;
-import java.util.Random;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -39,7 +38,9 @@ import org.dspace.core.I18nUtil;
 import org.dspace.eperson.EPerson;
 import org.hamcrest.Matchers;
 import org.junit.Ignore;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TestName;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -56,7 +57,8 @@ public class BitstreamFormatRestRepositoryIT extends AbstractControllerIntegrati
     @Autowired
     private BitstreamFormatConverter bitstreamFormatConverter;
 
-    private final int DEFAULT_AMOUNT_FORMATS = 95;
+    @Rule
+    public TestName testName = new TestName();
 
     @Test
     public void findAllPaginationTest() throws Exception {
@@ -136,7 +138,7 @@ public class BitstreamFormatRestRepositoryIT extends AbstractControllerIntegrati
     @Test
     public void createAdminAccess() throws Exception {
         ObjectMapper mapper = new ObjectMapper();
-        BitstreamFormatRest bitstreamFormatRest = this.createRandomMockBitstreamRest(false);
+        BitstreamFormatRest bitstreamFormatRest = this.createMockBitstreamRest();
 
         //Create bitstream format
         String token = getAuthToken(admin.getEmail(), password);
@@ -145,10 +147,15 @@ public class BitstreamFormatRestRepositoryIT extends AbstractControllerIntegrati
         AtomicReference<Integer> idRef = new AtomicReference<>();
         try {
 
+            // Capture the id right after the status check, so the format is cleaned up even when
+            // a later assertion in this test fails.
             MvcResult mvcResult = getClient(token).perform(post("/api/core/bitstreamformats/")
                                                   .content(mapper.writeValueAsBytes(bitstreamFormatRest))
                                                                    .contentType(contentType))
                                                   .andExpect(status().isCreated())
+                                                  .andDo(result -> idRef
+                                                          .set(read(result.getResponse().getContentAsString(),
+                                                                  "$.id")))
                                                   .andExpect(jsonPath("$", HalMatcher.matchNoEmbeds()))
                                                   .andReturn();
 
@@ -168,13 +175,13 @@ public class BitstreamFormatRestRepositoryIT extends AbstractControllerIntegrati
                                                              bitstreamFormatRest.getMimetype(),
                                                              bitstreamFormatRest.getDescription(),
                                                              bitstreamFormatRest.getShortDescription())
-                       )))
-                       .andDo(result -> idRef
-                               .set(read(result.getResponse().getContentAsString(), "$.id")));
+                       )));
 
         } finally {
-            // Delete the created community (cleanup after ourselves!)
-            BitstreamFormatBuilder.deleteBitstreamFormat(idRef.get());
+            // Delete the created bitstream format (cleanup after ourselves!)
+            if (idRef.get() != null) {
+                BitstreamFormatBuilder.deleteBitstreamFormat(idRef.get());
+            }
         }
 
 
@@ -183,8 +190,9 @@ public class BitstreamFormatRestRepositoryIT extends AbstractControllerIntegrati
     @Test
     public void createNonValidSupportLevel() throws Exception {
         ObjectMapper mapper = new ObjectMapper();
-        BitstreamFormatRest bitstreamFormatRest = this.createRandomMockBitstreamRest(false);
+        BitstreamFormatRest bitstreamFormatRest = this.createMockBitstreamRest();
         bitstreamFormatRest.setSupportLevel("NONVALID SUPPORT LVL");
+        int totalFormatsBefore = currentTotalFormats();
         //Attempt to create bitstream with a non-valid support lvl
         String token = getAuthToken(admin.getEmail(), password);
         getClient(token).perform(post("/api/core/bitstreamformats/")
@@ -194,13 +202,14 @@ public class BitstreamFormatRestRepositoryIT extends AbstractControllerIntegrati
         // Check that no new bitstreamformat was created
         getClient().perform(get("/api/core/bitstreamformats/"))
                    .andExpect(status().isOk())
-                   .andExpect(jsonPath("$.page.totalElements", is(DEFAULT_AMOUNT_FORMATS)));
+                   .andExpect(jsonPath("$.page.totalElements", is(totalFormatsBefore)));
     }
 
     @Test
     public void createNoAccess() throws Exception {
         ObjectMapper mapper = new ObjectMapper();
-        BitstreamFormatRest bitstreamFormatRest = this.createRandomMockBitstreamRest(false);
+        BitstreamFormatRest bitstreamFormatRest = this.createMockBitstreamRest();
+        int totalFormatsBefore = currentTotalFormats();
 
         //Try to create bitstreamFormat without auth token
         getClient(null).perform(post("/api/core/bitstreamformats/")
@@ -210,13 +219,14 @@ public class BitstreamFormatRestRepositoryIT extends AbstractControllerIntegrati
         // Check that no new bitstreamformat was created
         getClient().perform(get("/api/core/bitstreamformats/"))
                    .andExpect(status().isOk())
-                   .andExpect(jsonPath("$.page.totalElements", is(DEFAULT_AMOUNT_FORMATS)));
+                   .andExpect(jsonPath("$.page.totalElements", is(totalFormatsBefore)));
     }
 
     @Test
     public void createNonAdminAccess() throws Exception {
         ObjectMapper mapper = new ObjectMapper();
-        BitstreamFormatRest bitstreamFormatRest = this.createRandomMockBitstreamRest(false);
+        BitstreamFormatRest bitstreamFormatRest = this.createMockBitstreamRest();
+        int totalFormatsBefore = currentTotalFormats();
         context.turnOffAuthorisationSystem();
         EPerson user = EPersonBuilder.createEPerson(context)
                 .withNameInMetadata("first", "last")
@@ -234,13 +244,14 @@ public class BitstreamFormatRestRepositoryIT extends AbstractControllerIntegrati
         // Check that no new bitstreamformat was created
         getClient().perform(get("/api/core/bitstreamformats/"))
                    .andExpect(status().isOk())
-                   .andExpect(jsonPath("$.page.totalElements", is(DEFAULT_AMOUNT_FORMATS)));
+                   .andExpect(jsonPath("$.page.totalElements", is(totalFormatsBefore)));
     }
 
     @Test
     public void createAlreadyExisting() throws Exception {
         ObjectMapper mapper = new ObjectMapper();
-        BitstreamFormatRest bitstreamFormatRest = this.createRandomMockBitstreamRest(true);
+        BitstreamFormatRest bitstreamFormatRest = this.createMockBitstreamRest();
+        int totalFormatsBefore = currentTotalFormats();
 
         // Capture the Id of the created BitstreamFormat (see andDo() below)
         AtomicReference<Integer> idRef = new AtomicReference<>();
@@ -264,12 +275,14 @@ public class BitstreamFormatRestRepositoryIT extends AbstractControllerIntegrati
             // Check that the new bitstreamformat was created only once
             getClient().perform(get("/api/core/bitstreamformats/"))
                        .andExpect(status().isOk())
-                       .andExpect(jsonPath("$.page.totalElements", is(DEFAULT_AMOUNT_FORMATS + 1)));
+                       .andExpect(jsonPath("$.page.totalElements", is(totalFormatsBefore + 1)));
 
 
         } finally {
-            // Delete the created community (cleanup after ourselves!)
-            BitstreamFormatBuilder.deleteBitstreamFormat(idRef.get());
+            // Delete the created bitstream format (cleanup after ourselves!)
+            if (idRef.get() != null) {
+                BitstreamFormatBuilder.deleteBitstreamFormat(idRef.get());
+            }
         }
     }
 
@@ -645,19 +658,25 @@ public class BitstreamFormatRestRepositoryIT extends AbstractControllerIntegrati
                    )));
     }
 
-    private BitstreamFormatRest createRandomMockBitstreamRest(boolean withRand) {
+    /**
+     * Short descriptions are unique in the format registry, so derive them from the test method
+     * name: deterministic and collision-free, unlike the random numbers used before.
+     */
+    private BitstreamFormatRest createMockBitstreamRest() {
         BitstreamFormatRest bitstreamFormatRest = new BitstreamFormatRest();
-        String random = null;
-        if (withRand) {
-            Random rand = new Random();
-            random = String.valueOf(rand.nextInt(100) + 1);
-        }
-        bitstreamFormatRest.setShortDescription("Test short" + random);
+        bitstreamFormatRest.setShortDescription("Test short " + testName.getMethodName());
         bitstreamFormatRest.setDescription("Full description of Test short");
         bitstreamFormatRest.setMimetype("text/plain");
         bitstreamFormatRest.setSupportLevel("KNOWN");
         bitstreamFormatRest.setInternal(false);
         bitstreamFormatRest.setExtensions(Arrays.asList("txt", "asc"));
         return bitstreamFormatRest;
+    }
+
+    private int currentTotalFormats() throws Exception {
+        String response = getClient().perform(get("/api/core/bitstreamformats/"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return read(response, "$.page.totalElements");
     }
 }

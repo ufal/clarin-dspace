@@ -260,8 +260,8 @@ public class BitstreamByHandleRestControllerIT extends AbstractControllerIntegra
                         + "/M%C3%A9di%C3%A1%20(3).jfif")))
                 .andExpect(status().isOk())
                 .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION,
-                        // ASCII fallback replaces non-ASCII with underscore; filename* has UTF-8 encoding
-                        equalTo("attachment; filename=\"M_di_ (3).jfif\"; "
+                        // ASCII fallback transliterates the diacritics away; filename* keeps the real name
+                        equalTo("attachment; filename=\"Media (3).jfif\"; "
                                 + "filename*=UTF-8''M%C3%A9di%C3%A1%20%283%29.jfif")))
                 .andExpect(content().string(bitstreamContent));
     }
@@ -512,8 +512,8 @@ public class BitstreamByHandleRestControllerIT extends AbstractControllerIntegra
                         + "/%E6%97%A5%E6%9C%AC%E8%AA%9E.txt")))
                 .andExpect(status().isOk())
                 .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION,
-                        // CJK chars replaced with _ in ASCII fallback; filename* has UTF-8 encoding
-                        equalTo("attachment; filename=\"___.txt\"; "
+                        // CJK has no ASCII decomposition, so it drops out of the fallback entirely
+                        equalTo("attachment; filename=\".txt\"; "
                                 + "filename*=UTF-8''%E6%97%A5%E6%9C%AC%E8%AA%9E.txt")))
                 .andExpect(content().string(bitstreamContent));
     }
@@ -592,7 +592,7 @@ public class BitstreamByHandleRestControllerIT extends AbstractControllerIntegra
                         + "/M%C3%A9di%C3%A1%20(%2B)%239)%20ano")))
                 .andExpect(status().isOk())
                 .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION,
-                        equalTo("attachment; filename=\"M_di_ (+)#9) ano\"; "
+                        equalTo("attachment; filename=\"Media (+)#9) ano\"; "
                                 + "filename*=UTF-8''M%C3%A9di%C3%A1%20%28%2B%29%239%29%20ano")))
                 .andExpect(content().string(bitstreamContent));
     }

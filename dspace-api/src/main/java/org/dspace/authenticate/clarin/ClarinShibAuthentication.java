@@ -30,6 +30,8 @@ import org.apache.logging.log4j.Logger;
 import org.dspace.authenticate.AuthenticationMethod;
 import org.dspace.authenticate.factory.AuthenticateServiceFactory;
 import org.dspace.authorize.AuthorizeException;
+import org.dspace.authorize.factory.AuthorizeServiceFactory;
+import org.dspace.authorize.service.AuthorizeService;
 import org.dspace.content.MetadataField;
 import org.dspace.content.MetadataFieldName;
 import org.dspace.content.MetadataSchema;
@@ -85,8 +87,39 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
      */
     private static final Logger log = LogManager.getLogger(ClarinShibAuthentication.class);
 
+    /**
+     * The only request path on which Shibboleth attributes taken from the live HTTP request are trusted. Every other
+     * path (e.g. {@code /api/authn/login}) is not covered by the Shibboleth SP, so its headers may be client-supplied.
+     */
+    public static final String SHIBBOLETH_LOGIN_PATH = "/api/authn/shibboleth";
+
+    /**
+     * Request attribute holding the Shibboleth headers stored in a {@link ClarinVerificationToken}. It is set only by
+     * server code (the login filter and the autoregistration controller) and makes this method ignore the live
+     * request headers.
+     */
+    public static final String SHIB_HEADERS_ATTRIBUTE = "shib.headers";
+
+    /**
+     * Request attribute with the verification token whose row supplied {@link #SHIB_HEADERS_ATTRIBUTE}. Set by the
+     * same server code; the token is never taken from the client request here, so identity and e-mail always come
+     * from one validated row.
+     */
+    public static final String VERIFICATION_TOKEN_ATTRIBUTE = "shib.verification-token";
+
+    /**
+     * Whether an account that is found only by its e-mail (it has no netid yet) may be bound to the incoming netid.
+     * Off by default: such accounts are local password accounts and an IdP-asserted e-mail must not take them over.
+     */
+    public static final String EMAIL_FALLBACK_PROPERTY = "authentication-shibboleth.email-fallback";
+
     // If the user which are in the login process has email already associated with a different users email.
     private boolean isDuplicateUser = false;
+
+    /**
+     * True when {@link #shibheaders} come from a verification token instead of the live request.
+     */
+    private boolean headersFromToken = false;
 
     /**
      * Additional metadata mappings
@@ -120,6 +153,7 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
     protected MetadataSchemaService metadataSchemaService = ContentServiceFactory.getInstance()
             .getMetadataSchemaService();
     protected ConfigurationService configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
+    protected AuthorizeService authorizeService = AuthorizeServiceFactory.getInstance().getAuthorizeService();
     protected ClarinUserRegistrationService clarinUserRegistrationService =
             ClarinServiceFactory.getInstance().getClarinUserRegistration();
     protected ClarinVerificationTokenService clarinVerificationTokenService = ClarinServiceFactory.getInstance()
@@ -213,6 +247,10 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
             log.warn("Unable to authenticate using Shibboleth because the request object is null.");
             return BAD_ARGS;
         }
+        // Shibboleth never authenticates credentials; a password login must not fall through to the headers.
+        if (StringUtils.isNotEmpty(username) || StringUtils.isNotEmpty(password)) {
+            return BAD_ARGS;
+        }
         // CLARIN
         // Log all headers received if debugging is turned on. This is enormously
         // helpful when debugging shibboleth related problems.
@@ -222,11 +260,15 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
 
         // Shib headers could be loaded from the request header or request attribute. The shib headers are in the
         // request attribute only if the user is trying to authenticate by `verification token`.
-        String shibHeadersAttr = (String) request.getAttribute("shib.headers");
+        String shibHeadersAttr = (String) request.getAttribute(SHIB_HEADERS_ATTRIBUTE);
         if (StringUtils.isNotEmpty(shibHeadersAttr)) {
             shibheaders = new ShibHeaders(shibHeadersAttr);
-        } else {
+            headersFromToken = true;
+        } else if (isShibbolethLoginRequest(request)) {
             shibheaders = new ShibHeaders(request);
+        } else {
+            log.debug("Ignoring Shibboleth headers on {}: not the Shibboleth login endpoint.", request.getRequestURI());
+            return BAD_ARGS;
         }
         shibheaders.log_headers();
 
@@ -240,15 +282,12 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
         // The email was added to the `clarinVerificationToken` in the ClarinShibbolethFilter.
         String[] netidHeaders = configurationService.getArrayProperty("authentication-shibboleth.netid-header");
 
-        // Load the verification token from the request header or from the request parameter.
-        // This is only set if the user is trying to authenticate with the `verification-token`.
-        String VERIFICATION_TOKEN = "verification-token";
-        String verificationTokenFromRequest = StringUtils.defaultIfBlank(request.getHeader(VERIFICATION_TOKEN),
-                        request.getParameter(VERIFICATION_TOKEN));
-        if (StringUtils.isNotEmpty(verificationTokenFromRequest)) {
-            log.info("Verification token from request header `{}`: {}", VERIFICATION_TOKEN,
-                    verificationTokenFromRequest);
-            clarinVerificationToken = clarinVerificationTokenService.findByToken(context, verificationTokenFromRequest);
+        // The verification token validated by the login filter or the autoregistration controller together with the
+        // stored headers above. Its row supplies the e-mail the IdP did not send.
+        String verificationToken = (String) request.getAttribute(VERIFICATION_TOKEN_ATTRIBUTE);
+        if (headersFromToken && StringUtils.isNotEmpty(verificationToken)) {
+            log.info("Authenticating with a verification token.");
+            clarinVerificationToken = clarinVerificationTokenService.findByToken(context, verificationToken);
         }
         // CLARIN
 
@@ -346,7 +385,11 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
                 return Collections.emptyList();
             }
 
-            List<UUID> groupIds = new ShibGroup(new ShibHeaders(request), context).get();
+            // A verification token login maps the stored IdP headers, never the live request.
+            String storedHeaders = (String) request.getAttribute(SHIB_HEADERS_ATTRIBUTE);
+            ShibHeaders groupHeaders = StringUtils.isNotEmpty(storedHeaders)
+                    ? new ShibHeaders(storedHeaders) : new ShibHeaders(request);
+            List<UUID> groupIds = new ShibGroup(groupHeaders, context).get();
 
             List<Group> groups = new ArrayList<>();
             for (UUID uuid : groupIds) {
@@ -586,18 +629,15 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
                                     + email + "'" + ".");
                 }
 
-                // The condition `Objects.isNull(clarinVerificationToken)` was added because ePersonService couldn't
-                // find the eperson by netid when he exists. Otherwise the service find the user correctly
-                // but in that case when the clarinVerificationToken is not null it cannot find him. Do not know why.
-                if (eperson != null && eperson.getNetid() != null && Objects.isNull(clarinVerificationToken)) {
-                    // If the user has a netID it has been locked to that netid, don't let anyone else try and steal
-                    // the account.
+                if (eperson != null && !canBindNetIdByEmail(context, eperson, shibheaders.get_idp())) {
+                    // The account is locked to its netid, or e-mail based binding is not allowed for it.
+                    // Don't let anyone else try and steal the account.
                     log.error(
                             "The identified EPerson based upon Shibboleth email header, '" + emailHeader + "'='"
-                                    + email + "', is locked to another netid: '" + eperson.getNetid() +
-                                    "'. This might be a possible hacking attempt to steal another users " +
-                                    "credentials. If the user's netid has changed you will need to manually " +
-                                    "change it to the correct value or unset it in the database.");
+                                    + email + "', must not be bound to the incoming netid (its netid: '"
+                                    + eperson.getNetid() + "'). This might be a possible hacking attempt to steal "
+                                    + "another users credentials. If the user's netid has changed you will need to "
+                                    + "manually change it to the correct value or unset it in the database.");
                     this.isDuplicateUser = true;
                     eperson = null;
                 }
@@ -619,7 +659,7 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
                     log.info("Identified EPerson based upon Tomcat's remote user: '" + email + "'.");
                 }
 
-                if (eperson != null && eperson.getNetid() != null) {
+                if (eperson != null && !canBindNetIdByEmail(context, eperson, shibheaders.get_idp())) {
                     // If the user has a netID it has been locked to that netid, don't let anyone else try and steal
                     // the account.
                     log.error(
@@ -641,6 +681,61 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
 
 
         return eperson;
+    }
+
+    /**
+     * Whether an account that was found by its e-mail only may be bound to the netid of the current login.
+     * Allowed only when the account has no netid yet, it is not an administrator, and either
+     * {@value #EMAIL_FALLBACK_PROPERTY} is on or the IdP itself sent the e-mail and the account was registered
+     * through that IdP. An e-mail from a verification token was typed by the user, not sent by the IdP.
+     *
+     * @param context The DSpace database context
+     * @param eperson The account found by e-mail
+     * @param idp     The IdP of the current login
+     * @return true if the login may bind its netid to the account
+     * @throws SQLException if database error
+     */
+    public boolean canBindNetIdByEmail(Context context, EPerson eperson, String idp) throws SQLException {
+        return eperson.getNetid() == null
+                && !authorizeService.isAdmin(context, eperson)
+                && (configurationService.getBooleanProperty(EMAIL_FALLBACK_PROPERTY, false)
+                    || (!headersFromToken && isRegisteredThroughIdp(context, eperson, idp)));
+    }
+
+    /**
+     * Whether a Shibboleth login through this IdP created the account. An IdP that sends no netid leaves the account
+     * without one, so this is how its users sign in again.
+     */
+    private boolean isRegisteredThroughIdp(Context context, EPerson eperson, String idp) throws SQLException {
+        if (StringUtils.isEmpty(idp)) {
+            return false;
+        }
+        context.turnOffAuthorisationSystem();
+        try {
+            return clarinUserRegistrationService.findByEPersonUUID(context, eperson.getID()).stream()
+                    .anyMatch(registration -> idp.equals(registration.getOrganization()));
+        } catch (AuthorizeException e) {
+            throw new IllegalStateException(e);
+        } finally {
+            context.restoreAuthSystemState();
+        }
+    }
+
+    /**
+     * A name attribute. A live header is converted from the IdP charset; a value stored in a verification token was
+     * converted when it was stored, converting it again would corrupt it.
+     */
+    private String findNameAttribute(HttpServletRequest request, String name) {
+        String value = findSingleAttribute(request, name);
+        return headersFromToken ? value : Headers.updateValueByCharset(value);
+    }
+
+    /**
+     * Whether the request targets {@value #SHIBBOLETH_LOGIN_PATH}, the only path on which live Shibboleth headers
+     * are trusted. Compares the raw request URI, so an encoded or otherwise rewritten path does not qualify.
+     */
+    public static boolean isShibbolethLoginRequest(HttpServletRequest request) {
+        return (request.getContextPath() + SHIBBOLETH_LOGIN_PATH).equals(request.getRequestURI());
     }
 
     /**
@@ -681,8 +776,8 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
         // Header values
         String netid = getFirstNetId(netidHeaders);
         String email = getEmailAcceptedOrNull(findSingleAttribute(request, emailHeader));
-        String fname = Headers.updateValueByCharset(findSingleAttribute(request, fnameHeader));
-        String lname = Headers.updateValueByCharset(findSingleAttribute(request, lnameHeader));
+        String fname = findNameAttribute(request, fnameHeader);
+        String lname = findNameAttribute(request, lnameHeader);
 
         // If the values are not in the request headers try to retrieve it from `shibheaders`.
         if (StringUtils.isEmpty(email) && Objects.nonNull(clarinVerificationToken)) {
@@ -799,8 +894,8 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
 
         String netid = getFirstNetId(netidHeaders);
         String email = getEmailAcceptedOrNull(findSingleAttribute(request, emailHeader));
-        String fname = Headers.updateValueByCharset(findSingleAttribute(request, fnameHeader));
-        String lname = Headers.updateValueByCharset(findSingleAttribute(request, lnameHeader));
+        String fname = findNameAttribute(request, fnameHeader);
+        String lname = findNameAttribute(request, lnameHeader);
 
         // If the values are not in the request headers try to retrieve it from `shibheaders`.
         if (StringUtils.isEmpty(email) && Objects.nonNull(clarinVerificationToken)) {
@@ -1121,6 +1216,20 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
     protected String findAttribute(HttpServletRequest request, String name) {
         if (name == null) {
             return null;
+        }
+        if (headersFromToken) {
+            // A verification token login must not mix in anything the client sends in the live request. The stored
+            // values were converted from the IdP charset when they were stored; no conversion below applies to them.
+            List<String> stored = shibheaders.get(name);
+            if (stored == null || stored.isEmpty()) {
+                return null;
+            }
+            // The callers split on unescaped semicolons, as for a live header; a semicolon inside a value stays one.
+            List<String> escaped = new ArrayList<>();
+            for (String value : stored) {
+                escaped.add(value.replace(";", "\\;"));
+            }
+            return StringUtils.join(escaped, ";");
         }
         // First try to get the value from the attribute
         String value = (String) request.getAttribute(name);

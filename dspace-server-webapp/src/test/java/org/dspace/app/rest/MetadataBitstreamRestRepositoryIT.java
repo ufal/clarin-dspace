@@ -257,6 +257,47 @@ public class MetadataBitstreamRestRepositoryIT extends AbstractControllerIntegra
         configurationService.setProperty("file.preview.enabled", canPreview);
     }
 
+    /**
+     * The handle is resolved without @PreAuthorize, so READ on the item has to be checked explicitly, and before
+     * any preview content is generated for its files.
+     */
+    @Test
+    public void findByHandleRequiresReadOnItem() throws Exception {
+        context.turnOffAuthorisationSystem();
+        Collection col = CollectionBuilder.createCollection(context, parentCommunity).withName("Collection2").build();
+        Item privateItem = ItemBuilder.createItem(context, col)
+                .withAuthor(AUTHOR)
+                .withReaderGroup(groupService.findByName(context, Group.ADMIN))
+                .build();
+        Bitstream privateBitstream;
+        try (InputStream is = getClass().getResourceAsStream("assetstore/logos.tgz")) {
+            privateBitstream = BitstreamBuilder.
+                    createBitstream(context, privateItem, is)
+                    .withName("Bitstream")
+                    .withMimeType("application/x-gtar")
+                    .build();
+        }
+        context.restoreAuthSystemState();
+
+        getClient().perform(get(METADATABITSTREAM_SEARCH_BY_HANDLE_ENDPOINT)
+                        .param("handle", privateItem.getHandle())
+                        .param("fileGrpType", FILE_GRP_TYPE))
+                .andExpect(status().isUnauthorized());
+        getClient(getAuthToken(ePerson.getEmail(), PASSWORD)).perform(get(METADATABITSTREAM_SEARCH_BY_HANDLE_ENDPOINT)
+                        .param("handle", privateItem.getHandle())
+                        .param("fileGrpType", FILE_GRP_TYPE))
+                .andExpect(status().isForbidden());
+        assertFalse("Expects no preview content created for a refused caller.",
+                previewContentService.hasPreview(context, privateBitstream));
+
+        // an admin can still list the files
+        getClient(getAuthToken(admin.getEmail(), password)).perform(get(METADATABITSTREAM_SEARCH_BY_HANDLE_ENDPOINT)
+                        .param("handle", privateItem.getHandle())
+                        .param("fileGrpType", FILE_GRP_TYPE))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$._embedded.metadatabitstreams", hasSize(1)));
+    }
+
     @Test
     public void findByHandleEmptyFileGrpType() throws Exception {
         getClient().perform(get(METADATABITSTREAM_SEARCH_BY_HANDLE_ENDPOINT)

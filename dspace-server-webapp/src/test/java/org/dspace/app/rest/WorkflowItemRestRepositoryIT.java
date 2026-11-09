@@ -762,6 +762,56 @@ public class WorkflowItemRestRepositoryIT extends AbstractControllerIntegrationT
 
     @Test
     /**
+     * A reviewer with a claimed task has DELETE on the item, but must not be able to expunge or abort it
+     *
+     * @throws Exception
+     */
+    public void deleteOneWithExpungeByReviewerForbiddenTest() throws Exception {
+        context.turnOffAuthorisationSystem();
+
+        parentCommunity = CommunityBuilder.createCommunity(context)
+                                          .withName("Parent Community")
+                                          .build();
+        EPerson reviewer = EPersonBuilder.createEPerson(context)
+                .withEmail("reviewer@example.com")
+                .withPassword(password)
+                .build();
+        Collection col1 = CollectionBuilder.createCollection(context, parentCommunity).withName("Collection 1")
+                .withWorkflowGroup(1, reviewer).build();
+
+        EPerson submitter = EPersonBuilder.createEPerson(context)
+                .withEmail("submitter@example.com")
+                .withPassword(password)
+                .build();
+        context.setCurrentUser(submitter);
+
+        ClaimedTask claimedTask = ClaimedTaskBuilder.createClaimedTask(context, col1, reviewer)
+                .withTitle("Workflow Item 1")
+                .build();
+        XmlWorkflowItem witem = claimedTask.getWorkflowItem();
+        Item item = witem.getItem();
+
+        context.restoreAuthSystemState();
+
+        String reviewerToken = getAuthToken(reviewer.getEmail(), password);
+        String adminToken = getAuthToken(admin.getEmail(), password);
+
+        getClient(reviewerToken).perform(delete("/api/workflow/workflowitems/" + witem.getID() + "?expunge=true"))
+                    .andExpect(status().isForbidden());
+
+        getClient(reviewerToken).perform(delete("/api/workflow/workflowitems/" + witem.getID()))
+                    .andExpect(status().isForbidden());
+
+        // the workflowitem and its item should still exist
+        getClient(adminToken).perform(get("/api/workflow/workflowitems/" + witem.getID()))
+                   .andExpect(status().isOk());
+
+        getClient(adminToken).perform(get("/api/core/items/" + item.getID()))
+                   .andExpect(status().isOk());
+    }
+
+    @Test
+    /**
      * Test the deposit of a workspaceitem POSTing to the resource workflowitems collection endpoint a workspaceitem (as
      * uri-list) in a collection without workflow. This corresponds to the deposit action done by the submitter.
      *

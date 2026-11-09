@@ -465,6 +465,10 @@ public class WorkspaceItemRestRepository extends DSpaceRestRepository<WorkspaceI
             return;
         }
 
+        if (!authorizeService.isAdmin(context)) {
+            throw new AuthorizeException("Only an administrator can upload a file from the server.");
+        }
+
         File file = new File(fileName);
         String mimeType = URLConnection.guessContentTypeFromName(file.getName());
 

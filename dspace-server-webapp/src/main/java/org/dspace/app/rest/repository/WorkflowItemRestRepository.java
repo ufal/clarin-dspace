@@ -284,6 +284,9 @@ public class WorkflowItemRestRepository extends DSpaceRestRepository<WorkflowIte
                 throw new ResourceNotFoundException("WorkflowItem ID " + id + " not found");
             }
             if (expunge) {
+                if (!authorizeService.isAdmin(context)) {
+                    throw new AuthorizeException("You must be an admin to expunge a workflow item");
+                }
                 wis.delete(context, witem);
             } else {
                 wfs.abort(context, witem, context.getCurrentUser());

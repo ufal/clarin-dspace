@@ -21,6 +21,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -29,17 +30,22 @@ import java.util.List;
 import java.util.Map;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.commons.io.IOUtils;
 import org.dspace.app.rest.model.ClarinUserMetadataRest;
 import org.dspace.app.rest.model.patch.Operation;
 import org.dspace.app.rest.model.patch.ReplaceOperation;
 import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
 import org.dspace.authorize.AuthorizeException;
+import org.dspace.authorize.service.AuthorizeService;
+import org.dspace.builder.BitstreamBuilder;
 import org.dspace.builder.ClarinLicenseBuilder;
 import org.dspace.builder.ClarinLicenseLabelBuilder;
+import org.dspace.builder.ClarinLicenseResourceMappingBuilder;
 import org.dspace.builder.ClarinUserMetadataBuilder;
 import org.dspace.builder.ClarinUserRegistrationBuilder;
 import org.dspace.builder.CollectionBuilder;
 import org.dspace.builder.CommunityBuilder;
+import org.dspace.builder.ItemBuilder;
 import org.dspace.builder.WorkspaceItemBuilder;
 import org.dspace.content.Bitstream;
 import org.dspace.content.Collection;
@@ -49,13 +55,17 @@ import org.dspace.content.MetadataValue;
 import org.dspace.content.WorkspaceItem;
 import org.dspace.content.clarin.ClarinLicense;
 import org.dspace.content.clarin.ClarinLicenseLabel;
+import org.dspace.content.clarin.ClarinLicenseResourceMapping;
 import org.dspace.content.clarin.ClarinLicenseResourceUserAllowance;
 import org.dspace.content.clarin.ClarinUserMetadata;
 import org.dspace.content.clarin.ClarinUserRegistration;
+import org.dspace.content.service.InstallItemService;
 import org.dspace.content.service.ItemService;
 import org.dspace.content.service.clarin.ClarinLicenseLabelService;
+import org.dspace.content.service.clarin.ClarinLicenseResourceMappingService;
 import org.dspace.content.service.clarin.ClarinLicenseService;
 import org.dspace.content.service.clarin.ClarinUserMetadataService;
+import org.dspace.core.Constants;
 import org.dspace.eperson.EPerson;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -71,6 +81,12 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
     ClarinUserMetadataService clarinUserMetadataService;
     @Autowired
     ItemService itemService;
+    @Autowired
+    ClarinLicenseResourceMappingService clarinLicenseResourceMappingService;
+    @Autowired
+    AuthorizeService authorizeService;
+    @Autowired
+    InstallItemService installItemService;
 
     WorkspaceItem witem;
     WorkspaceItem witem2;
@@ -135,6 +151,12 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
         getClient(tokenAdmin).perform(get("/api/core/clarinlicenses/" + clarinLicense.getID()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.bitstreams", is(2)));
+
+        // 6. Archive the items - files are downloaded from archived items, which anonymous users can read
+        context.turnOffAuthorisationSystem();
+        installItemService.installItem(context, context.reloadEntity(witem));
+        installItemService.installItem(context, context.reloadEntity(witem2));
+        context.restoreAuthSystemState();
     }
 
     @Test
@@ -754,6 +776,152 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
 
         // Delete all created user metadata - clean test environment
         ClarinUserMetadataBuilder.deleteClarinUserMetadata(clarinUserRegistration.getID());
+    }
+
+    @Test
+    public void manageWithoutReadOnBitstreamIsDenied() throws Exception {
+        Item item = createArchivedItemWithLicensedFiles(Confirmation.ALLOW_ANONYMOUS);
+        Bitstream file = item.getBundles("ORIGINAL").get(0).getBitstreams().get(0);
+        context.turnOffAuthorisationSystem();
+        authorizeService.removePoliciesActionFilter(context, file, Constants.READ);
+        context.restoreAuthSystemState();
+
+        getClient().perform(post("/api/core/clarinusermetadata/manage?bitstreamUUID=" + file.getID())
+                        .content(userMetadataBody())
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized());
+        getClient(getAuthToken(eperson.getEmail(), password))
+                .perform(post("/api/core/clarinusermetadata/manage?bitstreamUUID=" + file.getID())
+                        .content(userMetadataBody())
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isForbidden());
+        assertNoDownloadTokenCreated();
+    }
+
+    @Test
+    public void manageWithoutReadOnParentItemIsDenied() throws Exception {
+        Item item = createArchivedItemWithLicensedFiles(Confirmation.ALLOW_ANONYMOUS);
+        Bitstream file = item.getBundles("ORIGINAL").get(0).getBitstreams().get(0);
+        context.turnOffAuthorisationSystem();
+        authorizeService.removePoliciesActionFilter(context, item, Constants.READ);
+        context.restoreAuthSystemState();
+
+        getClient().perform(post("/api/core/clarinusermetadata/manage?bitstreamUUID=" + file.getID())
+                        .content(userMetadataBody())
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized());
+        assertNoDownloadTokenCreated();
+    }
+
+    @Test
+    public void manageZipWithoutReadOnItemIsDenied() throws Exception {
+        Item item = createArchivedItemWithLicensedFiles(Confirmation.ALLOW_ANONYMOUS);
+        context.turnOffAuthorisationSystem();
+        authorizeService.removePoliciesActionFilter(context, item, Constants.READ);
+        context.restoreAuthSystemState();
+
+        getClient().perform(post("/api/core/clarinusermetadata/manage/zip?itemUUID=" + item.getID())
+                        .content(userMetadataBody())
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized());
+        getClient(getAuthToken(eperson.getEmail(), password))
+                .perform(post("/api/core/clarinusermetadata/manage/zip?itemUUID=" + item.getID())
+                        .content(userMetadataBody())
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isForbidden());
+        assertNoDownloadTokenCreated();
+    }
+
+    @Test
+    public void manageZipWithoutReadOnOneBitstreamIsDenied() throws Exception {
+        Item item = createArchivedItemWithLicensedFiles(Confirmation.ALLOW_ANONYMOUS, Confirmation.ALLOW_ANONYMOUS);
+        Bitstream secondFile = item.getBundles("ORIGINAL").get(0).getBitstreams().get(1);
+        context.turnOffAuthorisationSystem();
+        authorizeService.removePoliciesActionFilter(context, secondFile, Constants.READ);
+        context.restoreAuthSystemState();
+
+        getClient().perform(post("/api/core/clarinusermetadata/manage/zip?itemUUID=" + item.getID())
+                        .content(userMetadataBody())
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized());
+        assertNoDownloadTokenCreated();
+    }
+
+    @Test
+    public void manageZipAnonymousWithLicenseRequiringLoginIsDenied() throws Exception {
+        // The first file allows anonymous download, the second one does not - the stricter licence must win.
+        Item item = createArchivedItemWithLicensedFiles(Confirmation.ALLOW_ANONYMOUS, Confirmation.ASK_ALWAYS);
+
+        getClient().perform(post("/api/core/clarinusermetadata/manage/zip?itemUUID=" + item.getID())
+                        .content(userMetadataBody())
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized());
+        assertNoDownloadTokenCreated();
+    }
+
+    @Test
+    public void manageZipAnonymousWithAllowAnonymousLicenseReturnsToken() throws Exception {
+        Item item = createArchivedItemWithLicensedFiles(Confirmation.ALLOW_ANONYMOUS, Confirmation.ALLOW_ANONYMOUS);
+
+        getClient().perform(post("/api/core/clarinusermetadata/manage/zip?itemUUID=" + item.getID())
+                        .content(userMetadataBody())
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", notNullValue()))
+                .andExpect(jsonPath("$", not(CHECK_EMAIL_RESPONSE_CONTENT)));
+
+        // One download token record for every file of the item
+        getClient(getAuthToken(admin.getEmail(), password)).perform(get("/api/core/clarinlruallowances")
+                        .contentType(contentType))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements", is(2)));
+    }
+
+    /**
+     * Create an archived item, readable by anonymous users, with one ORIGINAL file per given licence confirmation.
+     * Every file gets its own licence.
+     */
+    private Item createArchivedItemWithLicensedFiles(Confirmation... confirmations) throws Exception {
+        context.turnOffAuthorisationSystem();
+        parentCommunity = CommunityBuilder.createCommunity(context).build();
+        Collection col = CollectionBuilder.createCollection(context, parentCommunity).build();
+        Item item = ItemBuilder.createItem(context, col).withTitle("Licensed item").build();
+        // Licence labels are unique, so all licences share one label
+        ClarinLicenseLabel clarinLicenseLabel = createClarinLicenseLabel("lbl", false, "Test Title");
+        for (int i = 0; i < confirmations.length; i++) {
+            ClarinLicense license = ClarinLicenseBuilder.createClarinLicense(context).build();
+            license.setConfirmation(confirmations[i]);
+            license.setDefinition("Def");
+            license.setRequiredInfo("NAME");
+            license.setName("License " + i);
+            license.setLicenseLabels(new HashSet<>(List.of(clarinLicenseLabel)));
+            clarinLicenseService.update(context, license);
+            Bitstream file = BitstreamBuilder.createBitstream(context, item,
+                            IOUtils.toInputStream("content", StandardCharsets.UTF_8))
+                    .withName("file.txt")
+                    .build();
+            ClarinLicenseResourceMapping mapping =
+                    ClarinLicenseResourceMappingBuilder.createClarinLicenseResourceMapping(context).build();
+            mapping.setLicense(license);
+            mapping.setBitstream(file);
+            clarinLicenseResourceMappingService.update(context, mapping);
+        }
+        context.restoreAuthSystemState();
+        return item;
+    }
+
+    private byte[] userMetadataBody() throws Exception {
+        ClarinUserMetadataRest clarinUserMetadata = new ClarinUserMetadataRest();
+        clarinUserMetadata.setMetadataKey("NAME");
+        clarinUserMetadata.setMetadataValue("Test");
+        return new ObjectMapper().writeValueAsBytes(new ClarinUserMetadataRest[] { clarinUserMetadata });
+    }
+
+    private void assertNoDownloadTokenCreated() throws Exception {
+        getClient(getAuthToken(admin.getEmail(), password)).perform(get("/api/core/clarinlruallowances")
+                        .contentType(contentType))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements", is(0)));
     }
 
     private WorkspaceItem createWorkspaceItemWithFile(boolean secondBitstream) {

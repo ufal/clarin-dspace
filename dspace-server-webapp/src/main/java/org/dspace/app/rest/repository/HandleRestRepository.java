@@ -7,6 +7,8 @@
  */
 package org.dspace.app.rest.repository;
 
+import static org.dspace.handle.external.Handle.restoreToken;
+
 import java.io.IOException;
 import java.lang.invoke.WrongMethodTypeException;
 import java.sql.SQLException;
@@ -380,7 +382,7 @@ public class HandleRestRepository extends  DSpaceRestRepository<HandleRest, Inte
 
         // Update handle based on obtained values from json nodes
         this.updateHandle(context, handleObject, jsonNodeHandle.asText(),
-                handleObject.getDSpaceObject(), jsonNodeUrl.asText(),
+                handleObject.getDSpaceObject(), restoreToken(jsonNodeUrl.asText(), handleObject.getUrl()),
                 jsonNodeArchive.asBoolean());
     }
 

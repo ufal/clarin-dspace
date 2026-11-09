@@ -8,6 +8,8 @@
 
 package org.dspace.app.oai;
 
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.startsWith;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -66,6 +68,9 @@ public class OAIpmhIT extends AbstractControllerIntegrationTest {
     private final String ROOT_PATH = "/oai/";
     private final String DEFAULT_CONTEXT_PATH = "request";
     private final String DEFAULT_CONTEXT = ROOT_PATH + DEFAULT_CONTEXT_PATH;
+    // Contexts declared by every one of our xoai.xml variants. The <description> blocks of an
+    // Identify response do not depend on the context, so a leak shows up in all of them.
+    private final String[] CONTEXT_PATHS = {DEFAULT_CONTEXT_PATH, "driver", "openaire", "openaire4"};
 
     // Mock to ensure XOAI caching is disabled for all tests (see @Before method)
     @MockBean
@@ -172,6 +177,22 @@ public class OAIpmhIT extends AbstractControllerIntegrationTest {
                    .andExpect(xpath("OAI-PMH/Identify/earliestDatestamp")
                                   .string(baseDateProvider.format(nowToNearestSecond)))
         ;
+    }
+
+    @Test
+    public void requestForIdentifyShouldNotLeakConfigPlaceholders() throws Exception {
+
+        for (String contextPath : CONTEXT_PATHS) {
+            // Make an Identify request to each configured OAI context
+            getClient().perform(get(ROOT_PATH + contextPath).param("verb", "Identify"))
+                       // Expect a 200 response code
+                       .andExpect(status().isOk())
+                       // A description template keyed on a property that no .cfg defines is copied
+                       // through verbatim by Utils.interpolateConfigsInString(), with no log line,
+                       // so the raw ${...} reaches every harvester. Nothing may leak that way.
+                       .andExpect(content().string(not(containsString("${description."))))
+            ;
+        }
     }
 
     @Test

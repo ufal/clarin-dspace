@@ -21,6 +21,7 @@ import org.dspace.xmlworkflow.storedcomponents.service.PoolTaskService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.rest.webmvc.ResourceNotFoundException;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Component;
 
 /**
@@ -44,6 +45,7 @@ public class PoolTaskStepLinkRepository extends AbstractDSpaceRestRepository imp
      * @return                  The {@link WorkflowStepRest} object related to the {@link PoolTask} specified by
      *                          the given ID
      */
+    @PreAuthorize("hasPermission(#poolTaskId, 'POOLTASK', 'READ')")
     public WorkflowStepRest getStep(@Nullable HttpServletRequest request,
                                     Integer poolTaskId,
                                     @Nullable Pageable optionalPageable,

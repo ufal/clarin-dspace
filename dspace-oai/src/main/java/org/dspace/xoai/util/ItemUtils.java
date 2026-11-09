@@ -11,6 +11,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.sql.SQLException;
+import java.text.SimpleDateFormat;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -375,7 +376,8 @@ public class ItemUtils {
 
         other.getField().add(createValue("handle", item.getHandle()));
         other.getField().add(createValue("identifier", DSpaceItem.buildIdentifier(item.getHandle())));
-        other.getField().add(createValue("lastModifyDate", item.getLastModified().toString()));
+        other.getField().add(createValue("lastModifyDate",
+                new SimpleDateFormat("yyyy-MM-dd").format(item.getLastModified())));
 
         if (restricted.get()) {
             other.getField().add(createValue("restrictedAccess", "true"));

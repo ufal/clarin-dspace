@@ -68,16 +68,21 @@ public class ClarinLicenseResourceUserAllowanceRestRepository
     }
 
     @SearchRestMethod(name = "byBitstreamAndUser")
+    @PreAuthorize("hasAuthority('AUTHENTICATED')")
     public Page<ClarinLicenseResourceUserAllowanceRest> findByValue(
             @Parameter(value = "bitstreamUUID", required = true) UUID bitstreamUUID,
             @Parameter(value = "userUUID", required = true) UUID userUUID,
-            Pageable pageable) throws SQLException, AuthorizeException {
+            Pageable pageable) throws SQLException {
 
         Context context = obtainContext();
 
-        List<ClarinLicenseResourceUserAllowance> clarinLicenseResourceUserAllowance =
-                clarinLicenseResourceUserAllowanceService.findByEPersonIdAndBitstreamId(context, userUUID,
-                        bitstreamUUID);
+        List<ClarinLicenseResourceUserAllowance> clarinLicenseResourceUserAllowance;
+        try {
+            clarinLicenseResourceUserAllowance = clarinLicenseResourceUserAllowanceService
+                    .findByEPersonIdAndBitstreamId(context, userUUID, bitstreamUUID);
+        } catch (AuthorizeException e) {
+            throw new RESTAuthorizationException(e);
+        }
 
         if (CollectionUtils.isEmpty(clarinLicenseResourceUserAllowance)) {
             return null;

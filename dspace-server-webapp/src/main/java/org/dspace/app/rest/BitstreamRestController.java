@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -133,7 +134,7 @@ public class BitstreamRestController {
 
         Long lastModified = bitstreamService.getLastModified(bit);
         BitstreamFormat format = bit.getFormat(context);
-        String mimetype = format.getMIMEType();
+        String mimetype = StringUtils.defaultIfBlank(format.getMIMEType(), "application/octet-stream");
         String name = getBitstreamName(bit, format);
 
         if (StringUtils.isBlank(request.getHeader("Range"))) {
@@ -293,7 +294,8 @@ public class BitstreamRestController {
      */
     private boolean checkFormatForContentDisposition(BitstreamFormat format) {
         // Undefined or Unknown formats should ALWAYS be downloaded for additional security.
-        if (format == null || format.getSupportLevel() == BitstreamFormat.UNKNOWN) {
+        if (format == null || format.getSupportLevel() == BitstreamFormat.UNKNOWN
+            || StringUtils.isBlank(format.getMIMEType())) {
             return true;
         }
 
@@ -306,16 +308,24 @@ public class BitstreamRestController {
             return true;
         }
 
-        // Define a download list of formats which DSpace forces to ALWAYS be downloaded.
-        // These formats can embed JavaScript which may be run in the user's browser if the file is opened inline.
-        // Therefore, DSpace blocks opening these formats inline as it could be used for an XSS attack.
-        List<String> downloadOnlyFormats = List.of("text/html", "text/javascript", "text/xml", "rdf");
+        // Compare MIME types without parameters or case differences.
+        String mimeType = StringUtils.substringBefore(format.getMIMEType(), ";").trim().toLowerCase(Locale.ROOT);
+        if (mimeType.isEmpty() || mimeType.endsWith("+xml") || mimeType.startsWith("text/javascript")) {
+            return true;
+        }
+
+        // Active formats must download regardless of configuration.
+        List<String> downloadOnlyFormats = List.of("text/html", "text/javascript", "text/xml", "application/xml",
+            "rdf", "application/javascript", "application/ecmascript", "text/ecmascript",
+            "application/x-javascript", "application/x-ecmascript", "text/x-javascript", "text/x-ecmascript",
+            "text/jscript", "text/livescript");
 
         // Combine our two lists
         List<String> formats = ListUtils.union(downloadOnlyFormats, configuredFormats);
 
         // See if the passed in format's MIME type or file extension is listed.
-        boolean download = formats.contains(format.getMIMEType());
+        boolean download = formats.stream().anyMatch(value ->
+            mimeType.equalsIgnoreCase(StringUtils.substringBefore(value, ";").trim()));
         if (!download) {
             for (String ext : format.getExtensions()) {
                 if (formats.contains(ext)) {
