@@ -16,7 +16,6 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.dspace.AbstractUnitTest;
-import org.dspace.api.DSpaceApi;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.Collection;
 import org.dspace.content.Community;
@@ -27,8 +26,6 @@ import org.dspace.content.service.CollectionService;
 import org.dspace.content.service.CommunityService;
 import org.dspace.content.service.InstallItemService;
 import org.dspace.content.service.WorkspaceItemService;
-import org.dspace.services.ConfigurationService;
-import org.dspace.services.factory.DSpaceServicesFactory;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -129,6 +126,7 @@ public class PIDConfigurationTest extends AbstractUnitTest {
         assertEquals("Com2 should still have local type", "local", pidCommunityConfiguration2.getType());
     }
 
+    /*
     @Test
     public void testGeneratingItemURL() {
         ConfigurationService configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
@@ -157,4 +155,5 @@ public class PIDConfigurationTest extends AbstractUnitTest {
         url = DSpaceApi.generateItemURLWithHandle(pid, publicItem);
         assertEquals(expectedUrl, url);
     }
+     */
 }

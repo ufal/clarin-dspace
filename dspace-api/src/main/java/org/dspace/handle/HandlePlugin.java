@@ -20,6 +20,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 import net.cnri.util.StreamTable;
 import net.handle.hdllib.Encoder;
@@ -292,7 +293,8 @@ public class HandlePlugin implements HandleStorage {
             if (resolveMetadata) {
                 dso = resolveHandleToObject(context, handle);
             }
-            return extractMetadata(dso);
+            return extractMetadata(dso).entrySet().stream().collect(
+                    Collectors.toMap(e -> e.getKey().name(), Map.Entry::getValue));
         } finally {
             try {
                 context.complete();
@@ -612,8 +614,8 @@ public class HandlePlugin implements HandleStorage {
         return canonicalHandlePrefix;
     }
 
-    public static Map<String, String> extractMetadata(DSpaceObject dso) {
-        Map<String, String> map = new LinkedHashMap<>();
+    public static Map<EpicHandleField, String> extractMetadata(DSpaceObject dso) {
+        Map<EpicHandleField, String> map = new LinkedHashMap<>();
         if (Objects.isNull(dso)) {
             return map;
         }
@@ -627,14 +629,14 @@ public class HandlePlugin implements HandleStorage {
         // load the DSpaceObject metadata
         List<MetadataValue> mds = itemService.getMetadataByMetadataString((Item) dso, "dc.title");
         if (CollectionUtils.isNotEmpty(mds)) {
-            map.put(AbstractPIDService.HANDLE_FIELDS.TITLE.toString(), mds.get(0).getValue());
+            map.put(EpicHandleField.TITLE, mds.get(0).getValue());
         }
-        map.put(AbstractPIDService.HANDLE_FIELDS.REPOSITORY.toString(), getRepositoryName());
+        map.put(EpicHandleField.REPOSITORY, getRepositoryName());
         mds = itemService.getMetadataByMetadataString((Item) dso, "dc.date.accessioned");
         if (CollectionUtils.isNotEmpty(mds)) {
-            map.put(AbstractPIDService.HANDLE_FIELDS.SUBMITDATE.toString(), mds.get(0).getValue());
+            map.put(EpicHandleField.SUBMITDATE, mds.get(0).getValue());
         }
-        map.put(AbstractPIDService.HANDLE_FIELDS.REPORTEMAIL.toString(), getRepositoryEmail());
+        map.put(EpicHandleField.REPORTEMAIL, getRepositoryEmail());
         return map;
     }
 }
@@ -656,29 +658,13 @@ class ResolvedHandle {
         String submitdate = null;
         String reportemail = null;
         if (null != dso) {
-            Map<String, String> map = HandlePlugin.extractMetadata(dso);
-            String key
-                    = AbstractPIDService.HANDLE_FIELDS.TITLE.toString();
-            title = getOrDefault(map, key, "");
-
-            key = AbstractPIDService.HANDLE_FIELDS.REPOSITORY.toString();
-            repository = getOrDefault(map, key, "");
-
-            key = AbstractPIDService.HANDLE_FIELDS.SUBMITDATE.toString();
-            submitdate = getOrDefault(map, key, "");
-
-            key = AbstractPIDService.HANDLE_FIELDS.REPORTEMAIL.toString();
-            reportemail = getOrDefault(map, key, "");
+            Map<EpicHandleField, String> map = HandlePlugin.extractMetadata(dso);
+            title = map.getOrDefault(EpicHandleField.TITLE, "");
+            repository = map.getOrDefault(EpicHandleField.REPOSITORY, "");
+            submitdate = map.getOrDefault(EpicHandleField.SUBMITDATE, "");
+            reportemail = map.getOrDefault(EpicHandleField.REPORTEMAIL, "");
         }
         init(url, title, repository, submitdate, reportemail);
-    }
-
-    private <K, V> V getOrDefault(Map<K, V> map, K key, V defaultValue) {
-        if (map.containsKey(key)) {
-            return map.get(key);
-        } else {
-            return defaultValue;
-        }
     }
 
     private void init(String url, String title, String repository, String submitdate, String reportemail) {
@@ -702,36 +688,26 @@ class ResolvedHandle {
             }
         }
         setResolvedUrl(url);
-        String key;
         if (null != title) {
-            key = AbstractPIDService.HANDLE_FIELDS.TITLE.toString();
-            setValue(key, title);
+            setValue(EpicHandleField.TITLE.name(), title);
         }
-
         if (null != repository) {
-            key = AbstractPIDService.HANDLE_FIELDS.REPOSITORY.toString();
-            setValue(key, repository);
+            setValue(EpicHandleField.REPOSITORY.name(), repository);
         }
-
         if (null != submitdate) {
-            key = AbstractPIDService.HANDLE_FIELDS.SUBMITDATE.toString();
-            setValue(key, submitdate);
+            setValue(EpicHandleField.SUBMITDATE.name(), submitdate);
         }
         if (null != reportemail) {
-            key = AbstractPIDService.HANDLE_FIELDS.REPORTEMAIL.toString();
-            setValue(key, reportemail);
+            setValue(EpicHandleField.REPORTEMAIL.name(), reportemail);
         }
         if (isNotBlank(datasetName)) {
-            key = AbstractPIDService.HANDLE_FIELDS.DATASETNAME.toString();
-            setValue(key, datasetName);
+            setValue(EpicHandleField.DATASETNAME.name(), datasetName);
         }
         if (isNotBlank(datasetVersion)) {
-            key = AbstractPIDService.HANDLE_FIELDS.DATASETVERSION.toString();
-            setValue(key, datasetVersion);
+            setValue(EpicHandleField.DATASETVERSION.name(), datasetVersion);
         }
         if (isNotBlank(query)) {
-            key = AbstractPIDService.HANDLE_FIELDS.QUERY.toString();
-            setValue(key, query);
+            setValue(EpicHandleField.QUERY.name(), query);
         }
     }
 
