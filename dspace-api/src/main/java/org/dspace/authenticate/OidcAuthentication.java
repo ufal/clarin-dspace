@@ -16,18 +16,29 @@ import org.dspace.core.Context;
 import org.dspace.eperson.EPerson;
 import org.dspace.eperson.Group;
 import org.dspace.kernel.ServiceManager;
+import org.dspace.services.ConfigurationService;
 import org.dspace.utils.DSpace;
 
 /**
  * Implementation of {@link AuthenticationMethod} that delegate all the method
  * invocations to the bean of class {@link OrcidAuthenticationBean}.
+ * <p>
+ * By default, this delegates to the "oidcAuthentication" bean (plain {@link OidcAuthenticationBean}). When the
+ * "authentication-oidc.type" property is set to "clarin", it delegates to the "clarinOidcAuthentication" bean
+ * ({@link org.dspace.authenticate.clarin.ClarinOidcAuthenticationBean}), which identifies users by a stable
+ * provider user ID instead of email, supports linking by email, OIDC group/role mapping, and a default
+ * authentication group.
  *
  * @author Luca Giamminonni (luca.giamminonni at 4science.it)
  *
  */
 public class OidcAuthentication implements AuthenticationMethod {
 
+    private static final String CLARIN_TYPE = "clarin";
+
     private final ServiceManager serviceManager = new DSpace().getServiceManager();
+
+    private final ConfigurationService configurationService = new DSpace().getConfigurationService();
 
     private static final String OIDC_AUTHENTICATED = "oidc.authenticated";
 
@@ -57,6 +68,11 @@ public class OidcAuthentication implements AuthenticationMethod {
     }
 
     @Override
+    public boolean areSpecialGroupsApplicable(Context context, HttpServletRequest request) {
+        return getOidcAuthentication().areSpecialGroupsApplicable(context, request);
+    }
+
+    @Override
     public int authenticate(Context context, String username, String password, String realm, HttpServletRequest request)
         throws SQLException {
         return getOidcAuthentication().authenticate(context, username, password, realm, request);
@@ -73,7 +89,9 @@ public class OidcAuthentication implements AuthenticationMethod {
     }
 
     private OidcAuthenticationBean getOidcAuthentication() {
-        return serviceManager.getServiceByName("oidcAuthentication", OidcAuthenticationBean.class);
+        String beanName = CLARIN_TYPE.equals(configurationService.getProperty("authentication-oidc.type"))
+                ? "clarinOidcAuthentication" : "oidcAuthentication";
+        return serviceManager.getServiceByName(beanName, OidcAuthenticationBean.class);
     }
 
     @Override
