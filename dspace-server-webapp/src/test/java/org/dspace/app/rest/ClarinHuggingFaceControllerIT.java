@@ -160,6 +160,7 @@ public class ClarinHuggingFaceControllerIT extends AbstractControllerIntegration
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(2)))
                 .andExpect(jsonPath("$[*].type", everyItem(is("file"))))
+                .andExpect(jsonPath("$[*].oid", everyItem(matchesPattern("^[0-9a-f]{40}$"))))
                 .andReturn();
 
         JsonNode entries = new ObjectMapper().readTree(result.getResponse().getContentAsString());
@@ -169,9 +170,11 @@ public class ClarinHuggingFaceControllerIT extends AbstractControllerIntegration
         }
 
         assertEquals(MODEL_BIN_CONTENT.length(), byPath.get("model.bin").get("size").asLong());
-        assertEquals(DigestUtils.md5Hex(MODEL_BIN_CONTENT), byPath.get("model.bin").get("oid").asText());
+        assertEquals(DigestUtils.sha1Hex("model.bin" + "\n" + DigestUtils.md5Hex(MODEL_BIN_CONTENT)),
+                byPath.get("model.bin").get("oid").asText());
         assertEquals(CONFIG_JSON_CONTENT.length(), byPath.get("config.json").get("size").asLong());
-        assertEquals(DigestUtils.md5Hex(CONFIG_JSON_CONTENT), byPath.get("config.json").get("oid").asText());
+        assertEquals(DigestUtils.sha1Hex("config.json" + "\n" + DigestUtils.md5Hex(CONFIG_JSON_CONTENT)),
+                byPath.get("config.json").get("oid").asText());
     }
 
     @Test
@@ -189,6 +192,56 @@ public class ClarinHuggingFaceControllerIT extends AbstractControllerIntegration
         getClient().perform(get(base + "/tree/" + sha))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(2)));
+    }
+
+    @Test
+    public void refsReturnsMainBranchAtCurrentSha() throws Exception {
+        String handle = exposedItem.getHandle();
+        String[] handleParts = handle.split("/");
+        String sha = fetchModelSha(handle);
+
+        getClient().perform(get(ENDPOINT_BASE + "/" + handleParts[0] + "/" + handleParts[1] + "/refs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.branches", hasSize(1)))
+                .andExpect(jsonPath("$.branches[0].name", is("main")))
+                .andExpect(jsonPath("$.branches[0].ref", is("refs/heads/main")))
+                .andExpect(jsonPath("$.branches[0].targetCommit", is(sha)))
+                .andExpect(jsonPath("$.converts", hasSize(0)))
+                .andExpect(jsonPath("$.tags", hasSize(0)));
+    }
+
+    @Test
+    public void refsTargetCommitIsAcceptedAsRevision() throws Exception {
+        String[] handleParts = exposedItem.getHandle().split("/");
+        String base = ENDPOINT_BASE + "/" + handleParts[0] + "/" + handleParts[1];
+
+        MvcResult result = getClient().perform(get(base + "/refs"))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode json = new ObjectMapper().readTree(result.getResponse().getContentAsString());
+        String targetCommit = json.get("branches").get(0).get("targetCommit").asText();
+
+        // Real clients feed targetCommit straight back as the revision of the next tree call.
+        getClient().perform(get(base + "/tree/" + targetCommit))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    public void refsNonExposedItemIsNotFound() throws Exception {
+        String[] handleParts = nonExposedItem.getHandle().split("/");
+
+        getClient().perform(get(ENDPOINT_BASE + "/" + handleParts[0] + "/" + handleParts[1] + "/refs"))
+                .andExpect(status().isNotFound())
+                .andExpect(header().string("X-Error-Code", "RepoNotFound"));
+    }
+
+    @Test
+    public void refsDisabledFacadeReturnsNotFound() throws Exception {
+        configurationService.setProperty("hf.api.enabled", false);
+        String[] handleParts = exposedItem.getHandle().split("/");
+
+        getClient().perform(get(ENDPOINT_BASE + "/" + handleParts[0] + "/" + handleParts[1] + "/refs"))
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -344,6 +397,20 @@ public class ClarinHuggingFaceControllerIT extends AbstractControllerIntegration
                 .andExpect(header().string("Content-Range", "bytes 1-3/" + MODEL_BIN_CONTENT.length()))
                 // We only expect the bytes 1, 2 and 3
                 .andExpect(content().bytes(MODEL_BIN_CONTENT.substring(1, 4).getBytes()));
+    }
+
+    @Test
+    public void resolveGetSupportsZeroLengthRangeProbe() throws Exception {
+        // The @huggingface/hub JS client probes with Range: bytes=0-0 and derives the file size purely
+        // from Content-Range, so this exact single-byte probe is a real client contract.
+        String handle = exposedItem.getHandle();
+
+        getClient().perform(get("/api/hf/" + handle + "/resolve/main/model.bin")
+                        .header("Range", "bytes=0-0"))
+                .andExpect(status().is(206))
+                .andExpect(header().string("Content-Range", "bytes 0-0/" + MODEL_BIN_CONTENT.length()))
+                .andExpect(header().longValue("Content-Length", 1))
+                .andExpect(header().string("ETag", "\"" + DigestUtils.md5Hex(MODEL_BIN_CONTENT) + "\""));
     }
 
     @Test
