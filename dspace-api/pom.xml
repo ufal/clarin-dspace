@@ -920,6 +920,19 @@
             </exclusions>
         </dependency>
 
+        <!-- Used by the CLARIN OIDC extension to model and verify ID tokens (OidcIdToken, OidcUserInfo,
+             NimbusJwtDecoder) -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-oauth2-core</artifactId>
+            <version>${spring-security.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-oauth2-jose</artifactId>
+            <version>${spring-security.version}</version>
+        </dependency>
+
     </dependencies>
 
     <dependencyManagement>

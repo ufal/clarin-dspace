@@ -7,6 +7,7 @@
  */
 package org.dspace.content.factory;
 
+import org.dspace.content.service.clarin.AuthenticationIdentityService;
 import org.dspace.content.service.clarin.ClarinItemService;
 import org.dspace.content.service.clarin.ClarinLicenseLabelService;
 import org.dspace.content.service.clarin.ClarinLicenseResourceMappingService;
@@ -52,6 +53,8 @@ public abstract class ClarinServiceFactory {
     public abstract MatomoReportSubscriptionService getMatomoReportService();
 
     public abstract ClarinTokenService getClarinTokenService();
+
+    public abstract AuthenticationIdentityService getAuthenticationIdentityService();
 
     public static ClarinServiceFactory getInstance() {
         return DSpaceServicesFactory.getInstance().getServiceManager()
