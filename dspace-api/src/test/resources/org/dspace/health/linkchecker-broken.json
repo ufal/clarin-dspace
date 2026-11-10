@@ -1,0 +1,72 @@
+{
+ "creationDate": "2026-10-20 13:27:02",
+ "collection": "LINDAT_CLARIAH_CZ_digital_library_at_the_Institute_of_Formal_and_Applied_Linguistics_UFAL_",
+ "category": "Broken",
+ "link": [
+  {
+   "url": "https://redmine.ms.mff.cuni.cz/projects/pmltq-web",
+   "checkingDate": "2026-10-20 12:15:14",
+   "method": "GET",
+   "statusCode": 404,
+   "contentLength": null,
+   "duration": 45,
+   "redirects": 0,
+   "message": "Broken, Status code: 404",
+   "collection": "LINDAT_CLARIAH_CZ_digital_library_at_the_Institute_of_Formal_and_Applied_Linguistics_UFAL_",
+   "origin": "clarin/results/cmdi/LINDAT_CLARIAH_CZ_digital_library_at_the_Institute_of_Formal_and_Applied_Linguistics_UFAL_/oai_lindat_mff_cuni_cz_11858_00_097C_0000_0022_C7FD_6.xml",
+   "expectedMimeType": "text/html"
+  },
+  {
+   "url": "https://ufal.mff.cuni.cz/data/CLEFeHealth",
+   "checkingDate": "2026-10-11 18:30:18",
+   "method": "GET",
+   "statusCode": 404,
+   "contentLength": null,
+   "duration": 201,
+   "redirects": 0,
+   "message": "Broken, Status code: 404",
+   "collection": "LINDAT_CLARIAH_CZ_digital_library_at_the_Institute_of_Formal_and_Applied_Linguistics_UFAL_",
+   "origin": "clarin/results/cmdi/LINDAT_CLARIAH_CZ_digital_library_at_the_Institute_of_Formal_and_Applied_Linguistics_UFAL_/oai_lindat_mff_cuni_cz_11234_1_2925.xml",
+   "expectedMimeType": "text/html"
+  },
+  {
+   "url": "https://tezaurus.ff.cuni.cz",
+   "checkingDate": "2026-10-20 12:15:09",
+   "method": "GET",
+   "statusCode": null,
+   "contentLength": null,
+   "duration": null,
+   "redirects": 0,
+   "message": "Unknown host",
+   "collection": "LINDAT_CLARIAH_CZ_digital_library_at_the_Institute_of_Formal_and_Applied_Linguistics_UFAL_",
+   "origin": "clarin/results/cmdi/LINDAT_CLARIAH_CZ_digital_library_at_the_Institute_of_Formal_and_Applied_Linguistics_UFAL_/oai_lindat_mff_cuni_cz_11234_1_4665.xml",
+   "expectedMimeType": "text/html"
+  },
+  {
+   "url": "http://tst.inl.nl/producten/SV1637",
+   "checkingDate": "2026-10-20 12:15:24",
+   "method": "GET",
+   "statusCode": null,
+   "contentLength": null,
+   "duration": null,
+   "redirects": 0,
+   "message": "Host is unreachable (connect failed)",
+   "collection": "LINDAT_CLARIAH_CZ_digital_library_at_the_Institute_of_Formal_and_Applied_Linguistics_UFAL_",
+   "origin": "clarin/results/cmdi/LINDAT_CLARIAH_CZ_digital_library_at_the_Institute_of_Formal_and_Applied_Linguistics_UFAL_/oai_lindat_mff_cuni_cz_11372_LRT_577.xml",
+   "expectedMimeType": "text/html"
+  },
+  {
+   "url": "http://www.zeno.org/DamenConvLex-1834",
+   "checkingDate": "2026-10-20 12:15:57",
+   "method": "GET",
+   "statusCode": null,
+   "contentLength": null,
+   "duration": null,
+   "redirects": 0,
+   "message": "timeout",
+   "collection": "LINDAT_CLARIAH_CZ_digital_library_at_the_Institute_of_Formal_and_Applied_Linguistics_UFAL_",
+   "origin": "clarin/results/cmdi/LINDAT_CLARIAH_CZ_digital_library_at_the_Institute_of_Formal_and_Applied_Linguistics_UFAL_/oai_lindat_mff_cuni_cz_11372_LRT_1156.xml",
+   "expectedMimeType": "text/html"
+  }
+ ]
+}

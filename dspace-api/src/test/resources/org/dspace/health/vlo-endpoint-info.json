@@ -1,0 +1,28 @@
+[
+ {
+  "id": 607,
+  "requests": 20,
+  "records": 1448,
+  "harvest_id": 18,
+  "when": "2026-10-20T03:28:18.710722+00:00",
+  "type": "clarin",
+  "endpoint_id": 28,
+  "name_lower": "lindat_clariah_cz_digital_library_at_the_institute_of_formal_and_applied_linguistics_ufal_",
+  "name": "LINDAT_CLARIAH_CZ_digital_library_at_the_Institute_of_Formal_and_Applied_Linguistics_UFAL_",
+  "location": "oai-pmh/LINDAT_CLARIAH_CZ_digital_library_at_the_Institute_of_Formal_and_Applied_Linguistics_UFAL_",
+  "url": "https://lindat.mff.cuni.cz/repository/server/oai/request?verb=Identify"
+ },
+ {
+  "id": 544,
+  "requests": 20,
+  "records": 1440,
+  "harvest_id": 16,
+  "when": "2026-10-16T01:52:04.21521+00:00",
+  "type": "clarin",
+  "endpoint_id": 28,
+  "name_lower": "lindat_clariah_cz_digital_library_at_the_institute_of_formal_and_applied_linguistics_ufal_",
+  "name": "LINDAT_CLARIAH_CZ_digital_library_at_the_Institute_of_Formal_and_Applied_Linguistics_UFAL_",
+  "location": "oai-pmh/LINDAT_CLARIAH_CZ_digital_library_at_the_Institute_of_Formal_and_Applied_Linguistics_UFAL_",
+  "url": "https://lindat.mff.cuni.cz/repository/server/oai/request?verb=Identify"
+ }
+]
