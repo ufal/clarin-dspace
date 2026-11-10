@@ -95,4 +95,13 @@ public class LocalMetadataTest extends AbstractUnitTest {
         MetadataField field = metadataFieldService.findByString(context, "local.hidden", '.');
         assertThat("existsHidden 0", field, notNullValue());
     }
+
+    /**
+     * Test if `local.description.usemarkdown` exists
+     */
+    @Test
+    public void existsDescriptionUseMarkdown() throws Exception {
+        MetadataField field = metadataFieldService.findByString(context, "local.description.usemarkdown", '.');
+        assertThat(field, notNullValue());
+    }
 }
