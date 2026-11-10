@@ -35,6 +35,7 @@ import javax.xml.xpath.XPathFactory;
 import org.apache.commons.io.IOUtils;
 import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
 import org.dspace.app.rest.utils.SolrOAIReindexer;
+import org.dspace.app.util.XMLUtils;
 import org.dspace.builder.BitstreamBuilder;
 import org.dspace.builder.CollectionBuilder;
 import org.dspace.builder.CommunityBuilder;
@@ -215,7 +216,7 @@ public class CmdiDownloadLinkIT extends AbstractControllerIntegrationTest {
      * @throws Exception if the response cannot be parsed as XML or the XPath expression fails
      */
     private List<String> extractResourceProxyRefs(String xml) throws Exception {
-        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        DocumentBuilderFactory factory = XMLUtils.getDocumentBuilderFactory();
         factory.setNamespaceAware(true);
         // Harden the parser: no DOCTYPE/external entities are expected in an OAI-PMH response
         factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
