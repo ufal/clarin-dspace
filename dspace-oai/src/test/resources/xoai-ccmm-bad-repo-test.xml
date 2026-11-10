@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+
+    The contents of this file are subject to the license and copyright
+    detailed in the LICENSE and NOTICE files at the root of the source
+    tree and available online at
+
+    http://www.dspace.org/license/
+
+-->
+<!--
+    repository/url is not an absolute http(s) URL, so no REST endpoint can be derived from it.
+    The crosswalk must keep the url XOAI supplied rather than build one that resolves nowhere.
+-->
+<metadata xmlns="http://www.lyncode.com/xoai" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://www.lyncode.com/xoai http://www.lyncode.com/xsd/xoai.xsd">
+    <element name="dc">
+        <element name="title">
+            <element name="none">
+                <field name="value">Repository url is not absolute</field>
+            </element>
+        </element>
+        <element name="date">
+            <element name="issued">
+                <element name="none">
+                    <field name="value">2022-07-01</field>
+                </element>
+            </element>
+        </element>
+    </element>
+    <element name="bundles">
+        <element name="bundle">
+            <field name="name">ORIGINAL</field>
+            <element name="bitstreams">
+                <element name="bitstream">
+                    <field name="name">data.csv</field>
+                    <field name="format">text/csv</field>
+                    <field name="size">512</field>
+                    <field name="url">https://files.example.org/data.csv</field>
+                    <field name="sid">1</field>
+                    <field name="id">2f1d8ad0-91c1-4c1e-9f0d-2b6a0e5d7c33</field>
+                </element>
+            </element>
+        </element>
+    </element>
+    <element name="others">
+        <field name="handle">123456789/1-9002</field>
+        <field name="identifier">oai:test.repository:123456789/1-9002</field>
+        <field name="lastModifyDate">2025-01-01 00:00:00.000</field>
+    </element>
+    <element name="repository">
+        <field name="url">localhost:8080</field>
+        <field name="name">Misconfigured Repository</field>
+    </element>
+</metadata>

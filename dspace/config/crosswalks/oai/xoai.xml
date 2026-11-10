@@ -24,6 +24,7 @@
             <Format ref="uketd_dc"/>
             <Format ref="bibtex" />
             <Format ref="elg" />
+            <Format ref="ccmm" />
             <!--<Format ref="junii2" />-->
             <Description>
                 This is the default context of the DSpace OAI-PMH data provider.
@@ -102,6 +103,7 @@
             <Set ref="openaireDataSet"/>
             <Format ref="oaidc"/>
             <Format ref="oai_datacite"/>
+            <Format ref="ccmm"/>
             <Description>
                 This context exports items following the openaire data archive rules.
             </Description>
@@ -238,6 +240,16 @@
         <SchemaLocation>http://w3id.org/meta-share/meta-share/ ../Schema/ELG-SHARE.xsd</SchemaLocation>
         <Filter ref="elgFilter"/>
     </Format>
+        <!-- CCMM (Czech Common Metadata Model) 1.1.0 for NMD/NRP
+             https://github.com/techlib/CCMM
+             https://github.com/techlib/CCMM/issues/61 - metadataPrefix: ccmm-xml
+        -->
+        <Format id="ccmm">
+            <Prefix>ccmm-xml</Prefix>
+            <XSLT>metadataFormats/ccmm.xsl</XSLT>
+            <Namespace>https://schema.ccmm.cz/research-data/1.1</Namespace>
+            <SchemaLocation>https://model.ccmm.cz/research-data/1.1.0/dataset/schema.xsd</SchemaLocation>
+        </Format>
     </Formats>
 
     <Transformers>

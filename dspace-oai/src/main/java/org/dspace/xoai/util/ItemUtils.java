@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.sql.SQLException;
 import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -25,9 +26,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.dspace.app.util.factory.UtilServiceFactory;
 import org.dspace.app.util.service.MetadataExposureService;
+import org.dspace.authorize.AuthorizationBitstreamUtils;
 import org.dspace.authorize.AuthorizeException;
+import org.dspace.authorize.ResourcePolicy;
 import org.dspace.authorize.factory.AuthorizeServiceFactory;
 import org.dspace.authorize.service.AuthorizeService;
+import org.dspace.authorize.service.ResourcePolicyService;
 import org.dspace.content.Bitstream;
 import org.dspace.content.Bundle;
 import org.dspace.content.Item;
@@ -46,6 +50,9 @@ import org.dspace.core.Context;
 import org.dspace.core.Utils;
 import org.dspace.core.factory.CoreServiceFactory;
 import org.dspace.core.service.LicenseService;
+import org.dspace.eperson.Group;
+import org.dspace.eperson.factory.EPersonServiceFactory;
+import org.dspace.eperson.service.GroupService;
 import org.dspace.services.ConfigurationService;
 import org.dspace.services.factory.DSpaceServicesFactory;
 import org.dspace.xoai.data.DSpaceItem;
@@ -81,6 +88,17 @@ public class ItemUtils {
 
 
     private static final LicenseService licenseService = CoreServiceFactory.getInstance().getLicenseService();
+
+    private static final ResourcePolicyService resourcePolicyService
+        = AuthorizeServiceFactory.getInstance().getResourcePolicyService();
+
+    private static final GroupService groupService = EPersonServiceFactory.getInstance().getGroupService();
+
+    /** Values of others/anonymousAccess, see {@link #getAnonymousAccess(Context, Item)}. */
+    public static final String ACCESS_OPEN = "open";
+    public static final String ACCESS_EMBARGO = "embargo";
+    public static final String ACCESS_RESTRICTED = "restricted";
+    public static final String ACCESS_METADATA_ONLY = "metadata.only";
 
     /**
      * Default constructor
@@ -283,6 +301,76 @@ public class ItemUtils {
         return INVALID_XML10_CHARS.matcher(value).replaceAll("");
     }
 
+    /**
+     * Whether an anonymous user can download the files of the item, decided by the same two gates the
+     * download goes through: a READ policy on the bitstream for a group anonymous users belong to (Anonymous
+     * itself or a group that has Anonymous as a subgroup, as GroupService.isMember decides), and a Clarin license
+     * that does not require a signed-in user. Every bitstream of the ORIGINAL bundle is checked, not only
+     * the primary one.
+     *
+     * @param context DSpace context
+     * @param item    the item
+     * @return {@link #ACCESS_METADATA_ONLY} when there are no files, {@link #ACCESS_OPEN} when every file
+     * is downloadable anonymously, {@link #ACCESS_EMBARGO} when some file opens to anonymous users only
+     * later and none is closed for good, otherwise {@link #ACCESS_RESTRICTED}
+     */
+    public static String getAnonymousAccess(Context context, Item item) throws SQLException {
+        Date now = new Date();
+        int files = 0;
+        int open = 0;
+        int embargoed = 0;
+        Group anonymous = groupService.findByName(context, Group.ANONYMOUS);
+        for (Bundle bundle : itemService.getBundles(item, Constants.CONTENT_BUNDLE_NAME)) {
+            for (Bitstream bitstream : bundle.getBitstreams()) {
+                files++;
+                boolean readNow = false;
+                boolean readLater = false;
+                for (ResourcePolicy policy : authorizeService.getPoliciesActionFilter(context, bitstream,
+                        Constants.READ)) {
+                    if (!includesAnonymous(context, policy.getGroup(), anonymous)) {
+                        continue;
+                    }
+                    if (resourcePolicyService.isDateValid(policy)) {
+                        readNow = true;
+                    } else if (policy.getStartDate() != null && policy.getStartDate().after(now)) {
+                        readLater = true;
+                    }
+                }
+                boolean licenseOk = AuthorizationBitstreamUtils.licenseAllowsAnonymous(
+                        clarinLicenseResourceMappingService.findByBitstreamUUID(context, bitstream.getID()));
+                if (readNow && licenseOk) {
+                    open++;
+                } else if (!readNow && readLater && licenseOk) {
+                    // A license that requires a signed-in user keeps the file closed after the embargo too
+                    embargoed++;
+                }
+            }
+        }
+        if (files == 0) {
+            return ACCESS_METADATA_ONLY;
+        }
+        if (open == files) {
+            return ACCESS_OPEN;
+        }
+        if (embargoed > 0 && open + embargoed == files) {
+            return ACCESS_EMBARGO;
+        }
+        return ACCESS_RESTRICTED;
+    }
+
+    /**
+     * Whether anonymous users are members of the group: it is Anonymous, or Anonymous is one of its
+     * subgroups. The same two cases GroupService.isMember lets through for a user without an account;
+     * special groups (IP authentication) are left out, they depend on who asks.
+     */
+    private static boolean includesAnonymous(Context context, Group group, Group anonymous) throws SQLException {
+        if (group == null) {
+            return false;
+        }
+        return Group.ANONYMOUS.equals(group.getName())
+            || (anonymous != null && groupService.isParentOf(context, group, anonymous));
+    }
+
     private static Element createLicenseElement(Context context, Item item)
             throws SQLException, AuthorizeException, IOException {
         Element license = create("license");
@@ -422,6 +510,11 @@ public class ItemUtils {
 
         if (restricted.get()) {
             other.getField().add(createValue("restrictedAccess", "true"));
+        }
+        try {
+            other.getField().add(createValue("anonymousAccess", getAnonymousAccess(context, item)));
+        } catch (SQLException e) {
+            log.warn(e.getMessage(), e);
         }
         // Because we reindex Solr, which is not done in vanilla
         // The owning collection for workspace items is null

@@ -233,8 +233,8 @@ public class RequestItemEmailNotifier {
                     } else {
                         LOG.warn(LogHelper.getHeader(context,
                                 "refused_attach_requestItem",
-                                "token={},bitstream_id={}"),
-                                ri.getToken(),
+                                "request_id={},bitstream_id={}"),
+                                ri.getID(),
                                 bitstream == null ? "null" : bitstream.getID());
                     }
                 }
@@ -258,7 +258,7 @@ public class RequestItemEmailNotifier {
             }
         }
         LOG.info(LogHelper.getHeader(context,
-                "sent_attach_requestItem", "token={}"), ri.getToken());
+                "sent_attach_requestItem", "request_id={}"), ri.getID());
     }
 
     /**
