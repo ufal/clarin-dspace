@@ -56,23 +56,23 @@ public class UserCheck extends Check {
             info.put("Self registered", 0);
 
             for (EPerson e : epersons) {
-                if (e.getEmail() != null && e.getEmail().length() > 0) {
+                if (e.getEmail() != null && !e.getEmail().isEmpty()) {
                     info.put(HAVE_EMAIL, info.get(HAVE_EMAIL) + 1);
                 }
                 if (e.canLogIn()) {
                     info.put("Can log in (password)",
                              info.get("Can log in (password)") + 1);
                 }
-                if (e.getFirstName() != null && e.getFirstName().length() > 0) {
+                if (e.getFirstName() != null && !e.getFirstName().isEmpty()) {
                     info.put("Have 1st name", info.get("Have 1st name") + 1);
                 }
-                if (e.getLastName() != null && e.getLastName().length() > 0) {
+                if (e.getLastName() != null && !e.getLastName().isEmpty()) {
                     info.put("Have 2nd name", info.get("Have 2nd name") + 1);
                 }
-                if (e.getLanguage() != null && e.getLanguage().length() > 0) {
+                if (e.getLanguage() != null && !e.getLanguage().isEmpty()) {
                     info.put("Have lang", info.get("Have lang") + 1);
                 }
-                if (e.getNetid() != null && e.getNetid().length() > 0) {
+                if (e.getNetid() != null && !e.getNetid().isEmpty()) {
                     info.put("Have netid", info.get("Have netid") + 1);
                 }
                 if (e.getSelfRegistered()) {

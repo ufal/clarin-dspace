@@ -9,9 +9,6 @@ package org.dspace.app.rest.repository;
 
 import static org.springframework.web.bind.annotation.RequestMethod.GET;
 
-import java.io.IOException;
-import javax.servlet.http.HttpServletResponse;
-
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
 import org.dspace.app.rest.ClarinDiscoJuiceFeedsDownloadService;
@@ -45,13 +42,13 @@ public class ClarinDiscoJuiceFeedsController {
 
     @RequestMapping(method = GET, produces = APPLICATION_JAVASCRIPT_UTF8)
     @PreAuthorize("permitAll()")
-    public ResponseEntity getDiscojuiceFeeds(@RequestParam(value = "callback", required = false) String callback,
-                                             HttpServletResponse response) throws IOException {
+    public ResponseEntity getDiscojuiceFeeds(@RequestParam(value = "callback", required = false) String callback) {
         // Download feeds
         String feedsContent = clarinDiscoJuiceFeedsUpdateScheduler.getFeedsContent();
         if (StringUtils.isBlank(feedsContent)) {
-            response.sendError(HttpServletResponse.SC_NO_CONTENT);
-            return null;
+            // Return an empty but valid feed, not a 204: the JSONP client passes the body to
+            // jQuery.merge() and an empty response throws on `undefined.length`.
+            feedsContent = "[]";
         }
 
         // If callback is not null wrap the feedsContent to the callback string.

@@ -79,6 +79,7 @@ public class ResourcePolicyGroupReplaceRestController {
         Group newGroup = (Group) dsoList.get(0);
         resourcePolicy.setGroup(newGroup);
         provenanceService.updateResourcePolicy(context, resourcePolicy);
+        resourcePolicyService.update(context, resourcePolicy);
         context.commit();
         return ControllerUtils.toEmptyResponse(HttpStatus.NO_CONTENT);
     }

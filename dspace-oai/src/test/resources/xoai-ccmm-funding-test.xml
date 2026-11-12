@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+
+    The contents of this file are subject to the license and copyright
+    detailed in the LICENSE and NOTICE files at the root of the source
+    tree and available online at
+
+    http://www.dspace.org/license/
+
+-->
+<!--
+    Funding recorded in both places at once: dc.relation carries the info:eu-repo URI and
+    local.sponsor carries the same grant under its call identifier.  Also holds a description the
+    source stores twice with different trailing whitespace, and a bitstream whose XOAI url is a
+    bare file name because the item had no handle when XOAI built it.
+-->
+<metadata xmlns="http://www.lyncode.com/xoai" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://www.lyncode.com/xoai http://www.lyncode.com/xsd/xoai.xsd">
+    <element name="dc">
+        <element name="title">
+            <element name="none">
+                <field name="value">Funding and duplicate handling</field>
+            </element>
+        </element>
+        <element name="date">
+            <element name="issued">
+                <element name="none">
+                    <field name="value">2021-03-04</field>
+                </element>
+            </element>
+        </element>
+        <element name="relation">
+            <element name="none">
+                <field name="value">info:eu-repo/grantAgreement/EC/FP7/900001/EU//ExampleAlpha</field>
+            </element>
+        </element>
+        <element name="description">
+            <element name="none">
+                <field name="value">The source stores this sentence twice.</field>
+            </element>
+            <element name="en_US">
+                <field name="value">The source stores this sentence twice. </field>
+            </element>
+        </element>
+        <element name="rights">
+            <element name="none">
+                <field name="value">Creative Commons - Attribution 4.0 International (CC BY 4.0)</field>
+            </element>
+        </element>
+    </element>
+    <element name="local">
+        <element name="sponsor">
+            <element name="none">
+                <field name="value">euFunds;FP7-TEST-0000-0-900001;Example Funding Agency;ExampleAlpha;info:eu-repo/grantAgreement/EC/FP7/900001</field>
+                <field name="value">Other;GA00-00002S;Example Science Foundation;A separately funded project;</field>
+            </element>
+        </element>
+    </element>
+    <element name="bundles">
+        <element name="bundle">
+            <field name="name">ORIGINAL</field>
+            <element name="bitstreams">
+<!-- a name that has to be percent-encoded, and a url XOAI could not build: the endpoint
+                     URL is derivable from the Handle and the name, so the file is still published -->
+                <element name="bitstream">
+                    <field name="format">text/plain</field>
+                    <field name="size">128</field>
+                    <field name="name">zpráva finální.txt</field>
+                    <field name="url">plain file name.txt</field>
+                    <field name="sid">1</field>
+                    <field name="id">18341be0-03ad-4a22-a1c8-4cd293c3f5da</field>
+                </element>
+                <!-- originalName but no name: the endpoint matches on name, so there is nothing to
+                     address the file by and the absolute url XOAI supplied is kept -->
+                <element name="bitstream">
+                    <field name="format">application/pdf</field>
+                    <field name="size">256</field>
+                    <field name="originalName">report-final.pdf</field>
+                    <field name="url">https://example.org/repository/bitstream/123456789/1-9001/2/report-final.pdf</field>
+                    <field name="sid">2</field>
+                    <field name="id">a2c4e6f8-1111-4222-8333-444455556666</field>
+                </element>
+                <!-- neither name nor originalName: the title has to come from the url's last
+                     segment, and it is still a file name rather than the whole URL -->
+                <element name="bitstream">
+                    <field name="format">text/csv</field>
+                    <field name="size">512</field>
+                    <field name="url">https://example.org/repository/bitstream/123456789/1-9001/3/data-table.csv</field>
+                    <field name="sid">3</field>
+                    <field name="id">b3d5f7a9-2222-4333-8444-555566667777</field>
+                </element>
+            </element>
+        </element>
+    </element>
+    <element name="others">
+        <field name="handle">123456789/1-9001</field>
+        <field name="identifier">oai:test.repository:123456789/1-9001</field>
+        <field name="lastModifyDate">2025-01-01 00:00:00.000</field>
+    </element>
+    <element name="repository">
+        <field name="url">https://example.org/repository/</field>
+        <field name="name">Example Repository</field>
+    </element>
+</metadata>

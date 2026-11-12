@@ -379,7 +379,7 @@ public class EPerson extends DSpaceObject implements DSpaceObjectLegacySupport {
 
     @Override
     public String getName() {
-        return getEmail();
+        return this.getFullName();
     }
 
     String getDigestAlgorithm() {

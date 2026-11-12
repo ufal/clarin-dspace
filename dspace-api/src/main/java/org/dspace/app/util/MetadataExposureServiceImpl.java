@@ -67,7 +67,7 @@ public class MetadataExposureServiceImpl implements MetadataExposureService {
     protected Map<String, Set<String>> hiddenElementSets = null;
     protected Map<String, Map<String, Set<String>>> hiddenElementMaps = null;
 
-    protected final String CONFIG_PREFIX = "metadata.hide.";
+    public static final String CONFIG_PREFIX = "metadata.hide.";
 
     /**
      * You can define hidden metadata could be seen by the submitter.

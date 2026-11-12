@@ -263,7 +263,8 @@ public class BitstreamByHandleRestController {
             int expirationTime = configurationService
                     .getIntProperty("s3.download.direct.expiration", 3600);
             String presignedUrl = s3DirectDownloadService
-                    .generatePresignedUrl(bucket, bitstreamPath, expirationTime, bitName);
+                    .generatePresignedUrl(bucket, bitstreamPath, expirationTime, bitName,
+                            buildContentDisposition(bitName));
 
             if (StringUtils.isBlank(presignedUrl)) {
                 throw new InternalServerErrorException(

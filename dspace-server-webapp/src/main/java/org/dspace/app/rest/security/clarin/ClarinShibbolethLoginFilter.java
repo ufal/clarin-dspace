@@ -180,6 +180,7 @@ public class ClarinShibbolethLoginFilter extends StatelessLoginFilter {
                 verificationToken, dSpaceAuthentication.getName())) {
             log.error("The verification token was already used or does not belong to the authenticated user.");
             res.sendRedirect(genericFailureUrl());
+            this.closeOpenContext(req);
             return;
         }
         restAuthenticationService.addAuthenticationDataForUser(req, res, dSpaceAuthentication, true);
@@ -219,6 +220,7 @@ public class ClarinShibbolethLoginFilter extends StatelessLoginFilter {
         response.sendRedirect(redirectUrl);
         log.error("Authentication failed (status:{})",
                 HttpServletResponse.SC_UNAUTHORIZED, failed);
+        this.closeOpenContext(request);
     }
 
     /**
