@@ -1970,7 +1970,7 @@ public class CcmmXslTest extends AbstractXSLTest {
             .withNamespace("xml", XML_NS);
     }
 
-    // ---- dataquest-dev/dspace-customers#1164 ----
+    // ---- Every contact point, unique download URLs, unqualified identifier ----
 
     private static final String KOVAR =
         "<field name=\"value\">Tomas;Kovar;kovar@example.org;Example University</field>";
