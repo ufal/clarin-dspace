@@ -30,4 +30,13 @@ public interface HandleClarinDAO {
      * @return List of Handles
      */
     List<Handle> findAll(Context context, String sortingColumn) throws SQLException;
+
+    /**
+     * Find the Handle whose handle string matches the given one ignoring case
+     * ({@code upper(handle) = upper(:handle)}, backed by the unique index {@code handle_handle_upper_idx}).
+     * @param context DSpace context object
+     * @param handle handle string in any case, e.g. `123456789/ABC-DEF`
+     * @return the Handle, or null if there is none
+     */
+    Handle findByHandleIgnoreCase(Context context, String handle) throws SQLException;
 }

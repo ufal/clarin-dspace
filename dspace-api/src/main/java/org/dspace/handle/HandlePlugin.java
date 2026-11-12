@@ -330,34 +330,37 @@ public class HandlePlugin implements HandleStorage {
                 throw new HandleException(HandleException.INTERNAL_ERROR);
             }
 
-            String handle = Util.decodeString(theHandle);
+            String requestedHandle = Util.decodeString(theHandle);
 
             context = new Context();
-            String url = handleClarinService.resolveToURL(context, handle);
-            if (Objects.isNull(url)) {
+            // With `case_sensitive` off in config.dct the Handle server uppercases the handle before calling us,
+            // so look it up ignoring case and continue with the handle as it is stored in the DB.
+            String handle = handleClarinService.findStoredHandle(context, requestedHandle);
+            if (Objects.isNull(handle)) {
                 // try with old prefix
 
-                String[] handle_parts = handleClarinService.splitHandle(handle);
+                String[] handle_parts = handleClarinService.splitHandle(requestedHandle);
 
                 String[] alternativePrefixes = PIDConfiguration.getAlternativePrefixes(handle_parts[0]);
 
                 for (String alternativePrefix : alternativePrefixes) {
                     String alternativeHandle = handleClarinService.completeHandle(
                             alternativePrefix, handle_parts[1]);
-                    url = handleClarinService.resolveToURL(context, alternativeHandle);
-                    if (Objects.nonNull(url)) {
+                    handle = handleClarinService.findStoredHandle(context, alternativeHandle);
+                    if (Objects.nonNull(handle)) {
                         break;
                     }
                 }
 
                 // still no match
-                if (Objects.isNull(url)) {
+                if (Objects.isNull(handle)) {
                     // <UFAL>
-                    log.warn(String.format("Unable to resolve [%s]", handle));
+                    log.warn(String.format("Unable to resolve [%s]", requestedHandle));
                     // </UFAL>
                     return null;
                 }
             }
+            String url = handleClarinService.resolveToURL(context, handle);
 
             ResolvedHandle rh = null;
             if (url.startsWith(MAGIC_BEAN)) {
