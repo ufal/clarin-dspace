@@ -65,6 +65,19 @@ public interface HandleClarinService {
     public Handle findByHandle(Context context, String handle) throws SQLException;
 
     /**
+     * Find the handle as it is stored in the database, matching the given handle ignoring case.
+     * The Handle server uppercases handles before passing them to the storage plugin when
+     * `case_sensitive` is off, so a stored handle like `123/Abc-DEFG` reaches us as `123/ABC-DEFG`.
+     * A part identifier (`@...`) is not looked up and is kept as received.
+     *
+     * @param context       DSpace context object
+     * @param handle        handle string in any case, optionally with a part identifier
+     * @return              the stored handle string (plus the received part identifier), or null if not found
+     * @throws SQLException if database error
+     */
+    public String findStoredHandle(Context context, String handle) throws SQLException;
+
+    /**
      * Creates a new external handle.
      * External handle has to have entered URL.
      *
