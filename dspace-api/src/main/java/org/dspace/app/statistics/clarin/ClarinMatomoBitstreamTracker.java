@@ -1,0 +1,230 @@
+/**
+ * The contents of this file are subject to the license and copyright
+ * detailed in the LICENSE and NOTICE files at the root of the source
+ * tree and available online at
+ *
+ * http://www.dspace.org/license/
+ */
+package org.dspace.app.statistics.clarin;
+
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
+import java.text.MessageFormat;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Objects;
+import java.util.UUID;
+import javax.naming.NameNotFoundException;
+
+import jakarta.servlet.http.HttpServletRequest;
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.BooleanUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.Logger;
+import org.dspace.content.Bitstream;
+import org.dspace.content.Item;
+import org.dspace.content.MetadataValue;
+import org.dspace.content.service.BitstreamService;
+import org.dspace.content.service.ItemService;
+import org.dspace.content.service.clarin.ClarinItemService;
+import org.dspace.core.Context;
+import org.dspace.core.Utils;
+import org.dspace.eperson.EPerson;
+import org.dspace.services.ConfigurationService;
+import org.dspace.services.factory.DSpaceServicesFactory;
+import org.matomo.java.tracking.MatomoException;
+import org.matomo.java.tracking.MatomoRequest;
+import org.springframework.beans.factory.annotation.Autowired;
+
+/**
+ * Customized implementation of the ClarinMatomoTracker for the tracking the Item's bitstream downloading events
+ *
+ * The class is copied from UFAL/CLARIN-DSPACE (https://github.com/ufal/clarin-dspace) and modified by
+ * @author Milan Majchrak (milan.majchrak at dataquest.sk)
+ */
+public class ClarinMatomoBitstreamTracker extends ClarinMatomoTracker {
+    /** log4j category */
+    private static Logger log = org.apache.logging.log4j.LogManager.getLogger(ClarinMatomoBitstreamTracker.class);
+
+    private final ConfigurationService configurationService =
+            DSpaceServicesFactory.getInstance().getConfigurationService();
+
+    @Autowired
+    ItemService itemService;
+
+    @Autowired
+    ClarinItemService clarinItemService;
+
+    @Autowired
+    BitstreamService bitstreamService;
+
+    /**
+     * Site ID for the Bitstream downloading statistics
+     */
+    private int siteId;
+
+    public ClarinMatomoBitstreamTracker() {
+        super();
+        siteId = configurationService.getIntProperty("matomo.tracker.bitstream.site_id");
+    }
+
+    /**
+     * Customize the matomo request parameters
+     *
+     * @param matomoRequest with the default parameters
+     * @param request current request
+     */
+    @Override
+    protected void preTrack(Context context, MatomoRequest matomoRequest, Item item, HttpServletRequest request) {
+        super.preTrack(context, matomoRequest, item, request);
+        // `&bots=1` because we want to track downloading by bots
+        matomoRequest.setTrackBotRequests(true);
+        matomoRequest.setSiteId(siteId);
+        log.debug("Logging to site " + matomoRequest.getSiteId());
+        String itemIdentifier = getItemIdentifier(item);
+        if (StringUtils.isBlank(itemIdentifier)) {
+            log.error("Cannot track the item without Identifier URI.");
+        } else {
+            // Set PageURL to handle identifier
+            String actionUrl = getFullURL(request);
+            try {
+                // Get the Bitstream UUID from the URL
+                String uuidFromUrl = Utils.fetchUUIDFromUrl(matomoRequest.getActionUrl());
+                if (StringUtils.isBlank(uuidFromUrl)) {
+                    throw new IllegalArgumentException("The UUID is blank.");
+                }
+                // with allzip the uuid might be item id
+                if (!item.getID().toString().equals(uuidFromUrl)) {
+                    // Get the bitstream using its UUID
+                    Bitstream bitstream = bitstreamService.find(context, UUID.fromString(uuidFromUrl));
+                    if (Objects.isNull(bitstream)) {
+                        throw new IllegalArgumentException("The Bitstream: UUID = " + uuidFromUrl + " was not found.");
+                    }
+
+                    if (StringUtils.isBlank(bitstream.getName())) {
+                        throw new NameNotFoundException("The Bitstream: UUID = " + uuidFromUrl +
+                                " bitstream.getName() is null.");
+                    }
+
+                    // set actionUrl to bitstreamUrl
+                    actionUrl = configurationService.getProperty("dspace.ui.url") + "/bitstream/handle/" +
+                            item.getHandle() + "/" + URLEncoder.encode(bitstream.getName(), StandardCharsets.UTF_8);
+                }
+            } catch (IllegalArgumentException | SQLException | NameNotFoundException e) {
+                log.error("Cannot get the Bitstream UUID from the URL {}: {}", matomoRequest.getActionUrl(),
+                        e.getMessage(), e);
+            }
+
+            // The bitstream URL is in the format `<DSPACE_UI_URL>/bitstream/handle/<ITEM_HANDLE>/<BITSTREAM_NAME>`
+            // if there is an error with the fetching the UUID, the original download URL is used
+            matomoRequest.setActionUrl(actionUrl);
+        }
+        try {
+            // Add the Item handle into the request as a custom dimension
+            LinkedHashMap<Long, Object> handleDimension = new LinkedHashMap<>();
+            handleDimension.put(configurationService.getLongProperty("matomo.custom.dimension.handle.id",
+                    1L), item.getHandle());
+            matomoRequest.setDimensions(handleDimension);
+        } catch (MatomoException e) {
+            log.error(e);
+        }
+    }
+
+    /**
+     * Get the Item's Handle URI from where the bitstream is downloaded
+     *
+     * @param item from where the bitstream is downloaded
+     * @return handle uri
+     */
+    private String getItemIdentifier(Item item) {
+        List<MetadataValue> mv = itemService.getMetadata(item, "dc", "identifier", "uri", Item.ANY, false);
+        if (CollectionUtils.isEmpty(mv)) {
+            log.error("The item doesn't have the metadata `dc.identifier.uri` - something went wrong.");
+            return "";
+        }
+        return mv.get(0).getValue();
+    }
+
+    /**
+     * Track the bitstream downloading event only if the downloading has started (Range header is null).
+     * Get the Item from where the bitstream is downloading because the Item handle must be added into the request.
+     *
+     * @param context DSpace context object
+     * @param request current request
+     * @param bit Bitstream which is downloading
+     */
+    public void trackBitstreamDownload(Context context, HttpServletRequest request, Bitstream bit, boolean isZip)
+            throws SQLException {
+        // We only track a download request when serving a request without Range header. Do not track the
+        // download if the downloading continues or the tracking is not allowed by the configuration.
+        if (StringUtils.isNotBlank(request.getHeader("Range"))) {
+            return;
+        }
+        if (BooleanUtils.isFalse(configurationService.getBooleanProperty("matomo.track.enabled"))) {
+            return;
+        }
+
+        if (Objects.isNull(bit)) {
+            log.error("The Bitstream is null - the statistics cannot be logged.");
+            return;
+        }
+
+        List<Item> items = clarinItemService.findByBitstreamUUID(context, bit.getID());
+        if (CollectionUtils.isEmpty(items)) {
+            return;
+        }
+
+        // The bitstream is assigned only into one Item.
+        Item item = items.get(0);
+        if (Objects.isNull(item)) {
+            log.error("Cannot get the Item from the bitstream - the statistics cannot be logged.");
+            return;
+        }
+
+        String pageName = "Bitstream Download / Single File";
+        if (!isZip) {
+            // Log the user which is downloading the bitstream
+            this.logUserDownloadingBitstream(context, bit);
+        } else {
+            // Track the zip file downloading event
+            this.logUserDownloadingZip(context, item);
+            pageName = "Bitstream Download / Zip Archive";
+        }
+
+        // Track the bitstream downloading event
+        trackPage(context, request, item, pageName);
+    }
+
+    /**
+     * Log the user which is downloading the bitstream
+     * @param context DSpace context object
+     * @param bit Bitstream which is downloading
+     */
+    private void logUserDownloadingBitstream(Context context, Bitstream bit) {
+        EPerson eperson = context.getCurrentUser();
+        String pattern = "The user name: {0}, uuid: {1} is downloading bitstream name: {2}, uuid: {3}.";
+        String logMessage = Objects.isNull(eperson)
+                ? MessageFormat.format(pattern, "ANONYMOUS", "null", bit.getName(), bit.getID())
+                : MessageFormat.format(pattern, eperson.getFullName(), eperson.getID(), bit.getName(), bit.getID());
+
+        log.info(logMessage);
+    }
+
+    /**
+     * Log the user which is downloading all bitstreams in a single ZIP file
+     * @param context DSpace context object
+     * @param item Item from where the bitstream is downloading
+     */
+    private void logUserDownloadingZip(Context context, Item item) {
+        EPerson eperson = context.getCurrentUser();
+        String pattern = "The user name: {0}, uuid: {1} is downloading all bitstreams in a single ZIP file " +
+                "from the Item titled: {2}, handle: {3}.";
+        String logMessage = Objects.isNull(eperson)
+                ? MessageFormat.format(pattern, "ANONYMOUS", "null", item.getName(), item.getHandle())
+                : MessageFormat.format(pattern, eperson.getFullName(), eperson.getID(), item.getName(),
+                item.getHandle());
+
+        log.info(logMessage);
+    }
+}

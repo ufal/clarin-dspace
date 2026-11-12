@@ -168,7 +168,7 @@
     <bean class="org.dspace.supervision.SupervisionOrderServiceImpl"/>
 
     <bean class="org.dspace.content.ItemFilterServiceImpl"/>
-    
+
     <!-- Submission Config Service -->
     <bean class="org.dspace.submit.service.SubmissionConfigServiceImpl"/>
 
@@ -184,6 +184,7 @@
     <bean class="org.matomo.java.tracking.MatomoTracker">
         <constructor-arg value="${matomo.tracker.host.url}"/>
     </bean>
+    <bean class="org.dspace.app.statistics.clarin.ClarinMatomoBitstreamTracker"/>
     <bean class="org.dspace.app.statistics.clarin.ClarinMatomoOAITracker"/>
 
     <bean class="org.dspace.content.ClarinBitstreamServiceImpl"/>
