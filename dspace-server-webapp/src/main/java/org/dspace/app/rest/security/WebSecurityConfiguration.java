@@ -8,6 +8,7 @@
 package org.dspace.app.rest.security;
 
 import org.dspace.app.rest.exception.DSpaceAccessDeniedHandler;
+import org.dspace.app.rest.security.clarin.ClarinOidcLoginConfigurer;
 import org.dspace.app.rest.security.clarin.ClarinShibbolethLoginFilter;
 import org.dspace.authenticate.service.AuthenticationService;
 import org.dspace.services.RequestService;
@@ -160,6 +161,9 @@ public class WebSecurityConfiguration extends WebSecurityConfigurerAdapter {
             .addFilterBefore(new StatelessAuthenticationFilter(authenticationManager(), restAuthenticationService,
                                                                ePersonRestAuthenticationProvider, requestService),
                              StatelessLoginFilter.class);
+
+        // CLARIN OIDC login on Spring Security's oauth2Login(), only if the ClarinOidcAuthentication plugin is enabled
+        ClarinOidcLoginConfigurer.configure(http, authenticationManager(), restAuthenticationService);
     }
 
     @Override
