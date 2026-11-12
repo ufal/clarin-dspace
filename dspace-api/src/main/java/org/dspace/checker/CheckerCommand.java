@@ -134,7 +134,7 @@ public final class CheckerCommand {
                 collector.collect(context, info);
             }
 
-            context.uncacheEntity(bitstream);
+            context.commit();
             bitstream = dispatcher.next();
         }
     }

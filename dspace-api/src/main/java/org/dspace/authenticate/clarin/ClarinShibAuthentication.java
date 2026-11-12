@@ -961,7 +961,8 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
         for (String header : metadataHeaderMap.keySet()) {
 
             String field = metadataHeaderMap.get(header);
-            String value = findSingleAttribute(request, header);
+            // Same charset handling as the name headers, the mapping can target the name fields too.
+            String value = findNameAttribute(request, header);
             if (StringUtils.isEmpty(value)) {
                 value = shibheaders.get_single(header);
             }
@@ -983,7 +984,7 @@ public class ClarinShibAuthentication implements AuthenticationMethod {
 
             String[] nameParts = MetadataFieldName.parse(field);
             ePersonService.setMetadataSingleValue(context, eperson,
-                    nameParts[0], nameParts[1], nameParts[2], value, null);
+                    nameParts[0], nameParts[1], nameParts[2], null, value);
             log.debug("Updated the eperson's '{}' metadata using header: '{}' = '{}'.",
                     field, header, value);
         }

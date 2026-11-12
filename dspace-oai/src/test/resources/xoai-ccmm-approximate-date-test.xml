@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+
+    The contents of this file are subject to the license and copyright
+    detailed in the LICENSE and NOTICE files at the root of the source
+    tree and available online at
+
+    http://www.dspace.org/license/
+
+-->
+<!--
+    XOAI metadata XML exercising the CLARIN-DSpace approximate-date convention:
+    dc.date.issued is the literal "0000" ("exact date unknown") and the real
+    information lives in local.approximateDate.issued.
+-->
+<metadata xmlns="http://www.lyncode.com/xoai" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://www.lyncode.com/xoai http://www.lyncode.com/xsd/xoai.xsd">
+    <element name="dc">
+        <element name="title">
+            <element name="none">
+                <field name="value">Example Oral History 1</field>
+            </element>
+        </element>
+        <element name="identifier">
+            <element name="uri">
+                <element name="none">
+                    <field name="value">http://hdl.handle.net/123456789/1-7101</field>
+                </element>
+            </element>
+        </element>
+        <element name="date">
+            <element name="issued">
+                <element name="none">
+                    <field name="value">0000</field>
+                </element>
+            </element>
+            <element name="accessioned">
+                <element name="none">
+                    <field name="value">2021-03-08T12:00:00Z</field>
+                </element>
+            </element>
+        </element>
+        <element name="subject">
+            <element name="none">
+                <field name="value">oral history</field>
+            </element>
+        </element>
+    </element>
+    <element name="local">
+        <element name="approximateDate">
+            <element name="issued">
+                <element name="none">
+                    <field name="value">cca 1930-1950</field>
+                </element>
+            </element>
+        </element>
+    </element>
+    <element name="others">
+        <field name="handle">123456789/1-7101</field>
+        <field name="identifier">oai:repository.example.org:123456789/1-7101</field>
+        <field name="lastModifyDate">2025-01-01 00:00:00.000</field>
+        <element name="access-status">
+            <field name="value">restricted</field>
+        </element>
+    </element>
+    <element name="repository">
+        <field name="name">Example Repository</field>
+    </element>
+</metadata>

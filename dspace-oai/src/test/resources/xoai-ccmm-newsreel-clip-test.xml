@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+
+    The contents of this file are subject to the license and copyright
+    detailed in the LICENSE and NOTICE files at the root of the source
+    tree and available online at
+
+    http://www.dspace.org/license/
+
+-->
+<!--
+    A segment of a digitised newsreel.  This is the largest single record class in the
+    Example Repository collection: a 1943 newsreel item held as a primary historical
+    source, not as a language resource.  Its FORD field is therefore History, not Linguistics.
+-->
+<metadata xmlns="http://www.lyncode.com/xoai">
+    <element name="dc">
+        <element name="date">
+            <element name="issued">
+                <element name="none">
+                    <field name="value">1943-11-15</field>
+                </element>
+            </element>
+        </element>
+        <element name="rights">
+            <element name="label">
+                <element name="none">
+                    <field name="value">PUB</field>
+                </element>
+            </element>
+        </element>
+        <element name="coverage">
+            <element name="placeName">
+                <element name="none">
+                    <field name="value">Germany||Austria</field>
+                </element>
+            </element>
+        </element>
+        <element name="relation">
+            <element name="uri">
+                <element name="none">
+                    <field name="value">http://hdl.handle.net/123456789/1-7001</field>
+                </element>
+            </element>
+        </element>
+        <element name="subject">
+            <element name="cs_CZ">
+                <field name="value">akce charitativni</field>
+            </element>
+        </element>
+        <element name="title">
+            <element name="en_US">
+                <field name="value">A Charity Evening in an Example Hall</field>
+            </element>
+        </element>
+        <element name="type">
+            <element name="none">
+                <field name="value">clip</field>
+            </element>
+        </element>
+    </element>
+    <element name="bundles">
+        <element name="bundle">
+            <field name="name">ORIGINAL</field>
+            <element name="bitstreams">
+                <element name="bitstream">
+                    <field name="name">segment.mov</field>
+                    <field name="format">video/quicktime</field>
+                    <field name="size">104857600</field>
+                    <field name="url">https://repository.example.org/repository/bitstream/1/9/segment.mov</field>
+                </element>
+            </element>
+        </element>
+    </element>
+    <element name="others">
+        <field name="handle">123456789/1-7002</field>
+        <field name="identifier">oai:repository.example.org:123456789/1-7002</field>
+        <element name="access-status">
+            <field name="value">open.access</field>
+        </element>
+    </element>
+    <element name="repository">
+        <field name="name">Example Repository</field>
+        <field name="url">https://repository.example.org/repository/</field>
+    </element>
+</metadata>

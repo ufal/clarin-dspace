@@ -24,7 +24,6 @@ import javax.ws.rs.InternalServerErrorException;
 import javax.ws.rs.core.Response;
 
 import org.apache.catalina.connector.ClientAbortException;
-import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
 import org.dspace.app.rest.converter.ConverterService;
@@ -127,7 +126,7 @@ public class BitstreamRestController {
         Bitstream bit = bitstreamService.find(context, uuid);
         EPerson currentUser = context.getCurrentUser();
 
-        if (bit == null) {
+        if (bit == null || bit.isDeleted()) {
             response.sendError(HttpServletResponse.SC_NOT_FOUND);
             return null;
         }
@@ -184,12 +183,16 @@ public class BitstreamRestController {
                 httpHeadersInitializer.withLastModified(lastModified);
             }
 
-            //Determine if we need to send the file as a download or if the browser can open it inline
-            //The file will be downloaded if its size is larger than the configured threshold,
-            //or if its mimetype/extension appears in the "webui.content_disposition_format" config
-            long dispositionThreshold = configurationService.getLongProperty("webui.content_disposition_threshold");
-            if ((dispositionThreshold >= 0 && filesize > dispositionThreshold)
-                    || checkFormatForContentDisposition(format)) {
+            // Determine if we need to send the file as a download or if the browser can open it inline.
+            // By default, all files will be downloaded as that is more secure. File formats will only be opened inline
+            // if they are listed in the "webui.content_disposition_inline" config and size is less than the
+            // configured "webui.content_disposition_threshold" (default = 8MB)
+            long dispositionThreshold = configurationService.getLongProperty("webui.content_disposition_threshold",
+                                                                             8388608);
+            if (checkFormatForContentDispositionInline(format) &&
+                filesize <= dispositionThreshold) {
+                httpHeadersInitializer.withDisposition(HttpHeadersInitializer.CONTENT_DISPOSITION_INLINE);
+            } else {
                 httpHeadersInitializer.withDisposition(HttpHeadersInitializer.CONTENT_DISPOSITION_ATTACHMENT);
             }
 
@@ -248,8 +251,11 @@ public class BitstreamRestController {
             // Generate a presigned URL for the bitstream with a configurable expiration time
             int expirationTime = configurationService.getIntProperty("s3.download.direct.expiration", 3600);
             log.debug("Generating presigned URL with expiration time of {} seconds", expirationTime);
-            String presignedUrl =
-                    s3DirectDownloadService.generatePresignedUrl(bucket, bitstreamPath, expirationTime, bitName);
+            // Serve the same Content-Disposition the non-redirect path would have sent, so that enabling
+            // direct downloads does not silently turn every inline preview into a forced download.
+            String contentDisposition = httpHeaders.getFirst(HttpHeaders.CONTENT_DISPOSITION);
+            String presignedUrl = s3DirectDownloadService.generatePresignedUrl(
+                    bucket, bitstreamPath, expirationTime, bitName, contentDisposition);
 
             if (StringUtils.isBlank(presignedUrl)) {
                 throw new InternalServerErrorException("Failed to generate presigned URL for bitstream: "
@@ -284,57 +290,57 @@ public class BitstreamRestController {
     }
 
     /**
-     * Check if a Bitstream of the specified format should always be downloaded (i.e. "content-disposition: attachment")
-     * or can be opened inline (i.e. "content-disposition: inline").
+     * Check if a Bitstream of the specified format should be opened inline (i.e. "content-disposition: inline")
+     * instead of the default behavior of always downloading (i.e. "content-disposition: attachment").
      * <P>
      * NOTE that downloading via "attachment" is more secure, as the user's browser will not attempt to process or
      * display the file. But, downloading via "inline" may be seen as more user-friendly for common formats.
      * @param format BitstreamFormat
-     * @return true if always download ("attachment"). false if can be opened inline ("inline")
+     * @return true if format is configured to be opened inline ("inline"). false if always download ("attachment")
      */
-    private boolean checkFormatForContentDisposition(BitstreamFormat format) {
+    private boolean checkFormatForContentDispositionInline(BitstreamFormat format) {
         // Undefined or Unknown formats should ALWAYS be downloaded for additional security.
         if (format == null || format.getSupportLevel() == BitstreamFormat.UNKNOWN
             || StringUtils.isBlank(format.getMIMEType())) {
-            return true;
-        }
-
-        // Load additional formats configured to require download
-        List<String> configuredFormats = List.of(configurationService.
-                                                     getArrayProperty("webui.content_disposition_format"));
-
-        // If configuration includes "*", then all formats will always be downloaded.
-        if (configuredFormats.contains("*")) {
-            return true;
+            return false;
         }
 
         // Compare MIME types without parameters or case differences.
         String mimeType = StringUtils.substringBefore(format.getMIMEType(), ";").trim().toLowerCase(Locale.ROOT);
-        if (mimeType.isEmpty() || mimeType.endsWith("+xml") || mimeType.startsWith("text/javascript")) {
-            return true;
+        if (mimeType.isEmpty()) {
+            return false;
         }
 
-        // Active formats must download regardless of configuration.
-        List<String> downloadOnlyFormats = List.of("text/html", "text/javascript", "text/xml", "application/xml",
-            "rdf", "application/javascript", "application/ecmascript", "text/ecmascript",
+        // Return false for BANNED inline formats. Some formats, especially XML / HTML / Javascript based formats,
+        // when loaded inline may be susceptible to XSS attacks. Therefore, we will refuse to allow those formats to be
+        // displayed inline for security purposes.
+        // NOTE: "+xml" in this list will match any MIME Type that ends in "+xml", as those are XML-based formats.
+        List<String> bannedInlineFormats = List.of("text/html", "text/javascript", "text/xml", "application/xml",
+            "+xml", "rdf", "application/javascript", "application/ecmascript", "text/ecmascript",
             "application/x-javascript", "application/x-ecmascript", "text/x-javascript", "text/x-ecmascript",
             "text/jscript", "text/livescript");
+        for (String bannedInlineFormat : bannedInlineFormats) {
+            // If our format MIME Type contains one of the banned inline formats, we refuse to display it inline
+            if (mimeType.contains(bannedInlineFormat)) {
+                return false;
+            }
+        }
 
-        // Combine our two lists
-        List<String> formats = ListUtils.union(downloadOnlyFormats, configuredFormats);
+        // Load formats configured to allow inline display
+        List<String> formats = List.of(configurationService.
+                                                     getArrayProperty("webui.content_disposition_inline"));
 
         // See if the passed in format's MIME type or file extension is listed.
-        boolean download = formats.stream().anyMatch(value ->
-            mimeType.equalsIgnoreCase(StringUtils.substringBefore(value, ";").trim()));
-        if (!download) {
+        boolean inline = formats.contains(format.getMIMEType());
+        if (!inline) {
             for (String ext : format.getExtensions()) {
                 if (formats.contains(ext)) {
-                    download = true;
+                    inline = true;
                     break;
                 }
             }
         }
-        return download;
+        return inline;
     }
 
     /**

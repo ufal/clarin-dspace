@@ -9,9 +9,9 @@
 services:
   dspace-cli:
     environment:
-    - AIPZIP=https://github.com/DSpace-Labs/AIP-Files/raw/main/dogAndReport.zip
-    - ADMIN_EMAIL=dspace.admin.dev@dataquest.sk
-    - AIPDIR=/tmp/aip-dir
+    - AIPZIP=${AIPZIP:-https://github.com/DSpace-Labs/AIP-Files/raw/main/dogAndReport.zip}
+    - ADMIN_EMAIL=${ADMIN_EMAIL:-dspace.admin.dev@dataquest.sk}
+    - AIPDIR=${AIPDIR:-/tmp/aip-dir}
     entrypoint:
       - /bin/bash
       - '-c'

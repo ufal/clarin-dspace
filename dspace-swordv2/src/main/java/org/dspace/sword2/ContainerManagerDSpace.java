@@ -13,6 +13,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.UUID;
 
 import org.apache.logging.log4j.Logger;
 import org.dspace.authorize.AuthorizeException;
@@ -25,6 +26,7 @@ import org.dspace.content.service.WorkspaceItemService;
 import org.dspace.core.Constants;
 import org.dspace.core.Context;
 import org.dspace.core.LogHelper;
+import org.dspace.event.Event;
 import org.dspace.workflow.WorkflowItem;
 import org.dspace.workflow.WorkflowItemService;
 import org.dspace.workflow.factory.WorkflowServiceFactory;
@@ -755,14 +757,18 @@ public class ContainerManagerDSpace extends DSpaceSwordAPI
             WorkflowTools wft = new WorkflowTools();
             if (wft.isItemInWorkspace(swordContext.getContext(), item)) {
                 WorkspaceItem wsi = wft.getWorkspaceItem(context, item);
+                // remove only the workspace wrapper row; the item itself is deleted below.
                 workspaceItemService.deleteWrapper(context, wsi);
             } else if (wft.isItemInWorkflow(context, item)) {
                 WorkflowItem wfi = wft.getWorkflowItem(context, item);
                 workflowItemService.deleteWrapper(context, wfi);
             }
 
-            // then delete the item
-            itemService.delete(context, item);
+            // then delete the item, unless an upstream method already queued its deletion
+            // in this transaction (safety net against a double itemService.delete()).
+            if (!isItemAlreadyDeleted(context, item.getID())) {
+                itemService.delete(context, item);
+            }
         } catch (SQLException | IOException e) {
             throw new DSpaceSwordException(e);
         } catch (AuthorizeException e) {
@@ -787,5 +793,25 @@ public class ContainerManagerDSpace extends DSpaceSwordAPI
             "Location resolves to item with handle: " + item.getHandle());
 
         return item;
+    }
+
+    /**
+     * Returns true if a DELETE event for this item is already queued on the context
+     * (i.e. the item was deleted earlier in this transaction), so the caller can skip
+     * a second {@code itemService.delete()} that would otherwise fail.
+     */
+    private boolean isItemAlreadyDeleted(Context context, UUID itemUUID) {
+        if (context.getEvents() == null) {
+            return false;
+        }
+
+        for (Event event : context.getEvents()) {
+            if (event.getEventType() == Event.DELETE
+                    && event.getSubjectType() == Constants.ITEM
+                    && itemUUID.equals(event.getSubjectID())) {
+                return true;
+            }
+        }
+        return false;
     }
 }
