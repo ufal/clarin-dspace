@@ -36,12 +36,14 @@ public class HandlePluginIT extends AbstractIntegrationTestWithDatabase {
 
     private static final String MIXED_CASE_HANDLE = "123456789/Evaldio-database-M9FH";
     private static final String EXTERNAL_URL = "https://example.org/evaldio";
+    private static final String MIXED_CASE_ITEM_HANDLE = "123456789/Mixed-Case-Item";
 
     private final ConfigurationService configurationService =
             DSpaceServicesFactory.getInstance().getConfigurationService();
     private final HandlePlugin handlePlugin = new HandlePlugin();
 
     private Item item;
+    private String uiUrl;
 
     @Before
     public void setup() throws Exception {
@@ -49,9 +51,12 @@ public class HandlePluginIT extends AbstractIntegrationTestWithDatabase {
         parentCommunity = CommunityBuilder.createCommunity(context).withName("Parent Community").build();
         Collection collection = CollectionBuilder.createCollection(context, parentCommunity).build();
         item = ItemBuilder.createItem(context, collection).withTitle("Item").build();
+        ItemBuilder.createItem(context, collection).withTitle("Mixed case item")
+                .withHandle(MIXED_CASE_ITEM_HANDLE).build();
         HandleBuilder.createExternalHandle(context, MIXED_CASE_HANDLE, EXTERNAL_URL).build();
         context.commit();
         context.restoreAuthSystemState();
+        uiUrl = configurationService.getProperty("dspace.ui.url");
     }
 
     @Test
@@ -71,8 +76,18 @@ public class HandlePluginIT extends AbstractIntegrationTestWithDatabase {
 
     @Test
     public void resolvesItemHandle() throws Exception {
-        String expectedUrl = configurationService.getProperty("dspace.ui.url") + "/handle/" + item.getHandle();
-        assertEquals(expectedUrl, resolveUrl(item.getHandle()));
+        assertEquals(uiUrl + "/handle/" + item.getHandle(), resolveUrl(item.getHandle()));
+    }
+
+    /**
+     * The UI's /handle/ route is case-sensitive, so the URL of an internal handle must use the stored spelling,
+     * not the case of the request.
+     */
+    @Test
+    public void internalHandleUrlKeepsStoredCase() throws Exception {
+        String expectedUrl = uiUrl + "/handle/" + MIXED_CASE_ITEM_HANDLE;
+        assertEquals(expectedUrl, resolveUrl(MIXED_CASE_ITEM_HANDLE.toUpperCase(Locale.ROOT)));
+        assertEquals(expectedUrl, resolveUrl(MIXED_CASE_ITEM_HANDLE.toLowerCase(Locale.ROOT)));
     }
 
     @Test
