@@ -48,8 +48,18 @@
     <xsl:variable name="FALLBACK_REPOSITORY_URL" select="'urn:x-ccmm:repository-unknown'"/>
     <xsl:variable name="FALLBACK_TITLE" select="'Untitled'"/>
     <xsl:variable name="FALLBACK_PUBLICATION_YEAR" select="'9999'"/>
-    <!-- used only when an item has no subject at all and oai.ccmm.subject.default is unset -->
-    <xsl:variable name="FALLBACK_SUBJECT" select="':unav'"/>
+    <!-- FRASCATI FORD discipline published when an item has none: CCMM wants at least one subject
+         from FORD and DSpace does not record it -->
+    <xsl:variable name="FORD_SCHEME" select="'https://vocabs.ccmm.cz/registry/codelist/SubjectCategory/'"/>
+    <xsl:variable name="FORD_SCHEME_EN" select="'OECD FORD Subject Category (Frascati)'"/>
+    <xsl:variable name="FORD_SCHEME_CS" select="'Oborové třídění OECD FORD (Frascati)'"/>
+    <!-- (IRI path under FORD_SCHEME, code, English title, Czech title), as in the SubjectCategory codelist -->
+    <xsl:variable name="FORD_LINGUISTICS" select="('60000/60200/60203', '60203', 'Linguistics', 'Lingvistika')"/>
+    <xsl:variable name="FORD_COMPUTER_SCIENCES" select="('10000/10200/10201', '10201',
+        'Computer sciences, information science, bioinformathics', 'Počítačové vědy, informační věda, bioinformatika')"/>
+    <xsl:variable name="FORD_HUMANITIES" select="('60000', '60000', 'Humanities and the arts', 'Humanitní vědy a umění')"/>
+    <!-- what a contact's email must look like to be published as one -->
+    <xsl:variable name="mailPattern" select="'^[^\s@]+@[^\s@]+\.[^\s@]+$'"/>
 
     <!-- ============================================================ -->
     <!-- EU file types.                                                -->
@@ -483,14 +493,18 @@
             </xsl:if>
         </xsl:for-each>
         <!--
-            Every remaining dc.identifier qualifier - dc.identifier.other and any local one.
+            Every remaining dc.identifier qualifier - dc.identifier.other and any local one - and
+            dc.identifier without a qualifier (a catalogue number such as an LDC id), whose value
+            sits directly under its language element.
             A value that merely repeats the item URI is skipped; dc.identifier.citation is a
             citation of the describing paper, not an identifier of the dataset, and is routed to
             related_resource instead.
         -->
-        <xsl:for-each select="doc:metadata/doc:element[@name='dc']/doc:element[@name='identifier']/doc:element[not(@name = ('uri', 'doi', 'citation'))]/doc:element/doc:field[@name='value']">
-            <xsl:if test="not(normalize-space(.) = ../../../doc:element[@name='uri']/doc:element/doc:field[@name='value']/normalize-space(.))
-                      and not(normalize-space(.) = ../../../doc:element[@name='doi']/doc:element/doc:field[@name='value']/normalize-space(.))">
+        <xsl:variable name="dcIdentifier" select="doc:metadata/doc:element[@name='dc']/doc:element[@name='identifier']"/>
+        <xsl:for-each select="$dcIdentifier/doc:element[not(@name = ('uri', 'doi', 'citation'))]/doc:element/doc:field[@name='value']
+                              | $dcIdentifier/doc:element/doc:field[@name='value']">
+            <xsl:if test="not(normalize-space(.) = $dcIdentifier/doc:element[@name='uri']/doc:element/doc:field[@name='value']/normalize-space(.))
+                      and not(normalize-space(.) = $dcIdentifier/doc:element[@name='doi']/doc:element/doc:field[@name='value']/normalize-space(.))">
                 <xsl:call-template name="EmitIdentifier"/>
             </xsl:if>
         </xsl:for-each>
@@ -1271,11 +1285,34 @@
         <xsl:variable name="amcMails"
             select="for $p in $amcParts
                     return (if (matches($p, $emailPattern)) then replace($p, concat('^.*?(', $emailPattern, ').*$'), '$1') else '')"/>
-        <xsl:variable name="given"  select="normalize-space((($msGiven, $cp[1])[normalize-space(.) != ''], '')[1])"/>
-        <xsl:variable name="family" select="normalize-space((($msSur,   $cp[2])[normalize-space(.) != ''], '')[1])"/>
+        <!--
+            Every local.contact.person value that names somebody is a contact; the repository's
+            own field wins over the migrated META-SHARE copy, which is only the fallback for an
+            item without one.  The same person entered twice (another address) is one contact.
+        -->
+        <xsl:variable name="cpNamed"
+            select="doc:metadata/doc:element[@name='local']/doc:element[@name='contact']/doc:element[@name='person']/doc:element/doc:field[@name='value']
+                    [normalize-space(string-join(tokenize(., ';')[position() le 2][not(contains(., '@'))], '')) != '']"/>
+        <xsl:variable name="given"  select="if ($cpNamed) then '' else normalize-space((($msGiven, $cp[1])[normalize-space(.) != ''], '')[1])"/>
+        <xsl:variable name="family" select="if ($cpNamed) then '' else normalize-space((($msSur,   $cp[2])[normalize-space(.) != ''], '')[1])"/>
         <xsl:variable name="mail"   select="normalize-space((($msMail,  $cp[3])[normalize-space(.) != ''], '')[1])"/>
         <xsl:variable name="org"    select="normalize-space((($msOrg,   $cp[4])[normalize-space(.) != ''], '')[1])"/>
-        <xsl:if test="concat($given, $family) = ''">
+        <xsl:for-each-group select="$cpNamed"
+            group-by="lower-case(concat(normalize-space(tokenize(., ';')[2]), ';', normalize-space(tokenize(., ';')[1])))">
+            <xsl:variable name="g" select="normalize-space(tokenize(., ';')[1])"/>
+            <xsl:variable name="f" select="normalize-space(tokenize(., ';')[2])"/>
+            <!-- the META-SHARE copy fills in what the field leaves out, but only for the same person -->
+            <xsl:variable name="sameAsMs" select="lower-case(concat($f, ';', $g)) = lower-case(concat($msSur, ';', $msGiven))"/>
+            <xsl:variable name="mails" select="distinct-values(for $v in current-group() return normalize-space(tokenize($v, ';')[3]))"/>
+            <xsl:variable name="orgs" select="distinct-values((for $v in current-group() return normalize-space(tokenize($v, ';')[4]))[. != ''])"/>
+            <xsl:call-template name="ContactPerson">
+                <xsl:with-param name="given" select="$g"/>
+                <xsl:with-param name="family" select="$f"/>
+                <xsl:with-param name="mails" select="if (exists($mails[matches(., $mailPattern)])) then $mails else if ($sameAsMs) then $msMail else ()"/>
+                <xsl:with-param name="orgs" select="if (exists($orgs)) then $orgs else if ($sameAsMs) then $msOrg else ()"/>
+            </xsl:call-template>
+        </xsl:for-each-group>
+        <xsl:if test="not($cpNamed) and concat($given, $family) = ''">
             <xsl:for-each select="1 to count($amcParts)">
                 <xsl:variable name="i" select="."/>
                 <!-- a bare address stands for itself, as before, unless it follows its person -->
@@ -1295,21 +1332,12 @@
             </xsl:for-each>
         </xsl:if>
         <xsl:if test="concat($given, $family) != ''">
-            <ccmm:contact_point>
-                <ccmm:person>
-                    <ccmm:name><xsl:value-of select="normalize-space(if ($family != '' and $given != '') then concat($family, ', ', $given) else concat($family, $given))"/></ccmm:name>
-                    <xsl:if test="$given != ''"><ccmm:given_name><xsl:value-of select="$given"/></ccmm:given_name></xsl:if>
-                    <xsl:if test="$family != ''"><ccmm:family_name><xsl:value-of select="$family"/></ccmm:family_name></xsl:if>
-                    <!-- the packed field is positional, so a record that omits one part shifts
-                         an affiliation into the email slot; only a real address is published -->
-                    <xsl:if test="matches($mail, '^[^\s@]+@[^\s@]+\.[^\s@]+$')">
-                        <ccmm:contact_point><ccmm:email><xsl:value-of select="$mail"/></ccmm:email></ccmm:contact_point>
-                    </xsl:if>
-                    <xsl:if test="$org != ''">
-                        <ccmm:affiliation><ccmm:name><xsl:value-of select="$org"/></ccmm:name></ccmm:affiliation>
-                    </xsl:if>
-                </ccmm:person>
-            </ccmm:contact_point>
+            <xsl:call-template name="ContactPerson">
+                <xsl:with-param name="given" select="$given"/>
+                <xsl:with-param name="family" select="$family"/>
+                <xsl:with-param name="mails" select="$mail"/>
+                <xsl:with-param name="orgs" select="$org[. != '']"/>
+            </xsl:call-template>
         </xsl:if>
         <!-- the repository's own role address; never a natural person -->
         <xsl:if test="normalize-space((doc:metadata/doc:element[@name='repository']/doc:field[@name='mail'])[1]) != ''">
@@ -1329,6 +1357,31 @@
                 </ccmm:organization>
             </ccmm:contact_point>
         </xsl:if>
+    </xsl:template>
+
+    <xsl:template name="ContactPerson">
+        <xsl:param name="given"/>
+        <xsl:param name="family"/>
+        <xsl:param name="mails"/>
+        <xsl:param name="orgs"/>
+        <ccmm:contact_point>
+            <ccmm:person>
+                <ccmm:name><xsl:value-of select="normalize-space(if ($family != '' and $given != '') then concat($family, ', ', $given) else concat($family, $given))"/></ccmm:name>
+                <xsl:if test="$given != ''"><ccmm:given_name><xsl:value-of select="$given"/></ccmm:given_name></xsl:if>
+                <xsl:if test="$family != ''"><ccmm:family_name><xsl:value-of select="$family"/></ccmm:family_name></xsl:if>
+                <!-- the packed field is positional, so a record that omits one part shifts
+                     an affiliation into the email slot; only a real address is published -->
+                <xsl:variable name="valid" select="$mails[matches(., $mailPattern)]"/>
+                <xsl:if test="exists($valid)">
+                    <ccmm:contact_point>
+                        <xsl:for-each select="$valid"><ccmm:email><xsl:value-of select="."/></ccmm:email></xsl:for-each>
+                    </ccmm:contact_point>
+                </xsl:if>
+                <xsl:for-each select="$orgs">
+                    <ccmm:affiliation><ccmm:name><xsl:value-of select="."/></ccmm:name></ccmm:affiliation>
+                </xsl:for-each>
+            </ccmm:person>
+        </ccmm:contact_point>
     </xsl:template>
 
     <!-- ============================================================ -->
@@ -1363,21 +1416,39 @@
             <ccmm:subject><ccmm:title xml:lang="en"><xsl:value-of select="."/></ccmm:title></ccmm:subject>
         </xsl:for-each>
         </xsl:variable>
+        <!--
+            CCMM: "At least one subject must be a value from FRASCATI FORD vocabulary."  DSpace does
+            not record a discipline, so an item without a FORD subject gets one by its dc.type, as
+            the repository agreed: language resources are Linguistics, tools Computer sciences,
+            everything else Humanities and the arts.  It also fills the required subject
+            (1..unbounded) of an item without any.
+        -->
+        <xsl:variable name="type" select="lower-case(normalize-space((doc:metadata/doc:element[@name='dc']/doc:element[@name='type']/doc:element/doc:field[@name='value'])[1]))"/>
+        <xsl:variable name="ford" select="if ($type = ('corpus', 'languagedescription', 'lexicalconceptualresource'))
+                                          then $FORD_LINGUISTICS
+                                          else if ($type = 'toolservice') then $FORD_COMPUTER_SCIENCES
+                                          else $FORD_HUMANITIES"/>
+        <xsl:if test="not($deduped/*[ccmm:subject_scheme/ccmm:iri = $FORD_SCHEME])">
+            <ccmm:subject>
+                <ccmm:iri><xsl:value-of select="concat($FORD_SCHEME, $ford[1])"/></ccmm:iri>
+                <ccmm:title xml:lang="en"><xsl:value-of select="$ford[3]"/></ccmm:title>
+                <ccmm:title xml:lang="cs"><xsl:value-of select="$ford[4]"/></ccmm:title>
+                <ccmm:classification_code><xsl:value-of select="$ford[2]"/></ccmm:classification_code>
+                <ccmm:subject_scheme>
+                    <ccmm:iri><xsl:value-of select="$FORD_SCHEME"/></ccmm:iri>
+                    <ccmm:label xml:lang="en"><xsl:value-of select="$FORD_SCHEME_EN"/></ccmm:label>
+                    <ccmm:label xml:lang="cs"><xsl:value-of select="$FORD_SCHEME_CS"/></ccmm:label>
+                </ccmm:subject_scheme>
+            </ccmm:subject>
+        </xsl:if>
         <xsl:call-template name="CopyDistinct">
             <xsl:with-param name="nodes" select="$deduped/*"/>
         </xsl:call-template>
-        <!--
-            subject is 1..unbounded and dc.subject is required at submission, so this is only a
-            safety net that keeps the record schema-valid.  No FRASCATI FORD field is derived:
-            DSpace does not record one, and guessing it from dc.type would publish a discipline
-            the depositor never stated.
-        -->
-        <xsl:if test="not($deduped/*)">
+        <!-- an item without subjects of its own: the subject the repository configured, if any -->
+        <xsl:if test="not($deduped/*) and normalize-space(string(fn:getProperty('oai.ccmm.subject.default'))) != ''">
             <ccmm:subject>
                 <ccmm:title xml:lang="en">
-                    <xsl:value-of select="if (normalize-space(string(fn:getProperty('oai.ccmm.subject.default'))) != '')
-                                          then normalize-space(string(fn:getProperty('oai.ccmm.subject.default')))
-                                          else $FALLBACK_SUBJECT"/>
+                    <xsl:value-of select="normalize-space(string(fn:getProperty('oai.ccmm.subject.default')))"/>
                 </ccmm:title>
             </ccmm:subject>
         </xsl:if>
@@ -1879,8 +1950,15 @@
                 supplied is kept instead.
             -->
             <xsl:variable name="fileName" select="normalize-space((doc:field[@name='name'])[1])"/>
+            <!-- two files of the item with one name: the name cannot tell them apart, the uuid can.
+                 The by-handle endpoint looks a name up in every ORIGINAL bundle, so count there. -->
+            <xsl:variable name="nameShared"
+                select="$fileName != '' and count(ancestor::doc:element[@name='bundles']/doc:element[@name='bundle'][doc:field[@name='name'] = 'ORIGINAL']
+                        /doc:element[@name='bitstreams']/doc:element[@name='bitstream'][normalize-space((doc:field[@name='name'])[1]) = $fileName]) gt 1"/>
             <xsl:variable name="downloadUrl"
-                select="cw:iri(if ($downloadBase != '' and $itemHandle != '' and $fileName != '')
+                select="cw:iri(if ($nameShared and $downloadBase != '' and $uuid != '')
+                               then concat(replace($downloadBase, 'handle/$', ''), encode-for-uri($uuid), '/content')
+                               else if ($downloadBase != '' and $itemHandle != '' and $fileName != '')
                                then concat($downloadBase, $itemHandle, '/', encode-for-uri($fileName))
                                else $url)"/>
             <xsl:variable name="sum" select="normalize-space((doc:field[@name='checksum'])[1])"/>
