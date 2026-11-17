@@ -63,9 +63,13 @@ import org.dspace.content.WorkspaceItem;
 import org.dspace.content.authority.Choices;
 import org.dspace.content.authority.service.ChoiceAuthorityService;
 import org.dspace.content.authority.service.MetadataAuthorityService;
+import org.dspace.core.Constants;
+import org.dspace.discovery.IndexingService;
 import org.dspace.discovery.configuration.DiscoverySortFieldConfiguration;
+import org.dspace.discovery.indexobject.IndexableItem;
 import org.dspace.eperson.EPerson;
 import org.dspace.eperson.Group;
+import org.dspace.eperson.factory.EPersonServiceFactory;
 import org.dspace.services.ConfigurationService;
 import org.dspace.services.factory.DSpaceServicesFactory;
 import org.dspace.supervision.SupervisionOrder;
@@ -88,6 +92,9 @@ public class DiscoveryRestControllerIT extends AbstractControllerIntegrationTest
 
     @Autowired
     ChoiceAuthorityService choiceAuthorityService;
+
+    @Autowired
+    IndexingService indexingService;
 
     /**
      * This field has been created to easily modify the tests when updating the defaultConfiguration's sidebar facets
@@ -6914,6 +6921,95 @@ public class DiscoveryRestControllerIT extends AbstractControllerIntegrationTest
             )))
             //There always needs to be a self link
             .andExpect(jsonPath("$._links.self.href", containsString("/api/discover/search/objects")));
+    }
+
+    /**
+     * A public item may hold an access-restricted file. The extracted text of that file must not be
+     * searchable by anonymous users, otherwise keyword search becomes a content oracle that reveals
+     * the restricted contents. The text of a publicly readable file must remain searchable.
+     */
+    @Test
+    public void discoverSearchDoesNotExposeFullTextOfRestrictedBitstream() throws Exception {
+        String restrictedToken = "zzxrestrictedtokenabc";
+        String publicToken = "zzxpublictokenxyz";
+
+        Group adminGroup = EPersonServiceFactory.getInstance().getGroupService()
+                .findByName(context, Group.ADMIN);
+        Group anonymousGroup = EPersonServiceFactory.getInstance().getGroupService()
+                .findByName(context, Group.ANONYMOUS);
+
+        context.turnOffAuthorisationSystem();
+
+        parentCommunity = CommunityBuilder.createCommunity(context)
+                .withName("Parent Community")
+                .build();
+        Collection col = CollectionBuilder.createCollection(context, parentCommunity)
+                .withName("Collection").build();
+
+        // A public item that is itself readable by Anonymous
+        Item item = ItemBuilder.createItem(context, col)
+                .withTitle("Public item with a restricted file")
+                .withIssueDate("2020-01-01")
+                .build();
+
+        // A restricted source file (ORIGINAL) readable only by administrators ...
+        BitstreamBuilder.createBitstream(context, item,
+                IOUtils.toInputStream("restricted source", CharEncoding.UTF_8), Constants.CONTENT_BUNDLE_NAME)
+                .withName("restricted.pdf")
+                .withReaderGroup(adminGroup)
+                .build();
+        // ... whose extracted text (left anonymously readable to mimic policy drift) must still be
+        // skipped because its source file is restricted.
+        BitstreamBuilder.createBitstream(context, item,
+                IOUtils.toInputStream(restrictedToken, CharEncoding.UTF_8), "TEXT")
+                .withName("restricted.pdf.txt")
+                .withReaderGroup(anonymousGroup)
+                .build();
+
+        // A public source file and its extracted text, both readable by Anonymous
+        BitstreamBuilder.createBitstream(context, item,
+                IOUtils.toInputStream("public source", CharEncoding.UTF_8), Constants.CONTENT_BUNDLE_NAME)
+                .withName("public.pdf")
+                .withReaderGroup(anonymousGroup)
+                .build();
+        BitstreamBuilder.createBitstream(context, item,
+                IOUtils.toInputStream(publicToken, CharEncoding.UTF_8), "TEXT")
+                .withName("public.pdf.txt")
+                .withReaderGroup(anonymousGroup)
+                .build();
+
+        // Re-index the item now that its TEXT bitstreams exist, so the full-text field is rebuilt.
+        indexingService.indexContent(context, new IndexableItem(item), true);
+        indexingService.commit();
+
+        context.restoreAuthSystemState();
+
+        String adminToken = getAuthToken(admin.getEmail(), password);
+
+        // Anonymous: the restricted file's text is not indexed -> no results.
+        getClient().perform(get("/api/discover/search/objects").param("query", restrictedToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$._embedded.searchResult.page.totalElements", is(0)));
+
+        // Anonymous: the public file's text is indexed -> item is returned (no regression).
+        getClient().perform(get("/api/discover/search/objects").param("query", publicToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$._embedded.searchResult.page.totalElements", is(1)))
+                .andExpect(jsonPath("$._embedded.searchResult._embedded.objects[0]._embedded.indexableObject.id",
+                        is(item.getID().toString())));
+
+        // Admin: the public file's text remains searchable (no regression).
+        getClient(adminToken).perform(get("/api/discover/search/objects").param("query", publicToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$._embedded.searchResult.page.totalElements", is(1)))
+                .andExpect(jsonPath("$._embedded.searchResult._embedded.objects[0]._embedded.indexableObject.id",
+                        is(item.getID().toString())));
+
+        // Admin: the restricted text was never indexed, so it is not searchable for anyone
+        // (this minimal fix is anonymous-gated).
+        getClient(adminToken).perform(get("/api/discover/search/objects").param("query", restrictedToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$._embedded.searchResult.page.totalElements", is(0)));
     }
 
 }

@@ -18,12 +18,19 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Collections;
 
 import org.apache.commons.io.IOUtils;
+import org.dspace.authorize.ResourcePolicy;
+import org.dspace.authorize.service.AuthorizeService;
+import org.dspace.authorize.service.ResourcePolicyService;
 import org.dspace.content.Bitstream;
 import org.dspace.content.Bundle;
 import org.dspace.content.Item;
 import org.dspace.content.service.BitstreamService;
+import org.dspace.core.Constants;
+import org.dspace.eperson.Group;
+import org.dspace.eperson.service.GroupService;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -44,6 +51,27 @@ public class FullTextContentStreamsTest {
     private BitstreamService bitstreamService;
 
     @Mock
+    private AuthorizeService authorizeService;
+
+    @Mock
+    private ResourcePolicyService resourcePolicyService;
+
+    @Mock
+    private GroupService groupService;
+
+    @Mock
+    private Group anonymousGroup;
+
+    @Mock
+    private ResourcePolicy anonymousReadPolicy;
+
+    @Mock
+    private Group nestedAnonymousGroup;
+
+    @Mock
+    private ResourcePolicy nestedGroupReadPolicy;
+
+    @Mock
     private Item item;
 
     @Mock
@@ -60,6 +88,12 @@ public class FullTextContentStreamsTest {
 
     @Mock
     private Bitstream textBitstream3;
+
+    @Mock
+    private Bitstream derivedTextBitstream;
+
+    @Mock
+    private Bitstream sourceBitstream;
 
 
     @Before
@@ -83,7 +117,21 @@ public class FullTextContentStreamsTest {
         when(bitstreamService.retrieve(null, textBitstream3))
             .thenReturn(new ByteArrayInputStream("This is text 3".getBytes(StandardCharsets.UTF_8)));
 
+        // By default every TEXT bitstream is readable by anonymous users.
+        when(groupService.findByName(null, Group.ANONYMOUS)).thenReturn(anonymousGroup);
+        when(anonymousReadPolicy.getGroup()).thenReturn(anonymousGroup);
+        when(resourcePolicyService.isDateValid(anonymousReadPolicy)).thenReturn(true);
+        when(authorizeService.getPoliciesActionFilter(null, textBitstream1, Constants.READ))
+            .thenReturn(Collections.singletonList(anonymousReadPolicy));
+        when(authorizeService.getPoliciesActionFilter(null, textBitstream2, Constants.READ))
+            .thenReturn(Collections.singletonList(anonymousReadPolicy));
+        when(authorizeService.getPoliciesActionFilter(null, textBitstream3, Constants.READ))
+            .thenReturn(Collections.singletonList(anonymousReadPolicy));
+
         streams.bitstreamService = bitstreamService;
+        streams.authorizeService = authorizeService;
+        streams.resourcePolicyService = resourcePolicyService;
+        streams.groupService = groupService;
     }
 
     @Test
@@ -199,6 +247,73 @@ public class FullTextContentStreamsTest {
                    content.contains("java.io.IOException"));
         assertTrue("The data should contain data on the exception that occurred",
                    content.contains("NOTFOUND"));
+    }
+
+    @Test
+    public void testRestrictedTextBitstreamIsNotIndexed() throws Exception {
+        when(item.getBundles()).thenReturn(Arrays.asList(originalBundle, textBundle));
+        when(textBundle.getBitstreams()).thenReturn(Arrays.asList(textBitstream1, textBitstream2, textBitstream3));
+        // The second bitstream is not readable by anonymous users and must be skipped.
+        when(authorizeService.getPoliciesActionFilter(null, textBitstream2, Constants.READ))
+            .thenReturn(Collections.emptyList());
+
+        streams.init(item);
+
+        assertEquals("Only the anonymously readable bitstreams should be included",
+                     "Full Text 1;Full Text 3", streams.getName());
+        assertEquals("The size should exclude the restricted bitstream", (Long) 4L, streams.getSize());
+        assertFalse("Content stream should not be empty", streams.isEmpty());
+        InputStream inputStream = streams.getStream();
+        assertNotNull(inputStream);
+        String content = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
+        assertTrue("The data should contain the text of the first (readable) bitstream",
+                   content.contains("This is text 1"));
+        assertFalse("The data should NOT contain the text of the restricted bitstream",
+                    content.contains("This is text 2"));
+        assertTrue("The data should contain the text of the third (readable) bitstream",
+                   content.contains("This is text 3"));
+    }
+
+    @Test
+    public void testTextWithRestrictedSourceOriginalIsNotIndexed() throws Exception {
+        when(derivedTextBitstream.getName()).thenReturn("doc.pdf.txt");
+        when(sourceBitstream.getName()).thenReturn("doc.pdf");
+
+        when(item.getBundles()).thenReturn(Arrays.asList(originalBundle, textBundle));
+        when(originalBundle.getBitstreams()).thenReturn(Arrays.asList(sourceBitstream));
+        when(textBundle.getBitstreams()).thenReturn(Arrays.asList(derivedTextBitstream));
+
+        // The extracted-text derivative itself is readable by anonymous users ...
+        when(authorizeService.getPoliciesActionFilter(null, derivedTextBitstream, Constants.READ))
+            .thenReturn(Collections.singletonList(anonymousReadPolicy));
+        // ... but its matching source file in the ORIGINAL bundle is restricted (policy drift).
+        when(authorizeService.getPoliciesActionFilter(null, sourceBitstream, Constants.READ))
+            .thenReturn(Collections.emptyList());
+
+        streams.init(item);
+
+        assertTrue("Text must be excluded when its source file is not anonymously readable",
+                   streams.isEmpty());
+        assertEquals("The name should be empty", "", streams.getName());
+    }
+
+    @Test
+    public void testTextReadableViaGroupContainingAnonymousIsIndexed() throws Exception {
+        when(item.getBundles()).thenReturn(Arrays.asList(originalBundle, textBundle));
+        when(textBundle.getBitstreams()).thenReturn(Arrays.asList(textBitstream1));
+        // The READ policy is granted not to Anonymous directly, but to a group that contains Anonymous,
+        // which still makes the bitstream anonymously readable.
+        when(nestedGroupReadPolicy.getGroup()).thenReturn(nestedAnonymousGroup);
+        when(resourcePolicyService.isDateValid(nestedGroupReadPolicy)).thenReturn(true);
+        when(groupService.isParentOf(null, nestedAnonymousGroup, anonymousGroup)).thenReturn(true);
+        when(authorizeService.getPoliciesActionFilter(null, textBitstream1, Constants.READ))
+            .thenReturn(Collections.singletonList(nestedGroupReadPolicy));
+
+        streams.init(item);
+
+        assertFalse("Text readable through a group that contains Anonymous must be indexed",
+                    streams.isEmpty());
+        assertEquals("Only the readable bitstream should be included", "Full Text 1", streams.getName());
     }
 
 }
