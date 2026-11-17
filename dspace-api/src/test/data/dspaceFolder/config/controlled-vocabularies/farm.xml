@@ -7,5 +7,6 @@
                 <node id='pond' label='pond'/>
             </isComposedBy>
         </node>
+        <node id="o'reilly" label="o'reilly"/>
     </isComposedBy>
 </node>

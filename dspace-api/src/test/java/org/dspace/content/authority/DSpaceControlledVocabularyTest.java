@@ -92,6 +92,95 @@ public class DSpaceControlledVocabularyTest extends AbstractDSpaceTest {
         assertEquals("north 40", result.values[0].value);
     }
 
+    private DSpaceControlledVocabulary getFarmVocabulary() throws ClassNotFoundException {
+        final String pluginInterface = "org.dspace.content.authority.ChoiceAuthority";
+        DSpaceControlledVocabulary instance = (DSpaceControlledVocabulary)
+            CoreServiceFactory.getInstance().getPluginService()
+                              .getNamedPlugin(Class.forName(pluginInterface), "farm");
+        assertNotNull(instance);
+        return instance;
+    }
+
+    /**
+     * An entryID is matched literally, so XPath metacharacters cannot be used to
+     * select unrelated nodes.
+     */
+    @Test
+    public void testGetChoiceRejectsXPathInjection() throws ClassNotFoundException {
+        DSpaceControlledVocabulary instance = getFarmVocabulary();
+
+        // Exact id still resolves
+        assertEquals("s40", instance.getChoice("s40", null).authority);
+
+        // Injection attempts must not resolve to any node
+        assertNull(instance.getChoice("s40' or '1'='1", null));
+        assertNull(instance.getChoice("x'] | //node | foo['", null));
+        assertNull(instance.getChoice("' or '1'='1", null));
+    }
+
+    /**
+     * A value containing an apostrophe is bound as a variable, so it matches the
+     * node whose id/label is exactly that value.
+     */
+    @Test
+    public void testApostropheBearingValueMatchesExactly() throws ClassNotFoundException {
+        DSpaceControlledVocabulary instance = getFarmVocabulary();
+
+        assertEquals("o'reilly", instance.getChoice("o'reilly", null).authority);
+
+        Choices best = instance.getBestMatch("o'reilly", null);
+        assertEquals(1, best.values.length);
+        assertEquals("o'reilly", best.values[0].authority);
+    }
+
+    /**
+     * getMatches filters are bound as variables, so XPath metacharacters cannot
+     * broaden the match.
+     */
+    @Test
+    public void testGetMatchesRejectsXPathInjection() throws ClassNotFoundException {
+        DSpaceControlledVocabulary instance = getFarmVocabulary();
+
+        assertEquals(0, instance.getMatches("' or '1'='1", 0, 10, null).values.length);
+        assertEquals(0, instance.getMatches("x'] | //node | foo['", 0, 10, null).values.length);
+    }
+
+    /**
+     * getBestMatch filters are bound as variables, so XPath metacharacters cannot
+     * broaden the match.
+     */
+    @Test
+    public void testGetBestMatchRejectsXPathInjection() throws ClassNotFoundException {
+        DSpaceControlledVocabulary instance = getFarmVocabulary();
+
+        assertEquals(0, instance.getBestMatch("' or '1'='1", null).values.length);
+        assertEquals(0, instance.getBestMatch("x'] | //node | foo['", null).values.length);
+    }
+
+    /**
+     * A parent id is matched literally, so injection cannot select an unrelated
+     * parent and leak its children.
+     */
+    @Test
+    public void testGetChoicesByParentRejectsXPathInjection() throws ClassNotFoundException {
+        DSpaceControlledVocabulary instance = getFarmVocabulary();
+
+        assertEquals(0,
+            instance.getChoicesByParent("farm", "' or '1'='1", 0, 10, null).values.length);
+        assertEquals(0,
+            instance.getChoicesByParent("farm", "x'] | //node | foo['", 0, 10, null).values.length);
+    }
+
+    /**
+     * A child id is matched literally when resolving its parent.
+     */
+    @Test
+    public void testGetParentChoiceRejectsXPathInjection() throws ClassNotFoundException {
+        DSpaceControlledVocabulary instance = getFarmVocabulary();
+
+        assertNull(instance.getParentChoice("farm", "' or '1'='1", null));
+    }
+
     /**
      * Node ids (entryID, parent, child) must be compared as plain strings, not spliced into the XPath expression.
      * @throws java.lang.ClassNotFoundException passed through.
