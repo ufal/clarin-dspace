@@ -36,7 +36,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * Test for the canCreateVersion authorization feature.
- * 
+ *
  * @author Mykhaylo Boychuk (mykhaylo.boychuk at 4science.it)
  */
 public class CanCreateVersionFeatureIT extends AbstractControllerIntegrationTest {
@@ -105,6 +105,8 @@ public class CanCreateVersionFeatureIT extends AbstractControllerIntegrationTest
 
     @Test
     public void epersonHasNotAccessTest() throws Exception {
+        configurationService.setProperty("versioning.submitterCanCreateNewVersion", false);
+
         String epersonToken = getAuthToken(eperson.getEmail(), password);
         getClient(epersonToken).perform(get("/api/authz/authorizations/search/object")
                                .param("embed", "feature")
@@ -117,6 +119,8 @@ public class CanCreateVersionFeatureIT extends AbstractControllerIntegrationTest
 
     @Test
     public void adminItemSuccessTest() throws Exception {
+        configurationService.setProperty("versioning.submitterCanCreateNewVersion", false);
+
         String adminToken = getAuthToken(admin.getEmail(), password);
         getClient(adminToken).perform(get("/api/authz/authorizations/search/object")
                              .param("embed", "feature")
@@ -149,6 +153,7 @@ public class CanCreateVersionFeatureIT extends AbstractControllerIntegrationTest
     @Test
     public void submitterItemWithPropertySubmitterCanCreateNewVersionIsFalseTest() throws Exception {
         context.turnOffAuthorisationSystem();
+        configurationService.setProperty("versioning.submitterCanCreateNewVersion", false);
 
         itemA.setSubmitter(user);
 
@@ -217,6 +222,8 @@ public class CanCreateVersionFeatureIT extends AbstractControllerIntegrationTest
     @Test
     public void checkCanCreateVersionsFeatureAdminsTest() throws Exception {
         context.turnOffAuthorisationSystem();
+        configurationService.setProperty("versioning.submitterCanCreateNewVersion", false);
+
         EPerson adminComA = EPersonBuilder.createEPerson(context)
                                           .withEmail("testComAdminA@test.com")
                                           .withPassword(password)
@@ -306,6 +313,7 @@ public class CanCreateVersionFeatureIT extends AbstractControllerIntegrationTest
     @Test
     public void checkCanCreateVersionFeatureTest() throws Exception {
         context.turnOffAuthorisationSystem();
+        configurationService.setProperty("versioning.submitterCanCreateNewVersion", false);
 
         Community rootCommunity = CommunityBuilder.createCommunity(context)
                                                   .withName("Parent Community")

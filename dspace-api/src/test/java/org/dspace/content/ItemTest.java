@@ -1636,6 +1636,15 @@ public class ItemTest extends AbstractDSpaceObjectTest {
     }
 
     /**
+     * Test of hasUploadedFiles method with an explicit bundle name, of class Item.
+     */
+    @Test
+    public void testHasUploadedFilesInBundle() throws Exception {
+        assertFalse("testHasUploadedFilesInBundle 0",
+                    itemService.hasUploadedFiles(it, Constants.CONTENT_BUNDLE_NAME));
+    }
+
+    /**
      * Test of getCollectionsNotLinked method, of class Item.
      */
     @Test

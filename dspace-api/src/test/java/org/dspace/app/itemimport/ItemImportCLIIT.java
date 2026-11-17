@@ -32,6 +32,8 @@ import org.dspace.content.Relationship;
 import org.dspace.content.factory.ContentServiceFactory;
 import org.dspace.content.service.ItemService;
 import org.dspace.content.service.RelationshipService;
+import org.dspace.identifier.factory.IdentifierServiceFactory;
+import org.dspace.identifier.service.IdentifierService;
 import org.dspace.services.ConfigurationService;
 import org.dspace.services.factory.DSpaceServicesFactory;
 import org.flywaydb.core.internal.util.ExceptionUtils;
@@ -55,6 +57,7 @@ public class ItemImportCLIIT extends AbstractIntegrationTestWithDatabase {
     private ItemService itemService = ContentServiceFactory.getInstance().getItemService();
     private RelationshipService relationshipService = ContentServiceFactory.getInstance().getRelationshipService();
     private ConfigurationService configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
+    private IdentifierService identifierService = IdentifierServiceFactory.getInstance().getIdentifierService();
     private Collection collection;
     private Path tempDir;
     private Path workDir;
@@ -112,6 +115,26 @@ public class ItemImportCLIIT extends AbstractIntegrationTestWithDatabase {
         perfomImportScript(args);
 
         checkMetadata();
+    }
+
+    @Test
+    public void importItemBySafWithExistingHandle() throws Exception {
+        // create simple SAF
+        Path safDir = Files.createDirectory(Path.of(tempDir.toString() + "/test"));
+        Path itemDir = Files.createDirectory(Path.of(safDir.toString() + "/item_000"));
+        Files.copy(getClass().getResourceAsStream("dublin_core.xml"),
+                Path.of(itemDir + "/dublin_core.xml"));
+        Files.copy(getClass().getResourceAsStream("handle"),
+                Path.of(itemDir + "/handle"));
+
+        String[] args = new String[] { "import", "-a", "-e", admin.getEmail(), "-c", collection.getID().toString(),
+                "-s", safDir.toString(), "-m", tempDir.toString() + "/mapfile.out" };
+        perfomImportScript(args);
+
+        Item item = findItemByTitle(publicationTitle);
+        assertEquals("123456789/3900021-03", item.getHandle());
+        checkMetadata();
+        identifierService.delete(context, item, item.getHandle());
     }
 
     @Test
@@ -549,7 +572,8 @@ public class ItemImportCLIIT extends AbstractIntegrationTestWithDatabase {
      * @throws Exception
      */
     private void checkMetadata() throws Exception {
-        Item item = itemService.findByMetadataField(context, "dc", "title", null, publicationTitle).next();
+        Item item = findItemByTitle(publicationTitle);
+        assertEquals(1, item.getHandles().size());
         assertEquals(item.getName(), publicationTitle);
         assertEquals(itemService.getMetadata(item, "dc.date.issued"), "1990");
         assertEquals(itemService.getMetadata(item, "dc.title.alternative"), "J'aime les Printemps");
@@ -560,7 +584,7 @@ public class ItemImportCLIIT extends AbstractIntegrationTestWithDatabase {
      * @throws Exception
      */
     private void checkMetadataWithAnotherSchema() throws Exception {
-        Item item = itemService.findByMetadataField(context, "dc", "title", null, publicationTitle).next();
+        Item item = findItemByTitle(publicationTitle);
         assertEquals(item.getName(), publicationTitle);
         assertEquals(itemService.getMetadata(item, "dcterms.title"), publicationTitle);
     }
@@ -570,8 +594,7 @@ public class ItemImportCLIIT extends AbstractIntegrationTestWithDatabase {
      * @throws Exception
      */
     private void checkBitstream() throws Exception {
-        Bitstream bitstream = itemService.findByMetadataField(context, "dc", "title", null, publicationTitle).next()
-                .getBundles("ORIGINAL").get(0).getBitstreams().get(0);
+        Bitstream bitstream = findItemByTitle(publicationTitle).getBundles("ORIGINAL").get(0).getBitstreams().get(0);
         assertEquals(bitstream.getName(), "file1.txt");
     }
 
@@ -589,8 +612,8 @@ public class ItemImportCLIIT extends AbstractIntegrationTestWithDatabase {
      * @throws Exception
      */
     private void checkRelationship() throws Exception {
-        Item item = itemService.findByMetadataField(context, "dc", "title", null, publicationTitle).next();
-        Item author = itemService.findByMetadataField(context, "dc", "title", null, personTitle).next();
+        Item item = findItemByTitle(publicationTitle);
+        Item author = findItemByTitle(personTitle);
         List<Relationship> relationships = relationshipService.findByItem(context, item);
         assertEquals(1, relationships.size());
         assertEquals(author.getID(), relationships.get(0).getRightItem().getID());
@@ -600,5 +623,9 @@ public class ItemImportCLIIT extends AbstractIntegrationTestWithDatabase {
     private void perfomImportScript(String[] args)
             throws Exception {
         runDSpaceScript(args);
+    }
+
+    private Item findItemByTitle(String title) throws Exception {
+        return itemService.findByMetadataField(context, "dc", "title", null, title).next();
     }
 }

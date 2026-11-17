@@ -16,11 +16,13 @@ import java.util.UUID;
 
 import org.dspace.app.requestitem.factory.RequestItemServiceFactory;
 import org.dspace.app.requestitem.service.RequestItemService;
+import org.dspace.authorize.AuthorizationBitstreamUtils;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.Bitstream;
 import org.dspace.core.Context;
 import org.dspace.services.ConfigurationService;
 import org.dspace.services.factory.DSpaceServicesFactory;
+import org.dspace.utils.DSpace;
 import org.springframework.core.io.AbstractResource;
 
 /**
@@ -42,6 +44,13 @@ public class BitstreamResourceAccessByToken extends BitstreamResource {
     private RequestItemService requestItemService = RequestItemServiceFactory.getInstance().getRequestItemService();
 
     private ConfigurationService configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
+
+    /**
+     * CLARIN licence gate. This is the same bean {@code AuthorizeServiceImpl.authorizeAction} uses for a
+     * download without an access token, not a second copy of the licence rules.
+     */
+    private AuthorizationBitstreamUtils authorizationBitstreamUtils =
+            new DSpace().getServiceManager().getServicesByType(AuthorizationBitstreamUtils.class).get(0);
 
     public BitstreamResourceAccessByToken(String name, UUID uuid, UUID currentUserUUID, Set<UUID> currentSpecialGroups,
                                           boolean shouldGenerateCoverPage, String accessToken) {
@@ -85,6 +94,15 @@ public class BitstreamResourceAccessByToken extends BitstreamResource {
             } catch (AuthorizeException e) {
                 throw new AuthorizeException("Authorization to bitstream " + uuid + " by access token FAILED");
             }
+
+            // CLARIN: a valid access token is not enough. Restricted downloads are gated by the CLARIN
+            // licence flow, and this resource serves content with authorisation switched off, so the
+            // gate has to be satisfied here too - before any content is read. authorizeBitstream()
+            // does not consult the authorisation system, so turnOffAuthorisationSystem() above does
+            // not weaken it; it throws MissingLicenseAgreementException/DownloadTokenExpiredException
+            // when the licence has not been agreed.
+            authorizationBitstreamUtils.authorizeBitstream(fileRetrievalContext, bitstream);
+
             if (shouldGenerateCoverPage) {
                 var coverPage = getCoverpageByteArray(fileRetrievalContext, bitstream);
 

@@ -15,8 +15,12 @@ import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.lang3.StringUtils;
+import org.dspace.content.clarin.ClarinUserRegistration;
+import org.dspace.content.factory.ClarinServiceFactory;
+import org.dspace.content.service.clarin.ClarinUserRegistrationService;
 import org.dspace.core.Context;
 import org.dspace.core.I18nUtil;
 import org.dspace.eperson.EPerson;
@@ -51,8 +55,12 @@ public final class CreateAdministrator {
      */
     private final Context context;
 
+    private static final Option OPT_ORGANIZATION = new Option("o", "organization", true,
+            "organization the user belongs to");
+
     protected EPersonService ePersonService;
     protected GroupService groupService;
+    protected ClarinUserRegistrationService clarinUserRegistrationService;
 
     /**
      * For invoking via the command line. If called with no command line arguments,
@@ -74,6 +82,7 @@ public final class CreateAdministrator {
         options.addOption("l", "last", true, "administrator last name");
         options.addOption("c", "language", true, "administrator language");
         options.addOption("p", "password", true, "administrator password");
+        options.addOption(OPT_ORGANIZATION);
 
         CommandLine line = null;
 
@@ -92,7 +101,8 @@ public final class CreateAdministrator {
                 line.hasOption("c") && line.hasOption("p")) {
             ca.createAdministrator(line.getOptionValue("e"),
                     line.getOptionValue("f"), line.getOptionValue("l"),
-                    line.getOptionValue("c"), line.getOptionValue("p"));
+                    line.getOptionValue("c"), line.getOptionValue("p"),
+                    line.getOptionValue("o", ClarinUserRegistration.UNKNOWN_USER_REGISTRATION));
         } else if (line.hasOption("h")) {
             String header = "\nA command-line tool for creating an initial administrator for setting up a" +
                     " DSpace site. Unless all the required parameters are passed it will" +
@@ -121,14 +131,15 @@ public final class CreateAdministrator {
         } catch (NullPointerException npr) {
             // if database is null, there is no point in continuing. Prior to this exception and catch,
             // NullPointerException was thrown, that wasn't very helpful.
-            throw new IllegalStateException("Problem connecting to database. This " +
-                    "indicates issue with either network or version (or possibly some other). " +
+            throw new IllegalStateException("Problem connecting to database. This" +
+                    " indicates issue with either network or version (or possibly some other). " +
                     "If you are running this in docker-compose, please make sure dspace-cli was " +
                     "built from the same sources as running dspace container AND that they are in " +
                     "the same project/network.");
         }
         groupService = EPersonServiceFactory.getInstance().getGroupService();
         ePersonService = EPersonServiceFactory.getInstance().getEPersonService();
+        clarinUserRegistrationService = ClarinServiceFactory.getInstance().getClarinUserRegistration();
     }
 
     /**
@@ -147,6 +158,7 @@ public final class CreateAdministrator {
         String firstName = line.getOptionValue('f');
         String lastName = line.getOptionValue('l');
         String language = I18nUtil.getDefaultLocale().getLanguage();
+        String org = line.getOptionValue('o', ClarinUserRegistration.UNKNOWN_USER_REGISTRATION);
         ConfigurationService cfg = DSpaceServicesFactory.getInstance().getConfigurationService();
         boolean flag = line.hasOption('p');
         char[] password = null;
@@ -217,8 +229,7 @@ public final class CreateAdministrator {
             password = line.getOptionValue("p").toCharArray();
         }
         // if we make it to here, we are ready to create an administrator
-        createAdministrator(email, firstName, lastName, language, String.valueOf(password));
-
+        createAdministrator(email, firstName, lastName, language, String.valueOf(password), org);
     }
 
     private char[] getPassword(Console console) {
@@ -258,8 +269,8 @@ public final class CreateAdministrator {
      * @throws Exception if error
      */
     protected void createAdministrator(String email, String first, String last,
-            String language, String pw)
-            throws Exception {
+                                       String language, String pw, String organization)
+        throws Exception {
         // Of course we aren't an administrator yet so we need to
         // circumvent authorisation
         context.turnOffAuthorisationSystem();
@@ -292,6 +303,13 @@ public final class CreateAdministrator {
 
         groupService.addMember(context, admins, eperson);
         groupService.update(context, admins);
+
+        ClarinUserRegistration clarinUserRegistration = new ClarinUserRegistration();
+        clarinUserRegistration.setOrganization(organization);
+        clarinUserRegistration.setConfirmation(true);
+        clarinUserRegistration.setEmail(eperson.getEmail());
+        clarinUserRegistration.setPersonID(eperson.getID());
+        clarinUserRegistrationService.create(context, clarinUserRegistration);
 
         context.complete();
 

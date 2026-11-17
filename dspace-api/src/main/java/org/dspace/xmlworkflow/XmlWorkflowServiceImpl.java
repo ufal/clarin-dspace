@@ -264,7 +264,11 @@ public class XmlWorkflowServiceImpl implements XmlWorkflowService {
                 mail.addArgument(argument);
             }
             for (EPerson anEpa : epa) {
-                mail.addRecipient(anEpa.getEmail());
+                String email = anEpa.getEmail();
+                if (email != null && email.contains(";")) {
+                    email = email.split(";")[0].trim();
+                }
+                mail.addRecipient(email);
             }
 
             mail.send();

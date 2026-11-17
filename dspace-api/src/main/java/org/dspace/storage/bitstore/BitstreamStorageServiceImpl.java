@@ -7,6 +7,7 @@
  */
 package org.dspace.storage.bitstore;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.sql.SQLException;
@@ -114,7 +115,7 @@ public class BitstreamStorageServiceImpl implements BitstreamStorageService, Ini
          * other method of working out where to put a new bitstream, here's
          * where it should go
          */
-        bitstream.setStoreNumber(incoming);
+        bitstream.setStoreNumber(recordedStoreNumber(incoming));
         bitstream.setDeleted(true);
         bitstream.setInternalId(id);
 
@@ -169,7 +170,7 @@ public class BitstreamStorageServiceImpl implements BitstreamStorageService, Ini
         // Create a deleted bitstream row, using a separate DB connection
         bitstream.setDeleted(true);
         bitstream.setInternalId(sInternalId);
-        bitstream.setStoreNumber(assetstore);
+        bitstream.setStoreNumber(recordedStoreNumber(assetstore));
         bitstreamService.update(context, bitstream);
 
         List<String> wantedMetadata = List.of("size_bytes", "checksum", "checksum_algorithm");
@@ -205,7 +206,7 @@ public class BitstreamStorageServiceImpl implements BitstreamStorageService, Ini
 
     @Override
     public Map<String, Object> computeChecksum(Context context, Bitstream bitstream) throws IOException {
-        return this.getStore(bitstream.getStoreNumber()).about(bitstream, List.of("checksum", "checksum_algorithm"));
+        return this.getStore(whichStoreNumber(bitstream)).about(bitstream, List.of("checksum", "checksum_algorithm"));
     }
 
     @Override
@@ -216,7 +217,7 @@ public class BitstreamStorageServiceImpl implements BitstreamStorageService, Ini
     @Override
     public InputStream retrieve(Context context, Bitstream bitstream)
         throws SQLException, IOException {
-        Integer storeNumber = bitstream.getStoreNumber();
+        int storeNumber = whichStoreNumber(bitstream);
         return this.getStore(storeNumber).get(bitstream);
     }
 
@@ -246,7 +247,8 @@ public class BitstreamStorageServiceImpl implements BitstreamStorageService, Ini
                 for (Bitstream bitstream : storage) {
                     UUID bid = bitstream.getID();
                     List<String> wantedMetadata = List.of("size_bytes", "modified");
-                    Map<String, Object> receivedMetadata = this.getStore(bitstream.getStoreNumber())
+                    int storeNumber = whichStoreNumber(bitstream);
+                    Map<String, Object> receivedMetadata = this.getStore(storeNumber)
                         .about(bitstream, wantedMetadata);
 
 
@@ -304,7 +306,7 @@ public class BitstreamStorageServiceImpl implements BitstreamStorageService, Ini
                     // remove the file if no other bitstream shares this
                     // internal identifier
                     if (!hasDuplicate) {
-                        this.getStore(bitstream.getStoreNumber()).remove(bitstream);
+                        this.getStore(storeNumber).remove(bitstream);
 
                         String message = ("Deleted bitstreamID " + bid + ", internalID " + bitstream.getInternalId());
                         if (log.isDebugEnabled()) {
@@ -351,7 +353,8 @@ public class BitstreamStorageServiceImpl implements BitstreamStorageService, Ini
     @Nullable
     @Override
     public Long getLastModified(Bitstream bitstream) throws IOException {
-        Map<String, Object> metadata = this.getStore(bitstream.getStoreNumber()).about(bitstream, List.of("modified"));
+        Map<String, Object> metadata = this.getStore(whichStoreNumber(bitstream))
+                .about(bitstream, List.of("modified"));
         if (metadata == null || !metadata.containsKey("modified")) {
             return null;
         }
@@ -500,12 +503,42 @@ public class BitstreamStorageServiceImpl implements BitstreamStorageService, Ini
         return (now - lastModified) < (1 * 60 * 1000);
     }
 
+    /**
+     * Store number to record on the bitstream row after the bits have been written to store
+     * {@code writtenStoreNumber}. A store that keeps one bitstream in more than one place records
+     * a sentinel instead, so a later read knows the row does not name a single real store.
+     *
+     * @param writtenStoreNumber the store the bits were actually written to
+     * @return the store number to persist on the bitstream
+     */
+    protected int recordedStoreNumber(int writtenStoreNumber) {
+        return writtenStoreNumber;
+    }
+
+    /**
+     * Store to read a bitstream back from. Overridden when the recorded store number is a sentinel
+     * rather than a key in {@link #getStores()}.
+     *
+     * @param bitstream the bitstream to read
+     * @return the store number to read from
+     */
+    protected int whichStoreNumber(Bitstream bitstream) {
+        return bitstream.getStoreNumber();
+    }
+
     protected BitStoreService getStore(int position) throws IOException {
         BitStoreService bitStoreService = this.stores.get(position);
         if (!bitStoreService.isInitialized()) {
             bitStoreService.init();
         }
         return bitStoreService;
+    }
+
+
+    @Override
+    public File retrieveFile(Context context, Bitstream bitstream) throws IOException {
+        int storeNumber = whichStoreNumber(bitstream);
+        return this.getStore(storeNumber).getFile(bitstream);
     }
 
 }

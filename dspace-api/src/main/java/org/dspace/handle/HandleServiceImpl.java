@@ -7,21 +7,33 @@
  */
 package org.dspace.handle;
 
+import static org.dspace.content.InstallItemServiceImpl.SET_OWNING_COLLECTION_EVENT_DETAIL;
+
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Objects;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.dspace.api.DSpaceApi;
+import org.dspace.content.Community;
 import org.dspace.content.DSpaceObject;
+import org.dspace.content.Item;
 import org.dspace.content.service.SiteService;
+import org.dspace.content.service.clarin.ClarinItemService;
 import org.dspace.core.Constants;
 import org.dspace.core.Context;
+import org.dspace.event.Event;
 import org.dspace.handle.dao.HandleDAO;
 import org.dspace.handle.service.HandleService;
 import org.dspace.services.ConfigurationService;
@@ -52,6 +64,9 @@ public class HandleServiceImpl implements HandleService {
 
     @Autowired(required = true)
     protected HandleDAO handleDAO;
+
+    @Autowired(required = true)
+    protected ClarinItemService clarinItemService;
 
     @Autowired(required = true)
     protected ConfigurationService configurationService;
@@ -139,7 +154,7 @@ public class HandleServiceImpl implements HandleService {
     public String createHandle(Context context, DSpaceObject dso)
         throws SQLException {
         Handle handle = handleDAO.create(context, new Handle());
-        String handleId = createId(context);
+        String handleId = createId(context, dso);
 
         handle.setHandle(handleId);
         handle.setDSpaceObject(dso);
@@ -406,5 +421,111 @@ public class HandleServiceImpl implements HandleService {
     @Override
     public String[] getAdditionalPrefixes() {
         return configurationService.getArrayProperty("handle.additional.prefixes");
+    }
+
+    protected String createId(Context context, DSpaceObject dso) throws SQLException {
+        // Get configured prefix
+        String handlePrefix = getPrefix();
+
+        // Get next available suffix (as a Long, since DSpace uses an incrementing sequence)
+        Long handleSuffix = handleDAO.getNextHandleSuffix(context);
+
+        String createdId = handlePrefix + (handlePrefix.endsWith("/") ? "" : "/") + handleSuffix.toString();
+        if (!(dso instanceof Item)) {
+            //create handle for another type of dspace objects
+            return createdId;
+        }
+        Community owningCommunity = getOwningCommunity(context, dso);
+        UUID owningCommunityId = Objects.isNull(owningCommunity) ? null : owningCommunity.getID();
+
+        // add subprefix for item handle
+        PIDCommunityConfiguration pidCommunityConfiguration = PIDConfiguration
+                .getPIDCommunityConfiguration(owningCommunityId);
+
+        if (Objects.isNull(pidCommunityConfiguration)) {
+            return createdId;
+        }
+
+        //Which type is pis community configuration?
+        if (pidCommunityConfiguration.isEpic()) {
+            String handleId;
+            StringBuffer suffix = new StringBuffer();
+            String handleSubprefix = pidCommunityConfiguration.getSubprefix();
+            if (Objects.nonNull(handleSubprefix) && !handleSubprefix.isEmpty()) {
+                suffix.append(handleSubprefix).append("-");
+            }
+            suffix.append(handleSuffix);
+            String prefix = pidCommunityConfiguration.getPrefix();
+            try {
+                handleId = DSpaceApi.handle_HandleManager_createId(log, handleSuffix, prefix, suffix.toString());
+                // if the handle created successfully register the final handle
+                DSpaceApi
+                        .handle_HandleManager_registerFinalHandleURL(log, handleId, dso);
+            } catch (IOException e) {
+                throw new IllegalStateException(
+                        "External PID service is not working. Please contact the administrator. "
+                                + "Internal message: [" + e.toString() + "]");
+            }
+            return handleId;
+        } else if (pidCommunityConfiguration.isLocal()) {
+            String prefix = pidCommunityConfiguration.getPrefix();
+            String handleSubprefix = pidCommunityConfiguration.getSubprefix();
+            String validatedPrefix = prefix + (handlePrefix.endsWith("/") ? "" : "/");
+            if (StringUtils.isEmpty(handleSubprefix)) {
+                // E.g., 13654/5553
+                return validatedPrefix + handleSuffix.toString();
+            }
+            // E.g., 13645/1-5553
+            return validatedPrefix + handleSubprefix + "-" + handleSuffix.toString();
+        } else {
+            throw new IllegalStateException("Unsupported PID type: "
+                    + pidCommunityConfiguration.getType());
+        }
+    }
+
+    /**
+     * CLARIN: resolve the owning community of a DSpaceObject, used to choose the per-community
+     * PID prefix/subprefix in createId(Context, DSpaceObject). During item install the handle is
+     * minted before setOwningCollection persists the collection, so the owning collection is taken
+     * from the transient "set owning collection" event published by WorkspaceItemServiceImpl
+     * (InstallItemServiceImpl.SET_OWNING_COLLECTION_EVENT_DETAIL); otherwise it falls back to the
+     * persisted owning collection. If neither is available createId(...) uses the default handle.prefix.
+     */
+    private Community getOwningCommunity(Context context, DSpaceObject dso) throws SQLException {
+        // The owning collection UUID may be stored as a transient event in the context (set at submission
+        // time, before the collection is persisted on the item).
+        Event setOwningCollectionEvent = getClarinSetOwningCollectionEvent(context);
+
+        String detail = Objects.isNull(setOwningCollectionEvent) ? "" : setOwningCollectionEvent.getDetail();
+        if (StringUtils.isNotBlank(detail)) {
+            int searchingCharIndex = detail.indexOf(":");
+            detail = detail.substring(searchingCharIndex + 1);
+            return clarinItemService.getOwningCommunity(context, UUID.fromString(detail));
+        }
+
+        return clarinItemService.getOwningCommunity(context, dso);
+    }
+
+    /**
+     * The context holds a list of events; fetch (and consume) the one carrying the owning-collection UUID
+     * published at submission time, identified by its special detail prefix.
+     *
+     * @param context DSpace context
+     * @return the "set owning collection" event, or null if none is present
+     */
+    private Event getClarinSetOwningCollectionEvent(Context context) {
+        int index = -1;
+        LinkedList<Event> allEvents = context.getEvents();
+        for (Event event : ListUtils.emptyIfNull(allEvents)) {
+            index++;
+            if (StringUtils.isBlank(event.getDetail())) {
+                continue;
+            }
+            if (event.getDetail().startsWith(SET_OWNING_COLLECTION_EVENT_DETAIL)) {
+                context.getEvents().remove(index);
+                return event;
+            }
+        }
+        return null;
     }
 }

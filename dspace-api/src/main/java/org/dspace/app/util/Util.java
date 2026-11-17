@@ -514,4 +514,19 @@ public class Util {
 
         return ListUtils.removeAll(fromFieldName, toFieldName);
     }
+
+    /**
+     * Format the netId with the IdP/organization, e.g. {@code netId[organization]}.
+     * Ported from CLARIN-DSpace (used by Shibboleth authentication).
+     *
+     * @param netId        the user's netId from the IdP
+     * @param organization the IdP/organization identifier
+     * @return formatted netId, or {@code null} if netId is blank
+     */
+    public static String formatNetId(String netId, String organization) {
+        if (StringUtils.isBlank(netId)) {
+            return null;
+        }
+        return netId + "[" + organization + "]";
+    }
 }

@@ -323,6 +323,39 @@
     </profiles>
 
     <dependencies>
+        <!-- CLARIN/LINDAT (UFAL) feature dependencies (ported from dtq-dev for DSpace 9 upgrade) -->
+        <dependency>
+            <!-- PDF generation for Matomo report exporter -->
+            <groupId>com.itextpdf</groupId>
+            <artifactId>itextpdf</artifactId>
+            <version>5.5.13.4</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jfree</groupId>
+            <artifactId>jcommon</artifactId>
+            <version>1.0.24</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jfree</groupId>
+            <artifactId>jfreechart</artifactId>
+            <version>1.5.6</version>
+        </dependency>
+        <dependency>
+            <groupId>com.flipkart.zjsonpatch</groupId>
+            <artifactId>zjsonpatch</artifactId>
+            <version>0.4.16</version>
+        </dependency>
+        <dependency>
+            <!-- JWT for Clarin tokens / Personal Access Tokens (PAT) -->
+            <groupId>com.nimbusds</groupId>
+            <artifactId>nimbus-jose-jwt</artifactId>
+            <version>${nimbus-jose-jwt.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.piwik.java.tracking</groupId>
+            <artifactId>matomo-java-tracker-java11</artifactId>
+            <version>3.4.0</version>
+        </dependency>
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-api</artifactId>

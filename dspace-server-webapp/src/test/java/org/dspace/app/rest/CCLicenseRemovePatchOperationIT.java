@@ -53,7 +53,7 @@ public class CCLicenseRemovePatchOperationIT extends AbstractControllerIntegrati
                                                  .withName("Collection")
                                                  .build();
 
-        WorkspaceItem workspaceItem = WorkspaceItemBuilder.createWorkspaceItem(context, collection)
+        WorkspaceItem workspaceItem = WorkspaceItemBuilder.createWorkspaceItemWithNoClarinLicense(context, collection)
                                                           .withTitle("Workspace Item")
                                                           .build();
 
@@ -115,7 +115,7 @@ public class CCLicenseRemovePatchOperationIT extends AbstractControllerIntegrati
                                                  .withName("Collection")
                                                  .build();
 
-        WorkspaceItem workspaceItem = WorkspaceItemBuilder.createWorkspaceItem(context, collection)
+        WorkspaceItem workspaceItem = WorkspaceItemBuilder.createWorkspaceItemWithNoClarinLicense(context, collection)
                                                           .withTitle("Workspace Item")
                                                           .build();
 

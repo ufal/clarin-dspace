@@ -259,6 +259,22 @@ public class CommunityServiceImpl extends DSpaceObjectServiceImpl<Community> imp
     }
 
     @Override
+    public void addLogo(Context context, Community community, Bitstream newLogo)
+            throws SQLException, AuthorizeException {
+        community.setLogo(newLogo);
+
+        // now create policy for logo bitstream
+        // to match our READ policy
+        List<ResourcePolicy> policies = authorizeService
+                .getPoliciesActionFilter(context, community, Constants.READ);
+        authorizeService.addPolicies(context, policies, newLogo);
+
+        log.info(LogHelper.getHeader(context, "set_logo",
+                "community_id=" + community.getID() + "logo_bitstream_id="
+                        + newLogo.getID()));
+    }
+
+    @Override
     public void update(Context context, Community community) throws SQLException, AuthorizeException {
         // Check authorisation
         canEdit(context, community);

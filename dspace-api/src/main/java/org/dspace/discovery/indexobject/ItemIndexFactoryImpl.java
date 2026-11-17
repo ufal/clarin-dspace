@@ -47,6 +47,7 @@ import org.dspace.content.service.WorkspaceItemService;
 import org.dspace.core.Context;
 import org.dspace.core.LogHelper;
 import org.dspace.discovery.FullTextContentStreams;
+import org.dspace.discovery.IsoLangCodes;
 import org.dspace.discovery.SearchUtils;
 import org.dspace.discovery.configuration.DiscoveryConfiguration;
 import org.dspace.discovery.configuration.DiscoveryConfigurationParameters;
@@ -566,6 +567,27 @@ public class ItemIndexFactoryImpl extends DSpaceObjectIndexFactoryImpl<Indexable
         }
 
 
+        // process item metadata
+        // just add _comp to local*
+        List<MetadataValue> mds = itemService.getMetadata(item, "local", Item.ANY, Item.ANY, Item.ANY);
+        for (MetadataValue meta : mds) {
+            String field = "local" + "." + meta.getMetadataField().getElement();
+            String value = meta.getValue();
+            if (value == null) {
+                continue;
+            }
+            String qualifier = meta.getMetadataField().getQualifier();
+            if (qualifier != null && !qualifier.isEmpty()) {
+                field += "." + qualifier;
+            }
+            doc.addField(field + "_comp", value);
+        }
+
+        // create handle_title_ac field
+        String title = item.getName();
+        String handle = item.getHandle();
+        doc.addField("handle_title_ac", handle + ":" + title);
+
         log.debug("  Added Metadata");
 
         try {
@@ -778,6 +800,18 @@ public class ItemIndexFactoryImpl extends DSpaceObjectIndexFactoryImpl<Indexable
             }
             //Also add prefix field with all parts of value
             saveFacetPrefixParts(doc, searchFilter, value, separator, authority, preferedLabel);
+        } else if (searchFilter.getType().equals(DiscoveryConfigurationParameters.TYPE_ISO_LANG)) {
+            // CLARIN/LINDAT: index the full language name resolved from the iso code
+            String langName = IsoLangCodes.getLangForCode(value);
+            if (StringUtils.isBlank(langName)) {
+                log.error(String.format("No language found for iso code %s", value));
+                return;
+            }
+            String convertedValue = langName.toLowerCase() + separator + langName;
+            doc.addField(searchFilter.getIndexFieldName() + "_filter", convertedValue);
+            doc.addField(searchFilter.getIndexFieldName(), langName);
+            doc.addField(searchFilter.getIndexFieldName() + "_keyword", langName);
+            doc.addField(searchFilter.getIndexFieldName() + "_ac", langName);
         }
     }
 

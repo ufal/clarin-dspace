@@ -140,6 +140,11 @@ public class VersionRestRepository extends DSpaceRestRepository<VersionRest, Int
         Version version = StringUtils.isNotBlank(summary) ?
                           versioningService.createNewVersion(context, item, summary) :
                           versioningService.createNewVersion(context, item);
+
+        if (Objects.isNull(version)) {
+            throw new RuntimeException("Cannot create the new version for the item with id: " + item.getID());
+        }
+
         return converter.toRest(version, utils.obtainProjection());
     }
 

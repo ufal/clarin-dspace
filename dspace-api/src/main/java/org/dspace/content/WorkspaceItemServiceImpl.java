@@ -7,6 +7,8 @@
  */
 package org.dspace.content;
 
+import static org.dspace.content.InstallItemServiceImpl.SET_OWNING_COLLECTION_EVENT_DETAIL;
+
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -121,6 +123,12 @@ public class WorkspaceItemServiceImpl implements WorkspaceItemService {
             item = itemService.create(context, workspaceItem);
         }
         item.setSubmitter(context.getCurrentUser());
+
+        // CLARIN: publish the owning collection as a transient event so HandleServiceImpl can pick the
+        // per-community PID prefix when the handle is minted (minting runs before setOwningCollection
+        // persists the collection on multi-prefix deployments). Consumed in HandleServiceImpl.createId.
+        context.addEvent(new Event(Event.MODIFY, Constants.ITEM, item.getID(),
+                SET_OWNING_COLLECTION_EVENT_DETAIL + collection.getID()));
 
         // Now create the policies for the submitter to modify item and contents
         // contents = bitstreams, bundles
@@ -316,6 +324,12 @@ public class WorkspaceItemServiceImpl implements WorkspaceItemService {
 
         source.getItem().removeMetadata(remove);
 
+    }
+
+
+    @Override
+    public List<WorkspaceItem> findByShareToken(Context context, String shareToken) throws SQLException {
+        return workspaceItemDAO.findByShareToken(context, shareToken);
     }
 
 }

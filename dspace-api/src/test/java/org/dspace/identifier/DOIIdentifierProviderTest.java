@@ -23,7 +23,9 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.stream.Collectors;
 
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -200,15 +202,18 @@ public class DOIIdentifierProviderTest
         }
 
         itemService.clearMetadata(context, item,
-                                  DOIIdentifierProvider.MD_SCHEMA,
-                                  DOIIdentifierProvider.DOI_ELEMENT,
-                                  DOIIdentifierProvider.DOI_QUALIFIER,
-                                  null);
-        itemService.addMetadata(context, item, DOIIdentifierProvider.MD_SCHEMA,
-                                DOIIdentifierProvider.DOI_ELEMENT,
-                                DOIIdentifierProvider.DOI_QUALIFIER,
-                                null,
-                                remainder);
+                DOIIdentifierProvider.MD_SCHEMA,
+                DOIIdentifierProvider.DOI_ELEMENT,
+                DOIIdentifierProvider.DOI_QUALIFIER,
+                null);
+        // There could be scenario when the `dc.identifier.doi` metadata field is empty, so do not try to remove it
+        if (CollectionUtils.isNotEmpty(remainder)) {
+            itemService.addMetadata(context, item, DOIIdentifierProvider.MD_SCHEMA,
+                    DOIIdentifierProvider.DOI_ELEMENT,
+                    DOIIdentifierProvider.DOI_QUALIFIER,
+                    null,
+                    remainder);
+        }
 
         itemService.update(context, item);
         //we need to commit the changes so we don't block the table for testing
@@ -326,6 +331,52 @@ public class DOIIdentifierProviderTest
             }
         }
         assertTrue("Cannot store DOI as item metadata value.", result);
+    }
+
+    @Test
+    public void testStore_DOI_keeps_existing_different_doi_metadata() throws SQLException, AuthorizeException,
+            IOException, IdentifierException, IllegalAccessException, WorkflowException {
+        Item item = newItem();
+
+        // this checks that the method does not fail if there is already a *different* DOI in the metadata,
+        // here we verify that the existing DOI is preserved (not deleted) and the new one is added alongside it.
+        // Items with more than one DOI are reported by the ItemMetadataQAChecker curation task, not silently
+        // cleaned up here.
+        String oldDoi = DOI.SCHEME + PREFIX + "/" + NAMESPACE_SEPARATOR + "1234";
+        String newDoi = DOI.SCHEME + PREFIX + "/" + NAMESPACE_SEPARATOR
+            + Long.toHexString(Instant.now().toEpochMilli());
+
+        context.turnOffAuthorisationSystem();
+        itemService.addMetadata(context, item, DOIIdentifierProvider.MD_SCHEMA,
+                DOIIdentifierProvider.DOI_ELEMENT,
+                DOIIdentifierProvider.DOI_QUALIFIER,
+                null,
+                doiService.DOIToExternalForm(oldDoi));
+        provider.saveDOIToObject(context, item, newDoi);
+        context.restoreAuthSystemState();
+
+        checkDoiMetadata(item, oldDoi, newDoi);
+    }
+
+    @Test
+    public void testStore_DOI_check_single_doi_metadata() throws SQLException, AuthorizeException, IOException,
+            IdentifierException, IllegalAccessException, WorkflowException {
+        Item item = newItem();
+
+        // this checks that the method does not fail if there is already a DOI in the metadata,
+        // here we check if DOI metadata are not duplicated
+        String doi = DOI.SCHEME + PREFIX + "/" + NAMESPACE_SEPARATOR + Long.toHexString(Instant.now().toEpochMilli());
+
+        context.turnOffAuthorisationSystem();
+        itemService.addMetadata(context, item, DOIIdentifierProvider.MD_SCHEMA,
+                DOIIdentifierProvider.DOI_ELEMENT,
+                DOIIdentifierProvider.DOI_QUALIFIER,
+                null,
+                doiService.DOIToExternalForm(doi));
+        provider.saveDOIToObject(context, item, doi);
+        context.restoreAuthSystemState();
+
+        checkSingleDoiMetadata(item, doi);
     }
 
     @Test
@@ -863,5 +914,35 @@ public class DOIIdentifierProviderTest
     // updateMetadataOnline
     // registerOnline
     // reserveOnline
+
+    private void checkSingleDoiMetadata(Item item, String doi) throws IdentifierException {
+        List<MetadataValue> metadata = itemService.getMetadata(item, DOIIdentifierProvider.MD_SCHEMA,
+                DOIIdentifierProvider.DOI_ELEMENT,
+                DOIIdentifierProvider.DOI_QUALIFIER,
+                Item.ANY);
+        boolean result = false;
+        if (metadata.size() == 1 && metadata.get(0).getValue().equals(doiService.DOIToExternalForm(doi))) {
+            result = true;
+        }
+        assertTrue("Invalid or duplicate 'dc.identifier.doi' metadata value(s).", result);
+    }
+
+    private void checkDoiMetadata(Item item, String... dois) throws IdentifierException {
+        List<String> values = itemService.getMetadata(item, DOIIdentifierProvider.MD_SCHEMA,
+                        DOIIdentifierProvider.DOI_ELEMENT,
+                        DOIIdentifierProvider.DOI_QUALIFIER,
+                        Item.ANY)
+                .stream()
+                .map(MetadataValue::getValue)
+                .collect(Collectors.toList());
+
+        List<String> expected = new ArrayList<>();
+        for (String doi : dois) {
+            expected.add(doiService.DOIToExternalForm(doi));
+        }
+
+        assertEquals("Unexpected number of 'dc.identifier.doi' metadata values.", expected.size(), values.size());
+        assertTrue("Expected 'dc.identifier.doi' metadata values are missing.", values.containsAll(expected));
+    }
 
 }

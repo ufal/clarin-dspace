@@ -241,3 +241,13 @@ db.password = dspace
 #  LDN INBOX SETTINGS  #
 ########################
 ldn.enabled = true
+
+##############################################
+#  CLARIN / LINDAT (UFAL) CONFIGURATION      #
+##############################################
+# Load the CLARIN master config. This MUST be included from local.cfg (a deployment file) rather than
+# from the committed dspace.cfg: clarin-dspace.cfg carries deployment-specific overrides (Shibboleth,
+# PID prefixes, authority, event consumers) that conflict with the vanilla DSpace integration-test
+# environment. Keeping the include here loads all CLARIN feature config at runtime for real deployments
+# while leaving the test environment vanilla. Copy this file to local.cfg and uncomment:
+# include = ${module_dir}/../clarin-dspace.cfg

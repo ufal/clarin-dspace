@@ -8,6 +8,8 @@
 package org.dspace.app.util;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -19,7 +21,13 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.dspace.content.MetadataSchemaEnum;
+import org.dspace.core.Context;
 import org.dspace.core.Utils;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import org.springframework.util.CollectionUtils;
+import org.springframework.util.ObjectUtils;
+import org.xml.sax.SAXException;
 
 /**
  * Class representing a line in an input form.
@@ -142,9 +150,34 @@ public class DCInput {
     private Pattern pattern = null;
 
     /**
+     * Access Control List - is user allowed for particular ACL action on this input field in given
+     */
+    private ACL acl = null;
+
+    /**
      * allowed document types
      */
     private List<String> typeBind = null;
+
+    /**
+     * for this input type the complex definition is loaded from the all complex definitions
+     */
+    private ComplexDefinition complexDefinition = null;
+
+    /**
+     * give suggestions from this specific autocomplete solr index/file
+     */
+    private String autocompleteCustom = null;
+
+    /**
+     * the custom field for the type bind
+     */
+    private String typeBindField = null;
+
+    /**
+     * the dropdown input type could have defined a default value
+     */
+    private String defaultValue = "";
 
     private boolean isRelationshipField = false;
     private boolean isMetadataField = false;
@@ -171,8 +204,10 @@ public class DCInput {
      *
      * @param fieldMap named field values.
      * @param listMap  value-pairs map, computed from the forms definition XML file
+     * @param complexDefinitions  definition of the complex input - more inputs in one row
      */
-    public DCInput(Map<String, String> fieldMap, Map<String, List<String>> listMap) {
+    public DCInput(Map<String, String> fieldMap, Map<String, List<String>> listMap,
+                   ComplexDefinitions complexDefinitions) {
         dcElement = fieldMap.get("dc-element");
         dcQualifier = fieldMap.get("dc-qualifier");
 
@@ -207,6 +242,12 @@ public class DCInput {
             valueListName = fieldMap.get("value-pairs-name");
             valueList = listMap.get(valueListName);
         }
+        if ("complex".equals(inputType)) {
+            complexDefinition = complexDefinitions.getByName((fieldMap.get(DCInputsReader.COMPLEX_DEFINITION_REF)));
+        }
+        if ("autocomplete".equals(inputType)) {
+            autocompleteCustom = fieldMap.get(DCInputsReader.AUTOCOMPLETE_CUSTOM);
+        }
         hint = fieldMap.get("hint");
         warning = fieldMap.get("required");
         required = warning != null && warning.length() > 0;
@@ -214,6 +255,7 @@ public class DCInput {
         readOnly = fieldMap.get("readonly");
         vocabulary = fieldMap.get("vocabulary");
         this.initRegex(fieldMap.get("regex"));
+        acl = ACL.fromString(fieldMap.get("acl"));
         String closedVocabularyStr = fieldMap.get("closedVocabulary");
         closedVocabulary = "true".equalsIgnoreCase(closedVocabularyStr)
             || "yes".equalsIgnoreCase(closedVocabularyStr);
@@ -221,12 +263,11 @@ public class DCInput {
         // parsing of the <type-bind> element (using the colon as split separator)
         typeBind = new ArrayList<>();
         String typeBindDef = fieldMap.get("type-bind");
-        if (typeBindDef != null && typeBindDef.trim().length() > 0) {
-            String[] types = typeBindDef.split(",");
-            for (String type : types) {
-                typeBind.add(type.trim());
-            }
-        }
+        this.insertToTypeBind(typeBindDef);
+        typeBindField = fieldMap.get(DCInputsReader.TYPE_BIND_FIELD_ATTRIBUTE);
+        this.insertToTypeBind(typeBindField);
+
+
         style = fieldMap.get("style");
         isRelationshipField = fieldMap.containsKey("relationship-type");
         isMetadataField = fieldMap.containsKey("dc-schema");
@@ -241,7 +282,17 @@ public class DCInput {
                 externalSources.add(StringUtils.trim(source));
             }
         }
+        defaultValue = fieldMap.get("default-value");
 
+    }
+
+    private void insertToTypeBind(String typeBindDef) {
+        if (StringUtils.isNotEmpty(typeBindDef)) {
+            String[] types = typeBindDef.split(",");
+            for (String type : types) {
+                typeBind.add(type.trim());
+            }
+        }
     }
 
     protected void initRegex(String regex) {
@@ -530,6 +581,21 @@ public class DCInput {
         return typeBind.contains(typeName);
     }
 
+    /**
+     * Decides if this field is valid for the document type
+     * Check if one of the typeName is in the typeBind list
+     *
+     * @param typeNames List of document type names e.g. ["VIDEO"]
+     * @return true when there is no type restriction or typeName is allowed
+     */
+    public boolean isAllowedFor(List<String> typeNames) {
+        if (typeBind.isEmpty()) {
+            return true;
+        }
+
+        return CollectionUtils.containsAny(typeBind, typeNames);
+    }
+
     public String getScope() {
         return visibility;
     }
@@ -562,11 +628,67 @@ public class DCInput {
         return externalSources;
     }
 
+    /**
+     * Is user allowed for particular ACL action on this input field in given Context?
+     *
+     * @param c current Context, load the user data based on the current Context
+     * @param action read/write
+     * @return true if allowed, false otherwise
+     */
+    public boolean isAllowedAction(Context c, int action) {
+        return acl.isAllowedAction(c, action);
+    }
+
     public boolean isQualdropValue() {
         if ("qualdrop_value".equals(getInputType())) {
             return true;
         }
         return false;
+    }
+
+    public ComplexDefinition getComplexDefinition() {
+        return this.complexDefinition;
+    }
+
+    public String getDefaultValue() {
+        return defaultValue;
+    }
+
+    public void setDefaultValue(String defaultValue) {
+        this.defaultValue = defaultValue;
+    }
+
+    public boolean hasDefaultValue() {
+        return StringUtils.isNotEmpty(this.getDefaultValue());
+    }
+
+    public boolean isDropdownValue() {
+        return "dropdown".equals(getInputType());
+    }
+
+
+
+    /**
+     * Convert complex definition HashMap to the ordered JSON string
+     * @return complex definition in the JSON string which will be parsed in the FE
+     */
+    public String getComplexDefinitionJSONString() {
+        String resultJson = "";
+        JSONArray complexDefinitionListJSON = null;
+
+        if (!ObjectUtils.isEmpty(this.complexDefinition)) {
+            List<JSONObject> complexDefinitionJsonList = new ArrayList<>();
+            for (String CDInputName : this.complexDefinition.getInputs().keySet()) {
+                JSONObject inputFieldJson = new JSONObject();
+                Map<String, String> inputField = this.complexDefinition.getInputs().get(CDInputName);
+                inputFieldJson.put(CDInputName, new JSONObject(inputField));
+                complexDefinitionJsonList.add(inputFieldJson);
+            }
+            complexDefinitionListJSON = new JSONArray(complexDefinitionJsonList);
+            resultJson = complexDefinitionListJSON.toString();
+        }
+
+        return resultJson;
     }
 
     public boolean validate(String value) {
@@ -614,5 +736,107 @@ public class DCInput {
      */
     public boolean isMetadataField() {
         return isMetadataField;
+    }
+
+    public String getAutocompleteCustom() {
+        return autocompleteCustom;
+    }
+
+    public void setAutocompleteCustom(String autocompleteCustom) {
+        this.autocompleteCustom = autocompleteCustom;
+    }
+
+    public String getTypeBindField() {
+        return typeBindField;
+    }
+
+    public void setTypeBindField(String typeBindField) {
+        this.typeBindField = typeBindField;
+    }
+
+    /**
+     * Class representing a Map of the ComplexDefinition object
+     * Class is copied from UFAL/CLARIN-DSPACE (https://github.com/ufal/clarin-dspace) and modified by
+     * @author Milan Majchrak (milan.majchrak at dataquest.sk)
+     */
+    public static class ComplexDefinitions {
+        /**
+         * Map of the ComplexDefiniton object
+         */
+        private Map<String, ComplexDefinition> definitions = null;
+        private Map<String, List<String>> valuePairs = null;
+        private static final String separator = ";";
+
+        public ComplexDefinitions(Map<String, List<String>> valuePairs) {
+            definitions = new HashMap<>();
+            this.valuePairs = valuePairs;
+        }
+
+        public ComplexDefinition getByName(String name) {
+            return definitions.get(name);
+        }
+
+        public void addDefinition(ComplexDefinition definition) {
+            definitions.put(definition.getName(), definition);
+            definition.setValuePairs(valuePairs);
+        }
+
+        public static String getSeparator() {
+            return separator;
+        }
+    }
+
+    /**
+     * Class representing a complex input field - multiple lines in input form
+     * Class is copied from UFAL/CLARIN-DSPACE (https://github.com/ufal/clarin-dspace) and modified by
+     * @author Milan Majchrak (milan.majchrak at dataquest.sk)
+     */
+    public static class ComplexDefinition {
+        /**
+         * Input fields in the input form
+         */
+        private Map<String, Map<String, String>> inputs;
+        private String name;
+        private Map<String, List<String>> valuePairs = null;
+
+        /**
+         * Class constructor for creating a ComplexDefinition object
+         *
+         * @param definitionName the name of the complex input type
+         */
+        public ComplexDefinition(String definitionName) {
+            name = definitionName;
+            inputs = new LinkedHashMap<>();
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        /**
+         * Add input field definition to the complex input field definition
+         * @param attributes of the input field definition e.g., ["name","surname"]
+         * @throws SAXException
+         */
+        public void addInput(Map<String, String> attributes) throws SAXException {
+            // these two are a must, check if present
+            String iName = attributes.get("name");
+            String iType = attributes.get("input-type");
+
+            if (iName == null || iType == null) {
+                throw new SAXException(
+                        "Missing attributes (name or input-type) on complex definition input");
+            }
+
+            inputs.put(iName,attributes);
+        }
+
+        public Map<String, Map<String, String>> getInputs() {
+            return this.inputs;
+        }
+
+        void setValuePairs(Map<String, List<String>> valuePairs) {
+            this.valuePairs = valuePairs;
+        }
     }
 }

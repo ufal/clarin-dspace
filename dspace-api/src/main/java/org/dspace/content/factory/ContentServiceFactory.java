@@ -20,6 +20,7 @@ import org.dspace.content.service.CollectionService;
 import org.dspace.content.service.CommunityService;
 import org.dspace.content.service.DSpaceObjectLegacySupportService;
 import org.dspace.content.service.DSpaceObjectService;
+import org.dspace.content.service.DspaceObjectClarinService;
 import org.dspace.content.service.DuplicateDetectionService;
 import org.dspace.content.service.EntityService;
 import org.dspace.content.service.EntityTypeService;
@@ -29,10 +30,13 @@ import org.dspace.content.service.ItemService;
 import org.dspace.content.service.MetadataFieldService;
 import org.dspace.content.service.MetadataSchemaService;
 import org.dspace.content.service.MetadataValueService;
+import org.dspace.content.service.PreviewContentService;
 import org.dspace.content.service.RelationshipService;
 import org.dspace.content.service.RelationshipTypeService;
+import org.dspace.content.service.ReportResultService;
 import org.dspace.content.service.SiteService;
 import org.dspace.content.service.WorkspaceItemService;
+import org.dspace.core.ProvenanceService;
 import org.dspace.eperson.service.SubscribeService;
 import org.dspace.services.factory.DSpaceServicesFactory;
 import org.dspace.workflow.factory.WorkflowServiceFactory;
@@ -53,6 +57,12 @@ public abstract class ContentServiceFactory {
     public abstract BitstreamFormatService getBitstreamFormatService();
 
     public abstract BitstreamService getBitstreamService();
+
+    public abstract ReportResultService getReportResultService();
+
+    public abstract DspaceObjectClarinService getDspaceObjectClarinService();
+
+    public abstract PreviewContentService getPreviewContentService();
 
     public abstract BundleService getBundleService();
 
@@ -120,6 +130,13 @@ public abstract class ContentServiceFactory {
      * @return the DuplicateDetectionService
      */
     public abstract DuplicateDetectionService getDuplicateDetectionService();
+
+    /**
+     * Return the implementation of the ProvenanceService interface
+     *
+     * @return the ProvenanceService
+     */
+    public abstract ProvenanceService getProvenanceService();
 
     public <T extends DSpaceObject> DSpaceObjectService<T> getDSpaceObjectService(T dso) {
         return getDSpaceObjectService(dso.getType());

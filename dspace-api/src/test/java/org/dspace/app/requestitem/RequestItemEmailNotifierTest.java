@@ -195,6 +195,11 @@ public class RequestItemEmailNotifierTest
 
         assertThat("Should contain the test custom message",
                 (String)content, containsString(TEST_MESSAGE));
+
+        assertEquals("Subject should carry the repository short name.",
+                configurationService.getProperty("dspace.shortname")
+                        + ": Request for Copy of Restricted Document is Granted",
+                myMessage.getSubject());
     }
 
     /**
@@ -272,6 +277,11 @@ public class RequestItemEmailNotifierTest
         // FIXME Note that this depends on the content of the rejection template!
         assertThat("Should contain the word 'denied'.",
                 (String)content, containsString("denied"));
+
+        assertEquals("Subject should carry the repository short name.",
+                configurationService.getProperty("dspace.shortname")
+                        + ": Request for Copy of Restricted Document is Denied",
+                myMessage.getSubject());
     }
 
     @Test

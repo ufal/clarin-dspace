@@ -3,8 +3,8 @@
 ## Parameters: {0} Main intro
 ##             {1} New items section
 ##             {2} Modified items section
-#set($subject = "${config.get('dspace.name')} Subscriptions")
-This email is sent from ${config.get('dspace.name')} based on the chosen subscription preferences.
+#set($subject = "${config.get('dspace.shortname')} Subscriptions")
+This email is sent from ${config.get('dspace.shortname')} based on the chosen subscription preferences.
 
 #if( not( "$params[0]" == "" ))
 ${params[0]}

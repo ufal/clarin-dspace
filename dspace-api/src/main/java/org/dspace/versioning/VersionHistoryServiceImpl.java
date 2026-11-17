@@ -74,7 +74,7 @@ public class VersionHistoryServiceImpl implements VersionHistoryService {
 
     @Override
     public void delete(Context context, VersionHistory versionHistory) throws SQLException, AuthorizeException {
-        versionHistoryDAO.delete(context, new VersionHistory());
+        versionHistoryDAO.delete(context, versionHistory);
     }
 
     // LIST order: descending

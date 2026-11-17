@@ -32,6 +32,8 @@ import org.dspace.content.dao.BundleDAO;
 import org.dspace.content.service.BitstreamService;
 import org.dspace.content.service.BundleService;
 import org.dspace.content.service.ItemService;
+import org.dspace.content.service.clarin.ClarinItemService;
+import org.dspace.content.service.clarin.ClarinLicenseService;
 import org.dspace.core.Constants;
 import org.dspace.core.Context;
 import org.dspace.core.LogHelper;
@@ -64,6 +66,10 @@ public class BundleServiceImpl extends DSpaceObjectServiceImpl<Bundle> implement
     protected AuthorizeService authorizeService;
     @Autowired(required = true)
     protected ResourcePolicyService resourcePolicyService;
+    @Autowired(required = true)
+    protected ClarinLicenseService clarinLicenseService;
+    @Autowired(required = true)
+    protected ClarinItemService clarinItemService;
 
     protected BundleServiceImpl() {
         super();
@@ -208,6 +214,10 @@ public class BundleServiceImpl extends DSpaceObjectServiceImpl<Bundle> implement
             }
         }
         bitstreamService.update(context, bitstream);
+
+        clarinItemService.updateItemFilesMetadata(context, owningItem, bundle);
+        // Add clarin license to the bitstream and clarin license values to the item metadata
+        clarinLicenseService.addClarinLicenseToBitstream(context, owningItem, bundle, bitstream);
     }
 
     @Override
@@ -251,6 +261,7 @@ public class BundleServiceImpl extends DSpaceObjectServiceImpl<Bundle> implement
             bundle.removeBitstream(bitstream);
             bitstream.getBundles().remove(bundle);
         }
+        clarinItemService.updateItemFilesMetadata(context, owningItem, bundle);
     }
 
     @Override
@@ -444,7 +455,7 @@ public class BundleServiceImpl extends DSpaceObjectServiceImpl<Bundle> implement
             if (owningItem != null) {
                 itemService.updateLastModified(context, owningItem);
                 itemService.update(context, owningItem);
-
+                clarinItemService.updateItemFilesMetadata(context, owningItem, bundle);
             }
         }
     }

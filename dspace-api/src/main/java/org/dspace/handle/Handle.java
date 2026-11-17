@@ -7,6 +7,9 @@
  */
 package org.dspace.handle;
 
+import java.util.Date;
+import java.util.Objects;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -50,6 +53,15 @@ public class Handle implements ReloadableEntity<Integer> {
      */
     @Column(name = "resource_type_id")
     private Integer resourceTypeId;
+
+    @Column(name = "url")
+    private String url;
+
+    @Column(name = "dead")
+    private Boolean dead;
+
+    @Column(name = "dead_since")
+    private Date deadSince;
 
     /**
      * Protected constructor, create object using:
@@ -124,5 +136,32 @@ public class Handle implements ReloadableEntity<Integer> {
             .append(handle)
             .append(resourceTypeId)
             .toHashCode();
+    }
+
+    public String getUrl() {
+        return url;
+    }
+
+    public void setUrl(String url) {
+        this.url = url;
+    }
+
+    public Boolean getDead() {
+        if (Objects.isNull(dead)) {
+            return false;
+        }
+        return dead;
+    }
+
+    public void setDead(Boolean dead) {
+        this.dead = dead;
+    }
+
+    public Date getDeadSince() {
+        return deadSince;
+    }
+
+    public void setDeadSince(Date deadSince) {
+        this.deadSince = deadSince;
     }
 }

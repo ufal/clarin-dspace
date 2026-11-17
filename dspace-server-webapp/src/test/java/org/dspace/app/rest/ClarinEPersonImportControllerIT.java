@@ -1,0 +1,333 @@
+/**
+ * The contents of this file are subject to the license and copyright
+ * detailed in the LICENSE and NOTICE files at the root of the source
+ * tree and available online at
+ *
+ * http://www.dspace.org/license/
+ */
+package org.dspace.app.rest;
+
+import static com.jayway.jsonpath.JsonPath.read;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.dspace.app.rest.model.ClarinUserRegistrationRest;
+import org.dspace.app.rest.model.EPersonRest;
+import org.dspace.app.rest.model.MetadataRest;
+import org.dspace.app.rest.model.MetadataValueRest;
+import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
+import org.dspace.builder.ClarinUserRegistrationBuilder;
+import org.dspace.builder.EPersonBuilder;
+import org.dspace.content.clarin.ClarinUserRegistration;
+import org.dspace.content.service.clarin.ClarinUserRegistrationService;
+import org.dspace.eperson.EPerson;
+import org.dspace.eperson.service.EPersonService;
+import org.junit.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+
+/**
+ * Integration test to test the /api/clarin/import/* endpoints
+ *
+ * @author Michaela Paurikova (michaela.paurikova at dataquest.sk)
+ */
+public class ClarinEPersonImportControllerIT  extends AbstractControllerIntegrationTest {
+
+    @Autowired
+    private EPersonService ePersonService;
+
+    @Autowired
+    private ClarinUserRegistrationService clarinUserRegistrationService;
+
+    /**
+     * Helper method to find a ClarinUserRegistration as admin, preserving current user context.
+     */
+    private ClarinUserRegistration findAsAdmin(Integer id) throws Exception {
+        EPerson currentUser = context.getCurrentUser();
+        try {
+            context.setCurrentUser(admin);
+            return clarinUserRegistrationService.find(context, id);
+        } finally {
+            context.setCurrentUser(currentUser);
+        }
+    }
+
+    /**
+     * Helper method to create a test EPerson with given email suffix and password.
+     */
+    private EPerson createTestEPerson(String emailSuffix, String password) throws Exception {
+        return EPersonBuilder.createEPerson(context)
+                .withEmail("eperson" + emailSuffix + "@mail.com")
+                .withPassword(password)
+                .build();
+    }
+
+    /**
+     * Helper method to create an initial ClarinUserRegistration for testing.
+     */
+    private ClarinUserRegistration createInitialRegistration(EPerson ePerson, String email, String org)
+            throws Exception {
+        return ClarinUserRegistrationBuilder
+                .createClarinUserRegistration(context)
+                .withEmail(email)
+                .withEPersonID(ePerson.getID())
+                .withOrganization(org)
+                .withConfirmation(false)
+                .build();
+    }
+
+    /**
+     * Helper method to build a ClarinUserRegistrationRest import request.
+     */
+    private ClarinUserRegistrationRest buildImportRequest(String email, UUID ePersonID, String org,
+            boolean confirmation) {
+        ClarinUserRegistrationRest request = new ClarinUserRegistrationRest();
+        request.setEmail(email);
+        request.setePersonID(ePersonID);
+        request.setOrganization(org);
+        request.setConfirmation(confirmation);
+        return request;
+    }
+
+    /**
+     * Helper method to perform the user registration import request.
+     */
+    private void performImportRequest(String authToken, ClarinUserRegistrationRest request) throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        getClient(authToken).perform(post("/api/clarin/import/userregistration")
+                        .content(mapper.writeValueAsBytes(request))
+                        .contentType(contentType))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    public void createEpersonTest() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        EPersonRest data = new EPersonRest();
+        MetadataRest metadataRest = new MetadataRest();
+        data.setEmail("createtest@example.com");
+        data.setCanLogIn(true);
+        MetadataValueRest surname = new MetadataValueRest();
+        surname.setValue("Doe");
+        metadataRest.put("eperson.lastname", surname);
+        MetadataValueRest firstname = new MetadataValueRest();
+        firstname.setValue("John");
+        metadataRest.put("eperson.firstname", firstname);
+        data.setMetadata(metadataRest);
+
+        AtomicReference<UUID> idRef = new AtomicReference<UUID>();
+
+        String authToken = getAuthToken(admin.getEmail(), password);
+
+        try {
+            getClient(authToken).perform(post("/api/clarin/import/eperson")
+                            .content(mapper.writeValueAsBytes(data))
+                            .contentType(contentType)
+                            .param("projection", "full")
+                            .param("selfRegistered", "true")
+                            .param("lastActive", "2018-02-10T13:21:29.733")
+                            .param("passwordHashStr",
+                                    "5b62ec4a3492ec34f1e659e93a6c204c8a72b2f53d1a60e83f48bdb2e5718ebf")
+                            .param("salt", "7f9d4e63bde7a0d546d8e6f4e32870f3")
+                            .param("digestAlgorithm", "SHA-512"))
+                    .andExpect(status().isOk())
+                    .andDo(result -> idRef
+                            .set(UUID.fromString(read(result.getResponse().getContentAsString(), "$.id"))));
+
+            EPerson createdEperson = ePersonService.find(context, idRef.get());
+
+            assertEquals(getStringFromDate(createdEperson.getLastActive()), "2018-02-10T13:21:29.733");
+            assertTrue(createdEperson.getSelfRegistered());
+            assertEquals(createdEperson.getEmail(),"createtest@example.com");
+            assertTrue(createdEperson.canLogIn());
+            assertFalse(createdEperson.getRequireCertificate());
+            assertEquals(createdEperson.getFirstName(), "John");
+            assertEquals(createdEperson.getLastName(), "Doe");
+            assertTrue(createdEperson.hasPasswordSet());
+        } finally {
+            EPersonBuilder.deleteEPerson(idRef.get());
+        }
+    }
+
+    @Test
+    public void createEpersonDifferentLastActiveFormatTest() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        EPersonRest data = new EPersonRest();
+        MetadataRest metadataRest = new MetadataRest();
+        data.setEmail("createtest@example.com");
+        data.setCanLogIn(true);
+        MetadataValueRest surname = new MetadataValueRest();
+        surname.setValue("Doe");
+        metadataRest.put("eperson.lastname", surname);
+        MetadataValueRest firstname = new MetadataValueRest();
+        firstname.setValue("John");
+        metadataRest.put("eperson.firstname", firstname);
+        data.setMetadata(metadataRest);
+
+        AtomicReference<UUID> idRef = new AtomicReference<UUID>();
+
+        String authToken = getAuthToken(admin.getEmail(), password);
+
+        try {
+            getClient(authToken).perform(post("/api/clarin/import/eperson")
+                            .content(mapper.writeValueAsBytes(data))
+                            .contentType(contentType)
+                            .param("projection", "full")
+                            .param("selfRegistered", "true")
+                            .param("lastActive", "2018-02-10T13:21:29.733"))
+                    .andExpect(status().isOk())
+                    .andDo(result -> idRef
+                            .set(UUID.fromString(read(result.getResponse().getContentAsString(), "$.id"))));
+
+            EPerson createdEperson = ePersonService.find(context, idRef.get());
+
+            assertEquals(getStringFromDate(createdEperson.getLastActive()), "2018-02-10T13:21:29.733");
+            assertTrue(createdEperson.getSelfRegistered());
+            assertEquals(createdEperson.getEmail(),"createtest@example.com");
+            assertTrue(createdEperson.canLogIn());
+            assertFalse(createdEperson.getRequireCertificate());
+            assertEquals(createdEperson.getFirstName(), "John");
+            assertEquals(createdEperson.getLastName(), "Doe");
+
+        } finally {
+            EPersonBuilder.deleteEPerson(idRef.get());
+        }
+    }
+
+    @Test
+    public void createUserRegistrationTest() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        context.turnOffAuthorisationSystem();
+        EPerson ePerson = EPersonBuilder.createEPerson(context)
+                .withEmail("eperson3@mail.com")
+                .withPassword("qwerty03")
+                .build();
+        context.restoreAuthSystemState();
+        ClarinUserRegistrationRest userRegistrationRest = new ClarinUserRegistrationRest();
+        userRegistrationRest.setConfirmation(true);
+        userRegistrationRest.setEmail("test@test.edu");
+        userRegistrationRest.setePersonID(ePerson.getID());
+        userRegistrationRest.setOrganization("Test");
+
+        AtomicReference<Integer> idRef = new AtomicReference<Integer>();
+
+        String authToken = getAuthToken(admin.getEmail(), password);
+
+        try {
+            getClient(authToken).perform(post("/api/clarin/import/userregistration")
+                            .content(mapper.writeValueAsBytes(userRegistrationRest))
+                            .contentType(contentType))
+                    .andExpect(status().isOk())
+                    .andDo(result -> idRef
+                            .set(read(result.getResponse().getContentAsString(), "$.id")));
+            //control
+            EPerson currentUser = context.getCurrentUser();
+            context.setCurrentUser(admin);
+            ClarinUserRegistration clarinUserRegistration = clarinUserRegistrationService.find(context, idRef.get());
+            context.setCurrentUser(currentUser);
+            assertTrue(clarinUserRegistration.isConfirmation());
+            assertEquals(clarinUserRegistration.getEmail(), "test@test.edu");
+            assertEquals(clarinUserRegistration.getPersonID(), ePerson.getID());
+            assertEquals(clarinUserRegistration.getOrganization(), "Test");
+        } finally {
+            ClarinUserRegistrationBuilder.deleteClarinUserRegistration(idRef.get());
+        }
+    }
+
+    @Test
+    public void updatesExistingRegistrationWhenMatchedByEmail() throws Exception {
+        context.turnOffAuthorisationSystem();
+        EPerson ePerson = createTestEPerson("4", "qwerty04");
+        ClarinUserRegistration initialRegistration = createInitialRegistration(ePerson, "user@test.edu",
+                "Original Org");
+        context.restoreAuthSystemState();
+
+        // Import with same email to match by email
+        ClarinUserRegistrationRest request = buildImportRequest("user@test.edu", ePerson.getID(),
+                "Updated Org", true);
+        String authToken = getAuthToken(admin.getEmail(), password);
+
+        try {
+            performImportRequest(authToken, request);
+
+            // Verify updates were applied
+            ClarinUserRegistration updated = findAsAdmin(initialRegistration.getID());
+            assertEquals("user@test.edu", updated.getEmail());
+            assertEquals("Updated Org", updated.getOrganization());
+            assertTrue(updated.isConfirmation());
+        } finally {
+            ClarinUserRegistrationBuilder.deleteClarinUserRegistration(initialRegistration.getID());
+        }
+    }
+
+    @Test
+    public void preventsEmailUpdateWhenMatchedByEPersonID() throws Exception {
+        context.turnOffAuthorisationSystem();
+        EPerson ePerson = createTestEPerson("5", "qwerty05");
+        ClarinUserRegistration initialRegistration = createInitialRegistration(ePerson, "existing@test.edu",
+                "Original Org");
+        context.restoreAuthSystemState();
+
+        // Import with different email - will match by ePersonID instead
+        ClarinUserRegistrationRest request = buildImportRequest("different@test.edu", ePerson.getID(),
+                "Updated Org", true);
+        String authToken = getAuthToken(admin.getEmail(), password);
+
+        try {
+            performImportRequest(authToken, request);
+
+            // Verify email was NOT updated but other fields were
+            ClarinUserRegistration updated = findAsAdmin(initialRegistration.getID());
+            assertEquals("existing@test.edu", updated.getEmail()); // Email unchanged
+            assertEquals("Updated Org", updated.getOrganization()); // Organization updated
+            assertTrue(updated.isConfirmation()); // Confirmation updated
+        } finally {
+            ClarinUserRegistrationBuilder.deleteClarinUserRegistration(initialRegistration.getID());
+        }
+    }
+
+    @Test
+    public void updatesRegistrationWhenBothEmailAndEPersonIDMatch() throws Exception {
+        context.turnOffAuthorisationSystem();
+        EPerson ePerson = createTestEPerson("6", "qwerty06");
+        ClarinUserRegistration initialRegistration = createInitialRegistration(ePerson, "consistent@test.edu",
+                "Original Org");
+        context.restoreAuthSystemState();
+
+        // Import with same email and ePersonID - both match the same record
+        ClarinUserRegistrationRest request = buildImportRequest("consistent@test.edu", ePerson.getID(),
+                "Updated Org", true);
+        String authToken = getAuthToken(admin.getEmail(), password);
+
+        try {
+            performImportRequest(authToken, request);
+
+            // Verify all fields were updated (happy path)
+            ClarinUserRegistration updated = findAsAdmin(initialRegistration.getID());
+            assertEquals("consistent@test.edu", updated.getEmail());
+            assertEquals("Updated Org", updated.getOrganization());
+            assertTrue(updated.isConfirmation());
+        } finally {
+            ClarinUserRegistrationBuilder.deleteClarinUserRegistration(initialRegistration.getID());
+        }
+    }
+
+    private String getStringFromDate(java.time.Instant value) throws ParseException {
+        return getStringFromDate(Date.from(value));
+    }
+
+    private String getStringFromDate(Date value) throws ParseException {
+        DateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS");
+        return df.format(value);
+    }
+}

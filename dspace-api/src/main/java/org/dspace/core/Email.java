@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import jakarta.activation.DataHandler;
 import jakarta.activation.DataSource;
@@ -341,10 +342,21 @@ public class Email {
         build();
 
         boolean disabled = getConfigurationService().getBooleanProperty("mail.server.disabled", false);
+
+        // Log email sending information with masked recipient addresses (PII compliance)
+        String templateName = contentName != null ? contentName : "unknown";
+        String recipientsList = recipients.stream()
+                .map(Utils::maskEmail)
+                .collect(Collectors.joining(", "));
+        LOG.info("Sending email - Template: '{}', Recipients: [{}], Subject: '{}'",
+                templateName, recipientsList, subject);
+
         if (disabled) {
             LOG.info(format(message, body));
         } else {
             Transport.send(message);
+            LOG.info("Email successfully sent - Template: '{}', Recipients: [{}]",
+                    templateName, recipientsList);
         }
     }
 
@@ -593,7 +605,7 @@ public class Email {
             message.setSubject(subject);
             message.addRecipient(to);
             System.out.println("\nAbout to send test email:");
-            System.out.println(" - To: " + to);
+            System.out.println(" - To: " + Utils.maskEmail(to));
             System.out.println(" - Subject: " + subject);
             System.out.println(" - Server: " + server);
             boolean disabled = getConfigurationService().getBooleanProperty("mail.server.disabled", false);

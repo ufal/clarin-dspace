@@ -15,6 +15,7 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -72,6 +73,10 @@ public class PubmedImportMetadataSourceServiceIT extends AbstractLiveImportInteg
     public void pubmedImportMetadataGetRecords2Test() throws Exception {
         context.turnOffAuthorisationSystem();
 
+        // The record carries an English month name (Oct), so pin the locale for the duration of the test.
+        Locale defaultLocale = Locale.getDefault();
+        Locale.setDefault(new Locale.Builder().setLanguage("en").setRegion("US").build());
+
         CloseableHttpClient originalHttpClient = liveImportClientImpl.getHttpClient();
         CloseableHttpClient httpClient = Mockito.mock(CloseableHttpClient.class);
         try (InputStream fetchFile = getClass().getResourceAsStream("pubmedimport-fetch-test2.xml");
@@ -92,6 +97,7 @@ public class PubmedImportMetadataSourceServiceIT extends AbstractLiveImportInteg
             matchRecords(new ArrayList<ImportRecord>(recordsImported), collection2match);
         } finally {
             liveImportClientImpl.setHttpClient(originalHttpClient);
+            Locale.setDefault(defaultLocale);
         }
     }
 
