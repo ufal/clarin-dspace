@@ -31,6 +31,7 @@ import org.dspace.app.rest.exception.DSpaceBadRequestException;
 import org.dspace.app.rest.exception.UnprocessableEntityException;
 import org.dspace.app.rest.model.ItemRest;
 import org.dspace.app.rest.utils.ContextUtil;
+import org.dspace.app.statistics.clarin.ClarinMatomoBitstreamTracker;
 import org.dspace.authorize.AuthorizationBitstreamUtils;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.authorize.service.AuthorizeService;
@@ -77,6 +78,8 @@ public class MetadataBitstreamController {
     @Autowired
     private RequestService requestService;
     @Autowired
+    ClarinMatomoBitstreamTracker matomoBitstreamTracker;
+    @Autowired
     EventService eventService;
 
     /**
@@ -116,6 +119,8 @@ public class MetadataBitstreamController {
         }
 
         Item item = (Item) dso;
+        // This bitstream is used to get it's item in the statistics tracker
+        Bitstream bitstreamForStatistics = null;
         name = item.getName() + ".zip";
         response.setHeader(HttpHeaders.CONTENT_DISPOSITION, buildContentDisposition(name));
         response.setContentType("application/zip");
@@ -136,10 +141,18 @@ public class MetadataBitstreamController {
                 IOUtils.copy(is, zip);
                 zip.closeArchiveEntry();
                 is.close();
+                if (bitstreamForStatistics == null) {
+                    bitstreamForStatistics = bitstream;
+                }
                 // Track each downloaded file through the standard DSpace usage-event pipeline
                 // (Solr statistics + the vanilla Matomo MatomoEventListener when matomo.enabled=true),
                 // instead of a CLARIN-specific tracker.
                 eventService.fireEvent(new UsageEvent(UsageEvent.Action.VIEW, request, context, bitstream));
+                try {
+                    matomoBitstreamTracker.trackBitstreamDownload(context, request, bitstreamForStatistics, true);
+                } catch (Exception e) {
+                    log.error("Matomo bitstream tracking failed, continuing with download", e);
+                }
             }
         }
         zip.close();

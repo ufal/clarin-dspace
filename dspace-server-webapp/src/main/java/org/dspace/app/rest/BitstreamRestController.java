@@ -32,6 +32,7 @@ import org.dspace.app.rest.security.ClarinBitstreamAccessTokenSecurityBean;
 import org.dspace.app.rest.utils.ContextUtil;
 import org.dspace.app.rest.utils.HttpHeadersInitializer;
 import org.dspace.app.rest.utils.Utils;
+import org.dspace.app.statistics.clarin.ClarinMatomoBitstreamTracker;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.Bitstream;
 import org.dspace.content.BitstreamFormat;
@@ -108,6 +109,9 @@ public class BitstreamRestController {
     Utils utils;
 
     @Autowired
+    ClarinMatomoBitstreamTracker matomoBitstreamTracker;
+
+    @Autowired
     private S3DirectDownloadService s3DirectDownloadService;
 
     @Autowired
@@ -182,6 +186,12 @@ public class BitstreamRestController {
                     request,
                     context,
                     bit));
+            // Track the download statistics - only if the downloading has started (the condition is inside the method)
+            try {
+                matomoBitstreamTracker.trackBitstreamDownload(context, request, bit, false);
+            } catch (Exception e) {
+                log.error("Matomo bitstream tracking failed, continuing with download", e);
+            }
         }
 
         // Begin actual bitstream delivery
