@@ -269,8 +269,7 @@
     </xsl:template>
 
     <!-- The ELG-SHARE fundingType choice for a stored local.sponsor type, or '' when there is none (e.g. N/A).
-         Also accepts the displayed values of the metashare_funding value-pairs, which were stored by mistake
-         (ufal/clarin-dspace#1388). -->
+         Also accepts the displayed values of the metashare_funding value-pairs, which were stored by mistake. -->
     <xsl:template name="elgFundingType">
         <xsl:param name="type"/>
         <xsl:variable name="type_lc" select="lower-case(normalize-space($type))"/>

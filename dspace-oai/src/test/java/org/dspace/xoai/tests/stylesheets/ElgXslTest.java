@@ -27,7 +27,6 @@ import org.junit.Test;
  * are the ones found in the rejected records, so the crosswalk has to cope with the stored data
  * as it is: it is not cleaned up before the next harvest.</p>
  *
- * @see <a href="https://github.com/ufal/clarin-dspace/issues/1430">ufal/clarin-dspace#1430</a>
  * @see <a href="https://gitlab.com/european-language-grid/platform/ELG-SHARE-schema">ELG-SHARE schema</a>
  */
 public class ElgXslTest extends AbstractXSLTest {
@@ -77,7 +76,7 @@ public class ElgXslTest extends AbstractXSLTest {
         assertFundingType("Other", "other");
     }
 
-    /** submission-forms metashare_funding displayed values, stored by mistake (ufal/clarin-dspace#1388). */
+    /** submission-forms metashare_funding displayed values, stored by mistake. */
     @Test
     public void displayedFundingTypesMapToElgChoices() throws Exception {
         assertFundingType("EU", "euFunds");

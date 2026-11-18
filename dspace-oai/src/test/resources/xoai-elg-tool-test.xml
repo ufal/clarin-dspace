@@ -11,7 +11,7 @@
 <!--
     XOAI metadata of a language dependent tool for the ELG crosswalk tests.
     ElgXslTest removes the language to build the shape the ELG harvest rejected
-    (ufal/clarin-dspace#1430, 11234/1-6024 and 11372/LRT-6050).
+    (11234/1-6024 and 11372/LRT-6050).
 -->
 <metadata xmlns="http://www.lyncode.com/xoai">
     <element name="dc">

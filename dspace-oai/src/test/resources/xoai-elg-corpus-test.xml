@@ -11,7 +11,7 @@
 <!--
     XOAI metadata of a valid text corpus for the ELG crosswalk tests.
     ElgXslTest replaces single values (description, sponsor, size, language) to build the
-    shapes the ELG harvest rejected (ufal/clarin-dspace#1430).
+    shapes the ELG harvest rejected.
 -->
 <metadata xmlns="http://www.lyncode.com/xoai">
     <element name="dc">
