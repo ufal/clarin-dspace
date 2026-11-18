@@ -18,6 +18,27 @@
 
     <xsl:variable name="handle" select="/doc:metadata/doc:element[@name='others']/doc:field[@name='handle']/text()"/>
 
+    <!-- ELG-SHARE restricts ms:description to this many characters; longer texts are rejected by the harvest -->
+    <xsl:variable name="DESCRIPTION_MAX_LENGTH" select="10000"/>
+    <!-- ms:amount is an xs:float; a negative size is a typo, so "-" is not accepted and the file size is used -->
+    <xsl:variable name="PLAIN_AMOUNT_REGEX" select="'^\+?([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][+-]?[0-9]+)?$'"/>
+    <!-- 30,000,000 / 5 490 000 000 / 19,376.84 - only groups of exactly three digits, "1,5" stays ambiguous -->
+    <xsl:variable name="THOUSANDS_AMOUNT_REGEX" select="'^\+?[0-9]{1,3}([,\s&#160;][0-9]{3})+(\.[0-9]+)?$'"/>
+    <xsl:variable name="THOUSANDS_SEPARATOR_REGEX" select="'[,\s&#160;]'"/>
+    <xsl:variable name="LANGUAGE_CODE_REGEX" select="'^[a-z]{2,3}$'"/>
+    <!-- what submitters type into a local.sponsor component when there is nothing to say (compared lower-cased) -->
+    <xsl:variable name="PLACEHOLDERS" select="('', '-', 'n/a')"/>
+
+    <!-- dc.language.iso values; one stored value may hold several languages separated by ";" -->
+    <xsl:variable name="isoLanguages"
+                  select="distinct-values(
+                              (for $value in /doc:metadata/doc:element[@name='dc']/doc:element[@name='language']/doc:element[@name='iso']/doc:element/doc:field[@name='value'],
+                                   $language in tokenize($value, ';')
+                               return normalize-space($language))[. != ''])"/>
+    <!-- free text language names (dc.language), used for und / mis -->
+    <xsl:variable name="languageNames"
+                  select="/doc:metadata/doc:element[@name='dc']/doc:element[@name='language']/doc:element/doc:field[@name='value']"/>
+
     <xsl:variable name="type"
                   select="/doc:metadata/doc:element[@name='dc']/doc:element[@name='type']/doc:element/doc:field[@name='value']/text()"/>
 
@@ -135,7 +156,17 @@
     </xsl:template>
 
     <xsl:template name="description">
-        <ms:description xml:lang="en"><xsl:value-of select="doc:metadata/doc:element[@name='dc']/doc:element[@name='description']/doc:element/doc:field[@name='value']"/></ms:description>
+        <xsl:variable name="description" select="string((doc:metadata/doc:element[@name='dc']/doc:element[@name='description']/doc:element/doc:field[@name='value'])[1])"/>
+        <ms:description xml:lang="en">
+            <xsl:choose>
+                <xsl:when test="string-length($description) &gt; $DESCRIPTION_MAX_LENGTH">
+                    <xsl:value-of select="concat(substring($description, 1, $DESCRIPTION_MAX_LENGTH - 1), '&#8230;')"/>
+                </xsl:when>
+                <xsl:otherwise>
+                    <xsl:value-of select="$description"/>
+                </xsl:otherwise>
+            </xsl:choose>
+        </ms:description>
     </xsl:template>
 
     <xsl:template name="keyword">
@@ -194,9 +225,15 @@
     <xsl:template name="fundingProject">
         <xsl:for-each select="doc:metadata/doc:element[@name='local']/doc:element[@name='sponsor']/doc:element/doc:field[@name='value']">
             <xsl:variable name="proj_arr" select="tokenize(., ';')"/>
+            <xsl:variable name="fundingType">
+                <xsl:call-template name="elgFundingType">
+                    <xsl:with-param name="type" select="$proj_arr[1]"/>
+                </xsl:call-template>
+            </xsl:variable>
             <xsl:if test="count($proj_arr) &gt;= 4">
-                <xsl:if
-                        test="$proj_arr[1] != '' and $proj_arr[2] != '' and $proj_arr[3] != '' and $proj_arr[4] != ''">
+                <!-- ELG requires a project name; "N/A;-;-;-;" is not a project. A project named "n/a" is kept,
+                     it still carries its funder and grant. -->
+                <xsl:if test="$fundingType != '' and not(normalize-space($proj_arr[4]) = ('', '-'))">
                     <ms:fundingProject>
                         <ms:projectName xml:lang="en">
                             <xsl:value-of select="$proj_arr[4]"/>
@@ -208,30 +245,40 @@
                                     <xsl:value-of select="$proj_arr[5]"/>
                                 </ms:ProjectIdentifier>
                             </xsl:when>
-                            <xsl:otherwise>
+                            <xsl:when test="not(lower-case(normalize-space($proj_arr[2])) = $PLACEHOLDERS)">
                                 <ms:grantNumber>
                                     <xsl:value-of select="$proj_arr[2]"/>
                                 </ms:grantNumber>
-                            </xsl:otherwise>
+                            </xsl:when>
                         </xsl:choose>
                         <ms:fundingType>
-                            <xsl:choose>
-                                <xsl:when test="$proj_arr[1] = 'Other'">http://w3id.org/meta-share/meta-share/other</xsl:when>
-                                <xsl:otherwise>
-                                    <xsl:value-of select="concat('http://w3id.org/meta-share/meta-share/', $proj_arr[1])"/>
-                                </xsl:otherwise>
-                            </xsl:choose>
+                            <xsl:value-of select="concat('http://w3id.org/meta-share/meta-share/', $fundingType)"/>
                         </ms:fundingType>
-                        <ms:funder>
-                            <ms:Organization>
-                                <ms:actorType>Organization</ms:actorType>
-                                <ms:organizationName xml:lang="en"><xsl:value-of select="$proj_arr[3]"/></ms:organizationName>
-                            </ms:Organization>
-                        </ms:funder>
+                        <xsl:if test="not(lower-case(normalize-space($proj_arr[3])) = $PLACEHOLDERS)">
+                            <ms:funder>
+                                <ms:Organization>
+                                    <ms:actorType>Organization</ms:actorType>
+                                    <ms:organizationName xml:lang="en"><xsl:value-of select="$proj_arr[3]"/></ms:organizationName>
+                                </ms:Organization>
+                            </ms:funder>
+                        </xsl:if>
                     </ms:fundingProject>
                 </xsl:if>
             </xsl:if>
         </xsl:for-each>
+    </xsl:template>
+
+    <!-- The ELG-SHARE fundingType choice for a stored local.sponsor type, or '' when there is none (e.g. N/A).
+         Also accepts the displayed values of the metashare_funding value-pairs, which were stored by mistake. -->
+    <xsl:template name="elgFundingType">
+        <xsl:param name="type"/>
+        <xsl:variable name="type_lc" select="lower-case(normalize-space($type))"/>
+        <xsl:choose>
+            <xsl:when test="$type_lc = ('eufunds', 'eu')">euFunds</xsl:when>
+            <xsl:when test="$type_lc = ('nationalfunds', 'national')">nationalFunds</xsl:when>
+            <xsl:when test="$type_lc = ('ownfunds', 'own funds')">ownFunds</xsl:when>
+            <xsl:when test="$type_lc = 'other'">other</xsl:when>
+        </xsl:choose>
     </xsl:template>
 
     <xsl:template name="LRSubclass">
@@ -320,7 +367,7 @@
 
     <xsl:template name="lingualityAndLanguges">
         <ms:lingualityType>
-            <xsl:variable name="langCount" select="count(/doc:metadata/doc:element[@name='dc']/doc:element[@name='language']/doc:element[@name='iso']/doc:element/doc:field[@name='value'])"/>
+            <xsl:variable name="langCount" select="count($isoLanguages)"/>
             <xsl:text>http://w3id.org/meta-share/meta-share/</xsl:text>
             <xsl:choose>
                 <xsl:when test="$langCount=1">monolingual</xsl:when>
@@ -338,7 +385,7 @@
             <ms:corpusMediaType><xsl:value-of select="$name"/></ms:corpusMediaType>
             <ms:mediaType><xsl:value-of select="concat('http://w3id.org/meta-share/meta-share/', $mediaType)"/></ms:mediaType>
             <ms:lingualityType>
-                <xsl:variable name="langCount" select="count(/doc:metadata/doc:element[@name='dc']/doc:element[@name='language']/doc:element[@name='iso']/doc:element/doc:field[@name='value'])"/>
+                <xsl:variable name="langCount" select="count($isoLanguages)"/>
                 <xsl:text>http://w3id.org/meta-share/meta-share/</xsl:text>
                 <xsl:choose>
                     <xsl:when test="$langCount=1">monolingual</xsl:when>
@@ -364,10 +411,24 @@ elg.xml:62: element typeOfVideoContent: Schemas validity error : Element '{http:
     </xsl:template>
 
     <xsl:template name="Language">
-        <xsl:param name="isoCode"/>
+        <!-- one language from dc.language.iso: usually an ISO 639 code, sometimes a name typed in by a submitter -->
+        <xsl:param name="value"/>
+        <xsl:variable name="isoCode" select="fn:shortestIdFn($value)"/>
+        <xsl:variable name="unknownToElg" select="exsl:node-set($ELG_UNKNOWN_LANGUAGES)/lang[@code = $isoCode]"/>
         <xsl:choose>
             <xsl:when test="$isoCode = 'und' or $isoCode = 'mis'">
                 <xsl:call-template name="uncoded_languages"/>
+            </xsl:when>
+            <!-- not a code: keep the name, ELG accepts it as an undetermined language with a variety name -->
+            <xsl:when test="not(matches($isoCode, $LANGUAGE_CODE_REGEX))">
+                <xsl:call-template name="language_without_code">
+                    <xsl:with-param name="name" select="$value"/>
+                </xsl:call-template>
+            </xsl:when>
+            <xsl:when test="$unknownToElg">
+                <xsl:call-template name="language_without_code">
+                    <xsl:with-param name="name" select="string($unknownToElg)"/>
+                </xsl:call-template>
             </xsl:when>
             <xsl:otherwise>
                 <ms:language>
@@ -400,7 +461,6 @@ elg.xml:62: element typeOfVideoContent: Schemas validity error : Element '{http:
                 <xsl:when test="$isoCode = 'ara'">ar</xsl:when>
                 <xsl:when test="$isoCode = 'fas'">fa</xsl:when>
                 <xsl:when test="$isoCode = 'deu'">de</xsl:when>
-                <xsl:when test="$isoCode = 'its'">it</xsl:when>
                 <xsl:when test="$isoCode = 'hin'">hi</xsl:when>
                 <xsl:when test="$isoCode = 'som'">so</xsl:when>
                 <xsl:when test="$isoCode = 'ell'">el</xsl:when>
@@ -416,7 +476,6 @@ elg.xml:62: element typeOfVideoContent: Schemas validity error : Element '{http:
                 <xsl:when test="$isoCode = 'est'">et</xsl:when>
                 <xsl:when test="$isoCode = 'eus'">eu</xsl:when>
                 <xsl:when test="$isoCode = 'fao'">fo</xsl:when>
-                <xsl:when test="$isoCode = 'fas'">fa</xsl:when>
                 <xsl:when test="$isoCode = 'fin'">fi</xsl:when>
                 <xsl:when test="$isoCode = 'gle'">ga</xsl:when>
                 <xsl:when test="$isoCode = 'heb'">he</xsl:when>
@@ -483,7 +542,6 @@ elg.xml:62: element typeOfVideoContent: Schemas validity error : Element '{http:
                 <xsl:when test="$isoCode = 'cre'">cr</xsl:when>
                 <xsl:when test="$isoCode = 'div'">dv</xsl:when>
                 <xsl:when test="$isoCode = 'dzo'">dz</xsl:when>
-                <xsl:when test="$isoCode = 'eop'">ep</xsl:when>
                 <xsl:when test="$isoCode = 'ewe'">ee</xsl:when>
                 <xsl:when test="$isoCode = 'fij'">fj</xsl:when>
                 <xsl:when test="$isoCode = 'ful'">ff</xsl:when>
@@ -512,7 +570,6 @@ elg.xml:62: element typeOfVideoContent: Schemas validity error : Element '{http:
                 <xsl:when test="$isoCode = 'lug'">lg</xsl:when>
                 <xsl:when test="$isoCode = 'mah'">mh</xsl:when>
                 <xsl:when test="$isoCode = 'mlg'">mg</xsl:when>
-                <xsl:when test="$isoCode = 'mob'">mn</xsl:when>
                 <xsl:when test="$isoCode = 'mri'">mi</xsl:when>
                 <xsl:when test="$isoCode = 'msa'">ms</xsl:when>
                 <xsl:when test="$isoCode = 'mya'">my</xsl:when>
@@ -559,12 +616,22 @@ elg.xml:62: element typeOfVideoContent: Schemas validity error : Element '{http:
                 <xsl:when test="$isoCode = 'cos'">co</xsl:when>
                 <xsl:when test="$isoCode = 'epo'">eo</xsl:when>
                 <xsl:when test="$isoCode = 'grn'">gn</xsl:when>
-                <xsl:when test="$isoCode = 'zul'">zu</xsl:when>
                 <xsl:when test="$isoCode = 'ido'">io</xsl:when>
                 <xsl:when test="$isoCode = 'lim'">li</xsl:when>
                 <xsl:when test="$isoCode = 'mon'">mn</xsl:when>
-                <xsl:when test="$isoCode = 'bos'">bs</xsl:when>
                 <xsl:when test="$isoCode = 'kin'">rw</xsl:when>
+                <xsl:when test="$isoCode = 'aar'">aa</xsl:when>
+                <xsl:when test="$isoCode = 'ave'">ae</xsl:when>
+                <xsl:when test="$isoCode = 'iii'">ii</xsl:when>
+                <xsl:when test="$isoCode = 'kua'">kj</xsl:when>
+                <xsl:when test="$isoCode = 'lub'">lu</xsl:when>
+                <xsl:when test="$isoCode = 'nbl'">nr</xsl:when>
+                <xsl:when test="$isoCode = 'nde'">nd</xsl:when>
+                <xsl:when test="$isoCode = 'oji'">oj</xsl:when>
+                <!-- ISO 639-2 collective code, not in ISO 639-3; ELG lists its 639-1 form -->
+                <xsl:when test="$isoCode = 'bih'">bh</xsl:when>
+                <!-- Moldavian was retired into Romanian (ISO 639-3 change 2008); ELG has no "mo" -->
+                <xsl:when test="$isoCode = 'mol'">ro</xsl:when>
                 <xsl:otherwise><xsl:value-of select="$isoCode"/></xsl:otherwise>
             </xsl:choose>
         </xsl:variable>
@@ -586,15 +653,11 @@ elg.xml:62: element typeOfVideoContent: Schemas validity error : Element '{http:
         -->
         <xsl:choose>
             <!-- Assume that if we have 'und' there are language names in dc.language -->
-            <xsl:when test="/doc:metadata/doc:element[@name='dc']/doc:element[@name='language']/doc:element/doc:field[@name='value']">
-                <xsl:for-each
-                        select="/doc:metadata/doc:element[@name='dc']/doc:element[@name='language']/doc:element/doc:field[@name='value']">
-                    <ms:language>
-                        <xsl:call-template name="ms_language_inside">
-                            <xsl:with-param name="isoCode" select="'und'"/>
-                        </xsl:call-template>
-                        <ms:languageVarietyName xml:lang="en"><xsl:value-of select="."/></ms:languageVarietyName>
-                    </ms:language>
+            <xsl:when test="$languageNames">
+                <xsl:for-each select="$languageNames">
+                    <xsl:call-template name="language_without_code">
+                        <xsl:with-param name="name" select="string(.)"/>
+                    </xsl:call-template>
                 </xsl:for-each>
             </xsl:when>
             <!-- if not just produce the und/und tag/id; though, elg will complain -->
@@ -606,6 +669,17 @@ elg.xml:62: element typeOfVideoContent: Schemas validity error : Element '{http:
                 </ms:language>
             </xsl:otherwise>
         </xsl:choose>
+    </xsl:template>
+
+    <!-- A language ELG has no code for: "und" plus the free text name -->
+    <xsl:template name="language_without_code">
+        <xsl:param name="name"/>
+        <ms:language>
+            <xsl:call-template name="ms_language_inside">
+                <xsl:with-param name="isoCode" select="'und'"/>
+            </xsl:call-template>
+            <ms:languageVarietyName xml:lang="en"><xsl:value-of select="$name"/></ms:languageVarietyName>
+        </ms:language>
     </xsl:template>
 
     <xsl:template name="Distribution">
@@ -681,6 +755,8 @@ elg.xml:62: element typeOfVideoContent: Schemas validity error : Element '{http:
             </xsl:call-template>
             <xsl:variable name="languageDependent">
                 <xsl:choose>
+                    <!-- ELG requires a language on the input and output of a language dependent tool -->
+                    <xsl:when test="empty($isoLanguages)">false</xsl:when>
                     <xsl:when test="/doc:metadata/doc:element[@name='metashare']/doc:element[@name='ResourceInfo#ResourceComponentType#ToolServiceInfo']/doc:element[@name='languageDependent']/doc:element/doc:field[@name='value']">
                         <xsl:value-of select="/doc:metadata/doc:element[@name='metashare']/doc:element[@name='ResourceInfo#ResourceComponentType#ToolServiceInfo']/doc:element[@name='languageDependent']/doc:element/doc:field[@name='value']"/>
                     </xsl:when>
@@ -789,14 +865,18 @@ elg.xml:62: element typeOfVideoContent: Schemas validity error : Element '{http:
     </xsl:template>
 
     <xsl:template name="Sizes">
+        <!-- local.size.info is "amount;unit"; amounts that are not a number even without thousands separators
+             (e.g. "122.62 KB") are left out -->
+        <xsl:variable name="validSizes"
+                      select="doc:metadata/doc:element[@name='local']/doc:element[@name='size']/doc:element[@name='info']/doc:element/doc:field[@name='value']
+                              [matches(normalize-space(tokenize(., ';')[1]), $PLAIN_AMOUNT_REGEX)
+                               or matches(normalize-space(tokenize(., ';')[1]), $THOUSANDS_AMOUNT_REGEX)]"/>
         <xsl:choose>
-            <xsl:when
-                    test="doc:metadata/doc:element[@name='local']/doc:element[@name='size']/doc:element[@name='info']/doc:element/doc:field[@name='value']">
-                <xsl:for-each
-                        select="doc:metadata/doc:element[@name='local']/doc:element[@name='size']/doc:element[@name='info']/doc:element/doc:field[@name='value']">
+            <xsl:when test="$validSizes">
+                <xsl:for-each select="$validSizes">
                     <xsl:variable name="size_arr" select="tokenize(., ';')"/>
                     <xsl:call-template name="size">
-                        <xsl:with-param name="amount" select="$size_arr[1]"/>
+                        <xsl:with-param name="amount" select="replace(normalize-space($size_arr[1]), $THOUSANDS_SEPARATOR_REGEX, '')"/>
                         <xsl:with-param name="unit" select="$size_arr[2]"/>
                     </xsl:call-template>
                 </xsl:for-each>
@@ -1089,11 +1169,144 @@ elg.xml:62: element typeOfVideoContent: Schemas validity error : Element '{http:
     </xsl:template>
 
     <xsl:template name="Languages">
-        <xsl:for-each
-                select="/doc:metadata/doc:element[@name='dc']/doc:element[@name='language']/doc:element[@name='iso']/doc:element/doc:field[@name='value']">
+        <!-- und and mis both list every dc.language name; emit those names once -->
+        <xsl:variable name="firstUncoded" select="$isoLanguages[. = ('und', 'mis')][1]"/>
+        <xsl:for-each select="$isoLanguages[not(. = ('und', 'mis')) or . = $firstUncoded]">
             <xsl:call-template name="Language">
-                <xsl:with-param name="isoCode" select="fn:shortestIdFn(.)"/>
+                <xsl:with-param name="value" select="."/>
             </xsl:call-template>
         </xsl:for-each>
     </xsl:template>
+
+    <!-- ISO 639-3 codes missing from the ELG language vocabulary (ISOVocabularies.xsd 1.6.0 of the ELG-SHARE
+         schema), mostly codes ISO added after it was published. The harvest rejects them as languageId, so they are
+         sent as "und" with the reference name from the ISO 639-3 code table (iso639-3.sil.org). -->
+    <xsl:variable name="ELG_UNKNOWN_LANGUAGES">
+        <lang code="ajs">Algerian Jewish Sign Language</lang>
+        <lang code="aqk">Aninka</lang>
+        <lang code="bpc">Mbuk</lang>
+        <lang code="bpe">Bauni</lang>
+        <lang code="ckm">Chakavian</lang>
+        <lang code="cls">Classical Sanskrit</lang>
+        <lang code="cnp">Northern Ping Chinese</lang>
+        <lang code="cnq">Chung</lang>
+        <lang code="csp">Southern Ping Chinese</lang>
+        <lang code="csx">Cambodian Sign Language</lang>
+        <lang code="cty">Moundadan Chetty</lang>
+        <lang code="cxh">Cha'ari</lang>
+        <lang code="dkg">Kadung</lang>
+        <lang code="dmf">Medefaidrin</lang>
+        <lang code="dsk">Dokshi</lang>
+        <lang code="dsz">Mardin Sign Language</lang>
+        <lang code="dwk">Dawik Kui</lang>
+        <lang code="dyl">Bhutanese Sign Language</lang>
+        <lang code="dyr">Dyarim</lang>
+        <lang code="dzd">Daza</lang>
+        <lang code="ebc">Beginci</lang>
+        <lang code="egm">Benamanga</lang>
+        <lang code="ehs">Miyakubo Sign Language</lang>
+        <lang code="emq">Eastern Minyag</lang>
+        <lang code="emz">Mbessa</lang>
+        <lang code="eud">Eudeve</lang>
+        <lang code="fif">Faifi</lang>
+        <lang code="fjs">Fiji Sign Language</lang>
+        <lang code="gef">Gerai</lang>
+        <lang code="gii">Girirra</lang>
+        <lang code="glb">Belning</lang>
+        <lang code="gmr">Mirning</lang>
+        <lang code="gov">Goo</lang>
+        <lang code="gyz">Geji</lang>
+        <lang code="hkh">Khah</lang>
+        <lang code="hng">Hungu</lang>
+        <lang code="hnm">Hainanese</lang>
+        <lang code="ikh">Ikhin-Arokho</lang>
+        <lang code="imt">Imotong</lang>
+        <lang code="isv">Interslavic</lang>
+        <lang code="izm">Kizamani</lang>
+        <lang code="jbm">Bijim</lang>
+        <lang code="jks">Amami Koniya Sign Language</lang>
+        <lang code="lfb">Buu (Cameroon)</lang>
+        <lang code="lgo">Lango (South Sudan)</lang>
+        <lang code="lgs">Guinea-Bissau Sign Language</lang>
+        <lang code="lqr">Logir</lang>
+        <lang code="lsb">Burundian Sign Language</lang>
+        <lang code="lsc">Albarradas Sign Language</lang>
+        <lang code="lsw">Seychelles Sign Language</lang>
+        <lang code="luh">Leizhou Chinese</lang>
+        <lang code="lvl">Lwel</lang>
+        <lang code="lxm">Lakurumau</lang>
+        <lang code="nqt">Nteng</lang>
+        <lang code="nsb">Lower Nossob</lang>
+        <lang code="nww">Ndwewe</lang>
+        <lang code="nzr">Dir-Nyamzak-Mbarimi</lang>
+        <lang code="oak">Noakhali</lang>
+        <lang code="ocm">Old Cham</lang>
+        <lang code="oie">Okolie</lang>
+        <lang code="okc">Kobo</lang>
+        <lang code="okz">Old Khmer</lang>
+        <lang code="olb">Oli-Bodiman</lang>
+        <lang code="omy">Old Malay</lang>
+        <lang code="osd">Digor Ossetic</lang>
+        <lang code="osn">Old Sundanese</lang>
+        <lang code="phj">Pahari</lang>
+        <lang code="pze">Pesse</lang>
+        <lang code="pzh">Pazeh</lang>
+        <lang code="rib">Bribri Sign Language</lang>
+        <lang code="rnb">Brunca Sign Language</lang>
+        <lang code="rrm">Moriori</lang>
+        <lang code="rsk">Ruthenian</lang>
+        <lang code="rsn">Rwandan Sign Language</lang>
+        <lang code="rsw">Rishiwa</lang>
+        <lang code="rwl">Ruwila</lang>
+        <lang code="scz">Shaetlan</lang>
+        <lang code="sdq">Semandang</lang>
+        <lang code="sjc">Shaojiang Chinese</lang>
+        <lang code="sqx">Kufr Qassem Sign Language (KQSL)</lang>
+        <lang code="suo">Bouni</lang>
+        <lang code="tok">Toki Pona</lang>
+        <lang code="tvg">Tugunese</lang>
+        <lang code="tvi">Tulai</lang>
+        <lang code="tyy">Tiyaa</lang>
+        <lang code="ugh">Kubachi</lang>
+        <lang code="uki">Kui (India)</lang>
+        <lang code="ukv">Kuku</lang>
+        <lang code="uly">Buli</lang>
+        <lang code="uni">Uni</lang>
+        <lang code="uon">Kulon</lang>
+        <lang code="vjk">Bajjika</lang>
+        <lang code="vkn">Koro Nulu</lang>
+        <lang code="vkz">Koro Zuba</lang>
+        <lang code="vsn">Vedic Sanskrit</lang>
+        <lang code="wdt">Wendat</lang>
+        <lang code="wlh">Welaun</lang>
+        <lang code="wmg">Western Minyag</lang>
+        <lang code="wtb">Matambwe</lang>
+        <lang code="wyn">Wyandot</lang>
+        <lang code="xdq">Kaitag</lang>
+        <lang code="xhm">Middle Khmer (1400 to 1850 CE)</lang>
+        <lang code="xiw">Shiwa</lang>
+        <lang code="xnj">Ngoni (Tanzania)</lang>
+        <lang code="xnm">Ngumbarl</lang>
+        <lang code="xnq">Ngoni (Mozambique)</lang>
+        <lang code="xpb">Northeastern Tasmanian</lang>
+        <lang code="xpd">Oyster Bay Tasmanian</lang>
+        <lang code="xpf">Southeast Tasmanian</lang>
+        <lang code="xph">North Midlands Tasmanian</lang>
+        <lang code="xpl">Port Sorell Tasmanian</lang>
+        <lang code="xpv">Northern Tasmanian</lang>
+        <lang code="xpw">Northwestern Tasmanian</lang>
+        <lang code="xpx">Southwestern Tasmanian</lang>
+        <lang code="xpz">Bruny Island Tasmanian</lang>
+        <lang code="ycr">Yilan Creole</lang>
+        <lang code="ykh">Khamnigan Mongol</lang>
+        <lang code="ynb">Yamben</lang>
+        <lang code="ysm">Myanmar Sign Language</lang>
+        <lang code="zba">Balaibalan</lang>
+        <lang code="zbu">Bu (Bauchi State)</lang>
+        <lang code="zcd">Las Delicias Zapotec</lang>
+        <lang code="zem">Zeem</lang>
+        <lang code="zhk">Kurdish Sign Language</lang>
+        <lang code="zla">Zula</lang>
+        <lang code="zlu">Zul</lang>
+    </xsl:variable>
 </xsl:stylesheet>

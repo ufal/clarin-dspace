@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+
+    The contents of this file are subject to the license and copyright
+    detailed in the LICENSE and NOTICE files at the root of the source
+    tree and available online at
+
+    http://www.dspace.org/license/
+
+-->
+<!--
+    XOAI metadata of a valid text corpus for the ELG crosswalk tests.
+    ElgXslTest replaces single values (description, sponsor, size, language) to build the
+    shapes the ELG harvest rejected.
+-->
+<metadata xmlns="http://www.lyncode.com/xoai">
+    <element name="dc">
+        <element name="contributor">
+            <element name="author">
+                <element name="none">
+                    <field name="value">Doe, Jane</field>
+                </element>
+            </element>
+        </element>
+        <element name="date">
+            <element name="available">
+                <element name="none">
+                    <field name="value">2025-01-15T10:00:00Z</field>
+                </element>
+            </element>
+            <element name="issued">
+                <element name="none">
+                    <field name="value">2025-01-15</field>
+                </element>
+            </element>
+        </element>
+        <element name="identifier">
+            <element name="uri">
+                <element name="none">
+                    <field name="value">http://hdl.handle.net/123456789/9999</field>
+                </element>
+            </element>
+        </element>
+        <element name="description">
+            <element name="none">
+                <field name="value">A short description of the test corpus.</field>
+            </element>
+        </element>
+        <element name="language">
+            <element name="iso">
+                <element name="none">
+                    <field name="value">ces</field>
+                </element>
+            </element>
+        </element>
+        <element name="publisher">
+            <element name="none">
+                <field name="value">Example University</field>
+            </element>
+        </element>
+        <element name="rights">
+            <element name="none">
+                <field name="value">Creative Commons - Attribution 4.0 International (CC BY 4.0)</field>
+            </element>
+            <element name="uri">
+                <element name="none">
+                    <field name="value">http://creativecommons.org/licenses/by/4.0/</field>
+                </element>
+            </element>
+        </element>
+        <element name="title">
+            <element name="none">
+                <field name="value">ELG Test Corpus</field>
+            </element>
+        </element>
+        <element name="type">
+            <element name="none">
+                <field name="value">corpus</field>
+            </element>
+        </element>
+    </element>
+    <element name="local">
+        <element name="sponsor">
+            <element name="none">
+                <field name="value">euFunds;123456;Example Funder;Example Project;</field>
+            </element>
+        </element>
+        <element name="size">
+            <element name="info">
+                <element name="none">
+                    <field name="value">1000;tokens</field>
+                </element>
+            </element>
+        </element>
+    </element>
+    <element name="metashare">
+        <element name="ResourceInfo#ContentInfo">
+            <element name="mediaType">
+                <element name="none">
+                    <field name="value">text</field>
+                </element>
+            </element>
+        </element>
+    </element>
+    <element name="bundles">
+        <element name="bundle">
+            <field name="name">ORIGINAL</field>
+            <element name="bitstreams">
+                <element name="bitstream">
+                    <field name="name">corpus.zip</field>
+                    <field name="format">application/zip</field>
+                    <field name="size">2048</field>
+                    <field name="url">https://repository.example.org/bitstream/123456789/9999/1/corpus.zip</field>
+                </element>
+            </element>
+        </element>
+    </element>
+    <element name="others">
+        <field name="handle">123456789/9999</field>
+        <field name="identifier">oai:repository.example.org:123456789/9999</field>
+        <field name="lastModifyDate">2025-01-15 10:00:00.000</field>
+    </element>
+</metadata>

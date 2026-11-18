@@ -19,7 +19,10 @@ import javax.xml.transform.stream.StreamResult;
 import javax.xml.transform.stream.StreamSource;
 
 import net.sf.saxon.jaxp.SaxonTransformerFactory;
+import net.sf.saxon.s9api.Processor;
 import org.apache.commons.io.IOUtils;
+import org.dspace.xoai.services.impl.resources.functions.LogMissingFn;
+import org.dspace.xoai.services.impl.resources.functions.ShortestIdFn;
 import org.dspace.xoai.services.impl.resources.functions.StringXSLFunction;
 
 public abstract class AbstractXSLTest {
@@ -42,7 +45,11 @@ public abstract class AbstractXSLTest {
     static {
         // In production DSpaceResourceResolver registers the real extension functions. getProperty reads
         // the DSpace configuration, which a unit test does not start, so it is replaced by a stub.
-        ((SaxonTransformerFactory) factory).getProcessor().registerExtensionFunction(new StubGetPropertyFn());
+        Processor processor = ((SaxonTransformerFactory) factory).getProcessor();
+        processor.registerExtensionFunction(new StubGetPropertyFn());
+        // Real functions that need no DSpace services (used by elg.xsl).
+        processor.registerExtensionFunction(new LogMissingFn());
+        processor.registerExtensionFunction(new ShortestIdFn());
     }
 
     protected TransformBuilder apply(String xslLocation) throws Exception {
