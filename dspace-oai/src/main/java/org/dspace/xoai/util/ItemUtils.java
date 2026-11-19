@@ -172,6 +172,7 @@ public class ItemUtils {
         List<Bundle> bs;
 
         Set<String> excludedBundleNames = getExcludedBundleNames();
+        Group anonymous = groupService.findByName(context, Group.ANONYMOUS);
 
         bs = item.getBundles();
         for (Bundle b : bs) {
@@ -244,6 +245,10 @@ public class ItemUtils {
                 bitstream.getField().add(createValue("checksumAlgorithm", cka));
                 bitstream.getField().add(createValue("sid", bit.getSequenceID() + ""));
                 bitstream.getField().add(createValue("id", bit.getID().toString()));
+                // Lets a crosswalk leave out files an anonymous visitor cannot see at all (embargoed,
+                // private). Licence-gated files count as readable: the licence is checked at download.
+                bitstream.getField().add(createValue("anonymousRead",
+                        String.valueOf(isReadableByAnonymousNow(context, bit, anonymous))));
                 if (!restricted.get()) {
                     List<ClarinLicenseResourceMapping> clarinLicenseResourceMappingList =
                             clarinLicenseResourceMappingService.findByBitstreamUUID(context, bit.getID());
@@ -356,6 +361,28 @@ public class ItemUtils {
             return ACCESS_EMBARGO;
         }
         return ACCESS_RESTRICTED;
+    }
+
+    /**
+     * Whether an anonymous user may read the bitstream right now: a READ policy, valid today, for Anonymous
+     * or a group that has Anonymous as a subgroup. Clarin licences are not considered.
+     * The value is computed at OAI indexing time; an embargo that ends later shows up when the item is
+     * reindexed.
+     *
+     * @param context   DSpace context
+     * @param bitstream the bitstream
+     * @param anonymous the Anonymous group, may be null
+     * @return true if anonymous users can read the bitstream now
+     * @throws SQLException if the policies cannot be read
+     */
+    static boolean isReadableByAnonymousNow(Context context, Bitstream bitstream, Group anonymous)
+            throws SQLException {
+        for (ResourcePolicy policy : authorizeService.getPoliciesActionFilter(context, bitstream, Constants.READ)) {
+            if (includesAnonymous(context, policy.getGroup(), anonymous) && resourcePolicyService.isDateValid(policy)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

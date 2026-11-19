@@ -53,6 +53,8 @@ public class CcmmXslTest extends AbstractXSLTest {
     private static final String TOOL = "xoai-ccmm-tool-test.xml";
     private static final String FUNDING = "xoai-ccmm-funding-test.xml";
     private static final String BAD_REPO = "xoai-ccmm-bad-repo-test.xml";
+    private static final String DOWNLOAD_URL = "oai.ccmm.distribution.download-url";
+    private static final String ANCHOR = "oai.ccmm.distribution.access-url.anchor";
 
     @Test
     public void ccmmCanTransformInput() throws Exception {
@@ -1051,7 +1053,7 @@ public class CcmmXslTest extends AbstractXSLTest {
     public void ccmmDownloadUrlIsTheByHandleEndpoint() throws Exception {
         // the file is addressed by the item's Handle and its name, the same endpoint the CMDI
         // crosswalk publishes, so the link outlives the bitstream's uuid
-        String result = apply("ccmm.xsl").to(resource(MAIN));
+        String result = applyWithDownloads().to(resource(MAIN));
         assertThat(result, is(ccmm().withXPath(
             "//ccmm:distribution_downloadable_file/ccmm:download_url/ccmm:iri",
             equalTo(TEST_SERVER_URL + "/api/core/bitstreams/handle/123456789/1-5678/corpus.txt"))));
@@ -1063,7 +1065,7 @@ public class CcmmXslTest extends AbstractXSLTest {
     public void ccmmDownloadUrlDoesNotDependOnTheBitstreamUuid() throws Exception {
         // this bitstream carries no usable uuid; the Handle and the name are all the endpoint
         // needs, so the link is built anyway
-        String result = apply("ccmm.xsl").to(resource(TOOL));
+        String result = applyWithDownloads().to(resource(TOOL));
         assertThat(result, is(ccmm().withXPath(
             "//ccmm:distribution_downloadable_file[ccmm:title='exampletagger.zip']"
                 + "/ccmm:download_url/ccmm:iri",
@@ -1313,7 +1315,7 @@ public class CcmmXslTest extends AbstractXSLTest {
     public void ccmmAccessUrlIsTheLandingPageNotTheDownloadRoute() throws Exception {
         // CCMM: access URL "shall be the web page (not a document file)"; the bitstream belongs
         // in download_url
-        String result = apply("ccmm.xsl").to(resource(MAIN));
+        String result = applyWithDownloads().to(resource(MAIN));
         assertThat(result, is(ccmm().withXPath(
             "//ccmm:distribution_downloadable_file/ccmm:access_url/ccmm:iri",
             equalTo("http://hdl.handle.net/123456789/1-5678"))));
@@ -1399,7 +1401,7 @@ public class CcmmXslTest extends AbstractXSLTest {
     public void ccmmEndpointUrlIsBuiltEvenWhenXoaiCouldNotBuildOne() throws Exception {
         // XOAI emitted a bare file name for this bitstream, but the Handle and the name are all
         // the endpoint needs, so the file is published rather than dropped
-        String result = apply("ccmm.xsl").to(resource(FUNDING));
+        String result = applyWithDownloads().to(resource(FUNDING));
         assertThat(result, is(ccmm().withXPath(
             "count(//ccmm:distribution_downloadable_file)", equalTo("3"))));
         assertThat(result, is(ccmm().withXPath(
@@ -1412,7 +1414,7 @@ public class CcmmXslTest extends AbstractXSLTest {
     public void ccmmFileNameInTheEndpointUrlIsPercentEncoded() throws Exception {
         // a space or a diacritic in a file name has to survive as %20 and %C3%A1, or the endpoint
         // is handed a URL it cannot parse
-        String result = apply("ccmm.xsl").to(resource(FUNDING));
+        String result = applyWithDownloads().to(resource(FUNDING));
         assertThat(result, is(ccmm().withXPath(
             "count(//ccmm:download_url/ccmm:iri[contains(., ' ')])", equalTo("0"))));
         assertThat(result, is(ccmm().withXPath(
@@ -1424,7 +1426,7 @@ public class CcmmXslTest extends AbstractXSLTest {
     public void ccmmOriginalNameIsNeverPutInTheEndpointUrl() throws Exception {
         // the endpoint compares the bitstream name, so originalName cannot stand in for it: with
         // no name there is nothing to address the file by and the url XOAI supplied is kept
-        String result = apply("ccmm.xsl").to(resource(FUNDING));
+        String result = applyWithDownloads().to(resource(FUNDING));
         assertThat(result, is(ccmm().withXPath(
             "//ccmm:distribution_downloadable_file[ccmm:byte_size='256']/ccmm:download_url/ccmm:iri",
             equalTo("https://example.org/repository/bitstream/123456789/1-9001/2/report-final.pdf"))));
@@ -1454,7 +1456,7 @@ public class CcmmXslTest extends AbstractXSLTest {
     public void ccmmServerUrlThatIsNotAbsoluteBuildsNoDownloadUrl() throws Exception {
         // guessing a route from "localhost:8080" would put an unresolvable IRI in a
         // mandatory slot, so the url XOAI supplied is kept instead
-        String result = apply("ccmm.xsl").withProperty("dspace.server.url", "localhost:8080/server")
+        String result = applyWithDownloads().withProperty("dspace.server.url", "localhost:8080/server")
             .to(resource(BAD_REPO));
         assertThat(result, is(ccmm().withXPath(
             "//ccmm:distribution_downloadable_file/ccmm:download_url/ccmm:iri",
@@ -1465,7 +1467,7 @@ public class CcmmXslTest extends AbstractXSLTest {
 
     @Test
     public void ccmmUnsetServerUrlBuildsNoDownloadUrl() throws Exception {
-        String result = apply("ccmm.xsl").withProperty("dspace.server.url", null).to(resource(MAIN));
+        String result = applyWithDownloads().withProperty("dspace.server.url", null).to(resource(MAIN));
         assertThat(result, is(ccmm().withXPath(
             "count(//ccmm:download_url/ccmm:iri[contains(., '/api/core/bitstreams/handle/')])",
             equalTo("0"))));
@@ -1475,7 +1477,7 @@ public class CcmmXslTest extends AbstractXSLTest {
     public void ccmmDownloadUrlUsesTheConfiguredServerNotTheUiUrl() throws Exception {
         // the fixture's repository url is the UI on repository.example.org; the backend is configured
         // on another host, as lindat_cmdi.xsl reads it, and the UI url plus "/server" is not it
-        String result = apply("ccmm.xsl").to(resource(MAIN));
+        String result = applyWithDownloads().to(resource(MAIN));
         assertThat(result, is(ccmm().withXPath(
             "count(//ccmm:download_url/ccmm:iri[starts-with(., '" + TEST_SERVER_URL + "/api/')])",
             equalTo("1"))));
@@ -1486,11 +1488,143 @@ public class CcmmXslTest extends AbstractXSLTest {
 
     @Test
     public void ccmmTrailingSlashOnTheServerUrlIsNotDoubled() throws Exception {
-        String result = apply("ccmm.xsl").withProperty("dspace.server.url", TEST_SERVER_URL + "/")
+        String result = applyWithDownloads().withProperty("dspace.server.url", TEST_SERVER_URL + "/")
             .to(resource(MAIN));
         assertThat(result, is(ccmm().withXPath(
             "//ccmm:distribution_downloadable_file/ccmm:download_url/ccmm:iri",
             equalTo(TEST_SERVER_URL + "/api/core/bitstreams/handle/123456789/1-5678/corpus.txt"))));
+    }
+
+    @Test
+    public void ccmmPublishesNoDownloadUrlByDefault() throws Exception {
+        // the default agreed for NMA: files are listed, downloads go through the landing page
+        String result = apply("ccmm.xsl").to(resource(MAIN));
+        assertThat(result, is(ccmm().withXPath("count(//ccmm:distribution_downloadable_file)", equalTo("1"))));
+        assertThat(result, is(ccmm().withXPath("count(//ccmm:download_url)", equalTo("0"))));
+        assertThat(result, is(ccmm().withXPath(
+            "//ccmm:distribution_downloadable_file/ccmm:access_url/ccmm:iri",
+            equalTo("http://hdl.handle.net/123456789/1-5678"))));
+    }
+
+    @Test
+    public void ccmmDownloadUrlNeedsTheSwitchToBeExactlyTrue() throws Exception {
+        String result = apply("ccmm.xsl").withProperty(DOWNLOAD_URL, "yes").to(resource(MAIN));
+        assertThat(result, is(ccmm().withXPath("count(//ccmm:download_url)", equalTo("0"))));
+        result = apply("ccmm.xsl").withProperty(DOWNLOAD_URL, " TRUE ").to(resource(MAIN));
+        assertThat(result, is(ccmm().withXPath("count(//ccmm:download_url)", equalTo("1"))));
+    }
+
+    @Test
+    public void ccmmFileUrlIsNoRelatedResourceEvenWhenDownloadUrlIsNotPublished() throws Exception {
+        // CCMM: distributions SHALL NOT be modeled as related resources, published link or not
+        String file = TEST_SERVER_URL + "/api/core/bitstreams/handle/123456789/1-5678/corpus.txt";
+        String result = ccmmOf(add(fixture(MAIN), "dc", field("relation.haspart", "none", file)));
+        assertThat(result, is(ccmm().withXPath(
+            "count(//ccmm:related_resource[ccmm:iri='" + file + "'])", equalTo("0"))));
+    }
+
+    @Test
+    public void ccmmAccessUrlCarriesTheConfiguredAnchor() throws Exception {
+        String result = apply("ccmm.xsl").withProperty(ANCHOR, "files").to(resource(MAIN));
+        assertThat(result, is(ccmm().withXPath(
+            "//ccmm:distribution_downloadable_file/ccmm:access_url/ccmm:iri",
+            equalTo("http://hdl.handle.net/123456789/1-5678#files"))));
+        // a leading '#' is not doubled
+        result = apply("ccmm.xsl").withProperty(ANCHOR, "#files").to(resource(MAIN));
+        assertThat(result, is(ccmm().withXPath(
+            "//ccmm:distribution_downloadable_file/ccmm:access_url/ccmm:iri",
+            equalTo("http://hdl.handle.net/123456789/1-5678#files"))));
+        // the dataset's own iri stays the plain landing page
+        assertThat(result, is(ccmm().withXPath(
+            "/ccmm:dataset/ccmm:iri", equalTo("http://hdl.handle.net/123456789/1-5678"))));
+    }
+
+    @Test
+    public void ccmmFileAnonymousCannotReadIsNotListed() throws Exception {
+        String id = "<field name=\"id\">18341be0-03ad-4a22-a1c8-4cd293c3f5da</field>";
+        String hidden = ccmmOf(once(fixture(MAIN), id, id + "<field name=\"anonymousRead\">false</field>"));
+        assertThat(hidden, is(ccmm().withXPath("count(//ccmm:distribution_downloadable_file)", equalTo("0"))));
+        String readable = ccmmOf(once(fixture(MAIN), id, id + "<field name=\"anonymousRead\">true</field>"));
+        assertThat(readable, is(ccmm().withXPath(
+            "count(//ccmm:distribution_downloadable_file)", equalTo("1"))));
+    }
+
+    @Test
+    public void ccmmHiddenFileStillTakesPartInTheSameNameCheck() throws Exception {
+        // the by-handle endpoint sees every ORIGINAL file, so a hidden namesake still forces the uuid URL
+        String firstId = "<field name=\"id\">18341be0-03ad-4a22-a1c8-4cd293c3f5da</field>";
+        String result = ccmmWithDownloadsOf(once(fixture(MAIN), firstId, firstId + "</element>"
+            + "<element name=\"bitstream\"><field name=\"name\">corpus.txt</field>"
+            + "<field name=\"format\">text/plain</field><field name=\"size\">4096</field>"
+            + "<field name=\"id\">5c1b4f7e-2d3a-4e5f-9a8b-1c2d3e4f5a6b</field>"
+            + "<field name=\"anonymousRead\">false</field>"));
+        assertThat(result, is(ccmm().withXPath("count(//ccmm:distribution_downloadable_file)", equalTo("1"))));
+        assertThat(result, is(ccmm().withXPath(
+            "//ccmm:distribution_downloadable_file/ccmm:download_url/ccmm:iri",
+            equalTo(TEST_SERVER_URL + "/api/core/bitstreams/18341be0-03ad-4a22-a1c8-4cd293c3f5da/content"))));
+    }
+
+    @Test
+    public void ccmmRepositoryOrganizationComesFromTheConfiguration() throws Exception {
+        String result = withOrganization(apply("ccmm.xsl")).to(resource(MAIN));
+        String dataManager = "//ccmm:metadata_identification/ccmm:qualified_relation/ccmm:relation/ccmm:organization";
+        assertThat(result, is(ccmm().withXPath(dataManager + "/ccmm:name", equalTo("LINDAT/CLARIAH-CZ"))));
+        assertThat(result, is(ccmm().withXPath(dataManager + "/ccmm:iri", equalTo("https://ror.org/00dd4fz34"))));
+        assertThat(result, is(ccmm().withXPath(dataManager + "/ccmm:identifier/ccmm:value", equalTo("00dd4fz34"))));
+        assertThat(result, is(ccmm().withXPath(
+            dataManager + "/ccmm:identifier/ccmm:scheme/ccmm:label", equalTo("ROR"))));
+        assertThat(result, is(ccmm().withXPath(
+            "//ccmm:terms_of_use/ccmm:contact_point/ccmm:organization/ccmm:name", equalTo("LINDAT/CLARIAH-CZ"))));
+        assertThat(result, is(ccmm().withXPath(
+            "//ccmm:terms_of_use/ccmm:contact_point/ccmm:organization/ccmm:contact_point/ccmm:email",
+            equalTo("desk@example.org"))));
+        // the repository itself keeps its own name
+        assertThat(result, is(ccmm().withXPath(
+            "//ccmm:original_repository/ccmm:label", equalTo("Example Repository"))));
+    }
+
+    @Test
+    public void ccmmConfiguredOrganizationIsThePublisherOfAnItemWithoutOne() throws Exception {
+        String result = withOrganization(apply("ccmm.xsl")).to(resource(BARE));
+        assertThat(result, is(ccmm().withXPath(
+            "//ccmm:dataset/ccmm:qualified_relation[ccmm:role/ccmm:iri="
+                + "'https://vocabs.ccmm.cz/registry/codelist/AgentRole/Publisher']"
+                + "/ccmm:relation/ccmm:organization/ccmm:iri",
+            equalTo("https://ror.org/00dd4fz34"))));
+    }
+
+    @Test
+    public void ccmmRepositoryOrganizationDefaultsToTheRepositoryName() throws Exception {
+        String result = apply("ccmm.xsl").to(resource(MAIN));
+        assertThat(result, is(ccmm().withXPath(
+            "//ccmm:metadata_identification/ccmm:qualified_relation/ccmm:relation/ccmm:organization/ccmm:name",
+            equalTo("Example Repository"))));
+        assertThat(result, is(ccmm().withXPath("count(//ccmm:organization/ccmm:identifier)", equalTo("0"))));
+    }
+
+    @Test
+    public void ccmmContactAddressPrefersHelpMailOverTheAdminAddress() throws Exception {
+        String result = apply("ccmm.xsl").withProperty("help.mail", "help-desk@example.org").to(resource(MAIN));
+        assertThat(result, is(ccmm().withXPath(
+            "//ccmm:contact_point/ccmm:organization/ccmm:contact_point/ccmm:email",
+            equalTo("help-desk@example.org"))));
+    }
+
+    @Test
+    public void ccmmMalformedRorIsNotPublished() throws Exception {
+        for (String ror : new String[] {"LINDAT", "https://ror.org/", "https://example.org/00dd4fz34", "00DD4FZ34"}) {
+            String result = apply("ccmm.xsl").withProperty("oai.ccmm.organization.ror", ror).to(resource(MAIN));
+            assertThat(ror, result, is(ccmm().withXPath("count(//ccmm:organization/ccmm:iri)", equalTo("0"))));
+        }
+        String bare = apply("ccmm.xsl").withProperty("oai.ccmm.organization.ror", "00dd4fz34").to(resource(MAIN));
+        assertThat(bare, is(ccmm().withXPath(
+            "//ccmm:metadata_identification//ccmm:organization/ccmm:iri", equalTo("https://ror.org/00dd4fz34"))));
+    }
+
+    private static TransformBuilder withOrganization(TransformBuilder builder) {
+        return builder.withProperty("oai.ccmm.organization.name", "LINDAT/CLARIAH-CZ")
+            .withProperty("oai.ccmm.organization.ror", "https://ror.org/00dd4fz34")
+            .withProperty("oai.ccmm.organization.email", "desk@example.org");
     }
 
     /**
@@ -1750,10 +1884,10 @@ public class CcmmXslTest extends AbstractXSLTest {
     @Test
     public void ccmmStatedRelationToADownloadableFileIsOnlyADistribution() throws Exception {
         Matcher download = Pattern.compile("<ccmm:download_url>\\s*<ccmm:iri>([^<]+)</ccmm:iri>")
-            .matcher(ccmmOf(fixture(MAIN)));
+            .matcher(ccmmWithDownloadsOf(fixture(MAIN)));
         assertThat(download.find(), is(true));
         String file = download.group(1);
-        String result = ccmmOf(add(fixture(MAIN), "dc", field("relation.haspart", "none", file)));
+        String result = ccmmWithDownloadsOf(add(fixture(MAIN), "dc", field("relation.haspart", "none", file)));
         assertThat(result, is(ccmm().withXPath(
             "count(//ccmm:download_url[ccmm:iri='" + file + "'])", equalTo("1"))));
         assertThat(result, is(ccmm().withXPath(
@@ -1766,7 +1900,7 @@ public class CcmmXslTest extends AbstractXSLTest {
         String xml = once(fixture(MAIN), "http://hdl.handle.net/123456789/1-5678<",
             "http://hdl.handle.net/123456789/1-5678|a<");
         xml = once(xml, "<field name=\"handle\">123456789/1-5678<", "<field name=\"handle\">123456789/1-5678|a<");
-        String result = ccmmOf(xml);
+        String result = ccmmWithDownloadsOf(xml);
         assertThat(result, is(ccmm().withXPath("count(//ccmm:iri[contains(., '|')])", equalTo("0"))));
         assertThat(result, is(ccmm().withXPath(
             "/ccmm:dataset/ccmm:iri", equalTo("http://hdl.handle.net/123456789/1-5678%7Ca"))));
@@ -1920,6 +2054,16 @@ public class CcmmXslTest extends AbstractXSLTest {
         return apply("ccmm.xsl").to(new ByteArrayInputStream(xoai.getBytes(StandardCharsets.UTF_8)));
     }
 
+    /** ccmmOf with direct download links switched on */
+    private String ccmmWithDownloadsOf(String xoai) throws Exception {
+        return applyWithDownloads().to(new ByteArrayInputStream(xoai.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    /** the transformation with oai.ccmm.distribution.download-url = true; download_url is off by default */
+    private TransformBuilder applyWithDownloads() throws Exception {
+        return apply("ccmm.xsl").withProperty(DOWNLOAD_URL, "true");
+    }
+
     /** text, which must occur exactly once in xml, replaced literally */
     private static String once(String xml, String text, String replacement) {
         int at = xml.indexOf(text);
@@ -2016,7 +2160,7 @@ public class CcmmXslTest extends AbstractXSLTest {
     @Test
     public void ccmmFilesWithTheSameNameInTwoOriginalBundlesGetDistinctDownloadUrls() throws Exception {
         // the by-handle endpoint looks the name up in every ORIGINAL bundle of the item
-        String result = ccmmOf(add(fixture(MAIN), "bundles",
+        String result = ccmmWithDownloadsOf(add(fixture(MAIN), "bundles",
             "<element name=\"bundle\"><field name=\"name\">ORIGINAL</field><element name=\"bitstreams\">"
                 + "<element name=\"bitstream\"><field name=\"name\">corpus.txt</field>"
                 + "<field name=\"format\">text/plain</field><field name=\"size\">4096</field>"
@@ -2076,7 +2220,7 @@ public class CcmmXslTest extends AbstractXSLTest {
     public void ccmmFilesWithTheSameNameGetDistinctDownloadUrls() throws Exception {
         // the first file's own closing tag closes the second one, inserted after the first's id
         String firstId = "<field name=\"id\">18341be0-03ad-4a22-a1c8-4cd293c3f5da</field>";
-        String result = ccmmOf(once(fixture(MAIN), firstId, firstId + "</element>"
+        String result = ccmmWithDownloadsOf(once(fixture(MAIN), firstId, firstId + "</element>"
             + "<element name=\"bitstream\"><field name=\"name\">corpus.txt</field>"
             + "<field name=\"format\">text/plain</field><field name=\"size\">4096</field>"
             + "<field name=\"id\">5c1b4f7e-2d3a-4e5f-9a8b-1c2d3e4f5a6b</field>"));

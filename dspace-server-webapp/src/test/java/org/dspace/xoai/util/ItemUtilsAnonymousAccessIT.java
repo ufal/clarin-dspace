@@ -11,6 +11,8 @@ import static org.junit.Assert.assertEquals;
 
 import java.io.InputStream;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 
 import com.lyncode.xoai.dataprovider.xml.xoai.Element;
 import com.lyncode.xoai.dataprovider.xml.xoai.Metadata;
@@ -181,6 +183,46 @@ public class ItemUtilsAnonymousAccessIT extends AbstractControllerIntegrationTes
         assertEquals(ItemUtils.ACCESS_OPEN, value);
     }
 
+    @Test
+    public void retrieveMetadataMarksWhetherAnonymousCanReadEachFile() throws Exception {
+        // the CCMM crosswalk leaves out files an anonymous visitor cannot see; a licence only gates
+        // the download, so a licence-gated file still counts as readable
+        Item item = item();
+        file(item, "open.txt");
+        embargo(file(item, "embargoed.txt"));
+        removeRead(file(item, "private.txt"));
+        license(file(item, "licensed.txt"), Confirmation.ASK_ALWAYS);
+        Bitstream viaGroup = file(item, "group.txt");
+        removeRead(viaGroup);
+        read(viaGroup, groupContainingAnonymous(), null);
+
+        Map<String, String> flags = anonymousReadByFileName(item);
+        assertEquals("true", flags.get("open.txt"));
+        assertEquals("false", flags.get("embargoed.txt"));
+        assertEquals("false", flags.get("private.txt"));
+        assertEquals("true", flags.get("licensed.txt"));
+        assertEquals("true", flags.get("group.txt"));
+    }
+
+    private Map<String, String> anonymousReadByFileName(Item item) throws Exception {
+        Metadata metadata = ItemUtils.retrieveMetadata(context, item);
+        Element bundles = ItemUtils.getElement(metadata.getElement(), "bundles");
+        Map<String, String> flags = new HashMap<>();
+        for (Element bundle : bundles.getElement()) {
+            for (Element bitstream : ItemUtils.getElement(bundle.getElement(), "bitstreams").getElement()) {
+                flags.put(fieldValue(bitstream, "name"), fieldValue(bitstream, "anonymousRead"));
+            }
+        }
+        return flags;
+    }
+
+    private static String fieldValue(Element element, String name) {
+        return element.getField().stream()
+            .filter(f -> name.equals(f.getName()))
+            .map(Element.Field::getValue)
+            .findFirst().orElse(null);
+    }
+
     private Item item() {
         context.turnOffAuthorisationSystem();
         Item item = ItemBuilder.createItem(context, collection).withTitle("Item").build();
@@ -189,9 +231,13 @@ public class ItemUtilsAnonymousAccessIT extends AbstractControllerIntegrationTes
     }
 
     private Bitstream file(Item item) throws Exception {
+        return file(item, "data.txt");
+    }
+
+    private Bitstream file(Item item, String name) throws Exception {
         context.turnOffAuthorisationSystem();
         try (InputStream is = IOUtils.toInputStream("data", "UTF-8")) {
-            Bitstream bitstream = BitstreamBuilder.createBitstream(context, item, is).withName("data.txt").build();
+            Bitstream bitstream = BitstreamBuilder.createBitstream(context, item, is).withName(name).build();
             context.restoreAuthSystemState();
             return bitstream;
         }
