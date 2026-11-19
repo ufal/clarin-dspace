@@ -23,6 +23,7 @@ import org.dspace.identifier.VersionedHandleIdentifierProvider;
 import org.dspace.identifier.VersionedHandleIdentifierProviderWithCanonicalHandles;
 import org.dspace.services.ConfigurationService;
 import org.dspace.services.factory.DSpaceServicesFactory;
+import org.junit.After;
 import org.junit.Test;
 
 /**
@@ -38,6 +39,13 @@ public class CreateMissingIdentifiersIT
     private static final String TASK_NAME = "test";
 
     private ConfigurationService configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
+
+    @After
+    public void clearCachedTasks() {
+        // The base class resets the config after each test, but the plugin service would still cache
+        // only the "test" task, so later tests could not resolve their curation tasks.
+        CoreServiceFactory.getInstance().getPluginService().clearNamedPluginClasses();
+    }
 
     @Test
     public void testPerform()
