@@ -1604,10 +1604,6 @@
     <!-- funding_reference (optional, unbounded)                       -->
     <!-- ============================================================ -->
     <xsl:template name="FundingReferences">
-        <!-- sponsors that yield a grant: something in code, funder or project -->
-        <xsl:variable name="sponsorValues"
-            select="doc:metadata/doc:element[@name='local']/doc:element[@name='sponsor']/doc:element/doc:field[@name='value']
-                    [some $p in tokenize(normalize-space(.), ';')[position() = (2, 3, 4)] satisfies normalize-space($p) != '']"/>
         <!--
             The grant numbers already published from the info:eu-repo URIs.  local.sponsor spells
             the same grant differently - "900001" there, "FP7-TEST-0000-0-900001" here - so the
@@ -1660,29 +1656,6 @@
                 </ccmm:funding_reference>
             </xsl:if>
         </xsl:for-each>
-        <!--
-            The migrated META-SHARE project tree has a project name but no grant number, prefixes
-            every value of a repeated field with its position ("#1-Example Project Gamma" - storage, not
-            part of the name), and has no funder at all: fundingType is a category (euFunds, nationalFunds, ownFunds), not who
-            paid.  local.sponsor holds the same grants properly, with numbers and funder names that
-            cannot be matched to these titles reliably, so the tree is used only for a record
-            without local.sponsor; the funder, required by the schema, is then stated as unknown.
-        -->
-        <xsl:if test="not($sponsorValues)">
-            <xsl:for-each select="doc:metadata/doc:element[@name='metashare']/doc:element[@name='ResourceInfo#ResourceCreationInfo#FundingInfo#ProjectInfo']/doc:element[@name='projectName']/doc:element/doc:field[@name='value']">
-                <xsl:variable name="project" select="normalize-space(replace(normalize-space(.), '^#[0-9]+-', ''))"/>
-                <xsl:if test="$project != ''">
-                    <ccmm:funding_reference>
-                        <ccmm:award_title><xsl:value-of select="$project"/></ccmm:award_title>
-                        <ccmm:funder>
-                            <ccmm:organization>
-                                <ccmm:name>:unkn</ccmm:name>
-                            </ccmm:organization>
-                        </ccmm:funder>
-                    </ccmm:funding_reference>
-                </xsl:if>
-            </xsl:for-each>
-        </xsl:if>
         <!--
             local.sponsor carries the same grants in structured form, including the ones that
             never got an info: URI.  Emitted only when the project code is not already above.

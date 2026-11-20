@@ -1695,47 +1695,6 @@ public class CcmmXslTest extends AbstractXSLTest {
     }
 
     @Test
-    public void ccmmMetashareGrantsAreLeftOutWhenLocalSponsorHoldsTheGrants() throws Exception {
-        // local.sponsor carries the grants in structured form; the META-SHARE tree repeats them
-        // with a position mark ("#1-") and a funding category where the funder belongs
-        // FUNDING has no metashare element; the tree goes in front of local
-        String result = ccmmOf(once(fixture(FUNDING), "<element name=\"local\">",
-            "<element name=\"metashare\">" + metashareProjects(
-                new String[] {"#1-Example infrastructure project (LM0000001)"}, new String[] {"#1-euFunds"})
-                + "</element><element name=\"local\">"));
-        assertThat(result, is(ccmm().withXPath("count(//ccmm:funding_reference)",
-            equalTo(String.valueOf(FUNDING_GRANTS)))));
-        assertThat(result, is(ccmm().withXPath(
-            "count(//ccmm:funding_reference[contains(., 'LM0000001') or contains(., 'euFunds')])",
-            equalTo("0"))));
-    }
-
-    @Test
-    public void ccmmMetashareProjectNameIsPublishedWithoutThePositionMark() throws Exception {
-        // "#1-" is how the migrated tree numbers repeated values, not part of the name; a value
-        // that is wrong in itself ("N/A") is published as stored
-        String result = ccmmOf(add(fixture(MAIN), "metashare", metashareProjects(
-            new String[] {"#1-Example Project Gamma", "#2-N/A"}, new String[] {"#1-euFunds", "#2-ownFunds"})));
-        for (String title : new String[] {"Example Project Gamma", "N/A"}) {
-            assertThat(title, result, is(ccmm().withXPath(
-                "count(//ccmm:funding_reference[ccmm:award_title='" + title + "'])", equalTo("1"))));
-        }
-        assertThat(result, is(ccmm().withXPath(
-            "count(//ccmm:funding_reference[contains(., '#1-') or contains(., '#2-')])", equalTo("0"))));
-    }
-
-    @Test
-    public void ccmmFundingCategoryIsNotAFunderName() throws Exception {
-        // "euFunds" says which kind of money it was, not who gave it; the name is unknown
-        String result = ccmmOf(add(fixture(MAIN), "metashare", metashareProjects(
-            new String[] {"Example Project Delta"}, new String[] {"euFunds"})));
-        assertThat(result, is(ccmm().withXPath(
-            "//ccmm:funding_reference[ccmm:award_title='Example Project Delta']"
-                + "/ccmm:funder/ccmm:organization/ccmm:name",
-            equalTo(":unkn"))));
-    }
-
-    @Test
     public void ccmmPlaceholderSponsorPartsArePublishedAsStored() throws Exception {
         // "-", "None", "unknown" in local.sponsor are data errors the repository fixes
         String result = ccmmOf(add(fixture(FUNDING), "local", field("sponsor", "none",
@@ -1767,18 +1726,6 @@ public class CcmmXslTest extends AbstractXSLTest {
         assertThat(result, is(ccmm().withXPath(
             "//ccmm:funding_reference[ccmm:local_identifier='GA99-00001S']/ccmm:funder/ccmm:organization/ccmm:name",
             equalTo(":unkn"))));
-    }
-
-    @Test
-    public void ccmmPlaceholderSponsorStillStandsForTheMetashareGrants() throws Exception {
-        // "ownFunds;unknown;;;" is a local.sponsor grant like any other, so the META-SHARE tree is not used
-        String result = ccmmOf(add(add(fixture(MAIN), "metashare", metashareProjects(
-                new String[] {"Example Project Delta"}, new String[] {"euFunds"})),
-            "local", field("sponsor", "none", "ownFunds;unknown;;;")));
-        assertThat(result, is(ccmm().withXPath(
-            "count(//ccmm:funding_reference[ccmm:award_title='Example Project Delta'])", equalTo("0"))));
-        assertThat(result, is(ccmm().withXPath(
-            "count(//ccmm:funding_reference[ccmm:local_identifier='unknown'])", equalTo("1"))));
     }
 
     @Test
@@ -2044,11 +1991,17 @@ public class CcmmXslTest extends AbstractXSLTest {
     }
 
     @Test
-    public void ccmmBlankLocalSponsorLeavesTheMetashareGrants() throws Exception {
+    public void ccmmMetashareProjectsAreNotPublished() throws Exception {
+        // the migrated META-SHARE tree has no grant number and no funder; the grants it names are
+        // in local.sponsor, and one without them is left out rather than published with an unknown funder
         String result = ccmmOf(add(add(fixture(MAIN), "local", field("sponsor", "none", "   ")),
-            "metashare", metashareProjects(new String[] {"Example Project Delta"}, new String[] {"euFunds"})));
+            "metashare", metashareProjects(new String[] {"#1-Example Project Delta", "#2-N/A"},
+                new String[] {"#1-euFunds", "#2-ownFunds"})));
         assertThat(result, is(ccmm().withXPath(
-            "count(//ccmm:funding_reference[ccmm:award_title='Example Project Delta'])", equalTo("1"))));
+            "count(//ccmm:funding_reference[contains(., 'Example Project Delta') or contains(., 'N/A')])",
+            equalTo("0"))));
+        assertThat(result, is(ccmm().withXPath(
+            "count(//ccmm:funding_reference/ccmm:funder/ccmm:organization[ccmm:name=':unkn'])", equalTo("0"))));
     }
 
     @Test
