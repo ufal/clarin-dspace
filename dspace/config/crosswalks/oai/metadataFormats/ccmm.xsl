@@ -419,9 +419,6 @@
             <!-- distribution (optional, unbounded) -->
             <xsl:apply-templates select="$distributions" mode="publish"/>
 
-            <!-- validation_result (optional, unbounded) -->
-            <xsl:call-template name="ValidationResults"/>
-
             <!-- provenance (optional, unbounded) -->
             <xsl:call-template name="Provenances"/>
 
@@ -616,16 +613,6 @@
                 <ccmm:title><xsl:call-template name="XmlLangAttribute"/><xsl:value-of select="normalize-space(.)"/></ccmm:title>
                 <xsl:call-template name="AlternativeTitleType"/>
             </ccmm:alternate_title>
-        </xsl:for-each>
-        <!-- the META-SHARE resource name, where it differs from dc.title -->
-        <xsl:for-each select="doc:metadata/doc:element[@name='metashare']/doc:element[@name='ResourceInfo#IdentificationInfo']/doc:element[@name='resourceName']/doc:element/doc:field[@name='value']">
-            <xsl:if test="normalize-space(.) != ''
-                      and not(normalize-space(.) = /doc:metadata/doc:element[@name='dc']/doc:element[@name='title']/doc:element/doc:field[@name='value']/normalize-space(.))">
-                <ccmm:alternate_title>
-                    <ccmm:title><xsl:call-template name="XmlLangAttribute"/><xsl:value-of select="normalize-space(.)"/></ccmm:title>
-                    <xsl:call-template name="AlternativeTitleType"/>
-                </ccmm:alternate_title>
-            </xsl:if>
         </xsl:for-each>
         <!-- dc.title.alternative mapped to alternate_title -->
         <xsl:for-each select="doc:metadata/doc:element[@name='dc']/doc:element[@name='title']/doc:element[@name='alternative']/doc:element/doc:field[@name='value']">
@@ -1250,17 +1237,6 @@
             <xsl:if test="$licenseUriRaw != '' and $licenseIri != $licenseUriRaw">
                 <ccmm:description xml:lang="en"><xsl:value-of select="$licenseUriRaw"/></ccmm:description>
             </xsl:if>
-            <xsl:for-each select="doc:metadata/doc:element[@name='metashare']/doc:element[@name='ResourceInfo#DistributionInfo#LicenseInfo']/doc:element[@name='restrictionsOfUse']/doc:element/doc:field[@name='value']">
-                <xsl:if test="normalize-space(.) != ''">
-                    <ccmm:description xml:lang="en"><xsl:value-of select="concat('Restrictions of use: ', normalize-space(.))"/></ccmm:description>
-                </xsl:if>
-            </xsl:for-each>
-            <xsl:for-each select="doc:metadata/doc:element[@name='metashare']/doc:element[@name='ResourceInfo#DistributionInfo#LicenseInfo']/doc:element[@name='license']/doc:element/doc:field[@name='value']
-                                | doc:metadata/doc:element[@name='metashare']/doc:element[@name='ResourceInfo#DistributionInfo#LicenseInfo']/doc:element[@name='distributionAccessMedium']/doc:element/doc:field[@name='value']">
-                <xsl:if test="normalize-space(.) != ''">
-                    <ccmm:description xml:lang="en"><xsl:value-of select="concat(replace(string(../../@name), '^.*#', ''), ': ', normalize-space(.))"/></ccmm:description>
-                </xsl:if>
-            </xsl:for-each>
             <xsl:for-each select="$amEthical[. != '']">
                 <ccmm:description xml:lang="en"><xsl:value-of select="concat('Ethical reference: ', .)"/></ccmm:description>
             </xsl:for-each>
@@ -1443,9 +1419,8 @@
         <xsl:for-each select="doc:metadata/doc:element[@name='metashare']/doc:element[@name='ResourceInfo#ContentInfo']/doc:element[@name='mediaType']/doc:element/doc:field[@name='value']">
             <xsl:call-template name="EmitSubject"/>
         </xsl:for-each>
-        <!-- the META-SHARE resource type and the Europeana type, both content descriptors -->
-        <xsl:for-each select="doc:metadata/doc:element[@name='metashare']/doc:element[@name='ResourceInfo#ContentInfo']/doc:element[@name='resourceType']/doc:element/doc:field[@name='value']
-                            | doc:metadata/doc:element[@name='edm']/doc:element[@name='type']/doc:element/doc:field[@name='value']">
+        <!-- the Europeana type, a content descriptor -->
+        <xsl:for-each select="doc:metadata/doc:element[@name='edm']/doc:element[@name='type']/doc:element/doc:field[@name='value']">
             <xsl:call-template name="EmitSubject"/>
         </xsl:for-each>
         <!-- languages named only in prose, which the language register cannot express -->
@@ -1565,38 +1540,13 @@
                 </ccmm:description>
             </xsl:if>
         </xsl:for-each>
-        <!-- the META-SHARE free description -->
-        <xsl:for-each select="doc:metadata/doc:element[@name='metashare']/doc:element[@name='ResourceInfo#ContentInfo']/doc:element[@name='description']/doc:element/doc:field[@name='value']">
-            <xsl:if test="normalize-space(.) != ''">
-                <ccmm:description>
-                    <ccmm:description_text><xsl:call-template name="XmlLangAttribute"/><xsl:value-of select="normalize-space(.)"/></ccmm:description_text>
-                    <ccmm:description_type>
-                        <ccmm:iri>https://vocabs.ccmm.cz/registry/codelist/DescriptionType/Other</ccmm:iri>
-                        <ccmm:label xml:lang="en">Other</ccmm:label>
-                    </ccmm:description_type>
-                </ccmm:description>
-            </xsl:if>
-        </xsl:for-each>
         <!--
             local.refbox.format is not published: it is the format string of the UI's citation box
             ("{title}, {authors}, {year}, ...", see local-types.xml), placeholders and all, and the
             values it would fill in are already elements of their own.
         -->
-        <!-- META-SHARE technical statements: extent, language coding, language dependence -->
-        <xsl:for-each select="doc:metadata/doc:element[@name='metashare']/doc:element[@name='ResourceInfo#TextInfo#SizeInfo']/doc:element[@name='size']/doc:element/doc:field[@name='value']">
-            <xsl:variable name="unit" select="normalize-space((/doc:metadata/doc:element[@name='metashare']/doc:element[@name='ResourceInfo#TextInfo#SizeInfo']/doc:element[@name='sizeUnit']/doc:element/doc:field[@name='value'])[1])"/>
-            <xsl:if test="normalize-space(.) != ''">
-                <ccmm:description>
-                    <ccmm:description_text xml:lang="en"><xsl:value-of select="normalize-space(concat('Size: ', ., ' ', $unit))"/></ccmm:description_text>
-                    <ccmm:description_type>
-                        <ccmm:iri>https://vocabs.ccmm.cz/registry/codelist/DescriptionType/TechnicalInfo</ccmm:iri>
-                        <ccmm:label xml:lang="en">Technical Info</ccmm:label>
-                    </ccmm:description_type>
-                </ccmm:description>
-            </xsl:if>
-        </xsl:for-each>
-        <xsl:for-each select="doc:metadata/doc:element[@name='metashare']/doc:element[@name='ResourceInfo#TextInfo#LanguageInfo']/doc:element[@name='languageCoding']/doc:element/doc:field[@name='value']
-                            | doc:metadata/doc:element[@name='metashare']/doc:element[@name='ResourceInfo#ResourceComponentType#ToolServiceInfo']/doc:element[@name='languageDependent']/doc:element/doc:field[@name='value']">
+        <!-- the META-SHARE language dependence of a tool, still asked by the submission form -->
+        <xsl:for-each select="doc:metadata/doc:element[@name='metashare']/doc:element[@name='ResourceInfo#ResourceComponentType#ToolServiceInfo']/doc:element[@name='languageDependent']/doc:element/doc:field[@name='value']">
             <xsl:if test="normalize-space(.) != ''">
                 <ccmm:description>
                     <ccmm:description_text xml:lang="en"><xsl:value-of select="concat(replace(string(../../@name), '^.*#', ''), ': ', normalize-space(.))"/></ccmm:description_text>
@@ -2138,32 +2088,13 @@
     </xsl:template>
 
     <!-- ============================================================ -->
-    <!-- validation_result and provenance                              -->
+    <!-- provenance                                                    -->
     <!-- ============================================================ -->
-    <xsl:template name="ValidationResults">
-        <xsl:for-each select="doc:metadata/doc:element[@name='metashare']/doc:element[@name='ResourceInfo#ValidationInfo']/doc:element[@name='validated']/doc:element/doc:field[@name='value']">
-            <ccmm:validation_result>
-                <ccmm:label xml:lang="en">
-                    <xsl:value-of select="if (lower-case(normalize-space(.)) = 'true')
-                                          then 'Validated by the repository'
-                                          else 'Not validated by the repository'"/>
-                </ccmm:label>
-            </ccmm:validation_result>
-        </xsl:for-each>
-    </xsl:template>
-
     <xsl:template name="Provenances">
         <xsl:for-each select="doc:metadata/doc:element[@name='local']/doc:element[@name='dataProvider']/doc:element/doc:field[@name='value']">
             <xsl:if test="normalize-space(.) != ''">
                 <ccmm:provenance>
                     <ccmm:label xml:lang="en"><xsl:value-of select="concat('Data provider: ', normalize-space(.))"/></ccmm:label>
-                </ccmm:provenance>
-            </xsl:if>
-        </xsl:for-each>
-        <xsl:for-each select="doc:metadata/doc:element[@name='metashare']/doc:element[@name='ResourceInfo#DistributionInfo']/doc:element[@name='availability']/doc:element/doc:field[@name='value']">
-            <xsl:if test="normalize-space(.) != ''">
-                <ccmm:provenance>
-                    <ccmm:label xml:lang="en"><xsl:value-of select="concat('META-SHARE availability: ', normalize-space(.))"/></ccmm:label>
                 </ccmm:provenance>
             </xsl:if>
         </xsl:for-each>

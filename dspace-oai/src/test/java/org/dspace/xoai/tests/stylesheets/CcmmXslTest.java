@@ -727,10 +727,22 @@ public class CcmmXslTest extends AbstractXSLTest {
     }
 
     @Test
-    public void ccmmContainsValidationResult() throws Exception {
-        String result = apply("ccmm.xsl").to(resource(MAIN));
-        assertThat(result, is(ccmm().withXPath(
-            "//ccmm:validation_result/ccmm:label", equalTo("Validated by the repository"))));
+    public void ccmmLegacyMetashareFieldsAreNotPublished() throws Exception {
+        // only migrated META-SHARE records carry these; they are stale or repeat dc/local fields.
+        // MAIN's own metashare "validated" flag is not a claim of this repository either.
+        String result = ccmmOf(add(fixture(MAIN), "metashare",
+            field("ResourceInfo#IdentificationInfo.resourceName", "none", "legacy-resource-name"),
+            field("ResourceInfo#DistributionInfo#LicenseInfo.restrictionsOfUse", "none", "legacy-restrictions"),
+            field("ResourceInfo#DistributionInfo#LicenseInfo.license", "none", "legacy-license"),
+            field("ResourceInfo#DistributionInfo#LicenseInfo.distributionAccessMedium", "none", "legacy-medium"),
+            field("ResourceInfo#ContentInfo.resourceType", "none", "legacy-resource-type"),
+            field("ResourceInfo#ContentInfo.description", "none", "legacy-description"),
+            field("ResourceInfo#TextInfo#SizeInfo.size", "none", "legacy-size"),
+            field("ResourceInfo#TextInfo#SizeInfo.sizeUnit", "none", "legacy-unit"),
+            field("ResourceInfo#TextInfo#LanguageInfo.languageCoding", "none", "legacy-coding"),
+            field("ResourceInfo#DistributionInfo.availability", "none", "legacy-availability")));
+        assertThat(result, is(ccmm().withXPath("count(//text()[contains(., 'legacy-')])", equalTo("0"))));
+        assertThat(result, is(ccmm().withXPath("count(//ccmm:validation_result)", equalTo("0"))));
     }
 
     @Test
@@ -816,9 +828,6 @@ public class CcmmXslTest extends AbstractXSLTest {
             "count(//ccmm:dataset/ccmm:subject[preceding-sibling::ccmm:location])", equalTo("0"))));
         assertThat(result, is(ccmm().withXPath(
             "count(//ccmm:dataset/ccmm:related_resource[preceding-sibling::ccmm:distribution])",
-            equalTo("0"))));
-        assertThat(result, is(ccmm().withXPath(
-            "count(//ccmm:dataset/ccmm:distribution[preceding-sibling::ccmm:validation_result])",
             equalTo("0"))));
     }
 
