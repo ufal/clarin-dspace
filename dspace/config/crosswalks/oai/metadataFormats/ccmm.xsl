@@ -1304,7 +1304,7 @@
                 <xsl:with-param name="given" select="$g"/>
                 <xsl:with-param name="family" select="$f"/>
                 <xsl:with-param name="mails" select="if (exists($mails[matches(., $mailPattern)])) then $mails else if ($sameAsMs) then $msMail else ()"/>
-                <xsl:with-param name="orgs" select="if (exists($orgs)) then $orgs else if ($sameAsMs) then $msOrg else ()"/>
+                <xsl:with-param name="orgs" select="if (exists($orgs)) then $orgs else if ($sameAsMs) then $msOrg[. != ''] else ()"/>
             </xsl:call-template>
         </xsl:for-each-group>
         <xsl:if test="not($cpNamed) and concat($given, $family) = ''">

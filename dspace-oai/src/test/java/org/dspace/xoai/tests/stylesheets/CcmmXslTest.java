@@ -2209,6 +2209,16 @@ public class CcmmXslTest extends AbstractXSLTest {
     }
 
     @Test
+    public void ccmmSamePersonWithoutAnyAffiliationGetsNoEmptyOne() throws Exception {
+        // a contact copied from META-SHARE into local.contact.person, where neither has an organization
+        String result = ccmmOf(add(once(fixture(MAIN), KOVAR,
+            "<field name=\"value\">Tomas;Kovar;kovar@example.org;</field>"), "metashare",
+            metashareContact("Tomas", "Kovar", "kovar@example.org")));
+        assertThat(result, is(ccmm().withXPath(CONTACT_PERSON + "/ccmm:name", equalTo("Kovar, Tomas"))));
+        assertThat(result, is(ccmm().withXPath("count(" + CONTACT_PERSON + "/ccmm:affiliation)", equalTo("0"))));
+    }
+
+    @Test
     public void ccmmAddressOnlyContactPersonDoesNotHideTheMetashareContact() throws Exception {
         String result = ccmmOf(add(once(fixture(MAIN), KOVAR,
             "<field name=\"value\">office@example.org</field>"), "metashare",
