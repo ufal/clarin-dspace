@@ -1846,7 +1846,9 @@
             have no identity to compare and all stay.  A URL that is already one of the record's
             distributions (a featured service also given as the demo, a web service also given as
             the source) is not repeated as a related resource: CCMM says distributions SHALL NOT be
-            modeled as related resources.
+            modeled as related resources.  The file URLs (download_url, built even when it is not
+            published) are compared too, only to guard against the unlikely case that a relation
+            names one of the item's own files; no LINDAT record does that today.
         -->
         <xsl:variable name="perIri" as="element()*">
             <xsl:for-each-group select="$deduped/*[not(ccmm:iri = $distributionIris)]" group-by="if (ccmm:iri) then string(ccmm:iri) else generate-id()">
@@ -2008,12 +2010,15 @@
                 access_url is the page that says how to get the resource, so it is the item's
                 landing page, with the configured anchor of its file section.  A record with no
                 Handle at all has no page to point at, and access_url is mandatory, so it falls
-                back to the route download_url uses, which is at least resolvable.
+                back to the route download_url uses - but only when direct links are published.
+                Otherwise the file is not listed: access_url would publish the very link that
+                download_url leaves out.
             -->
             <xsl:variable name="accessUrl"
                 select="if ($landingPage != '')
                         then concat($landingPage, if ($accessUrlAnchor != '') then concat('#', encode-for-uri($accessUrlAnchor)) else '')
-                        else $downloadUrl"/>
+                        else if ($publishDownloadUrl) then $downloadUrl
+                        else ''"/>
             <!--
                 access_url is the one mandatory URL, so it is what has to be resolvable.  Gating on
                 the XOAI url instead would drop the file whenever XOAI could not build one -
@@ -2106,10 +2111,6 @@
             <xsl:copy-of select="@*"/>
             <xsl:apply-templates select="node()" mode="publish"/>
         </xsl:copy>
-    </xsl:template>
-
-    <xsl:template match="text()" mode="publish">
-        <xsl:copy-of select="."/>
     </xsl:template>
 
     <xsl:template name="DataServiceDistribution">

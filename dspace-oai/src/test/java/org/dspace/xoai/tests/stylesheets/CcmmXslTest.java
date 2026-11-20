@@ -1515,6 +1515,23 @@ public class CcmmXslTest extends AbstractXSLTest {
     }
 
     @Test
+    public void ccmmFileOfAnItemWithoutLandingPageIsListedOnlyWithDownloadUrls() throws Exception {
+        // with no Handle, access_url falls back to the file's own URL - the link download_url leaves out
+        String noHandle = once(once(fixture(MAIN),
+            "<field name=\"value\">http://hdl.handle.net/123456789/1-5678</field>", ""),
+            "<field name=\"handle\">123456789/1-5678</field>", "");
+        String file = "https://repository.example.org/repository/bitstream/123456789/1-5678/1/corpus.txt";
+        String result = ccmmOf(noHandle);
+        assertThat(result, is(ccmm().withXPath("count(//ccmm:distribution_downloadable_file)", equalTo("0"))));
+        assertThat(result, is(ccmm().withXPath("count(//*[ccmm:iri = '" + file + "'])", equalTo("0"))));
+        result = ccmmWithDownloadsOf(noHandle);
+        assertThat(result, is(ccmm().withXPath(
+            "//ccmm:distribution_downloadable_file/ccmm:access_url/ccmm:iri", equalTo(file))));
+        assertThat(result, is(ccmm().withXPath(
+            "//ccmm:distribution_downloadable_file/ccmm:download_url/ccmm:iri", equalTo(file))));
+    }
+
+    @Test
     public void ccmmFileUrlIsNoRelatedResourceEvenWhenDownloadUrlIsNotPublished() throws Exception {
         // CCMM: distributions SHALL NOT be modeled as related resources, published link or not
         String file = TEST_SERVER_URL + "/api/core/bitstreams/handle/123456789/1-5678/corpus.txt";
