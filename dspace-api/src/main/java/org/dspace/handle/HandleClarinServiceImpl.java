@@ -110,6 +110,19 @@ public class HandleClarinServiceImpl implements HandleClarinService {
     }
 
     @Override
+    public String findStoredHandle(Context context, String handle) throws SQLException {
+        if (Objects.isNull(handle)) {
+            return null;
+        }
+        Handle found = handleClarinDAO.findByHandleIgnoreCase(context, stripPartIdentifier(handle));
+        if (Objects.isNull(found)) {
+            return null;
+        }
+        int pos = handle.indexOf(PART_IDENTIFIER_DELIMITER);
+        return pos >= 0 ? found.getHandle() + handle.substring(pos) : found.getHandle();
+    }
+
+    @Override
     public Handle createExternalHandle(Context context, String handleStr, String url, Boolean dead, Date deadSince)
             throws SQLException, AuthorizeException {
         if (!authorizeService.isAdmin(context)) {

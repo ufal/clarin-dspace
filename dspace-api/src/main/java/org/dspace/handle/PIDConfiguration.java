@@ -50,8 +50,6 @@ public class PIDConfiguration {
 
     private static Map<UUID, PIDCommunityConfiguration> pidCommunityConfigurations;
 
-    private ConfigurationService configurationService = new DSpace().getConfigurationService();
-
     private DspaceObjectClarinService dspaceObjectClarinService =
             ContentServiceFactory.getInstance().getDspaceObjectClarinService();
 
@@ -65,6 +63,9 @@ public class PIDConfiguration {
     private void initialize() {
         // All configurations are loaded into one array.
         // New configuration starts after loaded part contains "community".
+        // Look the ConfigurationService up on every (re)load instead of keeping it in a field: this singleton
+        // outlives the DSpace kernel in tests, which restart the kernel between test classes.
+        ConfigurationService configurationService = new DSpace().getConfigurationService();
         String[] pidCommunityConfigurationsArray = configurationService.getArrayProperty
                 (CLARIN_PID_COMMUNITY_CONFIGURATIONS_KEYWORD);
 
