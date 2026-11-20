@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+
+    The contents of this file are subject to the license and copyright
+    detailed in the LICENSE and NOTICE files at the root of the source
+    tree and available online at
+
+    http://www.dspace.org/license/
+
+-->
+<!--
+    Minimal XOAI metadata XML for CCMM crosswalk fallback testing.
+    Missing most DC fields to trigger fallback behavior for required CCMM elements:
+      - title (missing -> "Untitled")
+      - publication_year (missing issued/accessioned -> "9999")
+      - subject (missing -> "unspecified")
+      - identifier (only others/handle available)
+      - repository name (missing -> "Unknown Repository")
+-->
+<metadata xmlns="http://www.lyncode.com/xoai" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://www.lyncode.com/xoai http://www.lyncode.com/xsd/xoai.xsd">
+    <element name="dc">
+        <element name="rights">
+            <element name="none">
+                <field name="value">All rights reserved</field>
+            </element>
+        </element>
+    </element>
+    <element name="others">
+        <field name="handle">99999/test-1</field>
+        <field name="identifier">oai:test.repository:99999/test-1</field>
+        <field name="lastModifyDate">2025-01-01 00:00:00.000</field>
+    </element>
+</metadata>

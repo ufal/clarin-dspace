@@ -44,7 +44,6 @@ public class FilePreviewConfiguration<T extends FilePreview> extends ScriptConfi
             options.addOption("e", "email", true,
                     "Email of the eperson to run the script as.");
             options.getOption("e").setType(String.class);
-            options.getOption("e").setRequired(true);
 
             super.options = options;
         }

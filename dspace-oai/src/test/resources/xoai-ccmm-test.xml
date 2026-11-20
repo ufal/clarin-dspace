@@ -1,0 +1,232 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+
+    The contents of this file are subject to the license and copyright
+    detailed in the LICENSE and NOTICE files at the root of the source
+    tree and available online at
+
+    http://www.dspace.org/license/
+
+-->
+<!--
+    Test XOAI metadata XML for CCMM crosswalk testing.
+    Includes fields commonly found in dataset submissions.
+-->
+<metadata xmlns="http://www.lyncode.com/xoai" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://www.lyncode.com/xoai http://www.lyncode.com/xsd/xoai.xsd">
+    <element name="dc">
+        <element name="contributor">
+            <element name="author">
+                <element name="none">
+                    <field name="value">Novak, Jan</field>
+                    <field name="value">Svobodova, Marie</field>
+                    <!-- two corporate credits, which an author field still names as persons, and an
+                         ANVL placeholder; the shapes of all three occur in production -->
+                    <field name="value">Example Film Co.</field>
+                    <field name="value">Zorvex</field>
+                    <field name="value">(:unav) Unknown author</field>
+                </element>
+            </element>
+            <element name="other">
+                <element name="none">
+                    <field name="value">Dvorak, Petr</field>
+                </element>
+            </element>
+        </element>
+        <element name="coverage">
+            <element name="placeName">
+                <element name="none">
+                    <field name="value">Praha</field>
+                </element>
+            </element>
+        </element>
+        <element name="date">
+            <element name="accessioned">
+                <element name="none">
+                    <field name="value">2025-06-15T10:30:00Z</field>
+                </element>
+            </element>
+            <element name="available">
+                <element name="none">
+                    <field name="value">2025-06-15T10:30:00Z</field>
+                </element>
+            </element>
+            <element name="issued">
+                <element name="none">
+                    <field name="value">2025-03-20</field>
+                </element>
+            </element>
+        </element>
+        <element name="format">
+            <element name="none">
+                <field name="value">text/plain</field>
+            </element>
+        </element>
+        <element name="identifier">
+            <element name="uri">
+                <element name="none">
+                    <field name="value">http://hdl.handle.net/123456789/1-5678</field>
+                </element>
+            </element>
+            <element name="other">
+                <element name="none">
+                    <field name="value">ISLRN-123-456-789</field>
+                </element>
+            </element>
+        </element>
+        <element name="description">
+            <element name="abstract">
+                <element name="en">
+                    <field name="value">A sample dataset for testing CCMM crosswalk output in the OAI-PMH protocol.</field>
+                </element>
+            </element>
+            <element name="none">
+                <field name="value">Built from newspaper text collected in 2024.</field>
+            </element>
+        </element>
+        <element name="language">
+            <element name="iso">
+                <element name="none">
+                    <field name="value">ces</field>
+                    <field name="value">eng</field>
+                </element>
+            </element>
+        </element>
+        <element name="publisher">
+            <element name="none">
+                <field name="value">Example University, Faculty of Sciences, Institute of Example Linguistics</field>
+            </element>
+        </element>
+        <element name="relation">
+            <element name="none">
+                <field name="value">info:eu-repo/grantAgreement/EC/H2020/900002/EU//ExampleBeta</field>
+            </element>
+            <element name="replaces">
+                <element name="none">
+                    <field name="value">http://hdl.handle.net/123456789/1-1111</field>
+                </element>
+            </element>
+        </element>
+        <element name="rights">
+            <element name="none">
+                <field name="value">Creative Commons - Attribution 4.0 International</field>
+            </element>
+            <element name="uri">
+                <element name="none">
+                    <field name="value">https://creativecommons.org/licenses/by/4.0/</field>
+                </element>
+            </element>
+            <!-- the CLARIN access category; it is not a licence name -->
+            <element name="label">
+                <element name="none">
+                    <field name="value">PUB</field>
+                </element>
+            </element>
+        </element>
+        <element name="source">
+            <element name="uri">
+                <element name="none">
+                    <field name="value">https://example.org/czech-nlp-dataset</field>
+                </element>
+            </element>
+        </element>
+        <element name="subject">
+            <element name="none">
+                <field name="value">linguistics</field>
+                <field name="value">Czech language</field>
+                <field name="value">NLP</field>
+                <!-- a path through a controlled vocabulary, as the digitised collections use -->
+                <field name="value">People::Example Person (1801-1870)</field>
+            </element>
+            <element name="cs_CZ">
+                <field name="value">korpus</field>
+            </element>
+            <element name="de_DE">
+                <field name="value">Korpus</field>
+            </element>
+        </element>
+        <element name="title">
+            <element name="none">
+                <field name="value">Czech NLP Dataset v2.0</field>
+            </element>
+            <element name="alternative">
+                <element name="none">
+                    <field name="value">CND 2.0</field>
+                </element>
+            </element>
+        </element>
+        <element name="type">
+            <element name="none">
+                <field name="value">corpus</field>
+            </element>
+        </element>
+    </element>
+    <element name="local">
+        <element name="contact">
+            <element name="person">
+                <element name="none">
+                    <field name="value">Tomas;Kovar;kovar@example.org;Example University</field>
+                </element>
+            </element>
+        </element>
+        <element name="language">
+            <element name="name">
+                <element name="none">
+                    <field name="value">Czech</field>
+                    <field name="value">English</field>
+                </element>
+            </element>
+        </element>
+        <element name="demo">
+            <element name="uri">
+                <element name="none">
+                    <field name="value">https://example.org/demo</field>
+                </element>
+            </element>
+        </element>
+    </element>
+    <element name="metashare">
+        <element name="ResourceInfo#ValidationInfo">
+            <element name="validated">
+                <element name="none">
+                    <field name="value">true</field>
+                </element>
+            </element>
+        </element>
+    </element>
+    <element name="bundles">
+        <element name="bundle">
+            <field name="name">ORIGINAL</field>
+            <element name="bitstreams">
+                <element name="bitstream">
+                    <field name="name">corpus.txt</field>
+                    <field name="originalName">corpus.txt</field>
+                    <field name="format">text/plain</field>
+                    <field name="size">2048</field>
+                    <field name="url">https://repository.example.org/repository/bitstream/123456789/1-5678/1/corpus.txt</field>
+                    <field name="checksum">ee1c4e448a8f9f838df348dfee1fc11f</field>
+                    <field name="checksumAlgorithm">MD5</field>
+                    <field name="sid">1</field>
+                    <field name="id">18341be0-03ad-4a22-a1c8-4cd293c3f5da</field>
+                </element>
+            </element>
+        </element>
+    </element>
+    <element name="others">
+        <field name="handle">123456789/1-5678</field>
+        <field name="identifier">oai:repository.example.org:123456789/1-5678</field>
+        <field name="anonymousAccess">open</field>
+        <field name="owningCollection">Test Collection</field>
+        <field name="lastModifyDate">2025-06-15 10:30:00.000</field>
+        <!-- computed by org.dspace.access.status.DefaultAccessStatusHelper and injected by
+             AccessStatusElementItemCompilePlugin -->
+        <element name="access-status">
+            <field name="value">open.access</field>
+        </element>
+    </element>
+    <element name="repository">
+        <field name="url">https://repository.example.org/repository/</field>
+        <field name="name">Example Repository</field>
+        <field name="mail">help@repository.example.org</field>
+    </element>
+</metadata>

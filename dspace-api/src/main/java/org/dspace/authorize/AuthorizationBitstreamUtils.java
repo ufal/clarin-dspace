@@ -112,6 +112,17 @@ public class AuthorizationBitstreamUtils {
         List<ClarinLicenseResourceMapping> clarinLicenseResourceMappings =
                 clarinLicenseResourceMappingService.findByBitstreamUUID(context, bitstreamID);
 
+        return licenseAllowsAnonymous(clarinLicenseResourceMappings);
+    }
+
+    /**
+     * Whether the Clarin license mapped to a bitstream lets an anonymous user download it. This is the
+     * license part of the download gate; the READ policy of the bitstream is checked separately.
+     *
+     * @param clarinLicenseResourceMappings the license mappings of one bitstream
+     * @return true if the bitstream has no Clarin license, or its confirmation is ALLOW_ANONYMOUS or NOT_REQUIRED
+     */
+    public static boolean licenseAllowsAnonymous(List<ClarinLicenseResourceMapping> clarinLicenseResourceMappings) {
         // Bitstream does not have Clarin License
         if (CollectionUtils.isEmpty(clarinLicenseResourceMappings)) {
             return true;

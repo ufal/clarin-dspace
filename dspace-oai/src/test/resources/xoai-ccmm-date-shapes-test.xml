@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+
+    The contents of this file are subject to the license and copyright
+    detailed in the LICENSE and NOTICE files at the root of the source
+    tree and available online at
+
+    http://www.dspace.org/license/
+
+-->
+<!--
+    Date shapes DSpace actually stores, plus two that no format string can parse.  Every branch of
+    FormatDate has to produce a value xs:date accepts, or produce nothing at all.
+-->
+<metadata xmlns="http://www.lyncode.com/xoai">
+    <element name="dc">
+        <element name="date">
+            <element name="issued">
+                <element name="none">
+                    <field name="value">2014</field>
+                </element>
+            </element>
+            <element name="accessioned">
+                <element name="none">
+                    <field name="value">2011-12</field>
+                    <field name="value">no date recorded</field>
+                </element>
+            </element>
+            <element name="available">
+                <element name="none">
+                    <field name="value">2008-12-01</field>
+                    <field name="value">n.d.</field>
+                </element>
+            </element>
+        </element>
+        <element name="title">
+            <element name="none">
+                <field name="value">Date Shapes</field>
+            </element>
+        </element>
+    </element>
+    <element name="others">
+        <field name="handle">123/789</field>
+        <field name="identifier">oai:repo.example.org:123/789</field>
+    </element>
+    <element name="repository">
+        <field name="name">Example Repository</field>
+        <field name="url">https://repo.example.org/</field>
+    </element>
+</metadata>

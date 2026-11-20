@@ -13,18 +13,21 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.MissingResourceException;
 import java.util.Objects;
+import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
-import org.apache.solr.client.solrj.util.ClientUtils;
 import org.dspace.app.util.AuthorizeUtil;
 import org.dspace.authorize.AuthorizeConfiguration;
 import org.dspace.authorize.AuthorizeException;
@@ -847,6 +850,86 @@ public class CollectionServiceImpl extends DSpaceObjectServiceImpl<Collection> i
     }
 
     @Override
+    public List<Collection> findAuthorized(Context context, Community community, List<Integer> actions)
+        throws SQLException {
+
+        List<Collection> myCollections = new ArrayList<>();
+        EPerson eperson = context.getCurrentUser();
+
+        //If eperson is Administrator return all colls or if a community is not null only the community's collections
+        if (authorizeService.isAdmin(context, eperson)) {
+            if (community != null) {
+                return community.getCollections();
+            }
+            myCollections = this.findAll(context);
+            return myCollections;
+        }
+
+        //Get the collections of the eperson where is is admin of a community
+        List<Group> directGroups = new ArrayList<>(eperson.getGroups()); // direct membership
+        Queue<Group> queue = new LinkedList<>(directGroups);
+        while (!queue.isEmpty()) {
+            Group current = queue.poll();
+            List<Group> parents = current.getParentGroups();
+
+            for (Group parent : parents) {
+                if (directGroups.add(parent)) {
+                    queue.add(parent);
+                }
+            }
+        }
+
+        List<ResourcePolicy> resourcePolicies = resourcePolicyService
+                   .find(context, eperson, directGroups, Constants.ADMIN, Constants.COMMUNITY);
+        List<UUID> uuids = resourcePolicies.stream()
+            .map(policy -> policy.getdSpaceObject().getID())
+            .collect(Collectors.toList());
+
+        List<Community> communities = uuids.stream()
+            .map(uuid -> {
+                try {
+                    return communityService.find(context, uuid);
+                } catch (SQLException e) {
+                    return null;  //ignore that uuid
+                }
+            })
+            .filter(Objects::nonNull)
+            .collect(Collectors.toList());
+
+        Set<Community> allCommunities = new HashSet<>(communities);
+        Set<Collection> allCommAdminCollections = communities.stream()
+            .flatMap(cm -> cm.getCollections().stream())
+            .collect(Collectors.toSet());
+        Queue<Community> queueComm = new LinkedList<>(communities);
+
+        while (!queueComm.isEmpty()) {
+            Community com = queueComm.poll();
+            List<Community> childrenComms = com.getSubcommunities();
+            for (Community childComm : childrenComms) {
+                if (allCommunities.add(childComm)) {
+                    queueComm.add(childComm);
+                    allCommAdminCollections.addAll(childComm.getCollections());
+                }
+            }
+        }
+
+        //Now get the collection when the eperson can deposit or is admin or is in a group with those privileges
+        myCollections = collectionDAO.findAuthorizedByEPerson(context, eperson, actions);
+        Set<Collection> allCollections = new HashSet<>(myCollections);
+        //Join EPerson Community Admin Collections with Collection Admins
+        allCollections.addAll(allCommAdminCollections);
+
+        List<Collection> collsAllowed = new ArrayList<>(allCollections);
+
+        //A community is passed, only the community's collections will be used and existing in eperson Authorizations
+        if (community != null) {
+            collsAllowed.retainAll(community.getCollections());
+        }
+
+        return collsAllowed;
+    }
+
+    @Override
     public Collection findByGroup(Context context, Group group) throws SQLException {
         return collectionDAO.findByGroup(context, group);
     }
@@ -957,7 +1040,7 @@ public class CollectionServiceImpl extends DSpaceObjectServiceImpl<Collection> i
 
     @Override
     public List<Collection> findCollectionsWithSubmit(String q, Context context, Community community,
-        int offset, int limit) throws SQLException, SearchServiceException {
+        int offset, int limit) throws SearchServiceException {
 
         List<Collection> collections = new ArrayList<>();
         DiscoverQuery discoverQuery = new DiscoverQuery();
@@ -974,8 +1057,8 @@ public class CollectionServiceImpl extends DSpaceObjectServiceImpl<Collection> i
     }
 
     @Override
-    public int countCollectionsWithSubmit(String q, Context context, Community community)
-        throws SQLException, SearchServiceException {
+    public int countCollectionsWithSubmit(Context context, String q, Community community)
+        throws SearchServiceException {
 
         DiscoverQuery discoverQuery = new DiscoverQuery();
         discoverQuery.setMaxResults(0);
@@ -997,29 +1080,12 @@ public class CollectionServiceImpl extends DSpaceObjectServiceImpl<Collection> i
      *                                   terms. The terms are used to make also a prefix query on SOLR
      *                                   so it can be used to implement an autosuggest feature over the collection name
      * @return                           discovery search result objects
-     * @throws SQLException              if something goes wrong
      * @throws SearchServiceException    if search error
      */
     private DiscoverResult retrieveCollectionsWithSubmit(Context context, DiscoverQuery discoverQuery,
         String entityType, Community community, String q)
-        throws SQLException, SearchServiceException {
+        throws SearchServiceException {
 
-        StringBuilder query = new StringBuilder();
-        EPerson currentUser = context.getCurrentUser();
-        if (!authorizeService.isAdmin(context)) {
-            String userId = "";
-            if (currentUser != null) {
-                userId = currentUser.getID().toString();
-            }
-            query.append("submit:(e").append(userId);
-
-            Set<Group> groups = groupService.allMemberGroupsSet(context, currentUser);
-            for (Group group : groups) {
-                query.append(" OR g").append(group.getID());
-            }
-            query.append(")");
-            discoverQuery.addFilterQueries(query.toString());
-        }
         if (Objects.nonNull(community)) {
             discoverQuery.addFilterQueries("location.comm:" + community.getID().toString());
         }
@@ -1027,19 +1093,17 @@ public class CollectionServiceImpl extends DSpaceObjectServiceImpl<Collection> i
             discoverQuery.addFilterQueries("search.entitytype:" + entityType);
         }
         if (StringUtils.isNotBlank(q)) {
-            StringBuilder buildQuery = new StringBuilder();
-            String escapedQuery = ClientUtils.escapeQueryChars(q);
-            buildQuery.append("(").append(escapedQuery).append(" OR dc.title_sort:*")
-                .append(escapedQuery).append("*").append(")");
-            discoverQuery.setQuery(buildQuery.toString());
+            q = searchService.formatAutoCompleteQuery(q, "dc.title_sort");
+            discoverQuery.setQuery(q);
         }
+        discoverQuery.addRequiredAuthorization(Constants.ADD);
         DiscoverResult resp = searchService.search(context, discoverQuery);
         return resp;
     }
 
     @Override
-    public List<Collection> findCollectionsWithSubmit(String q, Context context, Community community, String entityType,
-            int offset, int limit) throws SQLException, SearchServiceException {
+    public List<Collection> findCollectionsWithSubmit(Context context, String q, Community community, String entityType,
+            int offset, int limit) throws SearchServiceException {
         List<Collection> collections = new ArrayList<>();
         DiscoverQuery discoverQuery = new DiscoverQuery();
         discoverQuery.setDSpaceObjectFilter(IndexableCollection.TYPE);
@@ -1056,8 +1120,8 @@ public class CollectionServiceImpl extends DSpaceObjectServiceImpl<Collection> i
     }
 
     @Override
-    public int countCollectionsWithSubmit(String q, Context context, Community community, String entityType)
-            throws SQLException, SearchServiceException {
+    public int countCollectionsWithSubmit(Context context, String q, Community community, String entityType)
+            throws SearchServiceException {
         DiscoverQuery discoverQuery = new DiscoverQuery();
         discoverQuery.setMaxResults(0);
         discoverQuery.setDSpaceObjectFilter(IndexableCollection.TYPE);
