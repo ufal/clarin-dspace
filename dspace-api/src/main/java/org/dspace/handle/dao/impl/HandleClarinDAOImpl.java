@@ -11,6 +11,7 @@ import java.sql.SQLException;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
+import javax.persistence.Query;
 import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.CriteriaQuery;
 import javax.persistence.criteria.Root;
@@ -98,5 +99,15 @@ public class HandleClarinDAOImpl extends AbstractHibernateDAO<Handle> implements
         orderList.add(criteriaBuilder.desc(handleRoot.get(Handle_.handle)));
 
         return list(context, criteriaQuery, false, Handle.class, -1, -1);
+    }
+
+    @Override
+    public Handle findByHandleIgnoreCase(Context context, String handle) throws SQLException {
+        // Must stay `upper(h.handle)` to match the expression index `handle_handle_upper_idx`
+        Query query = createQuery(context,
+                "SELECT h FROM Handle h LEFT JOIN FETCH h.dso WHERE upper(h.handle) = upper(:handle)");
+        query.setParameter("handle", handle);
+        query.setHint("org.hibernate.cacheable", Boolean.TRUE);
+        return singleResult(query);
     }
 }
