@@ -153,18 +153,12 @@ public class ClarinLicenseResourceUserAllowanceServiceImpl implements ClarinLice
         if (CollectionUtils.isEmpty(clruaList)) {
             return;
         }
-        // Check if the user is the same as from the userRegistration
-        // Do not allow to get the userRegistration of another user
+        // Only the owner may read it. Records without a user registration come from anonymous
+        // downloads, so only an admin may read them.
         EPerson currentUser = context.getCurrentUser();
-        ClarinLicenseResourceUserAllowance clrua = clruaList.get(0);
-
-        // Check if the userRegistration is not null
-        if (Objects.isNull(clrua.getUserRegistration())) {
-            return;
-        }
-
-        UUID userRegistrationEpersonUUID = clrua.getUserRegistration().getPersonID();
-        if (Objects.nonNull(currentUser) && currentUser.getID().equals(userRegistrationEpersonUUID)) {
+        ClarinUserRegistration userRegistration = clruaList.get(0).getUserRegistration();
+        if (Objects.nonNull(currentUser) && Objects.nonNull(userRegistration)
+                && currentUser.getID().equals(userRegistration.getPersonID())) {
             return;
         }
 

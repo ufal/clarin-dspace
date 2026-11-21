@@ -7,17 +7,21 @@
  */
 package org.dspace.app.rest;
 
+import static org.junit.Assert.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.io.ByteArrayOutputStream;
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
-import java.util.zip.Deflater;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 import org.apache.commons.codec.CharEncoding;
-import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
-import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream;
 import org.apache.commons.io.IOUtils;
 import org.dspace.app.rest.model.ItemRest;
 import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
@@ -29,7 +33,8 @@ import org.dspace.builder.ItemBuilder;
 import org.dspace.content.Bitstream;
 import org.dspace.content.Collection;
 import org.dspace.content.Item;
-import org.dspace.content.service.BitstreamService;
+import org.dspace.eperson.Group;
+import org.dspace.eperson.service.GroupService;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -38,6 +43,7 @@ public class MetadataBitstreamControllerIT extends AbstractControllerIntegration
     private static final String ALL_ZIP_PATH = "allzip";
     private static final String HANDLE_PARAM = "handleId";
     private static final String AUTHOR = "Test author name";
+    private static final String BITSTREAM_CONTENT = "ThisIsSomeDummyText";
     private Collection col;
 
     private Item publicItem;
@@ -45,9 +51,8 @@ public class MetadataBitstreamControllerIT extends AbstractControllerIntegration
 
     @Autowired
     AuthorizeService authorizeService;
-
     @Autowired
-    BitstreamService bitstreamService;
+    GroupService groupService;
 
 
     @Override
@@ -64,7 +69,7 @@ public class MetadataBitstreamControllerIT extends AbstractControllerIntegration
                 .withAuthor(AUTHOR)
                 .build();
 
-        String bitstreamContent = "ThisIsSomeDummyText";
+        String bitstreamContent = BITSTREAM_CONTENT;
         try (InputStream is = IOUtils.toInputStream(bitstreamContent, CharEncoding.UTF_8)) {
             bts = BitstreamBuilder.
                     createBitstream(context, publicItem, is)
@@ -78,23 +83,141 @@ public class MetadataBitstreamControllerIT extends AbstractControllerIntegration
 
     @Test
     public void downloadAllZip() throws Exception {
-        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-        ZipArchiveOutputStream zip = new ZipArchiveOutputStream(byteArrayOutputStream);
-        zip.setCreateUnicodeExtraFields(ZipArchiveOutputStream.UnicodeExtraFieldPolicy.ALWAYS);
-        zip.setLevel(Deflater.NO_COMPRESSION);
-        ZipArchiveEntry ze = new ZipArchiveEntry(bts.getName());
-        zip.putArchiveEntry(ze);
-        InputStream is = bitstreamService.retrieve(context, bts);
-        org.apache.commons.compress.utils.IOUtils.copy(is, zip);
-        zip.closeArchiveEntry();
-        is.close();
-        zip.close();
-
         String token = getAuthToken(admin.getEmail(), password);
-        getClient(token).perform(get(METADATABITSTREAM_ENDPOINT + "/" + publicItem.getID() +
+        byte[] zipBytes = getClient(token).perform(get(METADATABITSTREAM_ENDPOINT + "/" + publicItem.getID() +
                         "/" + ALL_ZIP_PATH).param(HANDLE_PARAM, publicItem.getHandle()))
                 .andExpect(status().isOk())
-                .andExpect(content().bytes(byteArrayOutputStream.toByteArray()));
+                .andReturn().getResponse().getContentAsByteArray();
 
+        // A ZIP entry stores a DOS last-modified timestamp that defaults to "now" at 2-second resolution, so
+        // comparing the response byte-for-byte against a locally-built ZIP intermittently failed when the server
+        // and the test happened to build their entries in different time buckets. Assert the meaningful payload
+        // instead: the archive must contain exactly the item's bitstream, with the expected content.
+        Map<String, String> entries = new HashMap<>();
+        int entryCount = 0;
+        try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(zipBytes))) {
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                entryCount++;
+                entries.put(entry.getName(), new String(IOUtils.toByteArray(zis), StandardCharsets.UTF_8));
+                zis.closeEntry();
+            }
+        }
+
+        // count tracked separately so a duplicate entry name can't be masked by the map
+        assertEquals(1, entryCount);
+        assertEquals(Set.of(bts.getName()), entries.keySet());
+        assertEquals(BITSTREAM_CONTENT, entries.get(bts.getName()));
+    }
+
+    @Test
+    public void downloadAllZipWithDoubleQuotesInItemName() throws Exception {
+        context.turnOffAuthorisationSystem();
+
+        // Double quotes in the name used to close the header's quoted-string early, which browsers
+        // reported as ERR_RESPONSE_HEADERS_MULTIPLE_CONTENT_DISPOSITION.
+        Item itemWithQuotes = ItemBuilder.createItem(context, col)
+                .withTitle("Supported data for manuscript \"Thermally-induced evolution\"")
+                .withAuthor(AUTHOR)
+                .build();
+
+        try (InputStream is = IOUtils.toInputStream("QuotedItemContent", CharEncoding.UTF_8)) {
+            BitstreamBuilder.createBitstream(context, itemWithQuotes, is)
+                    .withName("data.csv")
+                    .withMimeType("text/csv")
+                    .build();
+        }
+        context.restoreAuthSystemState();
+
+        String token = getAuthToken(admin.getEmail(), password);
+        getClient(token).perform(get(METADATABITSTREAM_ENDPOINT + "/" + itemWithQuotes.getID() +
+                        "/" + ALL_ZIP_PATH).param(HANDLE_PARAM, itemWithQuotes.getHandle()))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition",
+                        "attachment; filename=\"Supported data for manuscript"
+                        + " \\\"Thermally-induced evolution\\\".zip\";"
+                        + " filename*=UTF-8''Supported%20data%20for%20manuscript"
+                        + "%20%22Thermally-induced%20evolution%22.zip"));
+    }
+
+    @Test
+    public void downloadAllZipWithNonAsciiItemName() throws Exception {
+        context.turnOffAuthorisationSystem();
+
+        Item itemWithDiacritics = ItemBuilder.createItem(context, col)
+                .withTitle("Příliš žluťoučký kůň")
+                .withAuthor(AUTHOR)
+                .build();
+
+        try (InputStream is = IOUtils.toInputStream("DiacriticsContent", CharEncoding.UTF_8)) {
+            BitstreamBuilder.createBitstream(context, itemWithDiacritics, is)
+                    .withName("file.txt")
+                    .withMimeType("text/plain")
+                    .build();
+        }
+        context.restoreAuthSystemState();
+
+        String token = getAuthToken(admin.getEmail(), password);
+        getClient(token).perform(get(METADATABITSTREAM_ENDPOINT + "/" + itemWithDiacritics.getID() +
+                        "/" + ALL_ZIP_PATH).param(HANDLE_PARAM, itemWithDiacritics.getHandle()))
+                .andExpect(status().isOk())
+                // fallback transliterates the diacritics away; filename* carries the real name
+                .andExpect(header().string("Content-Disposition",
+                        "attachment; filename=\"Prilis zlutoucky kun.zip\";"
+                        + " filename*=UTF-8''P%C5%99%C3%ADli%C5%A1%20%C5%BElu%C5%A5ou%C4%8Dk%C3%BD"
+                        + "%20k%C5%AF%C5%88.zip"));
+    }
+
+    /**
+     * READ is checked on {uuid}, so the zip must not be built from an item identified by another handle:
+     * neither its files nor its title in Content-Disposition may reach the caller.
+     */
+    @Test
+    public void downloadAllZipRefusesHandleOfAnotherItem() throws Exception {
+        context.turnOffAuthorisationSystem();
+        Item privateItem = ItemBuilder.createItem(context, col)
+                .withTitle("Private item title")
+                .withAuthor(AUTHOR)
+                .withReaderGroup(groupService.findByName(context, Group.ADMIN))
+                .build();
+        try (InputStream is = IOUtils.toInputStream("PrivateContent", CharEncoding.UTF_8)) {
+            BitstreamBuilder.createBitstream(context, privateItem, is)
+                    .withName("private.txt")
+                    .withMimeType("text/plain")
+                    .build();
+        }
+        context.restoreAuthSystemState();
+
+        // uuid of a readable item + handle of a private one
+        getClient().perform(get(METADATABITSTREAM_ENDPOINT + "/" + publicItem.getID() +
+                        "/" + ALL_ZIP_PATH).param(HANDLE_PARAM, privateItem.getHandle()))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(header().doesNotExist("Content-Disposition"));
+        // an unknown handle gets the same answer
+        getClient().perform(get(METADATABITSTREAM_ENDPOINT + "/" + publicItem.getID() +
+                        "/" + ALL_ZIP_PATH).param(HANDLE_PARAM, "123456789/does-not-exist"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(header().doesNotExist("Content-Disposition"));
+        // the reverse is refused by the READ check on {uuid}
+        getClient().perform(get(METADATABITSTREAM_ENDPOINT + "/" + privateItem.getID() +
+                        "/" + ALL_ZIP_PATH).param(HANDLE_PARAM, publicItem.getHandle()))
+                .andExpect(status().isUnauthorized());
+        // a mismatch is refused for an admin too
+        String token = getAuthToken(admin.getEmail(), password);
+        getClient(token).perform(get(METADATABITSTREAM_ENDPOINT + "/" + publicItem.getID() +
+                        "/" + ALL_ZIP_PATH).param(HANDLE_PARAM, privateItem.getHandle()))
+                .andExpect(status().isUnprocessableEntity());
+
+        // the matching pair still works, for an anonymous caller on the public item and for an admin on the
+        // private one
+        getClient().perform(get(METADATABITSTREAM_ENDPOINT + "/" + publicItem.getID() +
+                        "/" + ALL_ZIP_PATH).param(HANDLE_PARAM, publicItem.getHandle()))
+                .andExpect(status().isOk());
+        getClient(token).perform(get(METADATABITSTREAM_ENDPOINT + "/" + privateItem.getID() +
+                        "/" + ALL_ZIP_PATH).param(HANDLE_PARAM, privateItem.getHandle()))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition",
+                        "attachment; filename=\"Private item title.zip\";"
+                        + " filename*=UTF-8''Private%20item%20title.zip"));
     }
 }

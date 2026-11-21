@@ -16,8 +16,10 @@ import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
 
 import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -27,6 +29,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.apache.commons.lang3.StringUtils;
 import org.dspace.AbstractIntegrationTestWithDatabase;
+import org.dspace.app.healthreport.HealthReport;
 import org.dspace.app.launcher.ScriptLauncher;
 import org.dspace.app.scripts.handler.impl.TestDSpaceRunnableHandler;
 import org.dspace.builder.CollectionBuilder;
@@ -37,7 +40,6 @@ import org.dspace.content.Bundle;
 import org.dspace.content.Collection;
 import org.dspace.content.Community;
 import org.dspace.content.Item;
-import org.dspace.content.MetadataValue;
 import org.dspace.content.ReportResult;
 import org.dspace.content.clarin.ClarinLicense;
 import org.dspace.content.clarin.ClarinLicenseLabel;
@@ -79,7 +81,7 @@ public class HealthReportIT extends AbstractIntegrationTestWithDatabase {
 
         List<String> messages = testDSpaceRunnableHandler.getInfoMessages();
         assertThat(messages, hasSize(1));
-        assertThat(messages, hasItem(containsString("HEALTH REPORT:")));
+        assertThat(messages, hasItem(containsString("HEALTH REPORT ")));
     }
 
     @Test
@@ -149,6 +151,136 @@ public class HealthReportIT extends AbstractIntegrationTestWithDatabase {
         assertThat(messages, hasItem(containsString("no bundle")));
         assertThat(messages, hasItem(containsString("UUIDs of items without license bundle:")));
         assertThat(messages, hasItem(containsString("PUB")));
+    }
+
+    /**
+     * Verifies that -h/--help prints help text and does not run any checks.
+     * use -h instead of -i.
+     */
+    @Test
+    public void testHelpOption() throws Exception {
+        TestDSpaceRunnableHandler handler = new TestDSpaceRunnableHandler();
+        String[] args = new String[] { "health-report", "-h" };
+        ScriptLauncher.handleScript(args, ScriptLauncher.getConfig(kernelImpl), handler, kernelImpl);
+
+        assertThat(handler.getErrorMessages(), empty());
+        List<String> messages = handler.getInfoMessages();
+        assertThat(messages, hasItem(containsString("HELP")));
+        assertThat(messages, hasItem(containsString("Available checks:")));
+    }
+
+    /**
+     * Verifies that multiple values for a single -c option run only the specified checks.
+     * Supports multiple check selection (e.g. -c 0 3).
+     */
+    @Test
+    public void testMultipleChecks() throws Exception {
+        TestDSpaceRunnableHandler handler = new TestDSpaceRunnableHandler();
+        // Run only check 0 (General Information) and check 3 (License summary): space-separated
+        String[] args = new String[] { "health-report", "-c", "0", "3" };
+        ScriptLauncher.handleScript(args, ScriptLauncher.getConfig(kernelImpl), handler, kernelImpl);
+
+        assertThat(handler.getErrorMessages(), empty());
+        List<String> messages = handler.getInfoMessages();
+        assertThat(messages, hasItem(containsString("HEALTH REPORT ")));
+        assertThat(messages, hasItem(containsString("General Information")));
+        assertThat(messages, hasItem(containsString("License summary")));
+        // Item summary (check index 1) should NOT be present
+        boolean hasItemSummary = messages.stream().anyMatch(m -> m.contains("Item summary:"));
+        assertThat("Only selected checks should run", hasItemSummary, org.hamcrest.Matchers.is(false));
+    }
+
+    /**
+     * Verifies that an out-of-range -c value causes a script error.
+     */
+    @Test
+    public void testInvalidCheckOutOfRange() throws Exception {
+        TestDSpaceRunnableHandler handler = new TestDSpaceRunnableHandler();
+        int maxCheck = HealthReport.getNumberOfChecks() - 1;
+        String[] args = new String[] { "health-report", "-c", String.valueOf(maxCheck + 1) };
+        ScriptLauncher.handleScript(args, ScriptLauncher.getConfig(kernelImpl), handler, kernelImpl);
+
+        assertThat(handler.getErrorMessages(),
+                hasItem(containsString("Must be an integer from 0 to " + maxCheck)));
+    }
+
+    /**
+     * Verifies that a non-integer -c value causes a script error.
+     */
+    @Test
+    public void testInvalidCheckNonInteger() throws Exception {
+        TestDSpaceRunnableHandler handler = new TestDSpaceRunnableHandler();
+        String[] args = new String[] { "health-report", "-c", "abc" };
+        ScriptLauncher.handleScript(args, ScriptLauncher.getConfig(kernelImpl), handler, kernelImpl);
+
+        assertThat(handler.getErrorMessages(),
+                hasItem(containsString("It has to be an integer number from 0 to")));
+    }
+
+    /**
+     * Verifies that a non-positive -f value (zero) causes a script error.
+     * Validate -f must be positive integer (greater than 0).
+     */
+    @Test
+    public void testInvalidForDaysZero() throws Exception {
+        TestDSpaceRunnableHandler handler = new TestDSpaceRunnableHandler();
+        String[] args = new String[] { "health-report", "-f", "0" };
+        ScriptLauncher.handleScript(args, ScriptLauncher.getConfig(kernelImpl), handler, kernelImpl);
+
+        assertThat(handler.getErrorMessages(),
+                hasItem(containsString("Must be a positive integer (greater than 0)")));
+    }
+
+    /**
+     * Verifies that a non-integer -f value causes a script error.
+     * Validate -f must be integer.
+     */
+    @Test
+    public void testInvalidForDaysNonInteger() throws Exception {
+        TestDSpaceRunnableHandler handler = new TestDSpaceRunnableHandler();
+        String[] args = new String[] { "health-report", "-f", "notanumber" };
+        ScriptLauncher.handleScript(args, ScriptLauncher.getConfig(kernelImpl), handler, kernelImpl);
+
+        assertThat(handler.getErrorMessages(),
+                hasItem(containsString("Must be a positive integer")));
+    }
+
+    /**
+     * Verifies that -r/--report saves report output to the specified file.
+     * -o/--output renamed to -r/--report.
+     */
+    @Test
+    public void testReportFileSaved() throws Exception {
+        File tempFile = File.createTempFile("health-report-test-", ".txt");
+        tempFile.deleteOnExit();
+
+        TestDSpaceRunnableHandler handler = new TestDSpaceRunnableHandler();
+        String[] args = new String[] { "health-report", "-r", tempFile.getAbsolutePath() };
+        ScriptLauncher.handleScript(args, ScriptLauncher.getConfig(kernelImpl), handler, kernelImpl);
+
+        assertThat(handler.getErrorMessages(), empty());
+        assertThat("Report file must exist after -r option", tempFile.exists(), org.hamcrest.Matchers.is(true));
+        String content = Files.readString(tempFile.toPath());
+        assertThat("Report file must contain health report header", content, containsString("HEALTH REPORT "));
+    }
+
+    @Test
+    public void testStoredArgsContainAllCheckOptions() throws Exception {
+        ReportResultService reportResultService = ContentServiceFactory.getInstance().getReportResultService();
+
+        TestDSpaceRunnableHandler handler = new TestDSpaceRunnableHandler();
+        String[] args = new String[] { "health-report", "-c", "2", "-c", "3" };
+        ScriptLauncher.handleScript(args, ScriptLauncher.getConfig(kernelImpl), handler, kernelImpl);
+
+        context.reloadEntity(eperson);
+        List<ReportResult> allReports = reportResultService.findAll(context);
+        // findAll() does not guarantee ordering; sort by lastModified so the newest report is last.
+        allReports.sort(java.util.Comparator.comparing(ReportResult::getLastModified));
+        ReportResult latest = allReports.get(allReports.size() - 1);
+
+        assertThat(handler.getErrorMessages(), empty());
+        assertThat(latest.getArgs(), containsString("-c: 2"));
+        assertThat(latest.getArgs(), containsString("-c: 3"));
     }
 
     @Test
@@ -266,105 +398,109 @@ public class HealthReportIT extends AbstractIntegrationTestWithDatabase {
         configurationService.setProperty("healthcheck.metadata.max-errors-to-show", 8);
         configurationService.setProperty("healthcheck.metadata.error-dispersion-quota", 1);
 
-        Community community = CommunityBuilder.createCommunity(context)
-                .withName("Community")
-                .build();
-
-        Collection collection = CollectionBuilder.createCollection(context, community)
-                .withName("Collection")
-                .withSubmitterGroup(eperson)
-                .build();
-
-        Item item1 = ItemBuilder.createItem(context, collection)
-                .withTitle("Test item 1")
-                .withType("corpus")
-                .withSubject("Test subject")
-                .withMetadata("local", "branding", null, "Community")
-                .build();
-
-        Item item2 = ItemBuilder.createItem(context, collection)
-                .withTitle("Test item 2")
-                .withType("toolService")
-                .withSubject("Test subject")
-                .withMetadata("local", "branding", null, "Community")
-                .withMetadata("dc", "relation", "replaces", findItemUri(item1))
-                .build();
-
-        ItemBuilder.createItem(context, collection)
-                .withTitle("Test item 3")
-                .withType("toolService")
-                .withSubject("Test subject")
-                .withMetadata("local", "branding", null, "Community")
-                .withMetadata("dc", "relation", "isreplacedby", findItemUri(item2))
-                .build();
-
-        // create 4 items with missing title
-        for (int i = 0; i < 4; i++) {
-            ItemBuilder.createItem(context, collection)
-                    .withType("toolService")
-                    .withSubject("Test subject")
-                    .withMetadata("local", "branding", null, "Community")
+        try {
+            Community community = CommunityBuilder.createCommunity(context)
+                    .withName("Community")
                     .build();
-        }
 
-        // create 4 items with missing type
-        for (int i = 4; i < 8; i++) {
-            ItemBuilder.createItem(context, collection)
-                    .withTitle("Test Item " + i)
-                    .withSubject("Test subject")
-                    .withMetadata("local", "branding", null, "Community")
+            Collection collection = CollectionBuilder.createCollection(context, community)
+                    .withName("Collection")
+                    .withSubmitterGroup(eperson)
                     .build();
-        }
 
-        // create 4 items with duplicate type
-        for (int i = 8; i < 12; i++) {
-            ItemBuilder.createItem(context, collection)
-                    .withTitle("Test Item " + i)
-                    .withType("toolService")
+            Item item1 = ItemBuilder.createItem(context, collection)
+                    .withTitle("Test item 1")
                     .withType("corpus")
                     .withSubject("Test subject")
                     .withMetadata("local", "branding", null, "Community")
                     .build();
+
+            Item item2 = ItemBuilder.createItem(context, collection)
+                    .withTitle("Test item 2")
+                    .withType("toolService")
+                    .withSubject("Test subject")
+                    .withMetadata("local", "branding", null, "Community")
+                    .withMetadata("dc", "relation", "replaces", findItemUri(item1))
+                    .build();
+
+            ItemBuilder.createItem(context, collection)
+                    .withTitle("Test item 3")
+                    .withType("toolService")
+                    .withSubject("Test subject")
+                    .withMetadata("local", "branding", null, "Community")
+                    .withMetadata("dc", "relation", "isreplacedby", findItemUri(item2))
+                    .build();
+
+            // create 4 items with missing title
+            for (int i = 0; i < 4; i++) {
+                ItemBuilder.createItem(context, collection)
+                        .withType("toolService")
+                        .withSubject("Test subject")
+                        .withMetadata("local", "branding", null, "Community")
+                        .build();
+            }
+
+            // create 4 items with missing type
+            for (int i = 4; i < 8; i++) {
+                ItemBuilder.createItem(context, collection)
+                        .withTitle("Test Item " + i)
+                        .withSubject("Test subject")
+                        .withMetadata("local", "branding", null, "Community")
+                        .build();
+            }
+
+            // create 4 items with duplicate type
+            for (int i = 8; i < 12; i++) {
+                ItemBuilder.createItem(context, collection)
+                        .withTitle("Test Item " + i)
+                        .withType("toolService")
+                        .withType("corpus")
+                        .withSubject("Test subject")
+                        .withMetadata("local", "branding", null, "Community")
+                        .build();
+            }
+
+            TestDSpaceRunnableHandler testDSpaceRunnableHandler = new TestDSpaceRunnableHandler();
+
+            // with "health-report -c 5", only Metadata check is running
+            String[] args = new String[]{"health-report", "-c", "5"};
+            ScriptLauncher.handleScript(args,
+                    ScriptLauncher.getConfig(kernelImpl), testDSpaceRunnableHandler, kernelImpl);
+
+            assertThat(testDSpaceRunnableHandler.getErrorMessages(), empty());
+            List<String> messages = testDSpaceRunnableHandler.getInfoMessages();
+
+            assertThat(messages, hasSize(1));
+            assertThat(messages.get(0), containsString("dc.relation issues:  " + " ".repeat(15) + "2"));
+            assertThat(messages.get(0), containsString("dc.title issues:     " + " ".repeat(15) + "4"));
+            assertThat(messages.get(0), containsString("dc.type issues:      " + " ".repeat(15) + "4"));
+            assertThat(messages.get(0), containsString("duplicate value issues:" + " ".repeat(13) + "4"));
+            assertThat(messages.get(0), containsString("Error count total:   " + " ".repeat(14) + "14"));
+
+            assertThat(messages.get(0), containsString("Errors:"));
+
+            // check if dc.type error is present exactly 2 times
+            assertThat(StringUtils.countMatches(messages.get(0), "Does not have dc.type metadata"), is(2));
+            // check if dc.title error is present exactly 2 times
+            assertThat(StringUtils.countMatches(messages.get(0), "Item has no dc.title metadata"), is(2));
+            // check if duplicate value error is present exactly 2 times
+            assertThat(StringUtils.countMatches(messages.get(0), "value [dc.type] is present multiple times"), is(2));
+
+            // check if all dc.relation errors are present
+            assertThat(StringUtils.countMatches(
+                    messages.get(0), "does not refer back via dc.relation.replaces"), is(1));
+            assertThat(StringUtils.countMatches(
+                    messages.get(0), "does not refer back via dc.relation.isreplacedby"), is(1));
+            assertThat(messages.get(0), containsString("and more..."));
+        } finally {
+            configurationService.setProperty("healthcheck.metadata.max-errors-to-show", null);
+            configurationService.setProperty("healthcheck.metadata.error-dispersion-quota", null);
         }
-
-        TestDSpaceRunnableHandler testDSpaceRunnableHandler = new TestDSpaceRunnableHandler();
-
-        // with "health-report -c 5", only Metadata check is running
-        String[] args = new String[]{"health-report", "-c", "5"};
-        ScriptLauncher.handleScript(args, ScriptLauncher.getConfig(kernelImpl), testDSpaceRunnableHandler, kernelImpl);
-
-        assertThat(testDSpaceRunnableHandler.getErrorMessages(), empty());
-        List<String> messages = testDSpaceRunnableHandler.getInfoMessages();
-
-        assertThat(messages, hasSize(1));
-        assertThat(messages.get(0), containsString("dc.relation issues:  " + " ".repeat(15) + "2"));
-        assertThat(messages.get(0), containsString("dc.title issues:     " + " ".repeat(15) + "4"));
-        assertThat(messages.get(0), containsString("dc.type issues:      " + " ".repeat(15) + "4"));
-        assertThat(messages.get(0), containsString("duplicate value issues:" + " ".repeat(13) + "4"));
-        assertThat(messages.get(0), containsString("Error count total:   " + " ".repeat(14) + "14"));
-
-        assertThat(messages.get(0), containsString("Errors:"));
-
-        // check if dc.type error is present exactly 2 times
-        assertThat(StringUtils.countMatches(messages.get(0), "Does not have dc.type metadata"), is(2));
-        // check if dc.title error is present exactly 2 times
-        assertThat(StringUtils.countMatches(messages.get(0), "Item has no dc.title metadata"), is(2));
-        // check id duplicate value error is present exactly 2 times
-        assertThat(StringUtils.countMatches(messages.get(0), "value [dc.type] is present multiple times"), is(2));
-
-        // check if all dc.relation errors are present
-        assertThat(StringUtils.countMatches(messages.get(0), "does not refer back via dc.relation.replaces"), is(1));
-        assertThat(
-                StringUtils.countMatches(messages.get(0), "does not refer back via dc.relation.isreplacedby"), is(1));
-        assertThat(messages.get(0), containsString("and more..."));
     }
 
     private String findItemUri(Item item) {
-        return item.getMetadata().stream()
-                .filter(metadataValue -> "dc_identifier_uri".equals(metadataValue.getMetadataField().toString()))
-                .findFirst()
-                .map(MetadataValue::getValue)
-                .orElse(null);
+        return ContentServiceFactory.getInstance().getItemService()
+                .getMetadataFirstValue(item, "dc", "identifier", "uri", Item.ANY);
     }
 
     ReportResult findLastReportResult(List<ReportResult> reportResults) {
@@ -380,4 +516,5 @@ public class HealthReportIT extends AbstractIntegrationTestWithDatabase {
         }
         return null;
     }
+
 }

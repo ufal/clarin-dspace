@@ -134,8 +134,12 @@ public class ShibHeaders {
             if (StringUtils.equals("cookie", i.getKey())) {
                 continue;
             }
-            sb.append(String.format("%s=%s\n",
-                    i.getKey(), StringUtils.join(i.getValue().toArray(), ",") ));
+            // Same multi-value format as the IdP uses, so the stored headers parse back to the same values.
+            List<String> escaped = new ArrayList<>();
+            for (String value : i.getValue()) {
+                escaped.add(value.replace(header_separator_, "\\" + header_separator_));
+            }
+            sb.append(String.format("%s=%s\n", i.getKey(), StringUtils.join(escaped, header_separator_)));
         }
         return sb.toString();
     }

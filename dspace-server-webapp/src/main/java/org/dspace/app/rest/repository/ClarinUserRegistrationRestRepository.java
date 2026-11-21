@@ -80,14 +80,18 @@ public class ClarinUserRegistrationRestRepository extends DSpaceRestRepository<C
     }
 
     @SearchRestMethod(name = "byEPerson")
+    @PreAuthorize("hasAuthority('AUTHENTICATED')")
     public Page<ClarinUserRegistrationRest> findByEPerson(@Parameter(value = "userUUID", required = true) UUID
                                                                       userUUID,
-                                                              Pageable pageable)
-            throws SQLException, AuthorizeException {
+                                                              Pageable pageable) throws SQLException {
         Context context = obtainContext();
 
-        List<ClarinUserRegistration> clarinUserRegistrationList =
-                clarinUserRegistrationService.findByEPersonUUID(context, userUUID);
+        List<ClarinUserRegistration> clarinUserRegistrationList;
+        try {
+            clarinUserRegistrationList = clarinUserRegistrationService.findByEPersonUUID(context, userUUID);
+        } catch (AuthorizeException e) {
+            throw new RESTAuthorizationException(e);
+        }
         if (CollectionUtils.isEmpty(clarinUserRegistrationList)) {
             return null;
         }

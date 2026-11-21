@@ -391,6 +391,92 @@ public class RequestItemRepositoryIT
     }
 
     /**
+     * A single-bitstream request must name a bitstream that belongs to the
+     * requested item. Naming a foreign bitstream together with one's own item
+     * must be rejected with 422, not created.
+     *
+     * @throws java.lang.Exception passed through.
+     */
+    @Test
+    public void testCreateAndReturnForeignBitstream()
+            throws Exception {
+        System.out.println("createAndReturn (foreign bitstream)");
+
+        // A second item with its own bitstream, not related to {@code item}.
+        context.turnOffAuthorisationSystem();
+        Item foreignItem = ItemBuilder
+                .createItem(context, collection)
+                .withTitle("Foreign Item")
+                .build();
+        Bitstream foreignBitstream = BitstreamBuilder
+                .createBitstream(context, foreignItem, new ByteArrayInputStream(new byte[0]))
+                .withName("Foreign Bitstream")
+                .build();
+        context.restoreAuthSystemState();
+
+        // Request the foreign bitstream while naming our own item.
+        RequestItemRest rir = new RequestItemRest();
+        rir.setAllfiles(false);
+        rir.setBitstreamId(foreignBitstream.getID().toString());
+        rir.setItemId(item.getID().toString());
+        rir.setRequestEmail(eperson.getEmail());
+        rir.setRequestName(eperson.getFullName());
+        rir.setRequestMessage(RequestItemBuilder.REQ_MESSAGE);
+
+        ObjectMapper mapper = new ObjectMapper();
+        String authToken = getAuthToken(eperson.getEmail(), password);
+        getClient(authToken)
+                .perform(post(URI_ROOT)
+                        .content(mapper.writeValueAsBytes(rir))
+                        .contentType(contentType))
+                .andExpect(status().isUnprocessableEntity());
+
+        // Nothing must have been created for our item.
+        assertTrue("No request should have been created",
+                !requestItemService.findByItem(context, item).hasNext());
+    }
+
+    /**
+     * A request for a withdrawn (or otherwise non-archived) item must be
+     * rejected with 422.
+     *
+     * @throws java.lang.Exception passed through.
+     */
+    @Test
+    public void testCreateAndReturnWithdrawnItem()
+            throws Exception {
+        System.out.println("createAndReturn (withdrawn item)");
+
+        context.turnOffAuthorisationSystem();
+        Item withdrawnItem = ItemBuilder
+                .createItem(context, collection)
+                .withTitle("Withdrawn Item")
+                .withdrawn()
+                .build();
+        Bitstream withdrawnBitstream = BitstreamBuilder
+                .createBitstream(context, withdrawnItem, new ByteArrayInputStream(new byte[0]))
+                .withName("Withdrawn Bitstream")
+                .build();
+        context.restoreAuthSystemState();
+
+        RequestItemRest rir = new RequestItemRest();
+        rir.setAllfiles(false);
+        rir.setBitstreamId(withdrawnBitstream.getID().toString());
+        rir.setItemId(withdrawnItem.getID().toString());
+        rir.setRequestEmail(eperson.getEmail());
+        rir.setRequestName(eperson.getFullName());
+        rir.setRequestMessage(RequestItemBuilder.REQ_MESSAGE);
+
+        ObjectMapper mapper = new ObjectMapper();
+        String authToken = getAuthToken(eperson.getEmail(), password);
+        getClient(authToken)
+                .perform(post(URI_ROOT)
+                        .content(mapper.writeValueAsBytes(rir))
+                        .contentType(contentType))
+                .andExpect(status().isUnprocessableEntity());
+    }
+
+    /**
      * Verify that Spring Security's CSRF protection is working as we expect.
      * We must test this using a simple non-GET request, as CSRF Tokens are not
      * validated in a GET request.

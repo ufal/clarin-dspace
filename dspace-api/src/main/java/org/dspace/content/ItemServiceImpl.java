@@ -50,6 +50,7 @@ import org.dspace.content.service.ItemService;
 import org.dspace.content.service.MetadataSchemaService;
 import org.dspace.content.service.RelationshipService;
 import org.dspace.content.service.WorkspaceItemService;
+import org.dspace.content.service.clarin.ClarinItemService;
 import org.dspace.content.virtual.VirtualMetadataPopulator;
 import org.dspace.core.Constants;
 import org.dspace.core.Context;
@@ -179,6 +180,9 @@ public class ItemServiceImpl extends DSpaceObjectServiceImpl<Item> implements It
 
     @Autowired
     private VersionHistoryService versionHistoryService;
+
+    @Autowired(required = true)
+    private ClarinItemService clarinItemService;
 
     @Autowired(required = true)
     ClarinMatomoBitstreamTracker matomoBitstreamTracker;
@@ -686,6 +690,11 @@ public class ItemServiceImpl extends DSpaceObjectServiceImpl<Item> implements It
         }
 
         if (item.isMetadataModified() || item.isModified()) {
+            // Derive dc.date.issued from local.approximateDate.issued when metadata changes
+            if (item.isMetadataModified()) {
+                clarinItemService.updateItemDatesMetadata(context, item);
+            }
+
             // Set the last modified date
             item.setLastModified(new Date());
 

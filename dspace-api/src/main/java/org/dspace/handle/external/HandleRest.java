@@ -7,6 +7,8 @@
  */
 package org.dspace.handle.external;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 /**
  * The `external/Handle` REST Resource
  */
@@ -63,6 +65,7 @@ public class HandleRest {
         this.submitdate = submitdate;
     }
 
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     public String getReportemail() {
         return reportemail;
     }

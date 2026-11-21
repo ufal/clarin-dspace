@@ -7,6 +7,8 @@
  */
 package org.dspace.app.rest.repository;
 
+import static org.dspace.handle.external.Handle.restoreToken;
+
 import java.io.IOException;
 import java.lang.invoke.WrongMethodTypeException;
 import java.sql.SQLException;
@@ -73,7 +75,7 @@ public class HandleRestRepository extends  DSpaceRestRepository<HandleRest, Inte
      * @return        handle rest
      */
     @Override
-    @PreAuthorize("permitAll()")
+    @PreAuthorize("hasAuthority('ADMIN')")
     public HandleRest findOne(Context context, Integer id) {
         Handle handle;
         try {
@@ -99,7 +101,7 @@ public class HandleRestRepository extends  DSpaceRestRepository<HandleRest, Inte
      * @return         page of handle rest
      */
     @Override
-    @PreAuthorize("permitAll()")
+    @PreAuthorize("hasAuthority('ADMIN')")
     public Page<HandleRest> findAll(Context context, Pageable pageable) {
         try {
             // Get sorting request into the string variable
@@ -380,7 +382,7 @@ public class HandleRestRepository extends  DSpaceRestRepository<HandleRest, Inte
 
         // Update handle based on obtained values from json nodes
         this.updateHandle(context, handleObject, jsonNodeHandle.asText(),
-                handleObject.getDSpaceObject(), jsonNodeUrl.asText(),
+                handleObject.getDSpaceObject(), restoreToken(jsonNodeUrl.asText(), handleObject.getUrl()),
                 jsonNodeArchive.asBoolean());
     }
 

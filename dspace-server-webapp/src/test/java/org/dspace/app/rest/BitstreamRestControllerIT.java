@@ -8,7 +8,6 @@
 package org.dspace.app.rest;
 
 import static java.util.UUID.randomUUID;
-import static javax.mail.internet.MimeUtility.encodeText;
 import static org.apache.commons.codec.CharEncoding.UTF_8;
 import static org.apache.commons.collections.CollectionUtils.isEmpty;
 import static org.apache.commons.io.IOUtils.toInputStream;
@@ -56,6 +55,8 @@ import java.io.StringWriter;
 import java.io.Writer;
 import java.net.URI;
 import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 import org.apache.commons.codec.digest.DigestUtils;
@@ -95,6 +96,7 @@ import org.dspace.statistics.factory.StatisticsServiceFactory;
 import org.dspace.statistics.service.SolrLoggerService;
 import org.dspace.storage.bitstore.S3BitStoreService;
 import org.dspace.storage.bitstore.factory.StorageServiceFactory;
+import org.dspace.storage.bitstore.service.BitstreamStorageService;
 import org.dspace.storage.bitstore.service.S3DirectDownloadService;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -364,7 +366,10 @@ public class BitstreamRestControllerIT extends AbstractControllerIntegrationTest
         //2. A public item with a bitstream
 
         String bitstreamContent = "0123456789";
-        String bitstreamName = "ภาษาไทย";
+        String bitstreamName = "ภาษาไทย-com-acentuação.pdf";
+        String expectedAscii = "-com-acentuacao.pdf";
+        String expectedUtf8Encoded = "%E0%B8%A0%E0%B8%B2%E0%B8%A9%E0%B8%B2%E0%B9%84%E0%B8%97%E0%B8%A2-"
+            + "com-acentua%C3%A7%C3%A3o.pdf";
 
         try (InputStream is = IOUtils.toInputStream(bitstreamContent, CharEncoding.UTF_8)) {
 
@@ -388,7 +393,51 @@ public class BitstreamRestControllerIT extends AbstractControllerIntegrationTest
             //We expect the content disposition to have the encoded bitstream name
             .andExpect(header().string(
                 "Content-Disposition",
-                "attachment;filename=\"" + encodeText(bitstreamName) + "\""
+                String.format("attachment; filename=\"%s\"; filename*=UTF-8''%s",
+                              expectedAscii,
+                              expectedUtf8Encoded)
+            ));
+    }
+
+    @Test
+    public void testBitstreamNameWithQuote() throws Exception {
+
+        context.turnOffAuthorisationSystem();
+
+        parentCommunity = CommunityBuilder
+            .createCommunity(context)
+            .build();
+
+        Collection collection = CollectionBuilder
+            .createCollection(context, parentCommunity)
+            .build();
+
+        String bitstreamContent = "0123456789";
+        String bitstreamName = "file \"quoted\".txt";
+        String expectedAscii = "file \\\"quoted\\\".txt";
+        String expectedUtf8Encoded = "file%20%22quoted%22.txt";
+
+        try (InputStream is = IOUtils.toInputStream(bitstreamContent, CharEncoding.UTF_8)) {
+
+            Item item = ItemBuilder
+                .createItem(context, collection)
+                .build();
+
+            bitstream = BitstreamBuilder
+                .createBitstream(context, item, is)
+                .withName(bitstreamName)
+                .build();
+        }
+
+        context.restoreAuthSystemState();
+
+        getClient().perform(get("/api/core/bitstreams/" + bitstream.getID() + "/content"))
+            .andExpect(status().isOk())
+            .andExpect(header().string(
+                "Content-Disposition",
+                String.format("attachment; filename=\"%s\"; filename*=UTF-8''%s",
+                              expectedAscii,
+                              expectedUtf8Encoded)
             ));
     }
 
@@ -1270,6 +1319,147 @@ public class BitstreamRestControllerIT extends AbstractControllerIntegrationTest
     }
 
     @Test
+    public void closesFallbackStreamsWhenCoverPageGenerationFails() throws Exception {
+        BitstreamStorageService storageSpy = setUpBitstreamWithStorageSpy();
+        List<InputStream> openedStreams = new ArrayList<>();
+        try {
+            configurationService.setProperty("citation-page.enable_globally", true);
+            citationDocumentService.afterPropertiesSet();
+            context.turnOffAuthorisationSystem();
+            bitstream = context.reloadEntity(bitstream);
+            // Plain text labelled as PDF forces cover-page generation to fail.
+            bitstream.setFormat(context, bitstreamFormatService.findByMIMEType(context, "application/pdf"));
+            bitstreamService.update(context, bitstream);
+            context.restoreAuthSystemState();
+
+            Mockito.doAnswer(invocation -> {
+                InputStream stream = spy((InputStream) invocation.callRealMethod());
+                openedStreams.add(stream);
+                return stream;
+            }).when(storageSpy).retrieve(any(), eq(bitstream));
+
+            String uri = "/api/core/bitstreams/" + bitstream.getID() + "/content";
+            String etag = getClient().perform(head(uri))
+                .andExpect(status().isOk()).andReturn().getResponse().getHeader("ETag");
+            getClient().perform(get(uri).header("If-None-Match", etag))
+                .andExpect(status().isNotModified());
+            getClient().perform(get(uri).header("If-Unmodified-Since", "Sat, 29 Oct 1994 19:43:31 GMT"))
+                .andExpect(status().isPreconditionFailed());
+            getClient().perform(get(uri))
+                .andExpect(status().isOk())
+                .andExpect(content().string("0123456789"));
+
+            // Each request opens one stream for the failed attempt and one for the fallback.
+            assertEquals(8, openedStreams.size());
+            for (InputStream stream : openedStreams) {
+                Mockito.verify(stream, times(1)).close();
+            }
+        } finally {
+            ReflectionTestUtils.setField(bitstreamService, "bitstreamStorageService",
+                StorageServiceFactory.getInstance().getBitstreamStorageService());
+            configurationService.setProperty("citation-page.enable_globally", false);
+            citationDocumentService.afterPropertiesSet();
+        }
+    }
+
+    /**
+     * Creates a public item with a text bitstream (stored in {@link #bitstream}) and replaces the bitstream
+     * storage service with a spy so that calls to {@code retrieve(...)} can be verified.
+     *
+     * @return the spied bitstream storage service
+     */
+    private BitstreamStorageService setUpBitstreamWithStorageSpy() throws Exception {
+        context.turnOffAuthorisationSystem();
+
+        parentCommunity = CommunityBuilder.createCommunity(context)
+            .withName("Parent Community")
+            .build();
+
+        Collection col1 =
+            CollectionBuilder.createCollection(context, parentCommunity).withName("Collection 1").build();
+
+        try (InputStream is = IOUtils.toInputStream("0123456789", CharEncoding.UTF_8)) {
+
+            Item publicItem1 = ItemBuilder.createItem(context, col1)
+                .withTitle("Public item 1")
+                .withIssueDate("2017-10-17")
+                .withAuthor("Smith, Donald").withAuthor("Doe, John")
+                .build();
+
+            bitstream = BitstreamBuilder
+                .createBitstream(context, publicItem1, is)
+                .withName("Test bitstream")
+                .withDescription("This is a bitstream to test range requests")
+                .withMimeType("text/plain")
+                .build();
+        }
+        context.restoreAuthSystemState();
+
+        BitstreamStorageService bitstreamStorageService =
+            StorageServiceFactory.getInstance().getBitstreamStorageService();
+        BitstreamStorageService bitstreamStorageServiceSpy = spy(bitstreamStorageService);
+        ReflectionTestUtils.setField(bitstreamService, "bitstreamStorageService", bitstreamStorageServiceSpy);
+        return bitstreamStorageServiceSpy;
+    }
+
+    @Test
+    public void doesNotOpenStreamForHeadRequest() throws Exception {
+        BitstreamStorageService bitstreamStorageServiceSpy = setUpBitstreamWithStorageSpy();
+
+        //A HEAD request only needs the headers, so the storage stream must never be opened.
+        getClient().perform(head("/api/core/bitstreams/" + bitstream.getID() + "/content"))
+            .andExpect(status().isOk());
+
+        Mockito.verify(bitstreamStorageServiceSpy, Mockito.never()).retrieve(any(), eq(bitstream));
+    }
+
+    @Test
+    public void doesNotOpenStreamForNotModifiedRequest() throws Exception {
+        BitstreamStorageService bitstreamStorageServiceSpy = setUpBitstreamWithStorageSpy();
+
+        //A matching If-None-Match results in a 304 without a body, so the storage stream must never be opened.
+        getClient().perform(get("/api/core/bitstreams/" + bitstream.getID() + "/content")
+                .header("If-None-Match", bitstream.getChecksum()))
+            .andExpect(status().isNotModified());
+
+        Mockito.verify(bitstreamStorageServiceSpy, Mockito.never()).retrieve(any(), eq(bitstream));
+    }
+
+    @Test
+    public void doesNotOpenStreamForPreconditionFailedRequest() throws Exception {
+        BitstreamStorageService bitstreamStorageServiceSpy = setUpBitstreamWithStorageSpy();
+
+        //An If-Unmodified-Since in the past results in a 412 without a body, so the stream must never be opened.
+        getClient().perform(get("/api/core/bitstreams/" + bitstream.getID() + "/content")
+                .header("If-Unmodified-Since", "Sat, 29 Oct 1994 19:43:31 GMT"))
+            .andExpect(status().isPreconditionFailed());
+
+        Mockito.verify(bitstreamStorageServiceSpy, Mockito.never()).retrieve(any(), eq(bitstream));
+    }
+
+    @Test
+    public void doesNotOpenStreamForRangeNotSatisfiableRequest() throws Exception {
+        BitstreamStorageService bitstreamStorageServiceSpy = setUpBitstreamWithStorageSpy();
+
+        //A non-matching If-Match results in a 416 without a body, so the storage stream must never be opened.
+        getClient().perform(get("/api/core/bitstreams/" + bitstream.getID() + "/content")
+                .header("If-Match", "not-the-etag"))
+            .andExpect(status().isRequestedRangeNotSatisfiable());
+
+        Mockito.verify(bitstreamStorageServiceSpy, Mockito.never()).retrieve(any(), eq(bitstream));
+    }
+
+    @Test
+    public void returnsServerErrorWhenFileIsMissing() throws Exception {
+        BitstreamStorageService bitstreamStorageServiceSpy = setUpBitstreamWithStorageSpy();
+        assertTrue(bitstreamStorageServiceSpy.retrieveFile(context, bitstream).delete());
+
+        //The file is opened only when the body is written, so a missing file must still end in an error.
+        getClient().perform(get("/api/core/bitstreams/" + bitstream.getID() + "/content"))
+            .andExpect(status().isInternalServerError());
+    }
+
+    @Test
     public void checkContentDispositionOfFormats() throws Exception {
         configurationService.setProperty("webui.content_disposition_format", new String[] {
             "text/richtext",
@@ -1385,6 +1575,68 @@ public class BitstreamRestControllerIT extends AbstractControllerIntegrationTest
         verifyBitstreamDownload(pdf, "application/pdf;charset=UTF-8", true);
     }
 
+
+    @Test
+    public void checkActiveContentFormatsNeverServedInline() throws Exception {
+        String[] mimeTypes = {
+            "image/svg+xml", "application/xhtml+xml", "image/SVG+XML", "APPLICATION/XHTML+XML",
+            "text/html; charset=utf-8", "application/javascript", "application/ecmascript",
+            "text/ecmascript", "application/x-javascript", "application/x-ecmascript",
+            "text/x-javascript", "text/x-ecmascript", "text/jscript", "text/livescript", "text/javascript1.5"
+        };
+        configurationService.setProperty("webui.content_disposition_format", new String[0]);
+
+        context.turnOffAuthorisationSystem();
+        Community community = CommunityBuilder.createCommunity(context).build();
+        Collection collection = CollectionBuilder.createCollection(context, community).build();
+        Item item = ItemBuilder.createItem(context, collection).build();
+        context.restoreAuthSystemState();
+
+        for (String mimeType : mimeTypes) {
+            context.turnOffAuthorisationSystem();
+            // Exercise registered active formats, not the unknown-format fallback.
+            createBitstreamFormat(context).withMimeType(mimeType)
+                .withShortDescription("Active " + mimeType).withSupportLevel(KNOWN).build();
+            item = context.reloadEntity(item);
+            Bitstream file = BitstreamBuilder.createBitstream(context, item, toInputStream("test", UTF_8))
+                .withMimeType(mimeType).build();
+            context.restoreAuthSystemState();
+
+            String contentType = mimeType.split(";")[0] + ";charset=UTF-8";
+            configurationService.setProperty("webui.content_disposition_threshold", 8388608);
+            verifyBitstreamDownload(file, contentType, true);
+            configurationService.setProperty("webui.content_disposition_threshold", -1);
+            verifyBitstreamDownload(file, contentType, true);
+        }
+    }
+
+    @Test
+    public void checkInlineDispositionSizeLimit() throws Exception {
+        context.turnOffAuthorisationSystem();
+        bitstream.setFormat(context, bitstreamFormatService.findByMIMEType(context, "application/pdf"));
+        bitstreamService.update(context, bitstream);
+        context.restoreAuthSystemState();
+
+        configurationService.setProperty("webui.content_disposition_threshold", bitstream.getSizeBytes());
+        verifyBitstreamDownload(bitstream, "application/pdf;charset=UTF-8", false);
+        configurationService.setProperty("webui.content_disposition_threshold", bitstream.getSizeBytes() - 1);
+        verifyBitstreamDownload(bitstream, "application/pdf;charset=UTF-8", true);
+        configurationService.setProperty("webui.content_disposition_threshold", -1);
+        verifyBitstreamDownload(bitstream, "application/pdf;charset=UTF-8", false);
+    }
+
+    @Test
+    public void checkMissingMimeTypeDownloads() throws Exception {
+        configurationService.setProperty("webui.content_disposition_format", new String[0]);
+        for (String mimeType : new String[] {null, "", " "}) {
+            context.turnOffAuthorisationSystem();
+            supportedFormat = context.reloadEntity(supportedFormat);
+            supportedFormat.setMIMEType(mimeType);
+            bitstreamFormatService.update(context, supportedFormat);
+            context.restoreAuthSystemState();
+            verifyBitstreamDownload(bitstream, "application/octet-stream;charset=UTF-8", true);
+        }
+    }
 
     private void verifyBitstreamDownload(Bitstream file, String contentType, boolean shouldDownload) throws Exception {
         String token = getAuthToken(admin.getEmail(), password);
@@ -1619,6 +1871,59 @@ public class BitstreamRestControllerIT extends AbstractControllerIntegrationTest
         }
     }
 
+    @Test
+    public void s3DirectDownloadRedirectDoesNotOpenStream() throws Exception {
+        // Enable S3 direct download so the controller takes the redirect branch, without standing up real S3.
+        configurationService.setProperty("s3.download.direct.enabled", true);
+        configurationService.setProperty("assetstore.s3.bucketName", "test");
+        try {
+            context.turnOffAuthorisationSystem();
+            parentCommunity = CommunityBuilder.createCommunity(context)
+                    .withName("Parent Community")
+                    .build();
+
+            Collection col1 = CollectionBuilder.createCollection(context, parentCommunity)
+                    .withName("Collection 1").build();
+            Item item = ItemBuilder.createItem(context, col1)
+                    .withTitle("Public item 1")
+                    .withIssueDate("2017-10-17")
+                    .withAuthor("Smith, Donald").withAuthor("Doe, John")
+                    .build();
+
+            URI expectedUrl = URI.create("https://example.com");
+            doReturn(expectedUrl.toString())
+                    .when(s3DirectDownloadService)
+                    .generatePresignedUrl(anyString(), anyString(), anyInt(), anyString());
+
+            // Bitstream in the ORIGINAL bundle so hasOriginalBundle is true and the redirect branch is taken.
+            bitstream = BitstreamBuilder.createBitstream(context, item, toInputStream("test", UTF_8))
+                    .withName("testfile.txt")
+                    .build();
+            String bitstreamId = bitstream.getID().toString();
+            context.restoreAuthSystemState();
+            context.commit();
+
+            BitstreamStorageService bitstreamStorageService =
+                StorageServiceFactory.getInstance().getBitstreamStorageService();
+            BitstreamStorageService bitstreamStorageServiceSpy = spy(bitstreamStorageService);
+            ReflectionTestUtils.setField(bitstreamService, "bitstreamStorageService", bitstreamStorageServiceSpy);
+
+            // Flip the assetstore flag only now, after the bitstream has been stored, so it cannot affect storage.
+            configurationService.setProperty("assetstore.s3.enabled", true);
+
+            getClient().perform(get("/api/core/bitstreams/" + bitstreamId + "/content"))
+                    .andExpect(status().isFound()) // 302 Redirect
+                    .andExpect(header().string("Location", containsString(expectedUrl.toString())));
+
+            // The redirect response has no body, so the storage stream must never be opened.
+            Mockito.verify(bitstreamStorageServiceSpy, Mockito.never()).retrieve(any(), eq(bitstream));
+        } finally {
+            configurationService.setProperty("s3.download.direct.enabled", false);
+            configurationService.setProperty("assetstore.s3.enabled", false);
+            configurationService.setProperty("assetstore.s3.bucketName", null);
+        }
+    }
+
     // Do not directly download the file which is not in the `ORIGINAL` bundle, because there could be problem
     // with working with that file, e.g. showing the process output
     @Test
@@ -1669,6 +1974,176 @@ public class BitstreamRestControllerIT extends AbstractControllerIntegrationTest
         } finally {
             configurationService.setProperty("s3.download.direct.enabled", false);
             configurationService.setProperty("assetstore.s3.bucketName", null);
+        }
+    }
+
+    @Test
+    public void bitstreamInputStreamClosesWithGetRequestTest() throws Exception {
+        InputStream realStream = new ByteArrayInputStream("abc".getBytes());
+        InputStream spyStream = Mockito.spy(realStream);
+
+        context.turnOffAuthorisationSystem();
+        Community community = CommunityBuilder.createCommunity(context).build();
+        Collection collection = CollectionBuilder.createCollection(context, community).build();
+        Item item = ItemBuilder.createItem(context, collection).build();
+
+        Bitstream bitstream = BitstreamBuilder.createBitstream(context, item, realStream).build();
+        context.restoreAuthSystemState();
+
+        BitstreamStorageService originalService =
+                StorageServiceFactory.getInstance().getBitstreamStorageService();
+        BitstreamStorageService spyService = spy(originalService);
+
+        doReturn(spyStream).when(spyService).retrieve(any(), eq(bitstream));
+
+        ReflectionTestUtils.setField(bitstreamService, "bitstreamStorageService", spyService);
+
+        try {
+            getClient().perform(get("/api/core/bitstreams/" + bitstream.getID() + "/content"))
+                       .andExpect(status().isOk());
+
+            boolean bitstreamRetrieved = Mockito.mockingDetails(spyService)
+                                                .getInvocations().stream()
+                                                .filter(i -> i.getMethod().getName().equals("retrieve"))
+                                                .mapToInt(i -> 1)
+                                                .sum() > 0;
+
+            if (bitstreamRetrieved) {
+                Mockito.verify(spyStream, times(1)
+                               .description("InputStream should have been closed after GET request"))
+                       .close();
+            }
+        } finally {
+            ReflectionTestUtils.setField(bitstreamService, "bitstreamStorageService", originalService);
+        }
+    }
+
+    @Test
+    public void bitstreamInputStreamClosesWithHeadRequestTest() throws Exception {
+        InputStream realStream = new ByteArrayInputStream("abc".getBytes());
+        InputStream spyStream = Mockito.spy(realStream);
+
+        context.turnOffAuthorisationSystem();
+        Community community = CommunityBuilder.createCommunity(context).build();
+        Collection collection = CollectionBuilder.createCollection(context, community).build();
+        Item item = ItemBuilder.createItem(context, collection).build();
+
+        Bitstream bitstream = BitstreamBuilder.createBitstream(context, item, realStream).build();
+        context.restoreAuthSystemState();
+
+        BitstreamStorageService originalService =
+                StorageServiceFactory.getInstance().getBitstreamStorageService();
+        BitstreamStorageService spyService = spy(originalService);
+
+        doReturn(spyStream).when(spyService).retrieve(any(), eq(bitstream));
+
+        ReflectionTestUtils.setField(bitstreamService, "bitstreamStorageService", spyService);
+
+        try {
+            getClient().perform(head("/api/core/bitstreams/" + bitstream.getID() + "/content"))
+                       .andExpect(status().isOk());
+
+            boolean bitstreamRetrieved = Mockito.mockingDetails(spyService)
+                                                .getInvocations().stream()
+                                                .filter(i -> i.getMethod().getName().equals("retrieve"))
+                                                .mapToInt(i -> 1)
+                                                .sum() > 0;
+
+            if (bitstreamRetrieved) {
+                Mockito.verify(spyStream, times(1)
+                               .description("InputStream should have been closed after HEAD request"))
+                       .close();
+            }
+        } finally {
+            ReflectionTestUtils.setField(bitstreamService, "bitstreamStorageService", originalService);
+        }
+    }
+
+    @Test
+    public void bitstreamInputStreamClosesWithGetRequestAndCitationPageEnabledTest() throws Exception {
+        configurationService.setProperty("citation-page.enable_globally", true);
+        citationDocumentService.afterPropertiesSet();
+
+        InputStream realStream = new ByteArrayInputStream("abc".getBytes());
+        InputStream spyStream = Mockito.spy(realStream);
+
+        context.turnOffAuthorisationSystem();
+        Community community = CommunityBuilder.createCommunity(context).build();
+        Collection collection = CollectionBuilder.createCollection(context, community).build();
+        Item item = ItemBuilder.createItem(context, collection).build();
+
+        Bitstream bitstream = BitstreamBuilder.createBitstream(context, item, realStream).build();
+        context.restoreAuthSystemState();
+
+        BitstreamStorageService originalService =
+                StorageServiceFactory.getInstance().getBitstreamStorageService();
+        BitstreamStorageService spyService = spy(originalService);
+
+        doReturn(spyStream).when(spyService).retrieve(any(), eq(bitstream));
+
+        ReflectionTestUtils.setField(bitstreamService, "bitstreamStorageService", spyService);
+
+        try {
+            getClient().perform(get("/api/core/bitstreams/" + bitstream.getID() + "/content"))
+                       .andExpect(status().isOk());
+
+            boolean bitstreamRetrieved = Mockito.mockingDetails(spyService)
+                                                .getInvocations().stream()
+                                                .filter(i -> i.getMethod().getName().equals("retrieve"))
+                                                .mapToInt(i -> 1)
+                                                .sum() > 0;
+
+            if (bitstreamRetrieved) {
+                Mockito.verify(spyStream, times(1)
+                               .description("InputStream should have been closed after GET request"))
+                       .close();
+            }
+        } finally {
+            ReflectionTestUtils.setField(bitstreamService, "bitstreamStorageService", originalService);
+        }
+    }
+
+    @Test
+    public void bitstreamInputStreamClosesWithHeadRequestAndCitationPageEnabledTest() throws Exception {
+        configurationService.setProperty("citation-page.enable_globally", true);
+        citationDocumentService.afterPropertiesSet();
+
+        InputStream realStream = new ByteArrayInputStream("abc".getBytes());
+        InputStream spyStream = Mockito.spy(realStream);
+
+        context.turnOffAuthorisationSystem();
+        Community community = CommunityBuilder.createCommunity(context).build();
+        Collection collection = CollectionBuilder.createCollection(context, community).build();
+        Item item = ItemBuilder.createItem(context, collection).build();
+
+        Bitstream bitstream = BitstreamBuilder.createBitstream(context, item, realStream).build();
+        context.restoreAuthSystemState();
+
+        BitstreamStorageService originalService =
+                StorageServiceFactory.getInstance().getBitstreamStorageService();
+        BitstreamStorageService spyService = spy(originalService);
+
+        doReturn(spyStream).when(spyService).retrieve(any(), eq(bitstream));
+
+        ReflectionTestUtils.setField(bitstreamService, "bitstreamStorageService", spyService);
+
+        try {
+            getClient().perform(head("/api/core/bitstreams/" + bitstream.getID() + "/content"))
+                       .andExpect(status().isOk());
+
+            boolean bitstreamRetrieved = Mockito.mockingDetails(spyService)
+                                                .getInvocations().stream()
+                                                .filter(i -> i.getMethod().getName().equals("retrieve"))
+                                                .mapToInt(i -> 1)
+                                                .sum() > 0;
+
+            if (bitstreamRetrieved) {
+                Mockito.verify(spyStream, times(1)
+                               .description("InputStream should have been closed after HEAD request"))
+                       .close();
+            }
+        } finally {
+            ReflectionTestUtils.setField(bitstreamService, "bitstreamStorageService", originalService);
         }
     }
 }

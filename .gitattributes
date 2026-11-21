@@ -18,3 +18,6 @@
 *.PDF  diff=astextplain
 *.rtf  diff=astextplain
 *.RTF  diff=astextplain
+
+# Preserve whitespace in the unmodified W3C schema fixture.
+dspace-oai/src/test/resources/cmdi/xml.xsd whitespace=-blank-at-eol,-blank-at-eof

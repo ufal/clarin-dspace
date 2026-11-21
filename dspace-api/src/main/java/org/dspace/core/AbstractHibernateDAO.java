@@ -306,11 +306,23 @@ public abstract class AbstractHibernateDAO<T> implements GenericDAO<T> {
         return new AbstractIterator<T> () {
             @Override
             protected T computeNext() {
-                return iter.hasNext() ? iter.next() : endOfData();
-            }
-            @Override
-            public void finalize() {
+                if (iter.hasNext()) {
+                    return iter.next();
+                }
+                // Close the backing ScrollableResults / JDBC cursor as soon as the iteration is exhausted, on
+                // the thread that owns the Hibernate Session (the caller's thread).
+                //
+                // This MUST NOT be done from a finalize() override (as it previously was): finalize() runs on
+                // the GC Finalizer thread, so closing the stream there mutates the Session's per-session,
+                // non-thread-safe JDBC ResourceRegistry (xref) concurrently with the owning thread. That is a
+                // genuine data race which intermittently throws ConcurrentModificationException from
+                // ResourceRegistryStandardImpl.releaseResources during an unrelated commit/rollback (observed
+                // as flaky integration-test failures in AbstractIntegrationTestWithDatabase teardown).
+                //
+                // An iterator abandoned before exhaustion no longer leaks: its open statement is released
+                // safely when the owning Context/Session is closed (releaseResources runs on the owning thread).
                 stream.close();
+                return endOfData();
             }
         };
     }

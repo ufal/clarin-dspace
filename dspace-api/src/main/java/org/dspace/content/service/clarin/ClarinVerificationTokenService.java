@@ -83,6 +83,12 @@ public interface ClarinVerificationTokenService {
             throws SQLException;
 
     /**
+     * Generate an unguessable token for the registration and verification steps of the Shibboleth autoregistration.
+     * @return 32 hex characters from a cryptographically strong random source
+     */
+    String generateToken();
+
+    /**
      * Remove the clarin verification token from DB
      * @param context DSpace context object
      * @param clarinUserRegistration object to delete

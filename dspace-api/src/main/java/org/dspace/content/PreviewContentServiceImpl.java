@@ -369,7 +369,7 @@ public class PreviewContentServiceImpl implements PreviewContentService {
         if (fileName == null) {
             logBitstreamNameIsNull();
         } else {
-            if (fileName.toLowerCase().endsWith("tar.gz")) {
+            if (fileName.toLowerCase().endsWith(".tar.gz") || fileName.toLowerCase().endsWith(".tgz")) {
                 processTarGzipFile(filePaths, file, bitstream);
             } else {
                 try (InputStream is = new GzipCompressorInputStream(new FileInputStream(file))) {
