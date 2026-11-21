@@ -22,6 +22,7 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 
 import org.dspace.app.util.DCInput;
+import org.dspace.app.util.XMLUtils;
 import org.dspace.authorize.ResourcePolicy;
 import org.dspace.authorize.factory.AuthorizeServiceFactory;
 import org.dspace.authorize.service.ResourcePolicyService;
@@ -95,7 +96,7 @@ public class SpecialItemService {
                 Reader reader = new InputStreamReader(bitstreamService.retrieve(context, bitstream));
                 context.restoreAuthSystemState();
                 try {
-                    DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+                    DocumentBuilderFactory factory = XMLUtils.getDocumentBuilderFactory();
                     factory.setNamespaceAware(true);
                     DocumentBuilder builder = factory.newDocumentBuilder();
                     Document doc = builder.parse(new InputSource(reader));

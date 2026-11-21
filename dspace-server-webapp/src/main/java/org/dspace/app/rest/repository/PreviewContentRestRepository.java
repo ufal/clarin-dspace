@@ -19,6 +19,7 @@ import org.dspace.core.Context;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Component;
 
 @Component(PreviewContentRest.CATEGORY + "." + PreviewContentRest.NAME)
@@ -30,6 +31,7 @@ public class PreviewContentRestRepository extends DSpaceRestRepository<PreviewCo
     PreviewContentService previewContentService;
 
     @Override
+    @PreAuthorize("hasAuthority('ADMIN')")
     public PreviewContentRest findOne(Context context, Integer integer) {
         PreviewContent previewContent;
         try {
@@ -47,6 +49,7 @@ public class PreviewContentRestRepository extends DSpaceRestRepository<PreviewCo
     }
 
     @Override
+    @PreAuthorize("hasAuthority('ADMIN')")
     public Page<PreviewContentRest> findAll(Context context, Pageable pageable) {
         try {
             List<PreviewContent> previewContentList = previewContentService.findAll(context);

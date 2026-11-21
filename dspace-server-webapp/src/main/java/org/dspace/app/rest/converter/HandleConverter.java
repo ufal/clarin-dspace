@@ -7,6 +7,8 @@
  */
 package org.dspace.app.rest.converter;
 
+import static org.dspace.handle.external.Handle.hideToken;
+
 import java.util.Objects;
 
 import org.dspace.app.rest.model.HandleRest;
@@ -36,7 +38,7 @@ public class HandleConverter implements DSpaceConverter<Handle, HandleRest> {
         handleRest.setId(modelObject.getID());
         handleRest.setHandle(modelObject.getHandle());
         handleRest.setResourceTypeID(modelObject.getResourceTypeId());
-        handleRest.setUrl(modelObject.getUrl());
+        handleRest.setUrl(hideToken(modelObject.getUrl()));
         if (Objects.nonNull(modelObject.getDSpaceObject())) {
             handleRest.setResourceId(modelObject.getDSpaceObject().getID());
         } else {

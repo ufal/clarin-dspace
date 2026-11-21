@@ -375,7 +375,7 @@ public class EPersonRestRepository extends DSpaceObjectRestRepository<EPerson, E
         } catch (EmptyWorkflowGroupException e) {
             throw new RESTEmptyWorkflowGroupException(e);
         } catch (IllegalStateException e) {
-            throw new UnprocessableEntityException(e.getMessage(), e);
+            throw new DSpaceBadRequestException(e.getMessage(), e);
         }
     }
 

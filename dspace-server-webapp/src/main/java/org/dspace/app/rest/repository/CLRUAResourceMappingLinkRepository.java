@@ -12,6 +12,7 @@ import java.util.Objects;
 import javax.annotation.Nullable;
 import javax.servlet.http.HttpServletRequest;
 
+import org.dspace.app.rest.exception.RESTAuthorizationException;
 import org.dspace.app.rest.model.ClarinLicenseResourceMappingRest;
 import org.dspace.app.rest.model.ClarinLicenseResourceUserAllowanceRest;
 import org.dspace.app.rest.projection.Projection;
@@ -40,11 +41,15 @@ public class CLRUAResourceMappingLinkRepository extends AbstractDSpaceRestReposi
                                                                Integer clruaID,
                                                                @Nullable Pageable optionalPageable,
                                                                Projection projection)
-            throws SQLException, AuthorizeException {
+            throws SQLException {
         Context context = obtainContext();
 
-        ClarinLicenseResourceUserAllowance clarinLicenseResourceUserAllowance =
-                clarinLicenseResourceUserAllowanceService.find(context, clruaID);
+        ClarinLicenseResourceUserAllowance clarinLicenseResourceUserAllowance;
+        try {
+            clarinLicenseResourceUserAllowance = clarinLicenseResourceUserAllowanceService.find(context, clruaID);
+        } catch (AuthorizeException e) {
+            throw new RESTAuthorizationException(e);
+        }
         if (Objects.isNull(clarinLicenseResourceUserAllowance)) {
             throw new ResourceNotFoundException("The ClarinLicenseResourceUserAllowance for id: " + clruaID +
                     " couldn't be found");

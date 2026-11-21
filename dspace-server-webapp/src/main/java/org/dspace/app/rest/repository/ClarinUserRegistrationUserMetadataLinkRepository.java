@@ -12,6 +12,7 @@ import java.util.Objects;
 import javax.annotation.Nullable;
 import javax.servlet.http.HttpServletRequest;
 
+import org.dspace.app.rest.exception.RESTAuthorizationException;
 import org.dspace.app.rest.model.ClarinUserMetadataRest;
 import org.dspace.app.rest.model.ClarinUserRegistrationRest;
 import org.dspace.app.rest.projection.Projection;
@@ -36,10 +37,15 @@ public class ClarinUserRegistrationUserMetadataLinkRepository extends AbstractDS
     public Page<ClarinUserMetadataRest> getUserMetadata(@Nullable HttpServletRequest request,
                                                         Integer userRegistrationID,
                                                         @Nullable Pageable optionalPageable,
-                                                        Projection projection) throws SQLException, AuthorizeException {
+                                                        Projection projection) throws SQLException {
         Context context = obtainContext();
 
-        ClarinUserRegistration clarinUserRegistration = clarinUserRegistrationService.find(context, userRegistrationID);
+        ClarinUserRegistration clarinUserRegistration;
+        try {
+            clarinUserRegistration = clarinUserRegistrationService.find(context, userRegistrationID);
+        } catch (AuthorizeException e) {
+            throw new RESTAuthorizationException(e);
+        }
         if (Objects.isNull(clarinUserRegistration)) {
             throw new ResourceNotFoundException("The ClarinLicenseResourceUserAllowance for if: " + userRegistrationID +
                     " couldn't be found");

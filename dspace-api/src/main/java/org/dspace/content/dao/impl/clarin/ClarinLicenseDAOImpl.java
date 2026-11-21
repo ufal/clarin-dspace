@@ -12,9 +12,13 @@ import java.util.List;
 import javax.persistence.Query;
 import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.CriteriaQuery;
+import javax.persistence.criteria.Predicate;
 import javax.persistence.criteria.Root;
+import javax.persistence.criteria.SetJoin;
 
 import org.dspace.content.clarin.ClarinLicense;
+import org.dspace.content.clarin.ClarinLicenseLabel;
+import org.dspace.content.clarin.ClarinLicenseLabel_;
 import org.dspace.content.clarin.ClarinLicense_;
 import org.dspace.content.dao.clarin.ClarinLicenseDAO;
 import org.dspace.core.AbstractHibernateDAO;
@@ -52,6 +56,22 @@ public class ClarinLicenseDAOImpl extends AbstractHibernateDAO<ClarinLicense> im
         criteriaQuery.select(clarinLicenseRoot);
         criteriaQuery.where(criteriaBuilder.like(clarinLicenseRoot.get(ClarinLicense_.name), "%" + name + "%"));
         criteriaQuery.orderBy(criteriaBuilder.asc(clarinLicenseRoot.get(ClarinLicense_.name)));
+        return list(context, criteriaQuery, false, ClarinLicense.class, -1, -1);
+    }
+
+    @Override
+    public List<ClarinLicense> findByLabel(Context context, String label) throws SQLException {
+        CriteriaBuilder criteriaBuilder = getCriteriaBuilder(context);
+        CriteriaQuery<ClarinLicense> criteriaQuery = getCriteriaQuery(criteriaBuilder, ClarinLicense.class);
+        Root<ClarinLicense> clarinLicenseRoot = criteriaQuery.from(ClarinLicense.class);
+
+        SetJoin<ClarinLicense, ClarinLicenseLabel> labelJoin =
+                clarinLicenseRoot.joinSet(ClarinLicense_.CLARIN_LICENSE_LABELS);
+
+        Predicate labelPredicate = criteriaBuilder.equal(labelJoin.get(ClarinLicenseLabel_.LABEL), label);
+
+        criteriaQuery.select(clarinLicenseRoot).where(labelPredicate);
+
         return list(context, criteriaQuery, false, ClarinLicense.class, -1, -1);
     }
 }

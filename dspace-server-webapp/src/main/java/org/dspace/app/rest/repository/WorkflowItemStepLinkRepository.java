@@ -26,6 +26,7 @@ import org.dspace.xmlworkflow.storedcomponents.service.XmlWorkflowItemService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.rest.webmvc.ResourceNotFoundException;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Component;
 
 /**
@@ -56,6 +57,7 @@ public class WorkflowItemStepLinkRepository extends AbstractDSpaceRestRepository
      * @return                  The {@link WorkflowStepRest} object related to the
      *                          {@link org.dspace.workflow.WorkflowItem} specified by the given ID
      */
+    @PreAuthorize("hasPermission(#workflowItemId, 'WORKFLOWITEM', 'READ')")
     public WorkflowStepRest getStep(@Nullable HttpServletRequest request,
                                     Integer workflowItemId,
                                     @Nullable Pageable optionalPageable,

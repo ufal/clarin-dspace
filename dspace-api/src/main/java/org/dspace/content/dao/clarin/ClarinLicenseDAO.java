@@ -28,4 +28,6 @@ public interface ClarinLicenseDAO extends GenericDAO<ClarinLicense> {
 
     List<ClarinLicense> findByNameLike(Context context, String name) throws SQLException;
 
+    List<ClarinLicense> findByLabel(Context context, String label) throws SQLException;
+
 }

@@ -28,6 +28,7 @@ import org.dspace.eperson.factory.EPersonServiceFactory;
 import org.dspace.eperson.service.EPersonService;
 import org.dspace.utils.DSpace;
 import org.springframework.core.io.AbstractResource;
+import org.springframework.core.io.InputStreamSource;
 import org.springframework.util.DigestUtils;
 
 /**
@@ -49,15 +50,13 @@ public class BitstreamResource extends AbstractResource {
     private final BitstreamService bitstreamService = ContentServiceFactory.getInstance().getBitstreamService();
     private final EPersonService ePersonService = EPersonServiceFactory.getInstance().getEPersonService();
     private final CitationDocumentService citationDocumentService =
-        new DSpace().getServiceManager()
-            .getServicesByType(CitationDocumentService.class).get(0);
+            new DSpace().getServiceManager()
+                    .getServicesByType(CitationDocumentService.class).get(0);
 
-    private String documentEtag;
-    private long documentLength;
-    private InputStream documentInputStream = null;
+    private BitstreamDocument document;
 
     public BitstreamResource(String name, UUID uuid, UUID currentUserUUID, Set<UUID> currentSpecialGroups,
-        boolean shouldGenerateCoverPage) {
+                             boolean shouldGenerateCoverPage) {
         this.name = name;
         this.uuid = uuid;
         this.currentUserUUID = currentUserUUID;
@@ -74,14 +73,16 @@ public class BitstreamResource extends AbstractResource {
      * @return a byte array containing the cover page
      */
     private byte[] getCoverpageByteArray(Context context, Bitstream bitstream)
-        throws IOException, SQLException, AuthorizeException {
+            throws IOException, SQLException, AuthorizeException {
         try {
             var citedDocument = citationDocumentService.makeCitedDocument(context, bitstream);
             return citedDocument.getLeft();
         } catch (Exception e) {
             LOG.warn("Could not generate cover page. Will fallback to original document", e);
             // Return the original bitstream without the cover page
-            return IOUtils.toByteArray(bitstreamService.retrieve(context, bitstream));
+            try (InputStream in = bitstreamService.retrieve(context, bitstream)) {
+                return IOUtils.toByteArray(in);
+            }
         }
     }
 
@@ -94,7 +95,7 @@ public class BitstreamResource extends AbstractResource {
     public InputStream getInputStream() throws IOException {
         fetchDocument();
 
-        return this.documentInputStream;
+        return document.getInputStream();
     }
 
     @Override
@@ -106,17 +107,17 @@ public class BitstreamResource extends AbstractResource {
     public long contentLength() {
         fetchDocument();
 
-        return this.documentLength;
+        return document.length();
     }
 
     public String getChecksum() {
         fetchDocument();
 
-        return this.documentEtag;
+        return document.getEtag();
     }
 
     private void fetchDocument() {
-        if (this.documentInputStream != null) {
+        if (document != null) {
             return;
         }
 
@@ -125,22 +126,19 @@ public class BitstreamResource extends AbstractResource {
             if (shouldGenerateCoverPage) {
                 var coverPage = getCoverpageByteArray(context, bitstream);
 
-                this.documentEtag = etag(bitstream);
-                this.documentLength = coverPage.length;
-                this.documentInputStream = new ByteArrayInputStream(coverPage);
-
+                this.document = new BitstreamDocumentCoverPage(etag(bitstream),
+                        coverPage.length,
+                        new ByteArrayInputStream(coverPage));
             } else {
-
-                this.documentEtag = bitstream.getChecksum();
-                this.documentLength = bitstream.getSizeBytes();
-                this.documentInputStream = bitstreamService.retrieve(context, bitstream);
-
+                this.document = new BitstreamDocumentInputstream(bitstream.getChecksum(),
+                        bitstream.getSizeBytes(),
+                        bitstream.getID());
             }
         } catch (SQLException | AuthorizeException | IOException e) {
             throw new RuntimeException(e);
         }
 
-        LOG.debug("fetched document {} {} {}", shouldGenerateCoverPage, this.documentEtag, this.documentLength);
+        LOG.debug("fetched document {} {}", shouldGenerateCoverPage, document);
     }
 
     private String etag(Bitstream bitstream) {
@@ -163,11 +161,61 @@ public class BitstreamResource extends AbstractResource {
     }
 
     private Context initializeContext() throws SQLException {
-        Context context = new Context();
+        Context context = new Context(Context.Mode.READ_ONLY);
         EPerson currentUser = ePersonService.find(context, currentUserUUID);
         context.setCurrentUser(currentUser);
         currentSpecialGroups.forEach(context::setSpecialGroup);
         return context;
+    }
+
+    protected abstract class BitstreamDocument implements InputStreamSource {
+        private final String etag;
+        private final long length;
+
+        protected BitstreamDocument(String etag, long length) {
+            this.etag = etag;
+            this.length = length;
+        }
+
+        public String getEtag() {
+            return etag;
+        }
+
+        public long length() {
+            return length;
+        }
+    }
+
+    protected class BitstreamDocumentInputstream extends BitstreamDocument {
+        protected final UUID bitstreamUUID;
+
+        public BitstreamDocumentInputstream(String etag, long length, UUID bitstreamUUID) {
+            super(etag, length);
+            this.bitstreamUUID = bitstreamUUID;
+        }
+
+        @Override
+        public InputStream getInputStream() throws IOException {
+            try (Context context = initializeContext()) {
+                return bitstreamService.retrieve(context, bitstreamService.find(context, bitstreamUUID));
+            } catch (SQLException | AuthorizeException | IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    protected class BitstreamDocumentCoverPage extends BitstreamDocument {
+        private final ByteArrayInputStream coverpage;
+
+        public BitstreamDocumentCoverPage(String etag, long length, ByteArrayInputStream byteArrayInputStream) {
+            super(etag, length);
+            this.coverpage = byteArrayInputStream;
+        }
+
+        @Override
+        public InputStream getInputStream() {
+            return coverpage;
+        }
     }
 
 }

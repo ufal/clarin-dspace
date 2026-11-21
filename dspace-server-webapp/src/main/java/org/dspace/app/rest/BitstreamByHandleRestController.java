@@ -15,6 +15,7 @@ import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
+import java.text.Normalizer;
 import java.util.List;
 import java.util.Objects;
 import javax.servlet.http.HttpServletRequest;
@@ -279,25 +280,50 @@ public class BitstreamByHandleRestController {
     }
 
     /**
-     * Build a Content-Disposition header value using RFC 5987 encoding.
-     * Includes both {@code filename} (ASCII fallback) and {@code filename*}
-     * (UTF-8 percent-encoded) so that curl -J and browsers can save files
-     * with non-ASCII characters in the name correctly.
-     *
-     * @param name the original filename
-     * @return the Content-Disposition header value
+     * Build the Content-Disposition value the way vanilla's HttpHeadersInitializer does: an ASCII
+     * fallback in {@code filename} for clients that predate RFC 5987, plus the real UTF-8 name in
+     * {@code filename*} for everyone else. This endpoint has no upstream counterpart, so the logic
+     * is copied from vanilla rather than shared, to keep it tracking upstream's behaviour.
+     * curl -J on Windows cannot create files with non-ASCII characters from a raw UTF-8 header,
+     * which is why this endpoint needs it too.
      */
     private String buildContentDisposition(String name) {
-        // RFC 5987 percent-encoding for filename*
-        String encoded = URLEncoder.encode(name, StandardCharsets.UTF_8)
-                .replace("+", "%20");
-        // ASCII fallback: replace non-ASCII chars with underscore, escape quotes.
-        // Modern clients use filename* (RFC 5987 / RFC 6266) with real UTF-8 name.
-        String asciiFallback = name.replaceAll("[^\\x20-\\x7E]", "_")
+        return String.format("attachment; filename=\"%s\"; filename*=UTF-8''%s",
+                createFallbackAsciiName(name), createEncodedUtf8Name(name));
+    }
+
+    /**
+     * Creates a safe ASCII-only fallback filename by removing diacritics (accents)
+     * and replacing any remaining non-ASCII characters.
+     * E.g., "ä-ö-é.pdf" becomes "a-o-e.pdf".
+     * @param originalFilename The original filename.
+     * @return A string containing only ASCII characters.
+     */
+    private String createFallbackAsciiName(String originalFilename) {
+        if (originalFilename == null) {
+            return "";
+        }
+        String normalized = Normalizer.normalize(originalFilename, Normalizer.Form.NFD);
+        String withoutAccents = normalized.replaceAll("\\p{InCombiningDiacriticalMarks}+", "");
+        // Deviates from vanilla by escaping \ and ": the value is a quoted-string, and a name
+        // containing a quote closes it early. Vanilla still has that bug.
+        return withoutAccents.replaceAll("[^\\x00-\\x7F]", "")
                 .replace("\\", "\\\\")
                 .replace("\"", "\\\"");
-        return String.format("attachment; filename=\"%s\"; filename*=UTF-8''%s",
-                asciiFallback, encoded);
+    }
+
+    /**
+     * Creates a percent-encoded UTF-8 filename according to RFC 5987.
+     * This is for the `filename*` parameter.
+     * E.g., "ä ö é.pdf" becomes "%C3%A4%20%C3%B6%20%C3%A9.pdf".
+     * @param originalFilename The original filename.
+     * @return A percent-encoded string.
+     */
+    private String createEncodedUtf8Name(String originalFilename) {
+        if (originalFilename == null) {
+            return "";
+        }
+        return URLEncoder.encode(originalFilename, StandardCharsets.UTF_8).replace("+", "%20");
     }
 
     /**

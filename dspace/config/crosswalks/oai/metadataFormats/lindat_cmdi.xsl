@@ -25,7 +25,7 @@
     select="fn:stringReplace(/doc:metadata/doc:element[@name='dc']/doc:element[@name='identifier']/doc:element[@name='uri']/doc:element/doc:field[@name='value'])"/>
     <xsl:variable name="modifyDate" select="/doc:metadata/doc:element[@name='others']/doc:field[@name='lastModifyDate']/text()"/>
     <xsl:variable name="dc_rights_uri" select="/doc:metadata/doc:element[@name='dc']/doc:element[@name='rights']/doc:element[@name='uri']/doc:element/doc:field[@name='value']" />
-    <xsl:variable name="dsURL" select="fn:getProperty('dspace.ui.url')"/>
+    <xsl:variable name="serverURL" select="fn:getProperty('dspace.server.url')"/>
     <xsl:variable name="newProfile" select="'clarin.eu:cr1:p_1403526079380'"/>
     <xsl:variable name="oldProfile" select="'clarin.eu:cr1:p_1349361150622'"/>
     
@@ -83,7 +83,20 @@
     <xsl:template name="Header">
     	<xsl:param name="profile"/>
         <cmd:Header>
-            <cmd:MdCreationDate><xsl:value-of select="$modifyDate"/></cmd:MdCreationDate>
+            <cmd:MdCreationDate>
+                <xsl:choose>
+                    <!-- Cached XOAI may contain Date.toString() instead of a SQL/ISO timestamp. -->
+                    <xsl:when test="fnx:matches($modifyDate, concat(
+                        '^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) ',
+                        '(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) ',
+                        '[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} \S+ [0-9]{4}$'))">
+                        <xsl:variable name="parts" select="fnx:tokenize($modifyDate, '\s+')"/>
+                        <xsl:variable name="months" select="fnx:tokenize('Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec', ' ')"/>
+                        <xsl:value-of select="concat($parts[last()], '-', format-number(fnx:index-of($months, $parts[2]), '00'), '-', $parts[3])"/>
+                    </xsl:when>
+                    <xsl:otherwise><xsl:value-of select="substring($modifyDate, 1, 10)"/></xsl:otherwise>
+                </xsl:choose>
+            </cmd:MdCreationDate>
             <cmd:MdSelfLink><xsl:value-of select="$dc_identifier_uri"/>@format=cmdi</cmd:MdSelfLink>
             <cmd:MdProfile><xsl:value-of select="$profile"/></cmd:MdProfile>
             <cmd:MdCollectionDisplayName><xsl:value-of select="/doc:metadata/doc:element[@name='others']/doc:field[@name='owningCollection']/text()"/></cmd:MdCollectionDisplayName>
@@ -108,13 +121,13 @@
 		</cmd:Resources>
 	</xsl:template>
 	
-	<!-- Omit the special "ORE" bitstream and also the consent to publish the data -->
+	<!-- List only the data files (ORIGINAL bundle); the download endpoint below serves nothing else -->
 	<xsl:template name="ProcessBitstreams">
-	   <xsl:for-each select="/doc:metadata/doc:element[@name='bundles']/doc:element[@name='bundle']/doc:field[@name='name' and text()!='ORE' and text()!='LICENSE']/../doc:element[@name='bitstreams']/doc:element[@name='bitstream']">
+	   <xsl:for-each select="/doc:metadata/doc:element[@name='bundles']/doc:element[@name='bundle']/doc:field[@name='name' and text()='ORIGINAL']/../doc:element[@name='bitstreams']/doc:element[@name='bitstream']">
 	       <cmd:ResourceProxy>
 	                   <xsl:attribute name="id">_<xsl:value-of select="./doc:field[@name='id']/text()"/></xsl:attribute>
                        <cmd:ResourceType><xsl:attribute name="mimetype"><xsl:value-of select="./doc:field[@name='format']/text()"/></xsl:attribute>Resource</cmd:ResourceType>
-			   <cmd:ResourceRef><xsl:attribute name="lindat:md5_checksum"><xsl:value-of select="./doc:field[@name='checksum']/text()"/></xsl:attribute><xsl:value-of select="concat($dsURL,'/bitstream/handle/',$handle,'/',./doc:field[@name='name']/text(),'?sequence=',./doc:field[@name='sid']/text())"/></cmd:ResourceRef>
+			   <cmd:ResourceRef><xsl:attribute name="lindat:md5_checksum"><xsl:value-of select="./doc:field[@name='checksum']/text()"/></xsl:attribute><xsl:value-of select="concat($serverURL,'/api/core/bitstreams/handle/',$handle,'/',fnx:encode-for-uri(./doc:field[@name='name']/text()))"/></cmd:ResourceRef>
            </cmd:ResourceProxy>
 	   </xsl:for-each>
 	</xsl:template>

@@ -64,14 +64,20 @@ public class ClarinUserMetadataRestRepository extends DSpaceRestRepository<Clari
     }
 
     @SearchRestMethod(name = "byUserRegistrationAndBitstream")
+    @PreAuthorize("hasAuthority('AUTHENTICATED')")
     public Page<ClarinUserMetadataRest> findByUserRegistrationAndBitstream(
             @Parameter(value = "userRegUUID", required = true) Integer userRegId,
             @Parameter(value = "bitstreamUUID", required = true) UUID bitstreamUUID,
-            Pageable pageable) throws SQLException, AuthorizeException {
+            Pageable pageable) throws SQLException {
         Context context = obtainContext();
 
-        List<ClarinUserMetadata> clarinUserMetadataList =
-                clarinUserMetadataService.findByUserRegistrationAndBitstream(context, userRegId, bitstreamUUID, true);
+        List<ClarinUserMetadata> clarinUserMetadataList;
+        try {
+            clarinUserMetadataList = clarinUserMetadataService
+                    .findByUserRegistrationAndBitstream(context, userRegId, bitstreamUUID, true);
+        } catch (AuthorizeException e) {
+            throw new RESTAuthorizationException(e);
+        }
 
         return converter.toRestPage(clarinUserMetadataList, pageable, utils.obtainProjection());
     }

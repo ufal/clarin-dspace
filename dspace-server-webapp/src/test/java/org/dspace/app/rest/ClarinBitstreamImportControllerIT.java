@@ -38,6 +38,9 @@ import org.dspace.content.Item;
 import org.dspace.content.service.BitstreamFormatService;
 import org.dspace.content.service.BitstreamService;
 import org.dspace.content.service.BundleService;
+import org.dspace.content.service.ItemService;
+import org.dspace.core.Constants;
+import org.dspace.core.Context;
 import org.junit.Before;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -58,6 +61,8 @@ public class ClarinBitstreamImportControllerIT extends AbstractEntityIntegration
     private BitstreamService bitstreamService;
     @Autowired
     private BundleService bundleService;
+    @Autowired
+    private ItemService itemService;
     private JsonNodeFactory jsonNodeFactory = new JsonNodeFactory(true);
     @Autowired
     private BitstreamFormatService bitstreamFormatService;
@@ -303,6 +308,56 @@ public class ClarinBitstreamImportControllerIT extends AbstractEntityIntegration
         context.turnOffAuthorisationSystem();
         BitstreamBuilder.deleteBitstream(uuid);
         context.restoreAuthSystemState();
+    }
+
+    @Test
+    public void importMultipleBitstreamsCountsSizeOfEveryFile() throws Exception {
+        context.turnOffAuthorisationSystem();
+        Item item = bundle.getItems().get(0);
+        Bundle originalBundle = BundleBuilder.createBundle(context, item)
+                .withName(Constants.CONTENT_BUNDLE_NAME)
+                .build();
+        context.restoreAuthSystemState();
+
+        // Import the same stored file twice; each import attaches an empty bitstream before its size is set.
+        UUID firstUuid = importExistingFile(originalBundle);
+        UUID secondUuid = importExistingFile(originalBundle);
+
+        // Read the committed state; the test context may still cache the item loaded before the imports.
+        try (Context verifyContext = new Context()) {
+            Item reloaded = itemService.find(verifyContext, item.getID());
+            assertEquals("2", itemService.getMetadataFirstValue(reloaded, "local", "files", "count", Item.ANY));
+            assertEquals(String.valueOf(2 * sizeBytes),
+                    itemService.getMetadataFirstValue(reloaded, "local", "files", "size", Item.ANY));
+        }
+
+        //clean all
+        context.turnOffAuthorisationSystem();
+        BitstreamBuilder.deleteBitstream(firstUuid);
+        BitstreamBuilder.deleteBitstream(secondUuid);
+        context.restoreAuthSystemState();
+    }
+
+    private UUID importExistingFile(Bundle targetBundle) throws Exception {
+        ObjectNode checksumNode = jsonNodeFactory.objectNode();
+        checksumNode.set("checkSumAlgorithm", jsonNodeFactory.textNode(checkSumsAlg));
+        checksumNode.set("value", jsonNodeFactory.textNode(checkSum));
+        ObjectNode node = jsonNodeFactory.objectNode();
+        node.set("sizeBytes", jsonNodeFactory.textNode(Long.toString(sizeBytes)));
+        node.set("checkSum", checksumNode);
+
+        ObjectMapper mapper = new ObjectMapper();
+        return UUID.fromString(read(getClient(token).perform(post("/api/clarin/import/core/bitstream")
+                        .content(mapper.writeValueAsBytes(node))
+                        .contentType(contentType)
+                        .param("internal_id", internalId)
+                        .param("storeNumber", Integer.toString(storeNumber))
+                        .param("bitstreamFormat", bitstreamFormat.getMIMEType())
+                        .param("deleted", Boolean.toString(false))
+                        .param("bundle_id", targetBundle.getID().toString()))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(),
+                "$.id"));
     }
 
     private void checkCreatedBitstream(UUID uuid, String internalId, int storeNumber,

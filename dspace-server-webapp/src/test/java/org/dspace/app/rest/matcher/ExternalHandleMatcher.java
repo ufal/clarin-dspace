@@ -10,6 +10,7 @@ package org.dspace.app.rest.matcher;
 import static com.jayway.jsonpath.matchers.JsonPathMatchers.hasJsonPath;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.is;
 
 import java.util.List;
@@ -53,9 +54,7 @@ public class ExternalHandleMatcher {
                 hasJsonPath("$[*].submitdate", containsInAnyOrder(externalHandles.get(0).submitdate,
                         externalHandles.get(1).submitdate,
                         externalHandles.get(2).submitdate)),
-                hasJsonPath("$[*].reportemail", containsInAnyOrder(externalHandles.get(0).reportemail,
-                        externalHandles.get(1).reportemail,
-                        externalHandles.get(2).reportemail)),
+                hasJsonPath("$[*].reportemail", empty()),
                 hasJsonPath("$[*].subprefix", containsInAnyOrder(externalHandles.get(0).subprefix,
                         externalHandles.get(1).subprefix,
                         externalHandles.get(2).subprefix)),

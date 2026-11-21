@@ -22,6 +22,7 @@ import org.dspace.scripts.Process;
 import org.dspace.scripts.service.ProcessService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.rest.webmvc.ResourceNotFoundException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Component;
 
@@ -58,6 +59,9 @@ public class ProcessOutputLinkRepository extends AbstractDSpaceRestRepository im
 
         Context context = obtainContext();
         Process process = processService.find(context, processId);
+        if (process == null) {
+            throw new ResourceNotFoundException("Process with id " + processId + " was not found");
+        }
         if ((context.getCurrentUser() == null) || (!context.getCurrentUser().equals(process.getEPerson())
                 && !authorizeService.isAdmin(context))) {
             throw new AuthorizeException("The current user is not eligible to view the process with id: " + processId);

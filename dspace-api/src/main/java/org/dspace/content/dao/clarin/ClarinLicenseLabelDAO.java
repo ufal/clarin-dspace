@@ -7,7 +7,10 @@
  */
 package org.dspace.content.dao.clarin;
 
+import java.sql.SQLException;
+
 import org.dspace.content.clarin.ClarinLicenseLabel;
+import org.dspace.core.Context;
 import org.dspace.core.GenericDAO;
 
 /**
@@ -19,4 +22,6 @@ import org.dspace.core.GenericDAO;
  * @author Milan Majchrak (milan.majchrak at dataquest.sk)
  */
 public interface ClarinLicenseLabelDAO extends GenericDAO<ClarinLicenseLabel> {
+
+    ClarinLicenseLabel findByLabel(Context context, String label) throws SQLException;
 }

@@ -56,8 +56,11 @@ RUN ant init_installation update_configs update_code update_webapps
 FROM docker.io/tomcat:9-jdk${JDK_VERSION}
 # NOTE: DSPACE_INSTALL must align with the "dspace.dir" default configuration.
 ENV DSPACE_INSTALL=/dspace
+# We create a 'dspace' user to run DSpace instead of running as root. An explicit UID is required
+# because Kubernetes deployment accepts only numeric user IDs when specifying the container user.
+RUN useradd -u 1100 -m -s /bin/bash dspace
 # Copy the /dspace directory from 'ant_build' container to /dspace in this container
-COPY --from=ant_build /dspace $DSPACE_INSTALL
+COPY --chown=dspace:dspace --from=ant_build /dspace $DSPACE_INSTALL
 # Need host command for "[dspace]/bin/make-handle-config"
 RUN apt-get update \
     && apt-get install -y --no-install-recommends host \
@@ -68,7 +71,7 @@ EXPOSE 8080 8009 8000
 # Give java extra memory (2GB)
 ENV JAVA_OPTS=-Xmx2000m
 COPY scripts/restart_debug/* /usr/local/tomcat/bin
-COPY scripts/index-scripts/* /dspace/bin
+COPY --chown=dspace:dspace scripts/index-scripts/* /dspace/bin
 # Link the DSpace 'server' webapp into Tomcat's webapps directory.
 # This ensures that when we start Tomcat, it runs from /server path (e.g. http://localhost:8080/server/)
 RUN ln -s $DSPACE_INSTALL/webapps/server   /usr/local/tomcat/webapps/server
@@ -81,11 +84,9 @@ RUN ln -s $DSPACE_INSTALL/webapps/server   /usr/local/tomcat/webapps/server
 WORKDIR /usr/local/tomcat/bin
 RUN chmod u+x redebug.sh undebug.sh custom_run.sh
 
-# We create a 'dspace' user to run DSpace instead of running as root. An explicit UID is required 
-# because Kubernetes deployment accepts only numeric user IDs when specifying the container user.
-RUN useradd -u 1100 -m -s /bin/bash dspace \
-    && mkdir -p /dspace/assetstore \
-    && chown -Rv dspace: /dspace /usr/local/tomcat
+RUN mkdir -p /dspace/assetstore \
+    && chown dspace:dspace /dspace/assetstore \
+    && chown -Rv dspace:dspace /usr/local/tomcat
 # NOTE: /dspace/assetstore does not exist in the base image.
 # We create it so Docker named volumes inherit the correct ownership.
 # This only works for *named volumes* — bind mounts use host permissions.

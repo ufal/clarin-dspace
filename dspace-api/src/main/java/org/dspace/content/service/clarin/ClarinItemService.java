@@ -102,4 +102,16 @@ public interface ClarinItemService {
      */
     void updateItemDatesMetadata(Context context, Item item) throws SQLException;
 
+    /**
+     * Derive the display value for {@code dc.date.issued} from the item's
+     * {@code local.approximateDate.issued} metadata, without touching the database.
+     * Returns the last year for a numeric sequence (e.g. "1938, 1945" -&gt; "1945"),
+     * {@code "0000"} for a non-numeric approximate value, or {@code null} when no
+     * approximate date is present.
+     *
+     * @param item the item to derive the date from
+     * @return the derived {@code dc.date.issued} value, or {@code null} if none applies
+     */
+    String deriveDateIssuedFromApproximateDate(Item item);
+
 }

@@ -18,12 +18,14 @@ import org.dspace.app.rest.Parameter;
 import org.dspace.app.rest.SearchRestMethod;
 import org.dspace.app.rest.model.ClarinVerificationTokenRest;
 import org.dspace.authorize.AuthorizeException;
+import org.dspace.authorize.service.AuthorizeService;
 import org.dspace.content.clarin.ClarinVerificationToken;
 import org.dspace.content.service.clarin.ClarinVerificationTokenService;
 import org.dspace.core.Context;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Component;
 
@@ -38,12 +40,18 @@ public class ClarinVerificationTokenRestRepository extends DSpaceRestRepository<
 
     @Autowired
     ClarinVerificationTokenService clarinVerificationTokenService;
+    @Autowired
+    AuthorizeService authorizeService;
 
+    // ConverterService applies this annotation to every returned token, so byToken needs permitAll() here.
     @Override
     @PreAuthorize("permitAll()")
     public ClarinVerificationTokenRest findOne(Context context, Integer integer) {
         ClarinVerificationToken clarinVerificationToken;
         try {
+            if (!authorizeService.isAdmin(context)) {
+                throw new AccessDeniedException("Only administrators can read a verification token by id.");
+            }
             clarinVerificationToken = clarinVerificationTokenService.find(context, integer);
         } catch (SQLException e) {
             throw new RuntimeException(e.getMessage(), e);
@@ -57,6 +65,7 @@ public class ClarinVerificationTokenRestRepository extends DSpaceRestRepository<
     }
 
     @Override
+    @PreAuthorize("hasAuthority('ADMIN')")
     public Page<ClarinVerificationTokenRest> findAll(Context context, Pageable pageable) {
         try {
             List<ClarinVerificationToken> clarinVerificationTokenList = clarinVerificationTokenService.findAll(context);
@@ -66,6 +75,7 @@ public class ClarinVerificationTokenRestRepository extends DSpaceRestRepository<
         }
     }
 
+    @PreAuthorize("hasAuthority('ADMIN')")
     @SearchRestMethod(name = "byNetId")
     public Page<ClarinVerificationTokenRest> findByNetId(@Parameter(value = "netid", required = true) String netid,
                                                           Pageable pageable) throws SQLException {
@@ -99,7 +109,7 @@ public class ClarinVerificationTokenRestRepository extends DSpaceRestRepository<
     }
 
     @Override
-    @PreAuthorize("permitAll()")
+    @PreAuthorize("hasAuthority('ADMIN')")
     protected void delete(Context context, Integer id) throws AuthorizeException {
         ClarinVerificationToken clarinVerificationToken ;
         try {

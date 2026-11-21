@@ -47,8 +47,8 @@ public class ClarinVerificationTokenDAOImpl extends AbstractHibernateDAO<ClarinV
         CriteriaQuery criteriaQuery = getCriteriaQuery(criteriaBuilder, ClarinVerificationToken.class);
         Root<ClarinVerificationToken> clarinVerificationTokenRoot = criteriaQuery.from(ClarinVerificationToken.class);
         criteriaQuery.select(clarinVerificationTokenRoot);
-        criteriaQuery.where(criteriaBuilder.like(clarinVerificationTokenRoot.get(ClarinVerificationToken_.ePersonNetID),
-                "%" + netID + "%"));
+        criteriaQuery.where(criteriaBuilder.equal(
+                clarinVerificationTokenRoot.get(ClarinVerificationToken_.ePersonNetID), netID));
         criteriaQuery.orderBy(criteriaBuilder.asc(clarinVerificationTokenRoot.
                 get(ClarinVerificationToken_.ePersonNetID)));
         return singleResult(context, criteriaQuery);
