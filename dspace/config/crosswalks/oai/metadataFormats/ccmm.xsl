@@ -1113,7 +1113,11 @@
             broadening of AJP, and HBS has no single successor).
         -->
         <xsl:variable name="langCode" select="$languageCodes[1]"/>
-        <xsl:if test="$langCode">
+        <!--
+            dc.language.iso has no order of importance (multilingual items list their languages
+            alphabetically), so only an item with exactly one language has a primary language.
+        -->
+        <xsl:if test="count($languageCodes) = 1">
             <!--
                 The register IRI alone: the scope note asks for "language label and/or its
                 3-letter code from" the register, and CCMM's own dataset-mini sample writes
@@ -1132,13 +1136,14 @@
     <!-- other_language (optional)                                     -->
     <!-- ============================================================ -->
     <xsl:template name="OtherLanguages">
-        <!-- every remaining code, in document order, so the positional name list stays aligned -->
-        <xsl:for-each select="2 to count($languageCodes)">
-            <xsl:variable name="i" select="."/>
-            <ccmm:other_language>
-                <ccmm:iri><xsl:value-of select="concat('http://publications.europa.eu/resource/authority/language/', upper-case($languageCodes[$i]))"/></ccmm:iri>
-            </ccmm:other_language>
-        </xsl:for-each>
+        <!-- with several languages every code, in document order; a single one is primary_language -->
+        <xsl:if test="count($languageCodes) &gt; 1">
+            <xsl:for-each select="$languageCodes">
+                <ccmm:other_language>
+                    <ccmm:iri><xsl:value-of select="concat('http://publications.europa.eu/resource/authority/language/', upper-case(.))"/></ccmm:iri>
+                </ccmm:other_language>
+            </xsl:for-each>
+        </xsl:if>
     </xsl:template>
 
     <!-- ============================================================ -->

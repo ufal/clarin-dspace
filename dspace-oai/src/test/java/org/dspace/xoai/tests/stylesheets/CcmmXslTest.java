@@ -354,20 +354,37 @@ public class CcmmXslTest extends AbstractXSLTest {
     public void ccmmContainsPrimaryLanguage() throws Exception {
         // CCMM: "Use IRI identifier from the register
         // http://publications.europa.eu/resource/authority/language"
-        String result = apply("ccmm.xsl").to(resource(MAIN));
+        String result = ccmmOf(once(fixture(MAIN), ENG_CODE, ""));
         assertThat(result, is(ccmm().withXPath(
-            "//ccmm:dataset/ccmm:primary_language/ccmm:iri",
-            equalTo("http://publications.europa.eu/resource/authority/language/CES"))));
+            "//ccmm:dataset/ccmm:primary_language/ccmm:iri", equalTo(LANGUAGE + "CES"))));
+        assertThat(result, is(ccmm().withXPath("count(//ccmm:dataset/ccmm:other_language)", equalTo("0"))));
+    }
+
+    @Test
+    public void ccmmSeveralLanguagesHaveNoPrimaryLanguage() throws Exception {
+        // dc.language.iso has no order of importance, so with several languages none is the primary one
+        String result = apply("ccmm.xsl").to(resource(MAIN));
+        assertThat(result, is(ccmm().withXPath("count(//ccmm:dataset/ccmm:primary_language)", equalTo("0"))));
     }
 
     @Test
     public void ccmmOtherLanguageKeepsItsRegisterIri() throws Exception {
-        // document order is preserved and duplicates removed without reordering, so the second
-        // distinct code is the first other_language
+        // with several languages every one is an other_language, in document order
         String result = apply("ccmm.xsl").to(resource(MAIN));
+        assertThat(result, is(ccmm().withXPath("count(//ccmm:dataset/ccmm:other_language)", equalTo("2"))));
         assertThat(result, is(ccmm().withXPath(
-            "//ccmm:dataset/ccmm:other_language/ccmm:iri",
-            equalTo("http://publications.europa.eu/resource/authority/language/ENG"))));
+            "(//ccmm:dataset/ccmm:other_language/ccmm:iri)[1]", equalTo(LANGUAGE + "CES"))));
+        assertThat(result, is(ccmm().withXPath(
+            "(//ccmm:dataset/ccmm:other_language/ccmm:iri)[2]", equalTo(LANGUAGE + "ENG"))));
+    }
+
+    @Test
+    public void ccmmTheSameLanguageTwiceIsOnePrimaryLanguage() throws Exception {
+        // "cs" and "ces" are one language once mapped to ISO 639-3
+        String result = ccmmOf(once(fixture(MAIN), ENG_CODE, "<field name=\"value\">cs</field>"));
+        assertThat(result, is(ccmm().withXPath(
+            "//ccmm:dataset/ccmm:primary_language/ccmm:iri", equalTo(LANGUAGE + "CES"))));
+        assertThat(result, is(ccmm().withXPath("count(//ccmm:dataset/ccmm:other_language)", equalTo("0"))));
     }
 
     @Test
@@ -1120,13 +1137,13 @@ public class CcmmXslTest extends AbstractXSLTest {
     public void ccmmLanguageCarriesTheRegisterIriAndNoInventedLabel() throws Exception {
         // the scope note asks for the register's label "and/or" its code; DSpace's own string is
         // not the register's, so only the IRI is published
-        String result = apply("ccmm.xsl").to(resource(MAIN));
-        assertThat(result, is(ccmm().withXPath(
-            "//ccmm:primary_language/ccmm:iri",
-            equalTo("http://publications.europa.eu/resource/authority/language/CES"))));
-        assertThat(result, is(ccmm().withXPath(
+        String single = ccmmOf(once(fixture(MAIN), ENG_CODE, ""));
+        assertThat(single, is(ccmm().withXPath("//ccmm:primary_language/ccmm:iri", equalTo(LANGUAGE + "CES"))));
+        assertThat(single, is(ccmm().withXPath(
             "count(//ccmm:primary_language/ccmm:label)", equalTo("0"))));
-        assertThat(result, is(ccmm().withXPath(
+        String several = apply("ccmm.xsl").to(resource(MAIN));
+        assertThat(several, is(ccmm().withXPath("count(//ccmm:other_language/ccmm:iri)", equalTo("2"))));
+        assertThat(several, is(ccmm().withXPath(
             "count(//ccmm:other_language/ccmm:label)", equalTo("0"))));
     }
 
@@ -1910,6 +1927,9 @@ public class CcmmXslTest extends AbstractXSLTest {
     private static final String SOURCE_URI = "https://example.org/czech-nlp-dataset";
     /** dc.relation.replaces of MAIN */
     private static final String REPLACED = "http://hdl.handle.net/123456789/1-1111";
+    /** the second of MAIN's two dc.language.iso codes */
+    private static final String ENG_CODE = "<field name=\"value\">eng</field>";
+    private static final String LANGUAGE = "http://publications.europa.eu/resource/authority/language/";
 
     /** A fixture as text, to edit with {@link #once} or {@link #add} and transform with {@link #ccmmOf}. */
     private String fixture(String name) throws Exception {
