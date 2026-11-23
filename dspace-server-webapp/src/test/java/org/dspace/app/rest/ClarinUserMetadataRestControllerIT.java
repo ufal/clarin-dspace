@@ -877,11 +877,62 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
                 .andExpect(jsonPath("$.page.totalElements", is(2)));
     }
 
+    @Test
+    public void manageZipAnonymousWithSendTokenLicenseSendsEmail() throws Exception {
+        Item item = createArchivedItemWithLicensedFiles("SEND_TOKEN,EXTRA_EMAIL",
+                Confirmation.ALLOW_ANONYMOUS, Confirmation.ALLOW_ANONYMOUS);
+        // Production serves every request in a fresh Hibernate session; drop the one the fixtures were built in
+        context.commit();
+
+        getClient().perform(post("/api/core/clarinusermetadata/manage/zip?itemUUID=" + item.getID())
+                        .content(sendTokenUserMetadataBody())
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", is(CHECK_EMAIL_RESPONSE_CONTENT)));
+
+        getClient(getAuthToken(admin.getEmail(), password)).perform(get("/api/core/clarinlruallowances")
+                        .contentType(contentType))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements", is(2)));
+    }
+
+    @Test
+    public void manageZipSignedInWithSendTokenLicenseSendsEmail() throws Exception {
+        Item item = createArchivedItemWithLicensedFiles("SEND_TOKEN,EXTRA_EMAIL",
+                Confirmation.ASK_ALWAYS, Confirmation.ASK_ALWAYS);
+        context.turnOffAuthorisationSystem();
+        ClarinUserRegistrationBuilder.createClarinUserRegistration(context).withEPersonID(eperson.getID()).build();
+        context.restoreAuthSystemState();
+        String epersonToken = getAuthToken(eperson.getEmail(), password);
+        // Production serves every request in a fresh Hibernate session; drop the one the fixtures were built in
+        context.commit();
+
+        getClient(epersonToken).perform(post("/api/core/clarinusermetadata/manage/zip?itemUUID=" + item.getID())
+                        .content(sendTokenUserMetadataBody())
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", is(CHECK_EMAIL_RESPONSE_CONTENT)));
+
+        getClient(getAuthToken(admin.getEmail(), password)).perform(get("/api/core/clarinlruallowances")
+                        .contentType(contentType))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements", is(2)));
+    }
+
     /**
      * Create an archived item, readable by anonymous users, with one ORIGINAL file per given licence confirmation.
      * Every file gets its own licence.
      */
     private Item createArchivedItemWithLicensedFiles(Confirmation... confirmations) throws Exception {
+        return createArchivedItemWithLicensedFiles("NAME", confirmations);
+    }
+
+    /**
+     * Create an archived item, readable by anonymous users, with one ORIGINAL file per given licence confirmation.
+     * Every file gets its own licence with the given required info.
+     */
+    private Item createArchivedItemWithLicensedFiles(String requiredInfo, Confirmation... confirmations)
+            throws Exception {
         context.turnOffAuthorisationSystem();
         parentCommunity = CommunityBuilder.createCommunity(context).build();
         Collection col = CollectionBuilder.createCollection(context, parentCommunity).build();
@@ -892,7 +943,7 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
             ClarinLicense license = ClarinLicenseBuilder.createClarinLicense(context).build();
             license.setConfirmation(confirmations[i]);
             license.setDefinition("Def");
-            license.setRequiredInfo("NAME");
+            license.setRequiredInfo(requiredInfo);
             license.setName("License " + i);
             license.setLicenseLabels(new HashSet<>(List.of(clarinLicenseLabel)));
             clarinLicenseService.update(context, license);
@@ -915,6 +966,15 @@ public class ClarinUserMetadataRestControllerIT extends AbstractControllerIntegr
         clarinUserMetadata.setMetadataKey("NAME");
         clarinUserMetadata.setMetadataValue("Test");
         return new ObjectMapper().writeValueAsBytes(new ClarinUserMetadataRest[] { clarinUserMetadata });
+    }
+
+    private byte[] sendTokenUserMetadataBody() throws Exception {
+        ClarinUserMetadataRest sendToken = new ClarinUserMetadataRest();
+        sendToken.setMetadataKey("SEND_TOKEN");
+        ClarinUserMetadataRest email = new ClarinUserMetadataRest();
+        email.setMetadataKey("EXTRA_EMAIL");
+        email.setMetadataValue("test@test.edu");
+        return new ObjectMapper().writeValueAsBytes(new ClarinUserMetadataRest[] { sendToken, email });
     }
 
     private void assertNoDownloadTokenCreated() throws Exception {
