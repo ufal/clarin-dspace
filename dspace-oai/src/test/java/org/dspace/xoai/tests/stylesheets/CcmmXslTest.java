@@ -1751,12 +1751,23 @@ public class CcmmXslTest extends AbstractXSLTest {
         // choosing one would be correcting the record
         String result = ccmmOf(add(fixture(MAIN), "dc", field("relation.isbasedon", "none", REPLACED)));
         assertThat(result, is(ccmm().withXPath(
-            "count(//ccmm:related_resource[ccmm:iri='" + REPLACED + "'])", equalTo("2"))));
+            "count(//ccmm:related_resource[ccmm:resource_url='" + REPLACED + "'])", equalTo("2"))));
         for (String type : new String[] {"Obsoletes", "IsDerivedFrom"}) {
             assertThat(type, result, is(ccmm().withXPath(
-                "count(//ccmm:related_resource[ccmm:iri='" + REPLACED + "']"
+                "count(//ccmm:related_resource[ccmm:resource_url='" + REPLACED + "']"
+                    + "[ccmm:identifier/ccmm:value='123456789/1-1111']"
                     + "[ccmm:resource_relation_type/ccmm:iri='" + RELATION + type + "'])", equalTo("1"))));
         }
+    }
+
+    @Test
+    public void ccmmOnlyTheFirstOfTwoRelationsToOneResourceCarriesItsIri() throws Exception {
+        // CCMM identifies a related resource by its iri and allows it one relation type (SHACL
+        // sh:maxCount 1 on ccmm:hasType), so a second relation to the same resource has no iri
+        String result = ccmmOf(add(fixture(MAIN), "dc", field("relation.isbasedon", "none", REPLACED)));
+        assertThat(result, is(ccmm().withXPath(
+            "count(//ccmm:related_resource[ccmm:iri='" + REPLACED + "'])", equalTo("1"))));
+        assertThat(result, is(ccmm().withXPath(relationTypeOf(REPLACED), equalTo(RELATION + "IsDerivedFrom"))));
     }
 
     @Test

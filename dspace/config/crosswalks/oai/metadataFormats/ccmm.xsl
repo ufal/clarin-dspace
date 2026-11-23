@@ -1816,15 +1816,21 @@
             distributions (a featured service also given as the demo, a web service also given as
             the source) is not repeated as a related resource: CCMM says distributions SHALL NOT be
             modeled as related resources.
+            CCMM identifies a related resource by its iri and gives it one relation type (SHACL
+            sh:maxCount 1 on ccmm:hasType), so only the first relation to an IRI carries it; a
+            further one keeps the identifier and resource_url.
         -->
         <xsl:variable name="perIri" as="element()*">
             <xsl:for-each-group select="$deduped/*[not(ccmm:iri = $distributionIris)]" group-by="if (ccmm:iri) then string(ccmm:iri) else generate-id()">
                 <xsl:variable name="best" select="min(for $r in current-group() return cw:relationRank($r))"/>
                 <xsl:for-each-group select="current-group()[cw:relationRank(.) = $best]"
                                     group-by="string(ccmm:resource_relation_type/ccmm:iri)">
+                    <xsl:variable name="nth" select="position()"/>
                     <xsl:for-each select="current-group()[1]">
                         <!-- without the cw:assumed mark and its namespace, on every level -->
-                        <xsl:copy copy-namespaces="no"><xsl:copy-of select="node()" copy-namespaces="no"/></xsl:copy>
+                        <xsl:copy copy-namespaces="no">
+                            <xsl:copy-of select="node()[not($nth &gt; 1 and self::ccmm:iri)]" copy-namespaces="no"/>
+                        </xsl:copy>
                     </xsl:for-each>
                 </xsl:for-each-group>
             </xsl:for-each-group>
