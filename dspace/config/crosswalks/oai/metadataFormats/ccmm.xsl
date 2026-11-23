@@ -192,6 +192,12 @@
     <xsl:variable name="languageCodes"
         select="for $i in 1 to count($langAll) return $langAll[$i][not(. = $langAll[position() &lt; $i])]"/>
     <!--
+        dc.language.iso has no order of importance, so only an item with exactly one language has a
+        primary language.  A value that maps to no code may still be a second language, so it counts.
+    -->
+    <xsl:variable name="singleLanguage"
+        select="count($languageCodes) = 1 and count($langAll) = count($languageRaw[normalize-space()])"/>
+    <!--
         local.additional.metadata is one blob of "Label (field_key):value" lines carried over from
         the old Drupal catalogue.  Splitting on the FIRST colon is safe: every key ends in ':' and
         contains none itself, so a URL value keeps its "//".
@@ -1112,12 +1118,7 @@
             concepts; they are emitted unchanged rather than silently remapped (APC is a
             broadening of AJP, and HBS has no single successor).
         -->
-        <xsl:variable name="langCode" select="$languageCodes[1]"/>
-        <!--
-            dc.language.iso has no order of importance (multilingual items list their languages
-            alphabetically), so only an item with exactly one language has a primary language.
-        -->
-        <xsl:if test="count($languageCodes) = 1">
+        <xsl:if test="$singleLanguage">
             <!--
                 The register IRI alone: the scope note asks for "language label and/or its
                 3-letter code from" the register, and CCMM's own dataset-mini sample writes
@@ -1127,7 +1128,7 @@
                 asserting a label the register does not use.
             -->
             <ccmm:primary_language>
-                <ccmm:iri><xsl:value-of select="concat('http://publications.europa.eu/resource/authority/language/', upper-case($langCode))"/></ccmm:iri>
+                <ccmm:iri><xsl:value-of select="concat('http://publications.europa.eu/resource/authority/language/', upper-case($languageCodes[1]))"/></ccmm:iri>
             </ccmm:primary_language>
         </xsl:if>
     </xsl:template>
@@ -1136,8 +1137,8 @@
     <!-- other_language (optional)                                     -->
     <!-- ============================================================ -->
     <xsl:template name="OtherLanguages">
-        <!-- with several languages every code, in document order; a single one is primary_language -->
-        <xsl:if test="count($languageCodes) &gt; 1">
+        <!-- every code, in document order, unless the item's only language is primary_language -->
+        <xsl:if test="not($singleLanguage)">
             <xsl:for-each select="$languageCodes">
                 <ccmm:other_language>
                     <ccmm:iri><xsl:value-of select="concat('http://publications.europa.eu/resource/authority/language/', upper-case(.))"/></ccmm:iri>

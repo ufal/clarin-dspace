@@ -388,6 +388,23 @@ public class CcmmXslTest extends AbstractXSLTest {
     }
 
     @Test
+    public void ccmmAValueWithoutACodeStillMeansSeveralLanguages() throws Exception {
+        // free text maps to no register code, but it can be another language, so CES is not primary
+        String result = ccmmOf(once(fixture(MAIN), ENG_CODE, "<field name=\"value\">English; Czech</field>"));
+        assertThat(result, is(ccmm().withXPath("count(//ccmm:dataset/ccmm:primary_language)", equalTo("0"))));
+        assertThat(result, is(ccmm().withXPath("count(//ccmm:dataset/ccmm:other_language)", equalTo("1"))));
+        assertThat(result, is(ccmm().withXPath(
+            "//ccmm:dataset/ccmm:other_language/ccmm:iri", equalTo(LANGUAGE + "CES"))));
+    }
+
+    @Test
+    public void ccmmNoLanguageIsNeitherPrimaryNorOther() throws Exception {
+        String result = ccmmOf(once(once(fixture(MAIN), "<field name=\"value\">ces</field>", ""), ENG_CODE, ""));
+        assertThat(result, is(ccmm().withXPath(
+            "count(//ccmm:dataset/ccmm:primary_language | //ccmm:dataset/ccmm:other_language)", equalTo("0"))));
+    }
+
+    @Test
     public void ccmmAcceptsIso6391AndRegionSubtags() throws Exception {
         // stock DSpace stores "en_US"; the register keys on the uppercased 639-3 code
         String result = apply("ccmm.xsl").to(resource(STOCK));
