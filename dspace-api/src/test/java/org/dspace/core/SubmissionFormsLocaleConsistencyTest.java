@@ -69,8 +69,12 @@ public class SubmissionFormsLocaleConsistencyTest {
     /** {@code <field>} children whose *text* may legitimately differ between locales. */
     private static final Set<String> FIELD_LOCALIZED_TAGS = Set.of("label", "hint", "required");
 
-    /** {@code <relation-field>} children whose *text* may legitimately differ between locales. */
-    private static final Set<String> RELATION_FIELD_LOCALIZED_TAGS = Set.of("label", "hint");
+    /**
+     * {@code <relation-field>} children whose *text* may legitimately differ between locales.
+     * Same as for {@code <field>}: DCInputsReader parses both with processField(), so a
+     * relation-field's {@code <required>} text is also the user-facing mandatory message.
+     */
+    private static final Set<String> RELATION_FIELD_LOCALIZED_TAGS = Set.of("label", "hint", "required");
 
     /** {@code <pair>} children whose *text* may legitimately differ between locales. */
     private static final Set<String> PAIR_LOCALIZED_TAGS = Set.of("displayed-value");
