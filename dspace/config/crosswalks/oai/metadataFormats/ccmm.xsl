@@ -160,8 +160,8 @@
     <!--
         Language codes.  LINDAT stores ISO 639-3, but stock DSpace stores 639-1 with an optional
         region subtag ("en", "en_US", "de-DE"), so the subtag is stripped and the two-letter code
-        mapped to 639-3 before the EU register IRI is built.  Document order is preserved - the
-        first code is the primary language - and duplicates are removed without reordering.
+        mapped to 639-3 before the EU register IRI is built.  Document order is preserved and
+        duplicates are removed without reordering.
     -->
     <xsl:variable name="iso1to3">
         <c k="ab">abk</c><c k="af">afr</c><c k="am">amh</c><c k="ar">ara</c><c k="as">asm</c><c k="az">aze</c>
