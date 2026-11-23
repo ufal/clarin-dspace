@@ -137,9 +137,10 @@ public class ClarinUserMetadataRestController {
             throw new NotFoundException("Cannot find the item with ID: " + itemUUID);
         }
         authorizeService.authorizeAction(context, item, Constants.READ);
-        // Load the name because it is used in the email, and it must be loaded before the `sendEmailWithDownloadLink`
-        // method otherwise it will throw an exception about Lazy loading.
+        // Load the name and handle because they are used in the email. They must be loaded before `context.commit()`
+        // detaches the item, otherwise `sendEmailWithDownloadLink` throws an exception about Lazy loading.
         item.getName();
+        String itemHandle = item.getHandle();
 
         boolean shouldEmailToken = false;
         ClarinLicense clarinLicense = null;
@@ -206,7 +207,7 @@ public class ClarinUserMetadataRestController {
             try {
                 String email = getEmailFromUserMetadata(clarinUserMetadataRestList);
                 this.sendEmailWithDownloadLink(context, item, clarinLicense,
-                        email, downloadToken, MailType.ALLZIP, clarinUserMetadataRestList, item.getHandle());
+                        email, downloadToken, MailType.ALLZIP, clarinUserMetadataRestList, itemHandle);
             } catch (MessagingException e) {
                 log.error("Cannot send the download email because: " + e.getMessage());
                 throw new RuntimeException("Cannot send the download email because: " + e.getMessage());
