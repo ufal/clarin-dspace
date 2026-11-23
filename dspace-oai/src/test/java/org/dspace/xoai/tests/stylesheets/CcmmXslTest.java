@@ -1763,7 +1763,8 @@ public class CcmmXslTest extends AbstractXSLTest {
     @Test
     public void ccmmOnlyTheFirstOfTwoRelationsToOneResourceCarriesItsIri() throws Exception {
         // CCMM identifies a related resource by its iri and allows it one relation type (SHACL
-        // sh:maxCount 1 on ccmm:hasType), so a second relation to the same resource has no iri
+        // sh:maxCount 1 on ccmm:hasType), so a second relation to the same resource has no iri.
+        // add() puts isbasedon before MAIN's own dc.relation element, so it is the first one.
         String result = ccmmOf(add(fixture(MAIN), "dc", field("relation.isbasedon", "none", REPLACED)));
         assertThat(result, is(ccmm().withXPath(
             "count(//ccmm:related_resource[ccmm:iri='" + REPLACED + "'])", equalTo("1"))));

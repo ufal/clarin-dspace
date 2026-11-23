@@ -1817,8 +1817,8 @@
             the source) is not repeated as a related resource: CCMM says distributions SHALL NOT be
             modeled as related resources.
             CCMM identifies a related resource by its iri and gives it one relation type (SHACL
-            sh:maxCount 1 on ccmm:hasType), so only the first relation to an IRI carries it; a
-            further one keeps the identifier and resource_url.
+            sh:maxCount 1 on ccmm:hasType), so only the first relation to an IRI, in the record's
+            order, carries it; a further one is still identified by its resource_url.
         -->
         <xsl:variable name="perIri" as="element()*">
             <xsl:for-each-group select="$deduped/*[not(ccmm:iri = $distributionIris)]" group-by="if (ccmm:iri) then string(ccmm:iri) else generate-id()">
