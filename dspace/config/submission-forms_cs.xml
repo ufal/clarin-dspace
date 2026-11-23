@@ -1236,7 +1236,7 @@
                         <input-type>name</input-type>
                     </linked-metadata-field>
                     <externalsources>orcid</externalsources>
-                    <required>At least one author (plain text or relationship) is required</required>
+                    <required>Je vyžadován alespoň jeden autor (prostý text nebo vztah)</required>
                 </relation-field>
             </row>
 
