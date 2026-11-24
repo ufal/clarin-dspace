@@ -17,6 +17,7 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -92,6 +93,8 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     private final static String ORGANIZATION = "voperson_external_affiliation";
     private final static String GROUPS = "eduperson_entitlement";
     private final static String EMAIL_VERIFIED = "email_verified";
+    private final static String EXTERNAL_IDS = "voperson_external_id";
+    private final static String SHIB_NETID = "perun@cuni.cz[https://idp.cuni.cz/idp/shibboleth]";
     private final static String PROVIDER = "oidc";
 
     private final static String START_URL = "/api/authn/oidc/start/clarin-oidc";
@@ -168,6 +171,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         configurationService.setProperty("authentication-oidc.can-self-register", "true");
         configurationService.setProperty("authentication-oidc.require-verified-email", "true");
         configurationService.setProperty(ClarinOidcAuthenticationBean.EMAIL_FALLBACK_PROPERTY, null);
+        configurationService.setProperty("authentication-oidc.user-info.external-ids", null);
         // disabled by default, enabled explicitly by the tests that need it
         configurationService.setProperty("authentication-oidc.user-info.groups", null);
         configurationService.setProperty("authentication-oidc.group.staff", null);
@@ -363,6 +367,119 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
 
         mockUserInfo("perun1", "perun@email.it", null);
 
+        loginRefusedAsDuplicate("perun@email.it");
+
+        assertThat(authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER, "perun1"), nullValue());
+    }
+
+    @Test
+    public void testShibbolethEPersonLinkedByExternalId() throws Exception {
+        configurationService.setProperty("authentication-oidc.user-info.external-ids", EXTERNAL_IDS);
+        // a different email than at the OIDC provider, so it couldn't be linked by email anyway
+        EPerson ePerson = createEPerson("shib@email.it", false);
+        setNetid(ePerson, SHIB_NETID);
+
+        mockUserInfo("perun1", "perun@email.it", null);
+        provider.userInfo.put(EXTERNAL_IDS, List.of("perun@muni.cz", "perun@cuni.cz"));
+
+        assertThat(login(), equalTo(ePerson.getID().toString()));
+
+        AuthenticationIdentity identity = authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER,
+                "perun1");
+        assertThat(identity, notNullValue());
+        assertThat(identity.getEPerson(), equalTo(ePerson));
+        assertThat(context.reloadEntity(ePerson).getNetid(), equalTo(SHIB_NETID));
+    }
+
+    @Test
+    public void testShibbolethEPersonLinkedByExternalIdSingleValue() throws Exception {
+        configurationService.setProperty("authentication-oidc.user-info.external-ids", EXTERNAL_IDS);
+        EPerson ePerson = createEPerson("shib@email.it", false);
+        setNetid(ePerson, SHIB_NETID);
+
+        mockUserInfo("perun1", "perun@email.it", null);
+        provider.userInfo.put(EXTERNAL_IDS, "perun@cuni.cz");
+
+        assertThat(login(), equalTo(ePerson.getID().toString()));
+    }
+
+    @Test
+    public void testExternalIdsNotUsedByDefault() throws Exception {
+        EPerson ePerson = createEPerson("shib@email.it", false);
+        setNetid(ePerson, SHIB_NETID);
+
+        mockUserInfo("perun1", "perun@email.it", null);
+        provider.userInfo.put(EXTERNAL_IDS, List.of("perun@cuni.cz"));
+
+        // a new EPerson is registered instead
+        String ePersonId = login();
+        registeredEPersons.add(ePersonService.find(context, UUIDUtils.fromString(ePersonId)));
+        assertThat(ePersonId, not(equalTo(ePerson.getID().toString())));
+    }
+
+    @Test
+    public void testExternalIdsMatchingTwoEPersonsAreNotLinked() throws Exception {
+        configurationService.setProperty("authentication-oidc.user-info.external-ids", EXTERNAL_IDS);
+        EPerson cuniPerson = createEPerson("cuni@email.it", false);
+        setNetid(cuniPerson, SHIB_NETID);
+        EPerson muniPerson = createEPerson("muni@email.it", false);
+        setNetid(muniPerson, "perun@muni.cz[https://idp.muni.cz/idp/shibboleth]");
+
+        mockUserInfo("perun1", "perun@email.it", null);
+        provider.userInfo.put(EXTERNAL_IDS, List.of("perun@cuni.cz", "perun@muni.cz"));
+
+        // no guessing: the login continues as without external IDs, here registering a new EPerson
+        String ePersonId = login();
+        registeredEPersons.add(ePersonService.find(context, UUIDUtils.fromString(ePersonId)));
+        assertThat(ePersonId, not(equalTo(cuniPerson.getID().toString())));
+        assertThat(ePersonId, not(equalTo(muniPerson.getID().toString())));
+    }
+
+    @Test
+    public void testExternalIdIsMatchedLiterally() throws Exception {
+        configurationService.setProperty("authentication-oidc.user-info.external-ids", EXTERNAL_IDS);
+        EPerson ePerson = createEPerson("shib@email.it", false);
+        setNetid(ePerson, SHIB_NETID);
+
+        mockUserInfo("perun1", "perun@email.it", null);
+        // LIKE wildcards, a prefix, another case, and values reaching into the authority part
+        provider.userInfo.put(EXTERNAL_IDS, List.of("perun_cuni.cz", "perun%", "%", "perun@cuni", "PERUN@cuni.cz",
+                SHIB_NETID, "perun@cuni.cz[https://idp.cuni.cz/idp/shibboleth"));
+
+        String ePersonId = login();
+        registeredEPersons.add(ePersonService.find(context, UUIDUtils.fromString(ePersonId)));
+        assertThat(ePersonId, not(equalTo(ePerson.getID().toString())));
+    }
+
+    @Test
+    public void testAdministratorNotLinkedByExternalId() throws Exception {
+        configurationService.setProperty("authentication-oidc.user-info.external-ids", EXTERNAL_IDS);
+        EPerson ePerson = createEPerson("shib@email.it", false);
+        setNetid(ePerson, SHIB_NETID);
+        context.turnOffAuthorisationSystem();
+        groupService.addMember(context, groupService.findByName(context, Group.ADMIN), ePerson);
+        context.restoreAuthSystemState();
+        context.commit();
+
+        mockUserInfo("perun1", "perun@email.it", null);
+        provider.userInfo.put(EXTERNAL_IDS, List.of("perun@cuni.cz"));
+
+        loginRefusedAsDuplicate("perun@email.it");
+
+        assertThat(authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER, "perun1"), nullValue());
+    }
+
+    @Test
+    public void testEPersonNotLinkedByExternalIdWhenAlreadyLinkedToOtherIdentity() throws Exception {
+        configurationService.setProperty("authentication-oidc.user-info.external-ids", EXTERNAL_IDS);
+        EPerson ePerson = createEPerson("shib@email.it", false);
+        setNetid(ePerson, SHIB_NETID);
+        createIdentity(ePerson, PROVIDER, "other-sub");
+
+        mockUserInfo("perun1", "perun@email.it", null);
+        provider.userInfo.put(EXTERNAL_IDS, List.of("perun@cuni.cz"));
+
+        // the page shows the email of this login, not the email of the account it was refused to be linked to
         loginRefusedAsDuplicate("perun@email.it");
 
         assertThat(authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER, "perun1"), nullValue());

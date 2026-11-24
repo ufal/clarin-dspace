@@ -14,9 +14,11 @@ import static org.dspace.content.clarin.AuthenticationIdentity.AUTH_METHOD_OIDC;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -56,6 +58,9 @@ import org.springframework.security.oauth2.core.oidc.user.OidcUser;
  * stored in the authentication_identity table, instead of the email which may change:
  * <ol>
  *     <li>the EPerson linked to the (oidc, provider, user ID) identity is logged in</li>
+ *     <li>otherwise, if authentication-oidc.user-info.external-ids is set, the identity is linked to the one
+ *     EPerson whose Shibboleth netid has one of the external IDs the provider vouches for (see
+ *     {@code findByExternalIds}); an administrator found this way is refused as a duplicate user</li>
  *     <li>otherwise, if an EPerson with the same email exists, the identity is linked to it only when
  *     {@value #EMAIL_FALLBACK_PROPERTY} is on, the EPerson has no netid and isn't an administrator (the same rule as
  *     {@link ClarinShibAuthentication#canBindNetIdByEmail}); otherwise the login is refused as a duplicate user
@@ -219,6 +224,20 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
                 return SUCCESS;
             }
 
+            // 1b. link the identity to the one EPerson whose Shibboleth netid is among the user's external IDs
+            EPerson externalIdOwner = findByExternalIds(context, userInfo, userId);
+            if (externalIdOwner != null) {
+                if (authorizeService.isAdmin(context, externalIdOwner)) {
+                    log.warn("OIDC identity {} was not linked to the administrator EPerson {} found by its external " +
+                            "ID", userId, externalIdOwner.getID());
+                    request.setAttribute(DUPLICATE_USER_ATTRIBUTE, Objects.toString(email, ""));
+                    return BAD_ARGS;
+                }
+                log.info("OIDC identity {} belongs to EPerson {} found by its external ID", userId,
+                        externalIdOwner.getID());
+                return linkEPerson(context, externalIdOwner, userInfo, provider, userId, organization, request);
+            }
+
             if (StringUtils.isBlank(email)) {
                 log.warn("No email found in the user info attributes of the OIDC identity {}", userId);
                 return NO_SUCH_USER;
@@ -262,7 +281,9 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
         if (identities.stream().anyMatch(identity -> provider.equals(identity.getProvider()))) {
             log.warn("EPerson {} is already linked to another identity of the OIDC provider {}, the OIDC identity " +
                     "{} is not linked", ePerson.getID(), provider, userId);
-            request.setAttribute(DUPLICATE_USER_ATTRIBUTE, Objects.toString(ePerson.getEmail(), ""));
+            // the email of this login, not of the account found (which may differ when found by external ID)
+            request.setAttribute(DUPLICATE_USER_ATTRIBUTE,
+                    Objects.toString(getAttributeAsString(userInfo, getEmailAttribute()), ""));
             return BAD_ARGS;
         }
 
@@ -297,6 +318,40 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
         }
         log.info("EPerson {} was linked to the OIDC identity {}", ePerson.getID(), userId);
         return SUCCESS;
+    }
+
+    /**
+     * Find the EPerson whose Shibboleth netid ("value[IdP entityID]", see org.dspace.app.util.Util#formatNetId) has
+     * one of the values of the external IDs attribute (authentication-oidc.user-info.external-ids), e.g. e-INFRA's
+     * voperson_external_id: the eduPersonPrincipalNames of the user's other identities, which the provider has
+     * linked only after the user logged in with each of them.
+     *
+     * @return the EPerson, or null when the attribute isn't configured or sent, or when no EPerson or more than one
+     *         EPerson matches (the identity isn't linked by guessing)
+     */
+    private EPerson findByExternalIds(Context context, Map<String, Object> userInfo, String userId)
+            throws SQLException {
+        String attribute = configurationService.getProperty("authentication-oidc.user-info.external-ids");
+        if (StringUtils.isBlank(attribute)) {
+            return null;
+        }
+        Map<UUID, EPerson> matches = new LinkedHashMap<>();
+        for (String externalId : getAttributeAsList(userInfo, attribute)) {
+            String value = externalId.trim();
+            // a bracket would let the value reach into the authority part of a netid
+            if (value.isEmpty() || StringUtils.containsAny(value, '[', ']')) {
+                continue;
+            }
+            for (EPerson ePerson : authenticationIdentityService.findEPersonsByNetidValue(context, value)) {
+                matches.put(ePerson.getID(), ePerson);
+            }
+        }
+        if (matches.size() > 1) {
+            log.warn("OIDC identity {} was not linked by its external IDs, because they match {} EPersons: {}", userId,
+                    matches.size(), matches.keySet());
+            return null;
+        }
+        return matches.isEmpty() ? null : matches.values().iterator().next();
     }
 
     /**

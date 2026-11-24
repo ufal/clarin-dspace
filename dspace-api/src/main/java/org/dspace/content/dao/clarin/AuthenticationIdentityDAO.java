@@ -52,6 +52,18 @@ public interface AuthenticationIdentityDAO extends GenericDAO<AuthenticationIden
     List<AuthenticationIdentity> findByEPerson(Context context, EPerson ePerson) throws SQLException;
 
     /**
+     * Find the EPersons whose netid is the given value in the format of a Shibboleth netid, "value[authority]"
+     * (see org.dspace.app.util.Util#formatNetId), whatever the authority. The value is matched exactly (case
+     * sensitive, no wildcards).
+     *
+     * @param context DSpace context
+     * @param value   netid value without the authority, e.g. an eduPersonPrincipalName
+     * @return the EPersons, empty if none found
+     * @throws SQLException if database error
+     */
+    List<EPerson> findEPersonsByNetidValue(Context context, String value) throws SQLException;
+
+    /**
      * Find identities of the given authentication method linked to the given EPerson.
      *
      * @param context    DSpace context

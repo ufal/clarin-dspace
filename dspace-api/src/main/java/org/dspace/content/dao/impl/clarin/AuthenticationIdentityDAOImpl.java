@@ -49,6 +49,15 @@ public class AuthenticationIdentityDAOImpl extends AbstractHibernateDAO<Authenti
     }
 
     @Override
+    @SuppressWarnings("unchecked")
+    public List<EPerson> findEPersonsByNetidValue(Context context, String value) throws SQLException {
+        Query query = createQuery(context, "SELECT e FROM EPerson e WHERE e.netid LIKE :netid ESCAPE '!'");
+        // the value is literal: escape the LIKE wildcards (and the escape character itself)
+        query.setParameter("netid", value.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "[%");
+        return (List<EPerson>) query.getResultList();
+    }
+
+    @Override
     public List<AuthenticationIdentity> findByEPersonAndAuthMethod(Context context,
                                                                    EPerson ePerson,
                                                                    String authMethod) throws SQLException {
