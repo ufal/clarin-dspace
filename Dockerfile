@@ -70,6 +70,11 @@ RUN apt-get update \
 EXPOSE 8080 8009 8000
 # Give java extra memory (2GB)
 ENV JAVA_OPTS=-Xmx2000m
+# Default connect (10 s) and read (60 s, waiting for data) timeouts of the JDK's HTTP client for calls that don't
+# set their own, e.g. the CLARIN OIDC calls to the provider (discovery, JWKS, token, UserInfo), EPIC PID minting,
+# Matomo: without them, a remote server that accepts the connection but never answers blocks the thread forever.
+# In CATALINA_OPTS (Tomcat only), so that deployments overriding JAVA_OPTS (e.g. for the heap) keep them.
+ENV CATALINA_OPTS="-Dsun.net.client.defaultConnectTimeout=10000 -Dsun.net.client.defaultReadTimeout=60000"
 COPY scripts/restart_debug/* /usr/local/tomcat/bin
 COPY --chown=dspace:dspace scripts/index-scripts/* /dspace/bin
 # Link the DSpace 'server' webapp into Tomcat's webapps directory.

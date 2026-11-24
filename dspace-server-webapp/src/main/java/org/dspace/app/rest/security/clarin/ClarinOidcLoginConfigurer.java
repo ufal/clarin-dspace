@@ -32,15 +32,11 @@ import org.dspace.authenticate.clarin.ClarinOidcAuthentication;
 import org.dspace.authenticate.clarin.ClarinOidcAuthenticationBean;
 import org.dspace.services.ConfigurationService;
 import org.dspace.services.factory.DSpaceServicesFactory;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.http.converter.FormHttpMessageConverter;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.oauth2.client.endpoint.DefaultAuthorizationCodeTokenResponseClient;
-import org.springframework.security.oauth2.client.http.OAuth2ErrorResponseErrorHandler;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserService;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
@@ -54,10 +50,8 @@ import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
-import org.springframework.security.oauth2.core.http.converter.OAuth2AccessTokenResponseHttpMessageConverter;
 import org.springframework.security.oauth2.core.oidc.OidcScopes;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
-import org.springframework.web.client.RestTemplate;
 
 /**
  * CLARIN OIDC login (ufal/clarin-dspace#1140) on Spring Security's oauth2Login(). Spring does the whole OIDC
@@ -118,8 +112,7 @@ public final class ClarinOidcLoginConfigurer {
                         .baseUri(START_BASE_PATH)
                         .authorizationRequestResolver(new StartResolver(registrations, configurationService)))
                 .loginProcessingUrl(CALLBACK_PATH)
-                .tokenEndpoint(token -> token.accessTokenResponseClient(tokenClient(configurationService)))
-                .userInfoEndpoint(userInfo -> userInfo.oidcUserService(userInfoClient(configurationService)))
+                .userInfoEndpoint(userInfo -> userInfo.oidcUserService(userInfoClient()))
                 .successHandler((request, response, authentication) -> loginToDSpace(request, response,
                         authentication, authenticationManager, restAuthenticationService, configurationService))
                 .failureHandler((request, response, exception) ->
@@ -131,24 +124,13 @@ public final class ClarinOidcLoginConfigurer {
         return configurationService.getProperty("dspace.server.url") + CALLBACK_PATH;
     }
 
-    /** Spring's token client, with timeouts. */
-    private static DefaultAuthorizationCodeTokenResponseClient tokenClient(ConfigurationService configuration) {
-        RestTemplate restTemplate = new RestTemplate(Arrays.asList(
-                new FormHttpMessageConverter(), new OAuth2AccessTokenResponseHttpMessageConverter()));
-        restTemplate.setErrorHandler(new OAuth2ErrorResponseErrorHandler());
-        restTemplate.setRequestFactory(requestFactory(configuration));
-        DefaultAuthorizationCodeTokenResponseClient client = new DefaultAuthorizationCodeTokenResponseClient();
-        client.setRestOperations(restTemplate);
-        return client;
-    }
-
-    /** Spring's UserInfo client (checks that UserInfo's sub is the ID token's), with timeouts. */
-    private static OidcUserService userInfoClient(ConfigurationService configuration) {
-        RestTemplate restTemplate = new RestTemplate();
-        restTemplate.setErrorHandler(new OAuth2ErrorResponseErrorHandler());
-        restTemplate.setRequestFactory(requestFactory(configuration));
+    /**
+     * Spring's UserInfo client (checks that UserInfo's sub is the ID token's). Like Spring's other calls to the
+     * provider (discovery, JWKS, token), it uses the JDK's HTTP client without its own timeouts: those come from the
+     * JVM-wide sun.net.client.defaultConnectTimeout/defaultReadTimeout (see the Dockerfile's CATALINA_OPTS).
+     */
+    private static OidcUserService userInfoClient() {
         DefaultOAuth2UserService oauth2UserService = new DefaultOAuth2UserService();
-        oauth2UserService.setRestOperations(restTemplate);
         OidcUserService oidcUserService = new OidcUserService();
         oidcUserService.setOauth2UserService(userRequest -> {
             try {
@@ -163,14 +145,6 @@ public final class ClarinOidcLoginConfigurer {
         // always call UserInfo (email, groups), not only when profile/email/address/phone scopes were granted
         oidcUserService.setAccessibleScopes(Collections.emptySet());
         return oidcUserService;
-    }
-
-    private static SimpleClientHttpRequestFactory requestFactory(ConfigurationService configuration) {
-        int timeout = configuration.getIntProperty("authentication-oidc.http.timeout", 10000);
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(timeout);
-        factory.setReadTimeout(timeout);
-        return factory;
     }
 
     /**
@@ -276,7 +250,7 @@ public final class ClarinOidcLoginConfigurer {
      * The one client registration, from OIDC discovery of authentication-oidc.issuer, built on first use (an
      * unreachable provider doesn't break DSpace startup) and rebuilt when its configuration changes. Note that
      * Spring caches the ID token decoder (JWKS URI) per registration ID: a different provider needs a restart.
-     * Discovery and the JWKS fetch use Spring's own RestTemplates, without timeouts.
+     * Discovery and the JWKS fetch use Spring's own RestTemplates, timed out by the JVM-wide defaults only.
      */
     private static final class ClarinClientRegistrations implements ClientRegistrationRepository {
 
