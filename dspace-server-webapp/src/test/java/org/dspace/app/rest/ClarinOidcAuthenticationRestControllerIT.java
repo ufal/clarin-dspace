@@ -532,6 +532,35 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     }
 
     @Test
+    public void testUnverifiedEmailAcceptedByDefault() throws Exception {
+        configurationService.setProperty("authentication-oidc.require-verified-email", null);
+
+        Map<String, Object> userInfo = new HashMap<>();
+        userInfo.put(SUB, "perun1");
+        userInfo.put(EMAIL, "perun@email.it");
+        provider.userInfo = new HashMap<>(userInfo);
+
+        String ePersonId = login();
+        registeredEPersons.add(ePersonService.find(context, UUIDUtils.fromString(ePersonId)));
+        assertThat(ePersonService.findByEmail(context, "perun@email.it").getID().toString(), equalTo(ePersonId));
+    }
+
+    @Test
+    public void testUnverifiedEmailDoesNotLinkByDefault() throws Exception {
+        configurationService.setProperty("authentication-oidc.require-verified-email", null);
+        createEPerson("perun@email.it", true);
+
+        Map<String, Object> userInfo = new HashMap<>();
+        userInfo.put(SUB, "perun1");
+        userInfo.put(EMAIL, "perun@email.it");
+        provider.userInfo = new HashMap<>(userInfo);
+
+        // email-fallback is off by default too
+        loginRefusedAsDuplicate("perun@email.it");
+        assertThat(authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER, "perun1"), nullValue());
+    }
+
+    @Test
     public void testEPersonLinkedByEmailWhenVerificationNotRequired() throws Exception {
         configurationService.setProperty("authentication-oidc.require-verified-email", "false");
         configurationService.setProperty(ClarinOidcAuthenticationBean.EMAIL_FALLBACK_PROPERTY, "true");

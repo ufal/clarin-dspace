@@ -52,8 +52,9 @@ import org.springframework.security.oauth2.core.oidc.user.OidcUser;
  * (GET /api/authn/oidc/callback/clarin-oidc). Spring hands the verified {@link OidcUser} over in the {@link #OIDC_USER_ATTRIBUTE}
  * request attribute; this class only decides which EPerson it belongs to.
  * <p>
- * If the provider returns an email that it doesn't confirm is verified, authentication fails immediately
- * (see {@link #isEmailVerified}). Otherwise, the user is identified by the OIDC user ID (the "sub" claim by
+ * If verified emails are required (authentication-oidc.require-verified-email) and the provider returns an email
+ * that it doesn't confirm is verified, authentication fails immediately (see {@link #isEmailVerified}).
+ * Otherwise, the user is identified by the OIDC user ID (the "sub" claim by
  * default) together with the provider (the verified issuer, unless authentication-oidc.provider is set),
  * stored in the authentication_identity table, instead of the email which may change:
  * <ol>
@@ -194,11 +195,11 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
                 ? null : getAttributeAsString(userInfo, emailAttribute);
         String organization = getAttributeAsFirstValue(userInfo, getOrganizationAttribute());
 
-        // A verified ownership is required before trusting the claimed email for anything: updating the
-        // email of an already logged-in EPerson, taking over an existing account found by email (e.g. one
-        // created by Shibboleth), or registering a new EPerson under an address its owner never confirmed
-        // (which could pre-empt the real owner, e.g. blocking them from later registering/linking via
-        // Shibboleth with that same email). A blank email isn't checked, since there is nothing to verify.
+        // When required, a verified ownership is needed before trusting the claimed email for anything:
+        // updating the email of an already logged-in EPerson, linking an existing account found by email, or
+        // registering a new EPerson under an address its owner never confirmed (which could pre-empt the real
+        // owner, e.g. blocking them from later registering/linking via Shibboleth with that same email).
+        // A blank email isn't checked, since there is nothing to verify.
         if (StringUtils.isNotBlank(email) && !isEmailVerified(userInfo)) {
             log.warn("OIDC identity {} was not authenticated, because the provider did not confirm the email " +
                     "{} is verified (check authentication-oidc.user-info.email-verified)", userId, email);
@@ -610,16 +611,16 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
     }
 
     /**
-     * Returns whether a verified email is required to link the OIDC identity to an existing EPerson found by
-     * email (see {@link #isEmailVerified}). Enabled by default, since otherwise any OIDC provider that doesn't
-     * actually verify a claimed email (or a user who can set their own email at the provider) could take over
-     * an existing account, including an administrator's. Only disable this for a deployment whose provider is
-     * known not to emit the verified-email claim at all (see authentication-oidc.cfg).
+     * Returns whether a login with an email the provider doesn't confirm as verified is refused (see
+     * {@link #isEmailVerified}). Off by default: with {@value #EMAIL_FALLBACK_PROPERTY} off (the default) an email
+     * never links a login to an existing account, so an unverified one can at most pre-empt its owner's address
+     * for a new account. It must be on whenever {@value #EMAIL_FALLBACK_PROPERTY} is on (see
+     * authentication-oidc.cfg).
      *
-     * @return true unless disabled by authentication-oidc.require-verified-email
+     * @return true when enabled by authentication-oidc.require-verified-email
      */
     private boolean isVerifiedEmailRequired() {
-        return configurationService.getBooleanProperty("authentication-oidc.require-verified-email", true);
+        return configurationService.getBooleanProperty("authentication-oidc.require-verified-email", false);
     }
 
     /**
