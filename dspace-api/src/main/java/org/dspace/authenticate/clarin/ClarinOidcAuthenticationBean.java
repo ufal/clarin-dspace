@@ -27,6 +27,7 @@ import org.apache.logging.log4j.Logger;
 import org.dspace.authenticate.AuthenticationMethod;
 import org.dspace.authenticate.OidcAuthenticationBean;
 import org.dspace.authorize.AuthorizeException;
+import org.dspace.authorize.service.AuthorizeService;
 import org.dspace.content.clarin.AuthenticationIdentity;
 import org.dspace.content.clarin.ClarinUserRegistration;
 import org.dspace.content.service.clarin.AuthenticationIdentityService;
@@ -55,8 +56,10 @@ import org.springframework.security.oauth2.core.oidc.user.OidcUser;
  * stored in the authentication_identity table, instead of the email which may change:
  * <ol>
  *     <li>the EPerson linked to the (oidc, provider, user ID) identity is logged in</li>
- *     <li>otherwise the identity is linked to the existing EPerson with the same email (e.g. created by Shibboleth)
- *     </li>
+ *     <li>otherwise, if an EPerson with the same email exists, the identity is linked to it only when
+ *     {@value #EMAIL_FALLBACK_PROPERTY} is on, the EPerson has no netid and isn't an administrator (the same rule as
+ *     {@link ClarinShibAuthentication#canBindNetIdByEmail}); otherwise the login is refused as a duplicate user
+ *     (see {@link #DUPLICATE_USER_ATTRIBUTE})</li>
  *     <li>otherwise a new EPerson is registered, together with the identity and CLARIN user registration</li>
  * </ol>
  * As in {@link ClarinShibAuthentication}, the EPerson canLogIn flag is not checked, because it only controls
@@ -85,6 +88,18 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
     /** Path of the endpoint starting the login, relative to dspace.server.url. */
     public static final String START_PATH = START_BASE_PATH + "/" + REGISTRATION_ID;
 
+    /**
+     * Whether an OIDC identity may be linked to an existing EPerson found by its (verified) email. Off by default,
+     * and even when on, never to an EPerson with a netid (a Shibboleth account) or an administrator.
+     */
+    public static final String EMAIL_FALLBACK_PROPERTY = "authentication-oidc.email-fallback";
+
+    /**
+     * Request attribute holding the email of a login refused because that email belongs to an EPerson this
+     * identity must not be linked to; the REST webapp then sends the user to the UI's duplicate-user page.
+     */
+    public static final String DUPLICATE_USER_ATTRIBUTE = "oidc.clarin.duplicate-user";
+
     public static final String DEFAULT_USER_ID_ATTRIBUTE = "sub";
     public static final String DEFAULT_EMAIL_VERIFIED_ATTRIBUTE = "email_verified";
 
@@ -102,6 +117,9 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
 
     @Autowired
     private GroupService groupService;
+
+    @Autowired
+    private AuthorizeService authorizeService;
 
     @Override
     public int authenticate(Context context, String username, String password, String realm, HttpServletRequest request)
@@ -206,9 +224,16 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
                 return NO_SUCH_USER;
             }
 
-            // 2. link the identity to the existing EPerson with the same email
+            // 2. link the identity to the existing EPerson with the same email, if allowed
             EPerson ePerson = ePersonService.findByEmail(context, email);
             if (ePerson != null) {
+                if (!canLinkByEmail(context, ePerson)) {
+                    log.warn("OIDC identity {} was not linked to EPerson {} found by the email {}: linking by email " +
+                            "is off ({}), or the EPerson has a netid or is an administrator", userId,
+                            ePerson.getID(), email, EMAIL_FALLBACK_PROPERTY);
+                    request.setAttribute(DUPLICATE_USER_ATTRIBUTE, email);
+                    return BAD_ARGS;
+                }
                 return linkEPerson(context, ePerson, userInfo, provider, userId, organization, request);
             }
 
@@ -235,8 +260,9 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
         List<AuthenticationIdentity> identities =
                 authenticationIdentityService.findByEPersonAndAuthMethod(context, ePerson, AUTH_METHOD_OIDC);
         if (identities.stream().anyMatch(identity -> provider.equals(identity.getProvider()))) {
-            log.warn("EPerson {} with the same email is already linked to another identity of the OIDC provider " +
-                    "{}, the OIDC identity {} is not linked", ePerson.getID(), provider, userId);
+            log.warn("EPerson {} is already linked to another identity of the OIDC provider {}, the OIDC identity " +
+                    "{} is not linked", ePerson.getID(), provider, userId);
+            request.setAttribute(DUPLICATE_USER_ATTRIBUTE, Objects.toString(ePerson.getEmail(), ""));
             return BAD_ARGS;
         }
 
@@ -245,7 +271,7 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
             authenticationIdentityService.create(context, ePerson, AUTH_METHOD_OIDC, provider, userId);
             // commit immediately, so a concurrent first login of a different OIDC identity racing past the
             // check above to link the same EPerson+provider is caught right here as a constraint violation
-            // (authentication_identity_eperson_auth_method_provider_unique), instead of silently succeeding
+            // (authentication_identity_eperson_per_provider_unique), instead of silently succeeding
             // or surfacing much later at the end-of-request commit. Depending on the database, the actual
             // violation may surface as a plain RuntimeException rather than specifically a Hibernate
             // ConstraintViolationException (e.g. once the broken Hibernate session is touched again by the
@@ -264,9 +290,24 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
 
         ePerson = context.reloadEntity(ePerson);
         logIn(context, ePerson, userInfo, request);
-        updateOrganization(context, ePerson, organization);
-        log.info("EPerson {} found by email was linked to the OIDC identity {}", ePerson.getID(), userId);
+        // an existing registration's organization is not changed: for an account registered by Shibboleth it
+        // records the IdP, which ClarinShibAuthentication#canBindNetIdByEmail relies on
+        if (clarinUserRegistrationService.findByEPersonUUID(context, ePerson.getID()).isEmpty()) {
+            updateOrganization(context, ePerson, organization);
+        }
+        log.info("EPerson {} was linked to the OIDC identity {}", ePerson.getID(), userId);
         return SUCCESS;
+    }
+
+    /**
+     * Whether an OIDC identity may be linked to the existing EPerson found by its email: only when
+     * {@value #EMAIL_FALLBACK_PROPERTY} is on, the EPerson has no netid (it isn't a Shibboleth account) and it is
+     * not an administrator. The same rule as ClarinShibAuthentication#canBindNetIdByEmail.
+     */
+    private boolean canLinkByEmail(Context context, EPerson ePerson) throws SQLException {
+        return configurationService.getBooleanProperty(EMAIL_FALLBACK_PROPERTY, false)
+                && ePerson.getNetid() == null
+                && !authorizeService.isAdmin(context, ePerson);
     }
 
     private int registerNewEPerson(Context context, Map<String, Object> userInfo, String email, String provider,

@@ -12,6 +12,8 @@ import static org.dspace.authenticate.clarin.ClarinOidcAuthenticationBean.START_
 import static org.dspace.authenticate.clarin.ClarinOidcAuthenticationBean.START_PATH;
 
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -121,7 +123,7 @@ public final class ClarinOidcLoginConfigurer {
                 .successHandler((request, response, authentication) -> loginToDSpace(request, response,
                         authentication, authenticationManager, restAuthenticationService, configurationService))
                 .failureHandler((request, response, exception) ->
-                        fail(request, response, exception, restAuthenticationService)));
+                        fail(request, response, exception, restAuthenticationService, configurationService)));
     }
 
     /** The redirect URL sent to the provider (authentication-oidc.redirect-url is the stock plugin's). */
@@ -197,7 +199,7 @@ public final class ClarinOidcLoginConfigurer {
             dspaceAuthentication = (DSpaceAuthentication) authenticationManager.authenticate(
                     new DSpaceAuthentication());
         } catch (AuthenticationException ex) {
-            fail(request, response, ex, restAuthenticationService);
+            fail(request, response, ex, restAuthenticationService, configurationService);
             return;
         }
         restAuthenticationService.addAuthenticationDataForUser(request, response, dspaceAuthentication, true);
@@ -207,13 +209,22 @@ public final class ClarinOidcLoginConfigurer {
     }
 
     /**
-     * Same response as a failed login at the stock OidcLoginFilter: 401 with the WWW-Authenticate header.
+     * A login refused because its email belongs to an account it must not be linked to is redirected to the UI's
+     * duplicate-user page, as ClarinShibbolethLoginFilter does. Any other failure gets the same response as a
+     * failed login at the stock OidcLoginFilter: 401 with the WWW-Authenticate header.
      */
     private static void fail(HttpServletRequest request, HttpServletResponse response, AuthenticationException ex,
-                             RestAuthenticationService restAuthenticationService) throws IOException {
+                             RestAuthenticationService restAuthenticationService,
+                             ConfigurationService configurationService) throws IOException {
         HttpSession session = request.getSession(false);
         if (session != null) {
             session.invalidate();
+        }
+        Object duplicateEmail = request.getAttribute(ClarinOidcAuthenticationBean.DUPLICATE_USER_ATTRIBUTE);
+        if (duplicateEmail != null) {
+            response.sendRedirect(configurationService.getProperty("dspace.ui.url") + "/login/duplicate-user?email="
+                    + URLEncoder.encode(duplicateEmail.toString(), StandardCharsets.UTF_8));
+            return;
         }
         // the OAuth2 error code (invalid_state_parameter, invalid_nonce, invalid_id_token, ...) is safe to log
         log.warn("CLARIN OIDC login failed: {}", ex instanceof OAuth2AuthenticationException

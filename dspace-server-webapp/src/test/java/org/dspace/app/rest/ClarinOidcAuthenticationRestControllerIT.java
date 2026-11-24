@@ -26,6 +26,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.text.ParseException;
 import java.time.Instant;
@@ -52,7 +54,9 @@ import org.dspace.content.clarin.ClarinUserRegistration;
 import org.dspace.content.service.clarin.AuthenticationIdentityService;
 import org.dspace.content.service.clarin.ClarinUserRegistrationService;
 import org.dspace.eperson.EPerson;
+import org.dspace.eperson.Group;
 import org.dspace.eperson.service.EPersonService;
+import org.dspace.eperson.service.GroupService;
 import org.dspace.services.ConfigurationService;
 import org.dspace.services.factory.DSpaceServicesFactory;
 import org.dspace.util.UUIDUtils;
@@ -122,6 +126,9 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     @Autowired
     private EPersonService ePersonService;
 
+    @Autowired
+    private GroupService groupService;
+
     @BeforeClass
     public static void startProvider() throws Exception {
         provider.start();
@@ -160,6 +167,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         configurationService.setProperty("authentication-oidc.provider", PROVIDER);
         configurationService.setProperty("authentication-oidc.can-self-register", "true");
         configurationService.setProperty("authentication-oidc.require-verified-email", "true");
+        configurationService.setProperty(ClarinOidcAuthenticationBean.EMAIL_FALLBACK_PROPERTY, null);
         // disabled by default, enabled explicitly by the tests that need it
         configurationService.setProperty("authentication-oidc.user-info.groups", null);
         configurationService.setProperty("authentication-oidc.group.staff", null);
@@ -277,6 +285,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
 
     @Test
     public void testIdentityOfOtherProviderIsNotUsed() throws Exception {
+        configurationService.setProperty(ClarinOidcAuthenticationBean.EMAIL_FALLBACK_PROPERTY, "true");
         EPerson otherProviderPerson = createEPerson("other@email.it", true);
         createIdentity(otherProviderPerson, "other-provider", "perun1");
         EPerson ePerson = createEPerson("perun@email.it", true);
@@ -290,16 +299,26 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     }
 
     @Test
-    public void testEPersonLinkedByEmail() throws Exception {
-        // EPerson created by Shibboleth
-        EPerson ePerson = createEPerson("perun@email.it", false);
-        context.turnOffAuthorisationSystem();
-        ePerson.setNetid("perun@cuni.cz[https://idp.cuni.cz/idp/shibboleth]");
-        ePersonService.update(context, ePerson);
-        context.restoreAuthSystemState();
-        context.commit();
+    public void testEPersonNotLinkedByEmailByDefault() throws Exception {
+        // a local password account
+        EPerson ePerson = createEPerson("perun@email.it", true);
 
         mockUserInfo("perun1", "perun@email.it", null);
+
+        loginRefusedAsDuplicate("perun@email.it");
+
+        assertThat(authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER, "perun1"), nullValue());
+        assertThat(ePersonService.findByEmail(context, "perun@email.it").getID(), equalTo(ePerson.getID()));
+    }
+
+    @Test
+    public void testEPersonLinkedByEmailWhenEmailFallbackOn() throws Exception {
+        configurationService.setProperty(ClarinOidcAuthenticationBean.EMAIL_FALLBACK_PROPERTY, "true");
+        EPerson ePerson = createEPerson("perun@email.it", true);
+        // e.g. registered by a Shibboleth IdP that sends no netid: the organization records the IdP
+        createRegistration(ePerson, "https://idp.example.org/idp/shibboleth");
+
+        mockUserInfo("perun1", "perun@email.it", "New University");
 
         assertThat(login(), equalTo(ePerson.getID().toString()));
 
@@ -308,10 +327,10 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         assertThat(identity, notNullValue());
         assertThat(identity.getEPerson(), equalTo(ePerson));
         assertThat(identity.getCreated(), notNullValue());
-
-        // Shibboleth netid is not changed
-        ePerson = context.reloadEntity(ePerson);
-        assertThat(ePerson.getNetid(), equalTo("perun@cuni.cz[https://idp.cuni.cz/idp/shibboleth]"));
+        // linking doesn't change the existing registration's organization
+        List<ClarinUserRegistration> registrations = findRegistrations(ePerson);
+        assertThat(registrations, hasSize(1));
+        assertThat(registrations.get(0).getOrganization(), equalTo("https://idp.example.org/idp/shibboleth"));
 
         // next login is by sub, even if the email has changed
         mockUserInfo("perun1", "new@email.it", null);
@@ -319,13 +338,45 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     }
 
     @Test
+    public void testShibbolethEPersonNotLinkedByEmail() throws Exception {
+        configurationService.setProperty(ClarinOidcAuthenticationBean.EMAIL_FALLBACK_PROPERTY, "true");
+        EPerson ePerson = createEPerson("perun@email.it", false);
+        setNetid(ePerson, "perun@cuni.cz[https://idp.cuni.cz/idp/shibboleth]");
+
+        mockUserInfo("perun1", "perun@email.it", null);
+
+        loginRefusedAsDuplicate("perun@email.it");
+
+        assertThat(authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER, "perun1"), nullValue());
+        assertThat(context.reloadEntity(ePerson).getNetid(),
+                equalTo("perun@cuni.cz[https://idp.cuni.cz/idp/shibboleth]"));
+    }
+
+    @Test
+    public void testAdministratorNotLinkedByEmail() throws Exception {
+        configurationService.setProperty(ClarinOidcAuthenticationBean.EMAIL_FALLBACK_PROPERTY, "true");
+        EPerson ePerson = createEPerson("perun@email.it", true);
+        context.turnOffAuthorisationSystem();
+        groupService.addMember(context, groupService.findByName(context, Group.ADMIN), ePerson);
+        context.restoreAuthSystemState();
+        context.commit();
+
+        mockUserInfo("perun1", "perun@email.it", null);
+
+        loginRefusedAsDuplicate("perun@email.it");
+
+        assertThat(authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER, "perun1"), nullValue());
+    }
+
+    @Test
     public void testEPersonNotLinkedWhenAlreadyLinkedToOtherIdentity() throws Exception {
+        configurationService.setProperty(ClarinOidcAuthenticationBean.EMAIL_FALLBACK_PROPERTY, "true");
         EPerson ePerson = createEPerson("perun@email.it", true);
         createIdentity(ePerson, PROVIDER, "other-sub");
 
         mockUserInfo("perun1", "perun@email.it", null);
 
-        loginFails();
+        loginRefusedAsDuplicate("perun@email.it");
 
         assertThat(authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER, "perun1"), nullValue());
     }
@@ -363,6 +414,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     @Test
     public void testEPersonLinkedByEmailWhenVerificationNotRequired() throws Exception {
         configurationService.setProperty("authentication-oidc.require-verified-email", "false");
+        configurationService.setProperty(ClarinOidcAuthenticationBean.EMAIL_FALLBACK_PROPERTY, "true");
         EPerson ePerson = createEPerson("perun@email.it", true);
 
         Map<String, Object> userInfo = new HashMap<>();
@@ -989,6 +1041,35 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         completeLogin(actions -> actions
                 .andExpect(status().isUnauthorized())
                 .andExpect(cookie().doesNotExist("Authorization-cookie")));
+    }
+
+    /** A refused login whose email belongs to an account it must not take over goes to the duplicate-user page. */
+    private void loginRefusedAsDuplicate(String email) throws Exception {
+        completeLogin(actions -> actions
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl(configurationService.getProperty("dspace.ui.url")
+                        + "/login/duplicate-user?email=" + URLEncoder.encode(email, StandardCharsets.UTF_8)))
+                .andExpect(cookie().doesNotExist("Authorization-cookie")));
+    }
+
+    private void setNetid(EPerson ePerson, String netid) throws Exception {
+        context.turnOffAuthorisationSystem();
+        ePerson.setNetid(netid);
+        ePersonService.update(context, ePerson);
+        context.restoreAuthSystemState();
+        context.commit();
+    }
+
+    private void createRegistration(EPerson ePerson, String organization) throws Exception {
+        context.turnOffAuthorisationSystem();
+        ClarinUserRegistration registration = new ClarinUserRegistration();
+        registration.setConfirmation(true);
+        registration.setEmail(ePerson.getEmail());
+        registration.setPersonID(ePerson.getID());
+        registration.setOrganization(organization);
+        clarinUserRegistrationService.create(context, registration);
+        context.restoreAuthSystemState();
+        context.commit();
     }
 
     private List<ClarinUserRegistration> findRegistrations(EPerson ePerson) throws Exception {
