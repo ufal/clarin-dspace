@@ -17,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -51,6 +52,7 @@ import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 import org.springframework.security.oauth2.core.oidc.OidcScopes;
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 
 /**
@@ -166,7 +168,11 @@ public final class ClarinOidcLoginConfigurer {
         SecurityContextHolder.clearContext();
 
         request.setAttribute(OidcAuthenticationBean.OIDC_AUTH_ATTRIBUTE, OidcAuthenticationBean.OIDC_AUTH_ATTRIBUTE);
-        request.setAttribute(ClarinOidcAuthenticationBean.OIDC_USER_ATTRIBUTE, oidcAuthentication.getPrincipal());
+        // plain claim maps, so that dspace-api doesn't depend on Spring Security's OAuth2 classes
+        OidcUser oidcUser = (OidcUser) oidcAuthentication.getPrincipal();
+        request.setAttribute(ClarinOidcAuthenticationBean.ID_TOKEN_CLAIMS_ATTRIBUTE, oidcUser.getIdToken().getClaims());
+        request.setAttribute(ClarinOidcAuthenticationBean.USER_INFO_CLAIMS_ATTRIBUTE,
+                oidcUser.getUserInfo() != null ? oidcUser.getUserInfo().getClaims() : Map.of());
         DSpaceAuthentication dspaceAuthentication;
         try {
             // NOTE: the authentication is implicit (see ClarinOidcAuthenticationBean), so it's empty

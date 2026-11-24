@@ -41,7 +41,6 @@ import org.dspace.eperson.service.EPersonService;
 import org.dspace.eperson.service.GroupService;
 import org.dspace.services.ConfigurationService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 
 /**
  * CLARIN extension of the OIDC authentication (ufal/clarin-dspace#1140).
@@ -49,8 +48,9 @@ import org.springframework.security.oauth2.core.oidc.user.OidcUser;
  * The OIDC protocol (discovery, state, nonce, PKCE, code exchange, ID token and UserInfo validation) is done by
  * Spring Security's oauth2Login() in the REST webapp (ClarinOidcLoginConfigurer): the login is started at
  * {@link #START_PATH} (see {@link #loginPageURL}) and completed at the configured redirect URL
- * (GET /api/authn/oidc/callback/clarin-oidc). Spring hands the verified {@link OidcUser} over in the {@link #OIDC_USER_ATTRIBUTE}
- * request attribute; this class only decides which EPerson it belongs to.
+ * (GET /api/authn/oidc/callback/clarin-oidc). The webapp hands the claims of the verified ID token and UserInfo
+ * response over in the {@link #ID_TOKEN_CLAIMS_ATTRIBUTE} and {@link #USER_INFO_CLAIMS_ATTRIBUTE} request
+ * attributes; this class only decides which EPerson they belong to.
  * <p>
  * If verified emails are required (authentication-oidc.require-verified-email) and the provider returns an email
  * that it doesn't confirm is verified, authentication fails immediately (see {@link #isEmailVerified}).
@@ -80,10 +80,16 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
     private static final String OIDC_AUTHENTICATED = "oidc.authenticated";
 
     /**
-     * Request attribute holding the {@link OidcUser} verified by Spring Security (ID token and UserInfo), set
-     * only by the REST webapp after a completed OIDC login. Request attributes can't be set by the client.
+     * Request attribute holding the claims (Map&lt;String, Object&gt;) of the ID token verified by Spring Security,
+     * set only by the REST webapp after a completed OIDC login. Request attributes can't be set by the client.
      */
-    public static final String OIDC_USER_ATTRIBUTE = "oidc.clarin.user";
+    public static final String ID_TOKEN_CLAIMS_ATTRIBUTE = "oidc.clarin.id-token-claims";
+
+    /**
+     * Request attribute holding the claims (Map&lt;String, Object&gt;) of the UserInfo response, whose sub Spring
+     * Security has matched against the ID token's, set together with {@link #ID_TOKEN_CLAIMS_ATTRIBUTE}.
+     */
+    public static final String USER_INFO_CLAIMS_ATTRIBUTE = "oidc.clarin.user-info-claims";
 
     /** Spring client registration ID of the CLARIN OIDC provider. */
     public static final String REGISTRATION_ID = "clarin-oidc";
@@ -140,16 +146,29 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
             return NO_SUCH_USER;
         }
 
-        Object oidcUser = request.getAttribute(OIDC_USER_ATTRIBUTE);
-        if (!(oidcUser instanceof OidcUser)) {
+        Object idTokenClaims = request.getAttribute(ID_TOKEN_CLAIMS_ATTRIBUTE);
+        if (!(idTokenClaims instanceof Map)) {
             // not the end of a login completed by Spring Security's OIDC client
             return NO_SUCH_USER;
         }
-        OidcUser user = (OidcUser) oidcUser;
+        Object userInfoClaims = request.getAttribute(USER_INFO_CLAIMS_ATTRIBUTE);
+        Map<String, Object> idToken = toClaims(idTokenClaims);
+        Map<String, Object> userInfo = userInfoClaims instanceof Map ? toClaims(userInfoClaims) : Map.of();
 
+        // the verified issuer of the ID token
+        Object issuer = idToken.get("iss");
+        if (issuer == null || StringUtils.isBlank(issuer.toString())) {
+            log.warn("Unable to authenticate using OIDC because the ID token has no issuer.");
+            return NO_SUCH_USER;
+        }
         String provider = StringUtils.defaultIfBlank(configurationService.getProperty("authentication-oidc.provider"),
-                user.getIdToken().getIssuer().toString());
-        return authenticateWithClaims(context, mergeClaims(user), provider, request);
+                issuer.toString());
+        return authenticateWithClaims(context, mergeClaims(idToken, userInfo), provider, request);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> toClaims(Object claims) {
+        return (Map<String, Object>) claims;
     }
 
     /**
@@ -158,9 +177,7 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
      * email and its verification flag are always taken together from the same source: an email_verified=true
      * of the ID token must never vouch for a different email returned by UserInfo.
      */
-    private Map<String, Object> mergeClaims(OidcUser user) {
-        Map<String, Object> idTokenClaims = user.getIdToken().getClaims();
-        Map<String, Object> userInfoClaims = user.getUserInfo() != null ? user.getUserInfo().getClaims() : Map.of();
+    private Map<String, Object> mergeClaims(Map<String, Object> idTokenClaims, Map<String, Object> userInfoClaims) {
         Map<String, Object> claims = new HashMap<>(idTokenClaims);
         claims.putAll(userInfoClaims);
 

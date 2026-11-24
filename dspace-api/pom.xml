@@ -920,21 +920,6 @@
             </exclusions>
         </dependency>
 
-        <!-- Used by the CLARIN OIDC extension: the whole authorization code flow (discovery, state, nonce,
-             PKCE, code exchange, ID token validation, UserInfo) is done by Spring Security's oauth2Login() in
-             dspace-server-webapp (ClarinOidcLoginConfigurer); dspace-api itself only uses OidcUser.
-             spring-security-oauth2-jose is needed at runtime by OidcIdTokenDecoderFactory. -->
-        <dependency>
-            <groupId>org.springframework.security</groupId>
-            <artifactId>spring-security-oauth2-client</artifactId>
-            <version>${spring-security.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.security</groupId>
-            <artifactId>spring-security-oauth2-jose</artifactId>
-            <version>${spring-security.version}</version>
-        </dependency>
-
     </dependencies>
 
     <dependencyManagement>
