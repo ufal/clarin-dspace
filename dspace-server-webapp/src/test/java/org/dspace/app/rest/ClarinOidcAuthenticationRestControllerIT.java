@@ -336,9 +336,12 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         assertThat(registrations, hasSize(1));
         assertThat(registrations.get(0).getOrganization(), equalTo("https://idp.example.org/idp/shibboleth"));
 
-        // next login is by sub, even if the email has changed
-        mockUserInfo("perun1", "new@email.it", null);
+        // next login is by sub, even if the email has changed; it doesn't change the organization either
+        mockUserInfo("perun1", "new@email.it", "Newer University");
         assertThat(login(), equalTo(ePerson.getID().toString()));
+        context.reloadEntity(registrations.get(0));
+        assertThat(findRegistrations(ePerson).get(0).getOrganization(),
+                equalTo("https://idp.example.org/idp/shibboleth"));
     }
 
     @Test
@@ -641,7 +644,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     }
 
     @Test
-    public void testOrganizationUpdatedOnLogin() throws Exception {
+    public void testOrganizationNotUpdatedOnLaterLogin() throws Exception {
         EPerson ePerson = createEPerson("perun@email.it", true);
         createIdentity(ePerson, PROVIDER, "perun1");
 
@@ -652,13 +655,14 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         assertThat(registrations, hasSize(1));
         assertThat(registrations.get(0).getOrganization(), equalTo("Old University"));
 
+        // as with Shibboleth, the organization is only set when the registration is created
         mockUserInfo("perun1", "perun@email.it", "New University");
         login();
 
         context.reloadEntity(registrations.get(0));
         registrations = findRegistrations(ePerson);
         assertThat(registrations, hasSize(1));
-        assertThat(registrations.get(0).getOrganization(), equalTo("New University"));
+        assertThat(registrations.get(0).getOrganization(), equalTo("Old University"));
     }
 
     @Test

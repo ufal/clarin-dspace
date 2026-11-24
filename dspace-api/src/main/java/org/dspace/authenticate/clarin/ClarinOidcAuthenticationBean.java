@@ -214,11 +214,11 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
                 logIn(context, ePerson, userInfo, request);
                 // current user is set to the identity owner, who is allowed to update it
                 authenticationIdentityService.updateLastLogin(context, identity);
-                // neither is updated when the provider doesn't return an email this time, since the
-                // organization is only meaningful together with a (verified) email identifying its owner
+                // the email is updated, and a missing registration created, only when the provider returns a
+                // (verified) email this time; the organization of an existing registration is never changed
                 if (StringUtils.isNotBlank(email)) {
                     updateEmail(context, ePerson, email);
-                    updateOrganization(context, ePerson, organization);
+                    createRegistrationIfMissing(context, ePerson, organization);
                 }
                 log.info("EPerson {} logged in via OIDC identity {}", ePerson.getID(), userId);
                 return SUCCESS;
@@ -311,11 +311,7 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
 
         ePerson = context.reloadEntity(ePerson);
         logIn(context, ePerson, userInfo, request);
-        // an existing registration's organization is not changed: for an account registered by Shibboleth it
-        // records the IdP, which ClarinShibAuthentication#canBindNetIdByEmail relies on
-        if (clarinUserRegistrationService.findByEPersonUUID(context, ePerson.getID()).isEmpty()) {
-            updateOrganization(context, ePerson, organization);
-        }
+        createRegistrationIfMissing(context, ePerson, organization);
         log.info("EPerson {} was linked to the OIDC identity {}", ePerson.getID(), userId);
         return SUCCESS;
     }
@@ -542,37 +538,25 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
     }
 
     /**
-     * Update the organization of the CLARIN user registration, when provided by the OIDC provider.
-     * The registration is created when missing, e.g. for the EPerson created by an administrator.
+     * Create the CLARIN user registration when the EPerson has none (e.g. an EPerson created by an administrator),
+     * with the organization provided by the OIDC provider, or "Unknown". The organization of an existing
+     * registration is never changed, as with Shibboleth, which records the IdP there when it registers an account
+     * (ClarinShibAuthentication#canBindNetIdByEmail relies on it).
      */
-    private void updateOrganization(Context context, EPerson ePerson, String organization)
+    private void createRegistrationIfMissing(Context context, EPerson ePerson, String organization)
             throws SQLException, AuthorizeException {
-
-        if (StringUtils.isBlank(organization)) {
+        context.turnOffAuthorisationSystem();
+        try {
             if (!clarinUserRegistrationService.findByEPersonUUID(context, ePerson.getID()).isEmpty()) {
                 return;
             }
-            organization = ClarinUserRegistration.UNKNOWN_USER_REGISTRATION;
-        }
-        context.turnOffAuthorisationSystem();
-        try {
-            List<ClarinUserRegistration> registrations =
-                    clarinUserRegistrationService.findByEPersonUUID(context, ePerson.getID());
-            if (registrations.isEmpty()) {
-                ClarinUserRegistration clarinUserRegistration = new ClarinUserRegistration();
-                clarinUserRegistration.setConfirmation(true);
-                clarinUserRegistration.setEmail(ePerson.getEmail());
-                clarinUserRegistration.setPersonID(ePerson.getID());
-                clarinUserRegistration.setOrganization(organization);
-                clarinUserRegistrationService.create(context, clarinUserRegistration);
-                return;
-            }
-            for (ClarinUserRegistration registration : registrations) {
-                if (!organization.equals(registration.getOrganization())) {
-                    registration.setOrganization(organization);
-                    clarinUserRegistrationService.update(context, registration);
-                }
-            }
+            ClarinUserRegistration clarinUserRegistration = new ClarinUserRegistration();
+            clarinUserRegistration.setConfirmation(true);
+            clarinUserRegistration.setEmail(ePerson.getEmail());
+            clarinUserRegistration.setPersonID(ePerson.getID());
+            clarinUserRegistration.setOrganization(StringUtils.isNotBlank(organization) ? organization :
+                    ClarinUserRegistration.UNKNOWN_USER_REGISTRATION);
+            clarinUserRegistrationService.create(context, clarinUserRegistration);
         } finally {
             context.restoreAuthSystemState();
         }
