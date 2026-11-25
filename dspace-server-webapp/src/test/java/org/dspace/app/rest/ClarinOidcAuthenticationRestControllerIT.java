@@ -61,6 +61,7 @@ import org.dspace.eperson.service.GroupService;
 import org.dspace.services.ConfigurationService;
 import org.dspace.services.factory.DSpaceServicesFactory;
 import org.dspace.util.UUIDUtils;
+import org.hamcrest.Matcher;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -91,7 +92,9 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     private final static String FIRST_NAME = "given_name";
     private final static String LAST_NAME = "family_name";
     private final static String ORGANIZATION = "voperson_external_affiliation";
-    private final static String GROUPS = "eduperson_entitlement";
+    private final static String ENTITLEMENT = "eduperson_entitlement";
+    private final static String AFFILIATION = "voperson_external_affiliation";
+    private final static String CLAIM_MAPPING = ClarinOidcAuthenticationBean.CLAIM_GROUP_MAPPING_PREFIX;
     private final static String EMAIL_VERIFIED = "email_verified";
     private final static String EXTERNAL_IDS = "voperson_external_id";
     private final static String SHIB_NETID = "perun@cuni.cz[https://idp.cuni.cz/idp/shibboleth]";
@@ -173,8 +176,9 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         configurationService.setProperty(ClarinOidcAuthenticationBean.EMAIL_FALLBACK_PROPERTY, null);
         configurationService.setProperty("authentication-oidc.user-info.external-ids", null);
         // disabled by default, enabled explicitly by the tests that need it
-        configurationService.setProperty("authentication-oidc.user-info.groups", null);
-        configurationService.setProperty("authentication-oidc.group.staff", null);
+        for (String key : configurationService.getPropertyKeys("authentication-oidc.claim")) {
+            configurationService.setProperty(key, null);
+        }
         configurationService.setProperty("authentication-oidc.default.auth.group", null);
 
         configurationService.setProperty(PLUGIN_SEQUENCE, CLARIN_PLUGIN_SEQUENCE);
@@ -743,150 +747,108 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     }
 
     @Test
-    public void testSpecialGroupsAssignedFromGroups() throws Exception {
-        configurationService.setProperty("authentication-oidc.user-info.groups", GROUPS);
-        configurationService.setProperty("authentication-oidc.group.staff", "Staff Test Group");
+    public void testSpecialGroupsAssignedFromClaim() throws Exception {
+        configurationService.setProperty(CLAIM_MAPPING + ENTITLEMENT, "staff => Staff Test Group");
+        createGroups("Staff Test Group");
 
-        context.turnOffAuthorisationSystem();
-        GroupBuilder.createGroup(context).withName("Staff Test Group").build();
-        context.restoreAuthSystemState();
+        mockUserInfoWithClaim(ENTITLEMENT, List.of("staff", "unmapped-group"));
 
-        Map<String, Object> userInfo = new HashMap<>();
-        userInfo.put(SUB, "perun1");
-        userInfo.put(EMAIL, "perun@email.it");
-        userInfo.put(GROUPS, List.of("staff", "unmapped-group"));
-        userInfo.put(EMAIL_VERIFIED, true);
-        provider.userInfo = new HashMap<>(userInfo);
-
-        MvcResult mvcResult = loginResult();
-
-        registeredEPersons.add(ePersonService.find(context, UUIDUtils.fromString(
-                getEPersonIdFromAuthorizationCookie(mvcResult))));
-
-        String token = getTokenFromAuthorizationCookie(mvcResult);
-        getClient(token).perform(get("/api/" + AuthnRest.CATEGORY + "/status/specialGroups")
-                        .param("projection", "full"))
-                .andExpect(status().isOk())
-                .andExpect(content().contentType(contentType))
-                .andExpect(jsonPath("$._embedded.specialGroups",
-                        containsInAnyOrder(GroupMatcher.matchGroupWithName("Staff Test Group"))));
+        assertSpecialGroups(loginResult(), containsInAnyOrder(GroupMatcher.matchGroupWithName("Staff Test Group")));
     }
 
     @Test
-    public void testGroupMappingStripsAuthoritySuffixFromEntitlementUrn() throws Exception {
-        configurationService.setProperty("authentication-oidc.user-info.groups", GROUPS);
-        configurationService.setProperty("authentication-oidc.group.urn:geant:cesnet.cz:group:einfra",
-                "eInfra Users");
-        configurationService.setProperty("authentication-oidc.group.urn:geant:cesnet.cz:group:einfra:members",
-                "eInfra Members");
+    public void testGroupMappingOfSeveralClaims() throws Exception {
+        configurationService.setProperty(CLAIM_MAPPING + ENTITLEMENT, "staff => Staff Test Group");
+        configurationService.setProperty(CLAIM_MAPPING + AFFILIATION,
+                "member@cuni.cz => Members, member@cuni.cz => CUNI Members");
+        // a single string claim, like Keycloak's groups of a user in one group
+        configurationService.setProperty(CLAIM_MAPPING + "groups", "testers => Testers, editors => Editors");
+        createGroups("Staff Test Group", "Members", "CUNI Members", "Testers", "Editors");
 
-        context.turnOffAuthorisationSystem();
-        GroupBuilder.createGroup(context).withName("eInfra Users").build();
-        GroupBuilder.createGroup(context).withName("eInfra Members").build();
-        context.restoreAuthSystemState();
+        Map<String, Object> userInfo = userInfoWithEmail();
+        userInfo.put(ENTITLEMENT, List.of("staff"));
+        userInfo.put(AFFILIATION, List.of("member@cuni.cz"));
+        userInfo.put("groups", "testers");
+        provider.userInfo = userInfo;
 
-        Map<String, Object> userInfo = new HashMap<>();
-        userInfo.put(SUB, "perun1");
-        userInfo.put(EMAIL, "perun@email.it");
-        userInfo.put(GROUPS, List.of(
+        assertSpecialGroups(loginResult(), containsInAnyOrder(
+                GroupMatcher.matchGroupWithName("Staff Test Group"), GroupMatcher.matchGroupWithName("Members"),
+                GroupMatcher.matchGroupWithName("CUNI Members"), GroupMatcher.matchGroupWithName("Testers")));
+    }
+
+    @Test
+    public void testGroupMappingWithScopeAndRoleWildcards() throws Exception {
+        configurationService.setProperty(CLAIM_MAPPING + AFFILIATION, "member@* => Members, *@cuni.cz => CUNI, "
+                + "staff@* => Staff, *@mff.cuni.cz => MFF, affiliate@einfra.cesnet.cz => eInfra, *@* => Everyone");
+        createGroups("Members", "CUNI", "Staff", "MFF", "eInfra", "Everyone");
+
+        mockUserInfoWithClaim(AFFILIATION, List.of("member@cuni.cz", "affiliate@google.extidp.cesnet.cz"));
+
+        assertSpecialGroups(loginResult(), containsInAnyOrder(GroupMatcher.matchGroupWithName("Members"),
+                GroupMatcher.matchGroupWithName("CUNI")));
+    }
+
+    @Test
+    public void testGroupMappingIgnoresAuthorityOfEntitlementUrn() throws Exception {
+        configurationService.setProperty(CLAIM_MAPPING + ENTITLEMENT,
+                "urn:geant:cesnet.cz:group:einfra => eInfra Users, "
+                        + "urn:geant:cesnet.cz:group:einfra:members#another authority => eInfra Members, "
+                        + "urn:geant:cesnet.cz:group:einfra:admins => eInfra Admins");
+        createGroups("eInfra Users", "eInfra Members", "eInfra Admins");
+
+        // AARC-G069 2.3: the authority (from '#' on) is ignored when comparing; a role is a different value
+        mockUserInfoWithClaim(ENTITLEMENT, List.of(
                 "urn:geant:cesnet.cz:group:einfra#Perun Identity and Management System - Maintenance",
-                "urn:geant:cesnet.cz:group:einfra:members#Perun Identity and Management System - Maintenance"));
-        userInfo.put(EMAIL_VERIFIED, true);
-        provider.userInfo = new HashMap<>(userInfo);
+                "urn:geant:cesnet.cz:group:einfra:members#Perun Identity and Management System - Maintenance",
+                "urn:geant:cesnet.cz:group:einfra:admins:role=manager#Perun Identity and Management System"));
 
-        MvcResult mvcResult = loginResult();
-
-        registeredEPersons.add(ePersonService.find(context, UUIDUtils.fromString(
-                getEPersonIdFromAuthorizationCookie(mvcResult))));
-
-        String token = getTokenFromAuthorizationCookie(mvcResult);
-        getClient(token).perform(get("/api/" + AuthnRest.CATEGORY + "/status/specialGroups")
-                        .param("projection", "full"))
-                .andExpect(status().isOk())
-                .andExpect(content().contentType(contentType))
-                .andExpect(jsonPath("$._embedded.specialGroups",
-                        containsInAnyOrder(GroupMatcher.matchGroupWithName("eInfra Users"),
-                                GroupMatcher.matchGroupWithName("eInfra Members"))));
+        assertSpecialGroups(loginResult(), containsInAnyOrder(GroupMatcher.matchGroupWithName("eInfra Users"),
+                GroupMatcher.matchGroupWithName("eInfra Members")));
     }
 
     @Test
     public void testDefaultAuthGroupAssignedOnLogin() throws Exception {
         configurationService.setProperty("authentication-oidc.default.auth.group", "Authenticated");
-        configurationService.setProperty("authentication-oidc.user-info.groups", GROUPS);
-        configurationService.setProperty("authentication-oidc.group.staff", "Staff Test Group");
+        configurationService.setProperty(CLAIM_MAPPING + ENTITLEMENT, "staff => Staff Test Group");
+        createGroups("Authenticated", "Staff Test Group");
 
-        context.turnOffAuthorisationSystem();
-        GroupBuilder.createGroup(context).withName("Authenticated").build();
-        GroupBuilder.createGroup(context).withName("Staff Test Group").build();
-        context.restoreAuthSystemState();
+        mockUserInfoWithClaim(ENTITLEMENT, List.of("staff"));
 
-        Map<String, Object> userInfo = new HashMap<>();
-        userInfo.put(SUB, "perun1");
-        userInfo.put(EMAIL, "perun@email.it");
-        userInfo.put(GROUPS, List.of("staff"));
-        userInfo.put(EMAIL_VERIFIED, true);
-        provider.userInfo = new HashMap<>(userInfo);
-
-        MvcResult mvcResult = loginResult();
-
-        registeredEPersons.add(ePersonService.find(context, UUIDUtils.fromString(
-                getEPersonIdFromAuthorizationCookie(mvcResult))));
-
-        String token = getTokenFromAuthorizationCookie(mvcResult);
-        getClient(token).perform(get("/api/" + AuthnRest.CATEGORY + "/status/specialGroups")
-                        .param("projection", "full"))
-                .andExpect(status().isOk())
-                .andExpect(content().contentType(contentType))
-                .andExpect(jsonPath("$._embedded.specialGroups",
-                        containsInAnyOrder(GroupMatcher.matchGroupWithName("Authenticated"),
-                                GroupMatcher.matchGroupWithName("Staff Test Group"))));
+        assertSpecialGroups(loginResult(), containsInAnyOrder(GroupMatcher.matchGroupWithName("Authenticated"),
+                GroupMatcher.matchGroupWithName("Staff Test Group")));
     }
 
     @Test
     public void testNoDefaultAuthGroupWhenNotConfigured() throws Exception {
-        context.turnOffAuthorisationSystem();
-        GroupBuilder.createGroup(context).withName("Authenticated").build();
-        context.restoreAuthSystemState();
+        createGroups("Authenticated");
 
         mockUserInfo("perun1", "perun@email.it", null);
 
-        MvcResult mvcResult = loginResult();
-
-        registeredEPersons.add(ePersonService.find(context, UUIDUtils.fromString(
-                getEPersonIdFromAuthorizationCookie(mvcResult))));
-
-        String token = getTokenFromAuthorizationCookie(mvcResult);
-        getClient(token).perform(get("/api/" + AuthnRest.CATEGORY + "/status/specialGroups")
-                        .param("projection", "full"))
-                .andExpect(status().isOk())
-                .andExpect(content().contentType(contentType))
-                .andExpect(jsonPath("$._embedded.specialGroups", empty()));
+        assertSpecialGroups(loginResult(), empty());
     }
 
     @Test
-    public void testNoSpecialGroupsWhenGroupsAttributeNotConfigured() throws Exception {
-        context.turnOffAuthorisationSystem();
-        GroupBuilder.createGroup(context).withName("Staff Test Group").build();
-        context.restoreAuthSystemState();
+    public void testNoSpecialGroupsWithoutClaimMapping() throws Exception {
+        createGroups("Staff Test Group");
 
-        Map<String, Object> userInfo = new HashMap<>();
-        userInfo.put(SUB, "perun1");
-        userInfo.put(EMAIL, "perun@email.it");
-        userInfo.put(GROUPS, List.of("staff"));
-        userInfo.put(EMAIL_VERIFIED, true);
-        provider.userInfo = new HashMap<>(userInfo);
+        mockUserInfoWithClaim(ENTITLEMENT, List.of("staff"));
 
-        MvcResult mvcResult = loginResult();
+        assertSpecialGroups(loginResult(), empty());
+    }
 
-        registeredEPersons.add(ePersonService.find(context, UUIDUtils.fromString(
-                getEPersonIdFromAuthorizationCookie(mvcResult))));
+    @Test
+    public void testOrganizationFromIssuer() throws Exception {
+        configurationService.setProperty("authentication-oidc.user-info.organization", "iss");
+        mockUserInfo("perun1", "perun@email.it", "Charles University");
 
-        String token = getTokenFromAuthorizationCookie(mvcResult);
-        getClient(token).perform(get("/api/" + AuthnRest.CATEGORY + "/status/specialGroups")
-                        .param("projection", "full"))
-                .andExpect(status().isOk())
-                .andExpect(content().contentType(contentType))
-                .andExpect(jsonPath("$._embedded.specialGroups", empty()));
+        EPerson ePerson = ePersonService.find(context, UUIDUtils.fromString(login()));
+        registeredEPersons.add(ePerson);
+        ePersons.add(ePerson);
+
+        // the ID token's iss: the provider that sent the login, like the IdP entityID stored by Shibboleth
+        List<ClarinUserRegistration> registrations = findRegistrations(ePerson);
+        assertThat(registrations, hasSize(1));
+        assertThat(registrations.get(0).getOrganization(), equalTo(provider.getIssuer()));
     }
 
     @Test
@@ -1247,6 +1209,38 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         } finally {
             context.restoreAuthSystemState();
         }
+    }
+
+    private Map<String, Object> userInfoWithEmail() {
+        Map<String, Object> userInfo = new HashMap<>();
+        userInfo.put(SUB, "perun1");
+        userInfo.put(EMAIL, "perun@email.it");
+        userInfo.put(EMAIL_VERIFIED, true);
+        return userInfo;
+    }
+
+    private void mockUserInfoWithClaim(String claim, Object value) {
+        Map<String, Object> userInfo = userInfoWithEmail();
+        userInfo.put(claim, value);
+        provider.userInfo = userInfo;
+    }
+
+    private void createGroups(String... names) throws SQLException {
+        context.turnOffAuthorisationSystem();
+        for (String name : names) {
+            GroupBuilder.createGroup(context).withName(name).build();
+        }
+        context.restoreAuthSystemState();
+    }
+
+    private void assertSpecialGroups(MvcResult mvcResult, Matcher<? extends Iterable<?>> groups) throws Exception {
+        registeredEPersons.add(ePersonService.find(context, UUIDUtils.fromString(
+                getEPersonIdFromAuthorizationCookie(mvcResult))));
+        getClient(getTokenFromAuthorizationCookie(mvcResult))
+                .perform(get("/api/" + AuthnRest.CATEGORY + "/status/specialGroups").param("projection", "full"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(contentType))
+                .andExpect(jsonPath("$._embedded.specialGroups", groups));
     }
 
     private void mockUserInfo(String sub, String email, String organization) {

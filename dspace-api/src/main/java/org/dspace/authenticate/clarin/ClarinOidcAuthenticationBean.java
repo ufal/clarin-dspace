@@ -106,6 +106,9 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
      */
     public static final String EMAIL_FALLBACK_PROPERTY = "authentication-oidc.email-fallback";
 
+    /** authentication-oidc.claim.&lt;claim&gt; = VALUE =&gt; GROUP, ... maps claim values to special groups. */
+    public static final String CLAIM_GROUP_MAPPING_PREFIX = "authentication-oidc.claim.";
+
     /**
      * Request attribute holding the email of a login refused because that email belongs to an EPerson this
      * identity must not be linked to; the REST webapp then sends the user to the UI's duplicate-user page.
@@ -430,28 +433,34 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
     }
 
     /**
-     * Map the OIDC groups (attribute configured by authentication-oidc.user-info.groups) to DSpace groups
-     * (authentication-oidc.group.&lt;group value&gt;), and add the default authentication group
-     * (authentication-oidc.default.auth.group), caching them all as the context's special groups,
-     * the same way {@link ClarinShibAuthentication} does for Shibboleth attributes.
-     * The OIDC group claims are only available here, during the user info exchange, so unlike
-     * Shibboleth the special groups cannot be recomputed later from the request on every call
-     * to {@link #getSpecialGroups}.
+     * Map claim values to DSpace groups and add the default authentication group
+     * (authentication-oidc.default.auth.group), caching them all as the context's special groups, like
+     * {@link ShibGroup} does for Shibboleth attributes. Each authentication-oidc.claim.&lt;claim&gt; property
+     * is a list of VALUE =&gt; GROUP rules, the Shibboleth authentication-shibboleth.header.&lt;attribute&gt;
+     * syntax; see {@link #matchesClaimValue} for how VALUE is matched.
+     * The claims are only available here, during the login, so unlike Shibboleth the special groups cannot be
+     * recomputed later from the request on every call to {@link #getSpecialGroups}.
      */
-    private void resolveSpecialGroups(Context context, Map<String, Object> userInfo) throws SQLException {
-        String groupsAttribute = getGroupsAttribute();
-        if (StringUtils.isNotBlank(groupsAttribute)) {
-            for (String rawGroup : getAttributeAsList(userInfo, groupsAttribute)) {
-                String externalGroup = stripAuthoritySuffix(rawGroup);
-                String[] groupNames =
-                        configurationService.getArrayProperty("authentication-oidc.group." + externalGroup);
-                if (groupNames == null || groupNames.length == 0) {
-                    log.debug("No DSpace group mapping found for the OIDC group '{}', check " +
-                            "authentication-oidc.group.{} in authentication-oidc.cfg", externalGroup, externalGroup);
+    private void resolveSpecialGroups(Context context, Map<String, Object> claims) throws SQLException {
+        // the prefix without its trailing dot: commons-configuration matches prefixes up to a dot
+        String prefix = StringUtils.removeEnd(CLAIM_GROUP_MAPPING_PREFIX, ".");
+        for (String key : configurationService.getPropertyKeys(prefix)) {
+            if (!key.startsWith(CLAIM_GROUP_MAPPING_PREFIX)) {
+                continue;
+            }
+            List<String> values = getAttributeAsList(claims, key.substring(CLAIM_GROUP_MAPPING_PREFIX.length()));
+            if (values.isEmpty()) {
+                continue;
+            }
+            for (String rule : configurationService.getArrayProperty(key)) {
+                String[] parts = rule.split("=>", 2);
+                if (parts.length != 2 || StringUtils.isBlank(parts[0]) || StringUtils.isBlank(parts[1])) {
+                    log.warn("Ignoring the rule '{}' of {}, expected VALUE => GROUP", rule, key);
                     continue;
                 }
-                for (String groupName : groupNames) {
-                    addSpecialGroup(context, groupName, "group '" + externalGroup + "'");
+                String pattern = parts[0].trim();
+                if (values.stream().anyMatch(value -> matchesClaimValue(pattern, value))) {
+                    addSpecialGroup(context, parts[1], key);
                 }
             }
         }
@@ -463,15 +472,34 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
     }
 
     /**
-     * Strips the authority suffix from a group value, i.e. everything from the first '#' onwards. AARC-style
-     * eduPersonEntitlement URNs append the responsible authority there (e.g. the issuing Perun instance), which
-     * is constant across all entitlements of the same IdP and, unlike the rest of the URN, often contains
-     * spaces that would otherwise have to be escaped in the authentication-oidc.group.&lt;group value&gt;
-     * configuration key. A value without '#' is returned unchanged.
+     * Whether a claim value matches the VALUE of a group mapping rule: exactly, except that
+     * <ul>
+     *     <li>"role@*" matches any scope and "*@scope" any role of a scoped value (e.g. an affiliation
+     *     "member@cuni.cz"); "*" stands for the whole role or scope only;</li>
+     *     <li>the authority of an AARC entitlement URN (from '#' on, e.g. "urn:geant:cesnet.cz:group:einfra#perun")
+     *     is ignored on both sides, as AARC-G069 section 2.3 (and RFC 8141 section 3) require for comparing them.</li>
+     * </ul>
      */
-    private String stripAuthoritySuffix(String group) {
-        int hashIndex = group.indexOf('#');
-        return (hashIndex >= 0 ? group.substring(0, hashIndex) : group).trim();
+    static boolean matchesClaimValue(String pattern, String value) {
+        String rule = withoutUrnAuthority(pattern.trim());
+        String claimValue = withoutUrnAuthority(value.trim());
+        int at = claimValue.lastIndexOf('@');
+        if (rule.startsWith("*@")) {
+            String scope = rule.substring(2);
+            return !scope.isEmpty() && !scope.contains("*") && at > 0 && claimValue.substring(at + 1).equals(scope);
+        }
+        if (rule.endsWith("@*")) {
+            String role = rule.substring(0, rule.length() - 2);
+            return !role.isEmpty() && !role.contains("*") && at > 0 && claimValue.substring(0, at).equals(role);
+        }
+        return rule.equals(claimValue);
+    }
+
+    /** An AARC entitlement URN without its authority (the f-component, from '#' on); other values unchanged. */
+    private static String withoutUrnAuthority(String value) {
+        int hashIndex = value.indexOf('#');
+        return hashIndex >= 0 && StringUtils.startsWithIgnoreCase(value, "urn:")
+                ? value.substring(0, hashIndex) : value;
     }
 
     /**
@@ -665,16 +693,6 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
         return configurationService.getProperty("authentication-oidc.user-info.organization");
     }
 
-    /**
-     * Returns the name of the user info attribute containing the user's groups, used to assign special
-     * groups (authentication-oidc.group.&lt;group value&gt;), not set by default.
-     *
-     * @return groups attribute name or null
-     */
-    private String getGroupsAttribute() {
-        return configurationService.getProperty("authentication-oidc.user-info.groups");
-    }
-
     private void logInEPerson(Context context, EPerson ePerson) {
         context.setCurrentUser(ePerson);
     }
@@ -732,7 +750,7 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
     }
 
     /**
-     * Returns the special groups resolved from the OIDC groups and the default authentication group during
+     * Returns the special groups resolved from the claim group mappings and the default authentication group during
      * {@link #authenticateWithClaims} and cached on the context, either just now (fresh login) or restored
      * from the JWT token special groups claim of a previous OIDC login (see SpecialGroupClaimProvider).
      */
