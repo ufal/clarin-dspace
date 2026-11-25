@@ -19,6 +19,8 @@ import org.dspace.builder.BitstreamBuilder;
 import org.dspace.builder.BitstreamFormatBuilder;
 import org.dspace.builder.BundleBuilder;
 import org.dspace.builder.ClaimedTaskBuilder;
+import org.dspace.builder.ClarinLicenseBuilder;
+import org.dspace.builder.ClarinLicenseLabelBuilder;
 import org.dspace.builder.CollectionBuilder;
 import org.dspace.builder.CommunityBuilder;
 import org.dspace.builder.EPersonBuilder;
@@ -31,6 +33,7 @@ import org.dspace.builder.OrcidHistoryBuilder;
 import org.dspace.builder.OrcidQueueBuilder;
 import org.dspace.builder.OrcidTokenBuilder;
 import org.dspace.builder.PoolTaskBuilder;
+import org.dspace.builder.PreviewContentBuilder;
 import org.dspace.builder.ProcessBuilder;
 import org.dspace.builder.RelationshipBuilder;
 import org.dspace.builder.RelationshipTypeBuilder;
@@ -87,6 +90,9 @@ public class AbstractBuilderCleanupUtil {
         map.put(MetadataSchemaBuilder.class.getName(), new ArrayList<>());
         map.put(SiteBuilder.class.getName(), new ArrayList<>());
         map.put(ProcessBuilder.class.getName(), new ArrayList<>());
+        map.put(PreviewContentBuilder.class.getName(), new ArrayList<>());
+        map.put(ClarinLicenseBuilder.class.getName(), new ArrayList<>());
+        map.put(ClarinLicenseLabelBuilder.class.getName(), new ArrayList<>());
     }
 
     /**

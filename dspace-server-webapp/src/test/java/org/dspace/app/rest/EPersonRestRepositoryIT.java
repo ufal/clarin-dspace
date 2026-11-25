@@ -111,8 +111,9 @@ public class EPersonRestRepositoryIT extends AbstractControllerIntegrationTest {
     @Autowired
     private MetadataFieldService metadataFieldService;
 
-    @Autowired
-    private ObjectMapper mapper;
+    // CLARIN/dtq parity: a local mapper — the tests call setAnnotationIntrospector, which must not
+    // mutate the server's shared Spring mapper (poisoned serialization made later POSTs 400)
+    private final ObjectMapper mapper = new ObjectMapper();
 
     @Test
     public void createTest() throws Exception {
@@ -1096,6 +1097,20 @@ public class EPersonRestRepositoryIT extends AbstractControllerIntegrationTest {
 
         // Verify the eperson is still here
         getClient(adminToken).perform(get("/api/eperson/epersons/" + ePerson.getID()))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    public void deleteYourselfForbidden() throws Exception {
+        // login as admin
+        String adminToken = getAuthToken(admin.getEmail(), password);
+
+        // Deleting yourself is forbidden
+        getClient(adminToken).perform(delete("/api/eperson/epersons/" + admin.getID()))
+                .andExpect(status().isBadRequest());
+
+        // Verify the admin is still here
+        getClient(adminToken).perform(get("/api/eperson/epersons/" + admin.getID()))
                 .andExpect(status().isOk());
     }
 

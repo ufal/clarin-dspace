@@ -76,6 +76,11 @@ public class ItemBuilder extends AbstractDSpaceObjectBuilder<Item> {
         return setMetadataSingleValue(item, MetadataSchemaEnum.DC.getName(), "title", null, title);
     }
 
+    public ItemBuilder withClarinLicense(String licenseName, String licenseUri) {
+        this.addMetadataValue(item, "dc", "rights", null, licenseName);
+        return this.addMetadataValue(item, "dc", "rights", "uri", licenseUri);
+    }
+
     public ItemBuilder withIssueDate(final String issueDate) {
         return addMetadataValue(item, MetadataSchemaEnum.DC.getName(),
                                 "date", "issued", new DCDate(issueDate).toString());

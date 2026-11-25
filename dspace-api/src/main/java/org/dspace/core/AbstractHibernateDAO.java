@@ -316,11 +316,13 @@ public abstract class AbstractHibernateDAO<T> implements GenericDAO<T> {
         return new AbstractIterator<T>() {
             @Override
             protected T computeNext() {
-                return iter.hasNext() ? iter.next() : endOfData();
-            }
-            @Override
-            public void finalize() {
+                if (iter.hasNext()) {
+                    return iter.next();
+                }
+                // Close the backing JDBC cursor on the thread that owns the Session; doing it from a
+                // finalize() override races the Session's non-thread-safe JDBC ResourceRegistry.
                 stream.close();
+                return endOfData();
             }
         };
     }

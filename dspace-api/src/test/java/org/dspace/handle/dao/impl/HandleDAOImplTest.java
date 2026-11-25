@@ -72,9 +72,11 @@ public class HandleDAOImplTest extends AbstractUnitTest {
 
     private static final String HANDLE_PREFIX = "123456789";
     private static final String SUFFIX_1 = "101";
-    private static final String SUFFIX_2 = "101.2";
+    private static final String SUFFIX_2 = "3";
     private static final String SUFFIX_3 = "303";
     private static final String SUFFIX_4 = "404";
+
+    private static final String SUBPREFIX = "2";
 
     @Before
     @Override
@@ -147,7 +149,8 @@ public class HandleDAOImplTest extends AbstractUnitTest {
         context.commit();
 
         assertEquals(newPrefix + "/" + SUFFIX_1, itemService.find(context, item1.getID()).getHandle());
-        assertEquals(newPrefix + "/" + SUFFIX_2, itemService.find(context, item2.getID()).getHandle());
+        assertEquals(newPrefix + "/" + SUBPREFIX + "-" + SUFFIX_2,
+                itemService.find(context, item2.getID()).getHandle());
         assertEquals(newPrefix + "/" + SUFFIX_3, itemService.find(context, item3.getID()).getHandle());
 
         //Ensure that records not matching the old prefix are not touched

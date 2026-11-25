@@ -681,6 +681,18 @@ public interface ItemService
     boolean hasUploadedFiles(Item item) throws SQLException;
 
     /**
+     * Check the given bundle to see if there are any uploaded files (CLARIN:
+     * the CMDI metadata file lives in the METADATA bundle, not ORIGINAL)
+     *
+     * @param item item to check
+     * @param bundleName name of the bundle to check
+     * @return true if there is a bundle with the given name with one or more
+     * bitstreams inside
+     * @throws SQLException if database error
+     */
+    boolean hasUploadedFiles(Item item, String bundleName) throws SQLException;
+
+    /**
      * Get the collections this item is not in.
      *
      * @param context DSpace context object

@@ -9,12 +9,19 @@ package org.dspace.content;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.dspace.authorize.AuthorizeException;
+import org.dspace.authorize.ResourcePolicy;
+import org.dspace.authorize.service.ResourcePolicyService;
 import org.dspace.content.factory.ContentServiceFactory;
 import org.dspace.content.logic.Filter;
 import org.dspace.content.logic.FilterUtils;
@@ -23,7 +30,10 @@ import org.dspace.content.service.InstallItemService;
 import org.dspace.content.service.ItemService;
 import org.dspace.core.Constants;
 import org.dspace.core.Context;
+import org.dspace.discovery.IsoLangCodes;
 import org.dspace.embargo.service.EmbargoService;
+import org.dspace.eperson.EPerson;
+import org.dspace.eperson.service.GroupService;
 import org.dspace.event.Event;
 import org.dspace.identifier.Identifier;
 import org.dspace.identifier.IdentifierException;
@@ -31,6 +41,9 @@ import org.dspace.identifier.service.IdentifierService;
 import org.dspace.services.ConfigurationService;
 import org.dspace.supervision.SupervisionOrder;
 import org.dspace.supervision.service.SupervisionOrderService;
+import org.dspace.versioning.Version;
+import org.dspace.versioning.service.VersionHistoryService;
+import org.dspace.versioning.service.VersioningService;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -40,6 +53,11 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @version $Revision$
  */
 public class InstallItemServiceImpl implements InstallItemService {
+
+    // CLARIN: detail prefix of the transient event published when a workspace item's owning collection
+    // is set, so HandleServiceImpl can choose the per-community PID prefix at install time (the handle is
+    // minted before setOwningCollection persists the collection on multi-prefix deployments).
+    public static final String SET_OWNING_COLLECTION_EVENT_DETAIL = "setCollection:";
 
     @Autowired(required = true)
     protected ContentServiceFactory contentServiceFactory;
@@ -54,6 +72,13 @@ public class InstallItemServiceImpl implements InstallItemService {
     @Autowired(required = true)
     protected SupervisionOrderService supervisionOrderService;
     @Autowired(required = false)
+    private ResourcePolicyService resourcePolicyService;
+    @Autowired(required = true)
+    protected GroupService groupService;
+    @Autowired(required = true)
+    protected VersioningService versioningService;
+    @Autowired(required = true)
+    protected VersionHistoryService versionHistoryService;
 
     Logger log = LogManager.getLogger(InstallItemServiceImpl.class);
 
@@ -94,10 +119,18 @@ public class InstallItemServiceImpl implements InstallItemService {
         // Finish up / archive the item
         item = finishItem(c, item, is);
 
+        fixRelationMetadata(c, item);
+
         // As this is a BRAND NEW item, as a final step we need to remove the
         // submitter item policies created during deposit and replace them with
         // the default policies from the collection.
         itemService.inheritCollectionDefaultPolicies(c, item, collection, false);
+
+        //Allow submitter to edit item
+        if (isCollectionAllowedForSubmitterEditing(item.getOwningCollection()) &&
+                isInSubmitGroup(c, item.getSubmitter(), item.getOwningCollection())) {
+            createResourcePolicy(c, item, Constants.WRITE);
+        }
 
         return item;
     }
@@ -161,6 +194,15 @@ public class InstallItemServiceImpl implements InstallItemService {
         itemService.addMetadata(c, item, MetadataSchemaEnum.DC.getName(),
                                 "date", "accessioned", null, now.toString());
 
+        // CLARIN: add date available if not under embargo, otherwise it will
+        // be set when the embargo is lifted.
+        // this will flush out fatal embargo metadata
+        // problems before we set inArchive.
+        if (embargoService.getEmbargoTermsAsDate(c, item) == null) {
+            itemService.addMetadata(c, item, MetadataSchemaEnum.DC.getName(),
+                                    "date", "available", null, now.toString());
+        }
+
         // If issue date is set as "today" (literal string), then set it to current date
         // In the below loop, we temporarily clear all issued dates and re-add, one-by-one,
         // replacing "today" with today's date.
@@ -194,6 +236,9 @@ public class InstallItemServiceImpl implements InstallItemService {
         // Add provenance description
         itemService.addMetadata(c, item, MetadataSchemaEnum.DC.getName(),
                                 "description", "provenance", "en", provDescription);
+
+        // CLARIN: Add language name into metadata. The lang name is fetched from the `lang_codes.txt`.
+        addLanguageNameToMetadata(c, item);
     }
 
     /**
@@ -294,5 +339,152 @@ public class InstallItemServiceImpl implements InstallItemService {
         // add sizes and checksums of bitstreams
         provmessage.append(getBitstreamProvenanceMessage(context, item));
         return provmessage.toString();
+    }
+
+    /**
+     * Language is stored in the metadatavalue in the ISO format e.g., `fra, cse,..` and not in the human satisfying
+     * format e.g., `France, Czech`. This method converts ISO format into human satisfying format e.g., `cse -> Czech`
+     * and stores it into `local.language.name` metadata field.
+     * @param c
+     * @param item
+     * @throws SQLException
+     */
+    private void addLanguageNameToMetadata(Context c, Item item) throws SQLException {
+        itemService.clearMetadata(c, item, "local", "language", "name", null);
+        List<MetadataValue> languageMetadata = itemService.getMetadataByMetadataString(item, "dc.language.iso");
+        for (MetadataValue mv: languageMetadata) {
+            if (StringUtils.isBlank(mv.getValue())) {
+                log.error("Cannot get name of the iso language (`dc.language.iso`) because the value is blank.");
+                return;
+            }
+            String langName = IsoLangCodes
+                    .getLangForCode(mv.getValue());
+            if (StringUtils.isBlank(langName)) {
+                log.error(String
+                        .format("No language found for iso code %s",
+                                langName));
+                return;
+            }
+            itemService.addMetadata(c, item, "local", "language", "name", null, langName);
+        }
+    }
+
+    /**
+     * Checks if the provided collection is allowed for submitter metadata editing.
+     *
+     * This method retrieves a list of allowed collection names and IDs from the system configuration,
+     * and checks if the given collection's name or ID matches any of the allowed values.
+     *
+     * @param collection The collection to be checked.
+     * @return True if the collection's name or ID is in the allowed list for submitter editing, false otherwise.
+     * @throws SQLException If there is an issue retrieving the configuration or querying the database.
+     */
+    private boolean isCollectionAllowedForSubmitterEditing(Collection collection) throws SQLException {
+        if (Objects.isNull(collection)) {
+            return false;
+        }
+        // Retrieve the allowed collections for submitter edition as an array
+        String[] editableCollections = configurationService.getArrayProperty("allow.edit.metadata", new String[] {});
+
+        if (Objects.isNull(editableCollections) || editableCollections.length == 0) {
+            return false;
+        }
+
+        Set<String> allowedNamesOrIds = new HashSet<>(Arrays.asList(editableCollections));
+
+        // Check if the provided collection's name or ID is in the allowed set
+        return allowedNamesOrIds.contains(collection.getName()) ||
+                allowedNamesOrIds.contains(collection.getID().toString());
+    }
+
+    /**
+     * Checks if the given ePerson is in the submit group of the collection.
+     * A submit group is identified by the name containing "SUBMIT" and the collection UUID.
+     *
+     * @param context           The current DSpace context.
+     * @param ePerson           the EPerson that is checked to be member of the collection submit group
+     * @param collection        the collection
+     * @return true if the EPerson is a member (direct or indirect) of a submit group, false otherwise
+     */
+    private boolean isInSubmitGroup(Context context, EPerson ePerson, Collection collection) throws SQLException {
+        return groupService.isMember(context, ePerson, "COLLECTION_" + collection.getID() + "_SUBMIT");
+    }
+
+    /**
+     * Creates a resource policy for an item, granting the specified action to the current user.
+     *
+     * @param context The current DSpace context.
+     * @param item The item for which the resource policy is being created.
+     * @param action The action to be assigned to the resource policy (e.g., write, read).
+     * @throws SQLException If there is an issue interacting with the database.
+     * @throws AuthorizeException If the current user does not have sufficient authorization
+     *                            to create the resource policy.
+     */
+    private void createResourcePolicy(Context context, Item item, int action) throws SQLException, AuthorizeException {
+        context.turnOffAuthorisationSystem();
+        ResourcePolicy resPol = resourcePolicyService.create(context, item.getSubmitter(), null);
+        resPol.setAction(action);
+        resPol.setdSpaceObject(item);
+        context.restoreAuthSystemState();
+    }
+
+    /**
+     * This method adds the "dc.relation.isreplacedby" metadata field to the previous item, if exists.
+     *
+     * @param c Context
+     * @param item Item being installed
+     * @throws SQLException If there is an issue interacting with the database.
+     */
+    private void fixRelationMetadata(Context c, Item item) throws SQLException, AuthorizeException {
+        String dcRelationReplaces = itemService.getMetadataFirstValue(item, "dc", "relation", "replaces", Item.ANY);
+        if (dcRelationReplaces == null) {
+            // nothing need to be done if the new item doesn't have "dc.relation.replaces" metadata field
+            return;
+        }
+        Version itemVersion = versioningService.getVersion(c, item);
+        if (itemVersion != null) {
+            Version previousItemVersion =
+                    versionHistoryService.getPrevious(c, itemVersion.getVersionHistory(), itemVersion);
+            if (previousItemVersion != null) {
+                Item previousItem = previousItemVersion.getItem();
+                if (previousItem != null) {
+                    String previousIdentifierUri =
+                            itemService.getMetadataFirstValue(previousItem, "dc", "identifier", "uri", Item.ANY);
+                    if (dcRelationReplaces.equals(previousIdentifierUri)) {
+                        // set "dc.relation.isreplacedby" metadata field to the previous item,
+                        // pointing to the handle of the new item
+                        // reload the previous item to avoid "detached entity" error
+                        // when updating it in the setIsReplacedByMetadata() method
+                        setIsReplacedByMetadata(c, c.reloadEntity(previousItem), item);
+                    }
+                }
+            }
+        }
+    }
+
+    private void setIsReplacedByMetadata(Context c, Item previousItem, Item newItem)
+            throws SQLException, AuthorizeException {
+        String identifierUri = itemService.getMetadataFirstValue(newItem, "dc", "identifier","uri", Item.ANY);
+        if (StringUtils.isBlank(identifierUri)) {
+            log.warn("The new item (id: {}) doesn't have the metadata dc.identifier.uri, " +
+                            "so it's not possible to add dc.relation.isreplacedby to the previous item",
+                    newItem.getID());
+        } else {
+            boolean isReplacedByAlreadyExists =
+                    itemService.getMetadata(previousItem, "dc", "relation", "isreplacedby", Item.ANY)
+                            .stream()
+                            .anyMatch(m -> identifierUri.equals(m.getValue()));
+            if (!isReplacedByAlreadyExists) {
+                itemService.addMetadata(c, previousItem, "dc", "relation", "isreplacedby", null, identifierUri);
+                try {
+                    c.turnOffAuthorisationSystem();
+                    itemService.update(c, previousItem);
+                } catch (AuthorizeException e) {
+                    throw new SQLException("Unable to update previous item after adding dc.relation.isreplacedby", e);
+                } finally {
+                    c.restoreAuthSystemState();
+                }
+            }
+        }
     }
 }

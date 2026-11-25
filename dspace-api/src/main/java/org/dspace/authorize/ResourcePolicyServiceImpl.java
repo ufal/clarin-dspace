@@ -25,6 +25,7 @@ import org.dspace.content.DSpaceObject;
 import org.dspace.content.factory.ContentServiceFactory;
 import org.dspace.core.Constants;
 import org.dspace.core.Context;
+import org.dspace.core.ProvenanceService;
 import org.dspace.eperson.EPerson;
 import org.dspace.eperson.Group;
 import org.dspace.eperson.service.GroupService;
@@ -55,6 +56,12 @@ public class ResourcePolicyServiceImpl implements ResourcePolicyService {
     @Autowired
     private AuthorizeService authorizeService;
 
+    @Autowired
+    ProvenanceService provenanceService;
+
+    @Autowired
+    ResourcePolicyService resourcePolicyService;
+
     protected ResourcePolicyServiceImpl() {
     }
 
@@ -69,6 +76,16 @@ public class ResourcePolicyServiceImpl implements ResourcePolicyService {
     @Override
     public ResourcePolicy find(Context context, int id) throws SQLException {
         return resourcePolicyDAO.findByID(context, ResourcePolicy.class, id);
+    }
+
+    @Override
+    public List<ResourcePolicy> findAll(Context context, int offset, int limit) throws SQLException {
+        return resourcePolicyDAO.findAll(context, offset, limit);
+    }
+
+    @Override
+    public int countAll(Context context) throws SQLException {
+        return resourcePolicyDAO.countAll(context);
     }
 
     /**
@@ -245,10 +262,15 @@ public class ResourcePolicyServiceImpl implements ResourcePolicyService {
     @Override
     public void removePolicies(Context c, DSpaceObject o, String type, int action)
         throws SQLException, AuthorizeException {
+        // Get all read policies of the dso before removing them
+        List<ResourcePolicy> resPolicies = resourcePolicyService.find(c, o, type);
+
         resourcePolicyDAO.deleteByDsoAndTypeAndAction(c, o, type, action);
         c.turnOffAuthorisationSystem();
         contentServiceFactory.getDSpaceObjectService(o).updateLastModified(c, o);
         c.restoreAuthSystemState();
+
+        provenanceService.removeReadPolicies(c, o, resPolicies);
     }
 
     @Override
@@ -412,6 +434,17 @@ public class ResourcePolicyServiceImpl implements ResourcePolicyService {
     @Override
     public int countByGroupAndResourceUuid(Context context, Group group, UUID resourceUuid) throws SQLException {
         return resourcePolicyDAO.countByGroupAndResourceUuid(context, group, resourceUuid);
+    }
+
+    @Override
+    public List<ResourcePolicy> findByDate(Context context, Boolean hasStartDate, Boolean hasEndDate,
+                                                   int offset, int limit) throws SQLException {
+        return resourcePolicyDAO.findByDate(context, hasStartDate, hasEndDate, offset, limit);
+    }
+
+    @Override
+    public int countByDate(Context context, Boolean hasStartDate, Boolean hasEndDate) throws SQLException {
+        return resourcePolicyDAO.countByDate(context, hasStartDate, hasEndDate);
     }
 
     @Override

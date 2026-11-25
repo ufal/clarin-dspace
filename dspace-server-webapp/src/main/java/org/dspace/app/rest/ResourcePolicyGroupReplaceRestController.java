@@ -25,6 +25,7 @@ import org.dspace.authorize.ResourcePolicy;
 import org.dspace.authorize.service.ResourcePolicyService;
 import org.dspace.content.DSpaceObject;
 import org.dspace.core.Context;
+import org.dspace.core.ProvenanceService;
 import org.dspace.eperson.Group;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.rest.webmvc.ControllerUtils;
@@ -52,6 +53,9 @@ public class ResourcePolicyGroupReplaceRestController {
     @Autowired
     private ResourcePolicyService resourcePolicyService;
 
+    @Autowired
+    private ProvenanceService provenanceService;
+
     @PreAuthorize("hasPermission(#id, 'resourcepolicy', 'ADMIN')")
     @RequestMapping(method = PUT, consumes = {"text/uri-list"})
     public ResponseEntity<RepresentationModel<?>> replaceGroupOfResourcePolicy(@PathVariable Integer id,
@@ -76,6 +80,7 @@ public class ResourcePolicyGroupReplaceRestController {
         Group newGroup = (Group) dsoList.get(0);
         resourcePolicy.setGroup(newGroup);
         resourcePolicyService.update(context, resourcePolicy);
+        provenanceService.updateResourcePolicy(context, resourcePolicy);
         context.commit();
         return ControllerUtils.toEmptyResponse(HttpStatus.NO_CONTENT);
     }

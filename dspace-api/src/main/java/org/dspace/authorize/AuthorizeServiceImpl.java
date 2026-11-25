@@ -88,6 +88,8 @@ public class AuthorizeServiceImpl implements AuthorizeService {
     private SearchService searchService;
     @Autowired(required = true)
     private ConfigurationService configurationService;
+    @Autowired(required = true)
+    AuthorizationBitstreamUtils authorizationBitstreamUtils;
 
 
     protected AuthorizeServiceImpl() {
@@ -178,6 +180,17 @@ public class AuthorizeServiceImpl implements AuthorizeService {
                                              + actionText + " on " + Constants.typeText[otype] + ":"
                                              + oid + " by user " + userid, o, action);
         }
+
+        // CLARIN
+        // This function throws exception if the authorization fails - if it is not reported, the license
+        // restrictions are OK
+        //
+        // the license confirmation is excluded when bitstream is edited,
+        // or when user has admin permission on bitstream object
+        if (o.getType() == Constants.BITSTREAM && action != Constants.WRITE && !isAdmin(c, o)) {
+            authorizationBitstreamUtils.authorizeBitstream(c, (Bitstream) o);
+        }
+        // CLARIN
     }
 
     @Override

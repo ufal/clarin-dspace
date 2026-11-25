@@ -1,21 +1,70 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Logging configuration for DSpace container (matches log4j2.xml but to console, removing file refs & most comments) -->
+<!-- Logging configuration for DSpace container.
+
+     Writes [dspace.dir]/log/dspace.log exactly like log4j2.xml does outside of a container, and
+     mirrors the same events to stdout so that "docker logs" keeps working. Point the container at
+     this file with the LOGGING_CONFIG environment variable (see docker-compose-rest.yml).
+
+     NOTE: /dspace/log only survives a container recreate when it is mounted as a volume. -->
 <Configuration strict='true'
                xmlns='http://logging.apache.org/log4j/2.0/config'>
 
     <Properties>
+        <!-- Log file directory. "dspace.dir" is fixed to /dspace in the image (see Dockerfile),
+             so the log directory is /dspace/log. Override with the DSPACE_LOG_DIR env variable
+             when the container installs DSpace somewhere else. -->
+        <Property name='log.dir'>${env:DSPACE_LOG_DIR:-/dspace/log}</Property>
+
+        <!-- Log level for all DSpace-specific code (org.dspace.*)
+             Possible values (from most to least info):
+	     DEBUG, INFO, WARN, ERROR, FATAL -->
         <Property name='loglevel.dspace'>INFO</Property>
+
+        <!-- Log level for other third-party tools/APIs used by DSpace
+             Possible values (from most to least info):
+	     DEBUG, INFO, WARN, ERROR, FATAL -->
         <Property name='loglevel.other'>INFO</Property>
+
+        <!-- Level of the copy that is echoed to the container console ("docker logs").
+             dspace.log always receives everything; raise this to WARN, or set it to OFF, to keep
+             the container output small once dspace.log is being collected. -->
+        <Property name='loglevel.console'>${env:DSPACE_LOG_CONSOLE_LEVEL:-INFO}</Property>
     </Properties>
 
     <Appenders>
         <!-- A1 is for most DSpace activity -->
         <Appender name='A1'
-                  type='Console'
+                  filePattern='${log.dir}/dspace.log-%d{yyyy-MM-dd}'
+                  type='RollingFile'
+                  fileName='${log.dir}/dspace.log'
 
         >
+            <!-- NOTE: The %equals patterns are providing a default value of "unknown" if "correlationID" or
+                 "requestID" are not currently set in the ThreadContext. -->
             <Layout type='PatternLayout'
                     pattern='%d %-5p %equals{%X{correlationID}}{}{unknown} %equals{%X{requestID}}{}{unknown} %c @ %m%n'/>
+            <policies>
+                <policy type='TimeBasedTriggeringPolicy'>yyyy-MM-dd</policy>
+            </policies>
+            <!-- Sample deletion policy:  keep last 30 archived files
+            <DefaultRolloverStrategy>
+                <Delete basePath='${log.dir}'>
+                    <IfFileName glob='dspace.log-*'/>
+                    <IfAccumulatedFileCount exceeds='30'/>
+                </Delete>
+            </DefaultRolloverStrategy>
+            -->
+        </Appender>
+
+        <!-- STDOUT echoes A1 to the container console, so that "docker logs" is not blind -->
+        <Appender name='STDOUT'
+                  type='Console'>
+            <Layout type='PatternLayout'
+                    pattern='%d %-5p %equals{%X{correlationID}}{}{unknown} %equals{%X{requestID}}{}{unknown} %c @ %m%n'/>
+            <Filters>
+                <Filter type='ThresholdFilter'
+                        level='${loglevel.console}'/>
+            </Filters>
         </Appender>
 
         <!-- A2 is for the checksum checker -->
@@ -23,6 +72,21 @@
                   type='Console'>
             <Layout type='PatternLayout'
                     pattern='%m%n'/>
+        </Appender>
+
+        <!-- A4 is for Warns and errors -->
+        <Appender name='A4'
+                  filePattern="${log.dir}/warn.log-%d{yyyy-MM-dd}.gz"
+                  type='RollingFile'
+                  fileName='${log.dir}/warn.log'
+        >
+            <!-- NOTE: The %equals patterns are providing a default value of "unknown" if "correlationID" or
+                 "requestID" are not currently set in the ThreadContext. -->
+            <Layout type='PatternLayout'
+                    pattern='%d %-5p %equals{%X{correlationID}}{}{unknown} %equals{%X{requestID}}{}{unknown} %c @ %m%n'/>
+            <policies>
+                <policy type='TimeBasedTriggeringPolicy'>yyyy-MM-dd</policy>
+            </policies>
         </Appender>
     </Appenders>
 
@@ -33,6 +97,8 @@
                 level='${loglevel.dspace}'
                 additivity='false'>
             <AppenderRef ref='A1'/>
+            <AppenderRef ref='STDOUT'/>
+            <AppenderRef ref="A4" level="WARN"/>
         </Logger>
 
         <!-- The checksum checker -->
@@ -60,6 +126,15 @@
         <!-- Anything not a part of DSpace -->
         <Root level='${loglevel.other}'>
             <AppenderRef ref='A1'/>
+            <AppenderRef ref='STDOUT'/>
+            <AppenderRef ref="A4" level="WARN"/>
         </Root>
+
+        <!-- 404 NOT_FOUND responses. Set to WARN to see 404s in logs. -->
+        <Logger name='org.dspace.app.rest.exception.DSpaceApiExceptionControllerAdvice.NotFound'
+                level='OFF'
+                additivity='false'>
+            <AppenderRef ref='A1'/>
+        </Logger>
     </Loggers>
 </Configuration>

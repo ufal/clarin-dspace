@@ -14,6 +14,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.dspace.authorize.AuthorizeException;
@@ -73,7 +74,7 @@ public class DOIIdentifierProvider extends FilteredIdentifierProvider {
     // TODO: move these to MetadataSchema or some such?
     public static final String MD_SCHEMA = "dc";
     public static final String DOI_ELEMENT = "identifier";
-    public static final String DOI_QUALIFIER = "uri";
+    public static final String DOI_QUALIFIER = "doi";
     // The DOI is queued for registered with the service provider
     public static final Integer TO_BE_REGISTERED = 1;
     // The DOI is queued for reservation with the service provider
@@ -1068,13 +1069,26 @@ public class DOIIdentifierProvider extends FilteredIdentifierProvider {
         }
         Item item = (Item) dso;
 
-        itemService.addMetadata(context, item, MD_SCHEMA, DOI_ELEMENT, DOI_QUALIFIER, null,
-            doiService.DOIToExternalForm(doi));
-        try {
-            itemService.update(context, item);
-        } catch (SQLException | AuthorizeException ex) {
-            throw ex;
+        String doiURL = doiService.DOIToExternalForm(doi);
+
+        // Add the DOI to the metadata only if this exact value is not present yet. This keeps the operation
+        // idempotent (re-registration does not create duplicate values) without ever deleting metadata: a
+        // pre-existing, different DOI is left untouched. This method is called after the DOI has already been
+        // registered with the external agency, so destroying metadata here would be lossy and irreversible.
+        // Items that end up with more than one dc.identifier.doi value are surfaced by the ItemMetadataQAChecker
+        // curation task for manual review.
+        List<MetadataValue> existing = itemService.getMetadata(item, MD_SCHEMA, DOI_ELEMENT, DOI_QUALIFIER, Item.ANY);
+        boolean alreadyPresent = existing.stream()
+                .anyMatch(metadataValue -> doiURL.equals(metadataValue.getValue()));
+
+        if (alreadyPresent) {
+            log.debug("The DOI {} is already part of the metadata of Item {}. Not adding it again.",
+                    doi, item.getID());
+            return;
         }
+
+        itemService.addMetadata(context, item, MD_SCHEMA, DOI_ELEMENT, DOI_QUALIFIER, null, doiURL);
+        itemService.update(context, item);
     }
 
     /**
@@ -1106,8 +1120,13 @@ public class DOIIdentifierProvider extends FilteredIdentifierProvider {
         }
 
         itemService.clearMetadata(context, item, MD_SCHEMA, DOI_ELEMENT, DOI_QUALIFIER, null);
-        itemService.addMetadata(context, item, MD_SCHEMA, DOI_ELEMENT, DOI_QUALIFIER, null,
-                remainder);
+        // There could be scenario when the `dc.identifier.doi` metadata field is empty, so do not try to remove it
+        if (CollectionUtils.isNotEmpty(remainder)) {
+            log.warn("The DOI {} was not found in the metadata of Item {}. Nothing to remove.", doi, item.getHandle());
+            itemService.addMetadata(context, item, MD_SCHEMA, DOI_ELEMENT, DOI_QUALIFIER, null,
+                    remainder);
+        }
+
         itemService.update(context, item);
     }
 

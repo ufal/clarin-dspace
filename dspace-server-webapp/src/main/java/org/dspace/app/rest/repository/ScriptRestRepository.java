@@ -32,6 +32,7 @@ import org.dspace.authorize.AuthorizeException;
 import org.dspace.core.Context;
 import org.dspace.scripts.DSpaceCommandLineParameter;
 import org.dspace.scripts.DSpaceRunnable;
+import org.dspace.scripts.DSpaceRunnable.StepResult;
 import org.dspace.scripts.configuration.ScriptConfiguration;
 import org.dspace.scripts.service.ScriptService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -153,7 +154,14 @@ public class ScriptRestRepository extends DSpaceRestRepository<ScriptRest, Strin
         throws IOException, SQLException, AuthorizeException, InstantiationException, IllegalAccessException {
         DSpaceRunnable dSpaceRunnable = scriptService.createDSpaceRunnableForScriptConfiguration(scriptToExecute);
         try {
-            dSpaceRunnable.initialize(args.toArray(new String[0]), restDSpaceRunnableHandler, context.getCurrentUser());
+            StepResult initResult = dSpaceRunnable.initialize(
+                args.toArray(new String[0]), restDSpaceRunnableHandler, context.getCurrentUser());
+            // -h/--help returns Exit: skip run() and just mark the process started + completed.
+            if (initResult == StepResult.Exit) {
+                restDSpaceRunnableHandler.start();
+                restDSpaceRunnableHandler.handleCompletion();
+                return;
+            }
             if (files != null && !files.isEmpty()) {
                 checkFileNames(dSpaceRunnable, files);
                 processFiles(context, restDSpaceRunnableHandler, files);

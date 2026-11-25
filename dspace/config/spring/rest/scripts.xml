@@ -79,4 +79,31 @@
         <property name="dspaceRunnableClass" value="org.dspace.app.bulkaccesscontrol.BulkAccessControl"/>
     </bean>
 
+    <bean id="file-downloader" class="org.dspace.administer.FileDownloaderConfiguration" primary="true">
+        <property name="description" value="Download a files from the provided URL and add it to item"/>
+        <property name="dspaceRunnableClass" value="org.dspace.administer.FileDownloader"/>
+    </bean>
+
+    <bean id="file-preview" class="org.dspace.scripts.filepreview.FilePreviewConfiguration" primary="true">
+        <property name="description" value="Generate the file preview"/>
+        <property name="dspaceRunnableClass" value="org.dspace.scripts.filepreview.FilePreview"/>
+    </bean>
+
+    <bean id="clarin-token" class="org.dspace.administer.ClarinTokenConfiguration" primary="true">
+        <property name="description" value="Create or delete clarin token. Created token is sent to e-mail address."/>
+        <property name="dspaceRunnableClass" value="org.dspace.administer.ClarinTokenCreator"/>
+    </bean>
+    <bean id="health-report" class="org.dspace.app.healthreport.HealthReportScriptConfiguration" primary="true">
+        <property name="description" value="Get report about DSpace health"/>
+        <property name="dspaceRunnableClass" value="org.dspace.app.healthreport.HealthReport"/>
+    </bean>
+    <bean id="report-diff" class="org.dspace.app.reportdiff.ReportDiffScriptConfiguration" primary="true">
+        <property name="description" value="Compares two health reports and shows the differences between them."/>
+        <property name="dspaceRunnableClass" value="org.dspace.app.reportdiff.ReportDiff"/>
+    </bean>
+
+    <bean id="item-version-linker" class="org.dspace.administer.ItemVersionLinkerConfiguration" primary="true">
+        <property name="description" value="Link items into versioning relationship."/>
+        <property name="dspaceRunnableClass" value="org.dspace.administer.ItemVersionLinker"/>
+    </bean>
 </beans>

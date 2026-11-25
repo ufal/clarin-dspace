@@ -92,6 +92,30 @@ public class IdentifierRestRepositoryIT extends AbstractControllerIntegrationTes
     }
 
     @Test
+    public void testRestrictedIdentifierAnonymousUnauthorized() throws Exception {
+        // CLARIN C3 regression: resolving a handle of an item the anonymous user
+        // cannot READ must answer 401, not 500 (NPE on the null converted rest object)
+        context.turnOffAuthorisationSystem();
+
+        parentCommunity = CommunityBuilder.createCommunity(context)
+                .withName("Parent Community")
+                .build();
+        Collection collection = CollectionBuilder.createCollection(context, parentCommunity)
+                .withName("Restricted Collection")
+                .build();
+        Item restrictedItem = ItemBuilder.createItem(context, collection)
+                .withTitle("Restricted Item")
+                .withReaderGroup(org.dspace.eperson.factory.EPersonServiceFactory.getInstance()
+                        .getGroupService().findByName(context, org.dspace.eperson.Group.ADMIN))
+                .build();
+
+        context.restoreAuthSystemState();
+
+        getClient().perform(get("/api/pid/find?id={handle}", restrictedItem.getHandle()))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     public void testUnexistentIdentifier() throws Exception {
         getClient().perform(get("/api/pid/find?id={id}","fakeIdentifier"))
                 .andExpect(status().isNotFound());

@@ -10,6 +10,7 @@ package org.dspace.storage.bitstore;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
@@ -31,6 +32,8 @@ import org.dspace.content.Item;
 import org.dspace.content.factory.ContentServiceFactory;
 import org.dspace.content.service.BitstreamService;
 import org.dspace.core.Context;
+import org.dspace.services.ConfigurationService;
+import org.dspace.services.factory.DSpaceServicesFactory;
 import org.dspace.storage.bitstore.factory.StorageServiceFactory;
 import org.junit.After;
 import org.junit.Before;
@@ -40,6 +43,7 @@ import org.junit.rules.TemporaryFolder;
 
 public class BitstreamStorageServiceImplIT extends AbstractIntegrationTestWithDatabase {
     private BitstreamService bitstreamService = ContentServiceFactory.getInstance().getBitstreamService();
+    private ConfigurationService configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
     private BitstreamStorageServiceImpl bitstreamStorageService =
         (BitstreamStorageServiceImpl) StorageServiceFactory.getInstance().getBitstreamStorageService();
     private Collection collection;
@@ -183,6 +187,40 @@ public class BitstreamStorageServiceImplIT extends AbstractIntegrationTestWithDa
 
         // Three bitstreams should have migrated to the destination assetstore
         assertThat(bitstreamService.countByStoreNumber(context, DEST_STORE).intValue(), equalTo(3));
+    }
+
+    /**
+     * The write half of the synchronized store: with sync.storage.service.enabled on, a new
+     * bitstream's row records the synchronized sentinel rather than the incoming store's own key,
+     * and reads still come back because they are routed to the incoming store.
+     *
+     * The flag is read once, in afterPropertiesSet(), so setting the property alone proves nothing
+     * - the callback has to be run again for the bean to see it.
+     */
+    @Test
+    public void testSyncEnabledRecordsTheSynchronizedStoreNumber() throws Exception {
+        SyncBitstreamStorageServiceImpl syncStorage =
+            StorageServiceFactory.getInstance().getSyncBitstreamStorageService();
+
+        context.turnOffAuthorisationSystem();
+        try {
+            Bitstream beforeFlag = createBitstream("Stored while the flag is off");
+            assertThat(beforeFlag.getStoreNumber(), equalTo(SOURCE_STORE));
+
+            configurationService.setProperty("sync.storage.service.enabled", true);
+            syncStorage.afterPropertiesSet();
+
+            Bitstream afterFlag = createBitstream("Stored while the flag is on");
+
+            assertEquals(SyncBitstreamStorageServiceImpl.SYNCHRONIZED_STORES_NUMBER,
+                afterFlag.getStoreNumber());
+            assertEquals("Stored while the flag is on",
+                IOUtils.toString(bitstreamStorageService.retrieve(context, afterFlag), UTF_8));
+        } finally {
+            configurationService.setProperty("sync.storage.service.enabled", false);
+            syncStorage.afterPropertiesSet();
+            context.restoreAuthSystemState();
+        }
     }
 
     private void createBitstreams(Context context, int numBitstreams)

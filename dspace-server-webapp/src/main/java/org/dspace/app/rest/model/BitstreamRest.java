@@ -19,7 +19,8 @@ import com.fasterxml.jackson.annotation.JsonProperty.Access;
     @LinkRest(name = BitstreamRest.BUNDLE, method = "getBundle"),
     @LinkRest(name = BitstreamRest.ACCESS_STATUS, method = "getAccessStatus"),
     @LinkRest(name = BitstreamRest.FORMAT, method = "getFormat"),
-    @LinkRest(name = BitstreamRest.THUMBNAIL, method = "getThumbnail")
+    @LinkRest(name = BitstreamRest.THUMBNAIL, method = "getThumbnail"),
+    @LinkRest(name = BitstreamRest.CHECKSUM, method = "getChecksum")
 })
 public class BitstreamRest extends DSpaceObjectRest {
     public static final String PLURAL_NAME = "bitstreams";
@@ -30,10 +31,13 @@ public class BitstreamRest extends DSpaceObjectRest {
     public static final String ACCESS_STATUS = "accessStatus";
     public static final String FORMAT = "format";
     public static final String THUMBNAIL = "thumbnail";
+    public static final String CHECKSUM = "checksum";
 
     private String bundleName;
 
     private Long sizeBytes;
+
+    private int storeNumber;
     private CheckSumRest checkSum;
     // sequenceId is READ_ONLY because it is assigned by the ItemService (as it must be unique within an Item)
     @JsonProperty(access = Access.READ_ONLY)
@@ -49,6 +53,14 @@ public class BitstreamRest extends DSpaceObjectRest {
 
     public Long getSizeBytes() {
         return sizeBytes;
+    }
+
+    public int getStoreNumber() {
+        return storeNumber;
+    }
+
+    public void setStoreNumber(int storeNumber) {
+        this.storeNumber = storeNumber;
     }
 
     public void setSizeBytes(Long sizeBytes) {

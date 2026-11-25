@@ -110,6 +110,13 @@ public class SolrServiceImpl implements SearchService, IndexingService {
     // facet by indexing "each word to end of value' partial value
     public static final String SOLR_FIELD_SUFFIX_FACET_PREFIXES = "_prefix";
 
+    // Suffix of the solr field used to index the facet/filter so that the facet search can search all word in a
+    // facet.
+    private static final String SOLR_FACET_FIELD_ALL_VALUES_SUFFIX = "_filter";
+
+    // List of all facets which will return facet value with splitter.
+    private ArrayList<String> allValuesFacetList = new ArrayList<>();
+
     @Autowired
     protected ContentServiceFactory contentServiceFactory;
     @Autowired
@@ -1446,8 +1453,17 @@ public class SolrServiceImpl implements SearchService, IndexingService {
             }
         } else if (facetFieldConfig.getType().equals(DiscoveryConfigurationParameters.TYPE_HIERARCHICAL)) {
             if (removePostfix) {
+                // If the current field is configured to show all values instead of only the top level values
+                if (this.getFacetsToShowAllValues().contains(
+                        StringUtils.substringBeforeLast(field, SOLR_FACET_FIELD_ALL_VALUES_SUFFIX))) {
+                    return StringUtils.substringBeforeLast(field, SOLR_FACET_FIELD_ALL_VALUES_SUFFIX);
+                }
                 return StringUtils.substringBeforeLast(field, "_tax_");
             } else {
+                // If the current field is configured to show all values instead of only the top level values
+                if (this.getFacetsToShowAllValues().contains(field)) {
+                    return field + SOLR_FACET_FIELD_ALL_VALUES_SUFFIX;
+                }
                 //Only display top level filters !
                 return field + "_tax_0_filter";
             }
@@ -1456,6 +1472,13 @@ public class SolrServiceImpl implements SearchService, IndexingService {
                 return field.substring(0, field.lastIndexOf("_acid"));
             } else {
                 return field + "_acid";
+            }
+        } else if (facetFieldConfig.getType().equals(DiscoveryConfigurationParameters.TYPE_ISO_LANG)) {
+            // CLARIN/LINDAT: the iso_language facet is indexed as {field}_filter with the full language name
+            if (removePostfix) {
+                return field.substring(0, field.lastIndexOf("_filter"));
+            } else {
+                return field + "_filter";
             }
         } else {
             return field;
@@ -1662,4 +1685,15 @@ public class SolrServiceImpl implements SearchService, IndexingService {
         return null;
     }
 
+
+    /**
+     * Return or load the configuration property `discovery.solr.facets.allvalues` as a list.
+     */
+    private ArrayList<String> getFacetsToShowAllValues() {
+        if (CollectionUtils.isEmpty(allValuesFacetList)) {
+            String[] allValuesFacetArray = configurationService.getArrayProperty("discovery.solr.facets.allvalues");
+            Collections.addAll(allValuesFacetList, allValuesFacetArray);
+        }
+        return allValuesFacetList;
+    }
 }

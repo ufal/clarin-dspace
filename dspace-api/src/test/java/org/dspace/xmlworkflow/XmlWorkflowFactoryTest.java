@@ -70,7 +70,9 @@ public class XmlWorkflowFactoryTest extends AbstractUnitTest {
             this.owningCommunity = communityService.create(null, context);
             this.mappedCollection =
                     this.collectionService.create(context, owningCommunity, "123456789/workflow-test-1");
-            this.nonMappedCollection = this.collectionService.create(context, owningCommunity, "123456789/999");
+            // Non-numeric suffix so the handle sequence can never mint a colliding handle
+            this.nonMappedCollection =
+                    this.collectionService.create(context, owningCommunity, "123456789/workflow-test-2");
             //we need to commit the changes so we don't block the table for testing
             context.restoreAuthSystemState();
         } catch (SQLException e) {

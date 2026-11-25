@@ -95,7 +95,11 @@ public class ScriptRestRepositoryIT extends AbstractControllerIntegrationTest {
     public void findAllScriptsTest() throws Exception {
         String token = getAuthToken(admin.getEmail(), password);
 
-        getClient(token).perform(get("/api/system/scripts"))
+        // Request a page large enough to hold every registered script. Without an explicit size the
+        // endpoint returns the default page of 20; once CLARIN adds enough scripts the total exceeds
+        // 20 and the overflow scripts fall onto page 2, breaking the containsInAnyOrder match.
+        getClient(token).perform(get("/api/system/scripts")
+                            .param("size", String.valueOf(scriptConfigurations.size())))
                         .andExpect(status().isOk())
                         .andExpect(jsonPath("$._embedded.scripts", containsInAnyOrder(
                             scriptConfigurations
@@ -132,9 +136,18 @@ public class ScriptRestRepositoryIT extends AbstractControllerIntegrationTest {
     public void findAllScriptsGenericLoggedInUserTest() throws Exception {
         String token = getAuthToken(eperson.getEmail(), password);
 
+        ScriptConfiguration<?> fileDownloaderScriptConfiguration =
+                scriptConfigurations.stream()
+                        .filter(scriptConfiguration
+                                -> scriptConfiguration.getName().equals("file-downloader"))
+                        .findAny().orElseThrow();
+
         getClient(token).perform(get("/api/system/scripts"))
                         .andExpect(status().isOk())
-                        .andExpect(jsonPath("$.page.totalElements", is(0)));
+                        .andExpect(jsonPath("$.page.totalElements", is(1)))
+                        .andExpect(jsonPath("$._embedded.scripts", hasItem(
+                                ScriptMatcher.matchScript(fileDownloaderScriptConfiguration.getName(),
+                                        fileDownloaderScriptConfiguration.getDescription()))));
     }
 
     @Test
@@ -584,6 +597,57 @@ public class ScriptRestRepositoryIT extends AbstractControllerIntegrationTest {
 
 
 
+
+    @Test
+    public void postFilePreviewProcess() throws Exception {
+        LinkedList<DSpaceCommandLineParameter> parameters = new LinkedList<>();
+
+        List<ParameterValueRest> list = parameters.stream()
+                .map(dSpaceCommandLineParameter -> dSpaceRunnableParameterConverter
+                        .convert(dSpaceCommandLineParameter, Projection.DEFAULT))
+                .collect(Collectors.toList());
+
+        String token = getAuthToken(admin.getEmail(), password);
+        List<ProcessStatus> acceptableProcessStatuses = new LinkedList<>();
+        acceptableProcessStatuses.addAll(Arrays.asList(ProcessStatus.SCHEDULED,
+                ProcessStatus.RUNNING,
+                ProcessStatus.COMPLETED));
+
+        AtomicReference<Integer> idRef = new AtomicReference<>();
+
+        try {
+            getClient(token)
+                    .perform(multipart("/api/system/scripts/file-preview/processes")
+                            .param("properties", new ObjectMapper().writeValueAsString(list)))
+                    .andExpect(status().isAccepted())
+                    .andExpect(jsonPath("$", is(
+                            ProcessMatcher.matchProcess("file-preview",
+                                    String.valueOf(admin.getID()),
+                                    parameters,
+                                    acceptableProcessStatuses))))
+                    .andDo(result -> idRef
+                            .set(read(result.getResponse().getContentAsString(), "$.processId")));
+
+            Process process = processService.find(context, idRef.get());
+            Bitstream bitstream = processService.getBitstream(context, process, Process.OUTPUT_TYPE);
+            MvcResult mvcResult = getClient(token)
+                    .perform(get("/api/core/bitstreams/" + bitstream.getID() + "/content")).andReturn();
+            String content = mvcResult.getResponse().getContentAsString();
+
+            getClient(token).perform(get("/api/system/processes/" + idRef.get() + "/output"))
+                    .andExpect(status().isOk());
+            assertThat(content, CoreMatchers
+                    .containsString("INFO file-preview - " + process.getID() + " @ The script has started"));
+            assertThat(content,
+                    CoreMatchers.containsString(
+                            "INFO file-preview - " + process.getID() +
+                                    " @ Authentication by user: " + admin.getEmail()));
+            assertThat(content, CoreMatchers
+                    .containsString("INFO file-preview - " + process.getID() + " @ The script has completed"));
+        } finally {
+            ProcessBuilder.deleteProcess(idRef.get());
+        }
+    }
 
     @Test
     public void postProcessAdminWithWrongContentTypeBadRequestException() throws Exception {

@@ -41,6 +41,10 @@ public class EPersonRest extends DSpaceObjectRest {
 
     private Boolean selfRegistered;
 
+    private String welcomeInfo;
+
+    private Boolean canEditSubmissionMetadata;
+
     @JsonProperty(access = Access.WRITE_ONLY)
     private String password;
 
@@ -121,4 +125,20 @@ public class EPersonRest extends DSpaceObjectRest {
         return RestResourceController.class;
     }
 
+
+    public String getWelcomeInfo() {
+        return welcomeInfo;
+    }
+
+    public void setWelcomeInfo(String welcomeInfo) {
+        this.welcomeInfo = welcomeInfo;
+    }
+
+    public Boolean getCanEditSubmissionMetadata() {
+        return canEditSubmissionMetadata;
+    }
+
+    public void setCanEditSubmissionMetadata(Boolean canEditSubmissionMetadata) {
+        this.canEditSubmissionMetadata = canEditSubmissionMetadata;
+    }
 }

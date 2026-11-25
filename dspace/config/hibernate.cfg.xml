@@ -86,6 +86,19 @@
         <mapping class="org.dspace.versioning.Version"/>
         <mapping class="org.dspace.versioning.VersionHistory"/>
 
+        <!-- CLARIN/LINDAT (UFAL) entities ported for DSpace 9 upgrade. -->
+        <mapping class="org.dspace.content.PreviewContent"/>
+        <mapping class="org.dspace.content.ReportResult"/>
+        <mapping class="org.dspace.content.clarin.ClarinLicense"/>
+        <mapping class="org.dspace.content.clarin.ClarinLicenseLabel"/>
+        <mapping class="org.dspace.content.clarin.ClarinLicenseResourceMapping"/>
+        <mapping class="org.dspace.content.clarin.ClarinLicenseResourceUserAllowance"/>
+        <mapping class="org.dspace.content.clarin.ClarinUserRegistration"/>
+        <mapping class="org.dspace.content.clarin.ClarinUserMetadata"/>
+        <mapping class="org.dspace.content.clarin.ClarinVerificationToken"/>
+        <mapping class="org.dspace.content.clarin.ClarinToken"/>
+        <mapping class="org.dspace.content.clarin.MatomoReportSubscription"/>
+
         <mapping class="org.dspace.app.requestitem.RequestItem"/>
 
         <!--Configurable workflow services -->

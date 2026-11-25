@@ -118,6 +118,12 @@
             <type>cclicense</type> 
         </step-definition>
 
+        <step-definition id="clarin-license">
+            <heading>submit.progressbar.clarin-license</heading>
+            <processing-class>org.dspace.app.rest.submit.step.ClarinLicenseResourceStep</processing-class>
+            <type>clarin-license</type>
+        </step-definition>
+
         <step-definition id="extractionstep"> 
             <heading>submit.progressbar.ExtractMetadataStep</heading>
             <processing-class>org.dspace.app.rest.submit.step.ExtractMetadataStep</processing-class>
@@ -245,6 +251,8 @@
             <!--Step will be to Sign off on the License -->
             <step id="license"/>
             <step id="cclicense"/>
+
+            <step id="clarin-license"/>
         </submission-process>
 
         <submission-process name="languagetestprocess">

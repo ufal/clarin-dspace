@@ -9,6 +9,8 @@ package org.dspace.storage.bitstore;
 
 import static java.lang.String.valueOf;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -18,6 +20,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -29,6 +32,7 @@ import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.output.NullOutputStream;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -697,5 +701,21 @@ public class S3BitStoreService extends BaseBitStoreService {
      */
     public boolean isRegisteredBitstream(String internalId) {
         return internalId.startsWith(REGISTERED_FLAG);
+    }
+
+    /**
+     * CLARIN: download the bitstream from S3 into a local temp File (used by the file-preview feature).
+     * Reuses get(Bitstream) (AWS SDK v2 async client) and streams it to a temp file. The dtq-dev 7.x
+     * version used AWS SDK v1 (tm.download), which does not apply to the v9 SDK-v2 client.
+     */
+    @Override
+    public File getFile(Bitstream bitstream) throws IOException {
+        File tempFile = File.createTempFile("s3-disk-copy-" + UUID.randomUUID(), ".temp");
+        tempFile.deleteOnExit();
+        try (InputStream in = this.get(bitstream);
+             FileOutputStream out = new FileOutputStream(tempFile)) {
+            IOUtils.copy(in, out);
+        }
+        return tempFile;
     }
 }

@@ -10,6 +10,7 @@ package org.dspace.health;
 import java.time.Instant;
 
 import org.apache.logging.log4j.Logger;
+import org.json.JSONObject;
 
 /**
  * Abstract check interface.
@@ -22,12 +23,15 @@ public abstract class Check {
     protected static Logger log = org.apache.logging.log4j.LogManager.getLogger(Check.class);
     long took_ = -1L;
     String report_ = null;
+    private JSONObject reportJson_ = new JSONObject();
     private String errors_ = "";
 
     // this method should be overridden
     protected abstract String run(ReportInfo ri);
 
     public void report(ReportInfo ri) {
+        reportJson_ = new JSONObject();
+        errors_ = "";
         took_ = Instant.now().toEpochMilli();
         try {
             String run_report = run(ri);
@@ -52,4 +56,18 @@ public abstract class Check {
         }
     }
 
+
+    /** CLARIN: accumulated human-readable report text. */
+    public String getReport() {
+        return report_;
+    }
+
+    /** CLARIN: structured JSON report (used by the health-report / report-diff scripts). */
+    public JSONObject getReportJson() {
+        return reportJson_;
+    }
+
+    public void setReportJson(JSONObject reportJson) {
+        this.reportJson_ = reportJson;
+    }
 }
