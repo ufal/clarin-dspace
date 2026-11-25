@@ -48,7 +48,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * The OIDC protocol (discovery, state, nonce, PKCE, code exchange, ID token and UserInfo validation) is done by
  * Spring Security's oauth2Login() in the REST webapp (ClarinOidcLoginConfigurer): the login is started at
  * {@link #START_PATH} (see {@link #loginPageURL}) and completed at the configured redirect URL
- * (GET /api/authn/oidc/callback/clarin-oidc). The webapp hands the claims of the verified ID token and UserInfo
+ * (GET /api/authn/oidc-callback). The webapp hands the claims of the verified ID token and UserInfo
  * response over in the {@link #ID_TOKEN_CLAIMS_ATTRIBUTE} and {@link #USER_INFO_CLAIMS_ATTRIBUTE} request
  * attributes; this class only decides which EPerson they belong to.
  * <p>

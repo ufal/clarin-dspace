@@ -77,8 +77,15 @@ public final class ClarinOidcLoginConfigurer {
 
     private static final Logger log = LogManager.getLogger(ClarinOidcLoginConfigurer.class);
 
-    /** Where the provider redirects back to: dspace.server.url + this must be registered at the provider. */
-    public static final String CALLBACK_PATH = "/api/authn/oidc/callback/" + REGISTRATION_ID;
+    /**
+     * Where the provider redirects back to: dspace.server.url + this must be registered at the provider.
+     * It must be directly under /api/authn, like the stock /api/authn/oidc and /api/authn/shibboleth: the temporary
+     * Authorization-cookie set here (by JWTTokenRestAuthenticationServiceImpl) has no Path, so the browser scopes it
+     * to the callback's parent directory, and the UI then has to send it to /api/authn/status and /api/authn/login.
+     * Spring takes the registration from the pending authorization request, so the path doesn't need the
+     * registration id.
+     */
+    public static final String CALLBACK_PATH = "/api/authn/oidc-callback";
 
     private static final String REDIRECT_URL_SESSION_ATTRIBUTE =
             ClarinOidcLoginConfigurer.class.getName() + ".redirectUrl";

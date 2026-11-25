@@ -205,6 +205,24 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     }
 
     @Test
+    public void testAuthorizationCookieReachesStatusEndpoint() throws Exception {
+        mockUserInfo("perun1", "user@email.it", null);
+        MvcResult result = loginResult();
+        // the cookie (set by JWTTokenRestAuthenticationServiceImpl) has no Path: a browser scopes it to the callback's
+        // parent directory (RFC 6265 5.1.4), and the UI redeems it at /api/authn/status (MockMvc ignores cookie paths,
+        // so this is checked explicitly)
+        assertThat(result.getResponse().getCookie("Authorization-cookie").getPath(), nullValue());
+        String defaultPath = CALLBACK_URL.substring(0, CALLBACK_URL.lastIndexOf('/'));
+        assertThat(defaultPath, equalTo("/api/" + AuthnRest.CATEGORY));
+        registeredEPersons.add(ePersonService.find(context, UUIDUtils.fromString(
+                getEPersonIdFromAuthorizationCookie(result))));
+        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/status")
+                        .cookie(result.getResponse().getCookie("Authorization-cookie")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.authenticated", is(true)));
+    }
+
+    @Test
     public void testClarinBeanIsUsed() {
         assertThat(oidcAuthentication, instanceOf(ClarinOidcAuthenticationBean.class));
     }
