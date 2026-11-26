@@ -115,7 +115,9 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
      */
     public static final String DUPLICATE_USER_ATTRIBUTE = "oidc.clarin.duplicate-user";
 
-    public static final String DEFAULT_USER_ID_ATTRIBUTE = "sub";
+    /** Prefixes the organization (authentication-oidc.user-info.organization) a new registration is created with. */
+    public static final String ORGANIZATION_PREFIX = "oidc:";
+
     public static final String DEFAULT_EMAIL_VERIFIED_ATTRIBUTE = "email_verified";
 
     @Autowired
@@ -158,15 +160,18 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
         Map<String, Object> idToken = toClaims(idTokenClaims);
         Map<String, Object> userInfo = userInfoClaims instanceof Map ? toClaims(userInfoClaims) : Map.of();
 
-        // the verified issuer of the ID token
+        // the verified issuer and subject of the ID token: the subject is the user's unique and stable ID at the
+        // provider (Spring has checked that the UserInfo's sub is the same)
         Object issuer = idToken.get("iss");
-        if (issuer == null || StringUtils.isBlank(issuer.toString())) {
-            log.warn("Unable to authenticate using OIDC because the ID token has no issuer.");
+        Object subject = idToken.get("sub");
+        if (issuer == null || subject == null || StringUtils.isAnyBlank(issuer.toString(), subject.toString())) {
+            log.warn("Unable to authenticate using OIDC because the ID token has no issuer or subject.");
             return NO_SUCH_USER;
         }
         String provider = StringUtils.defaultIfBlank(configurationService.getProperty("authentication-oidc.provider"),
                 issuer.toString());
-        return authenticateWithClaims(context, mergeClaims(idToken, userInfo), provider, request);
+        return authenticateWithClaims(context, mergeClaims(idToken, userInfo), provider, subject.toString(),
+                request);
     }
 
     @SuppressWarnings("unchecked")
@@ -202,18 +207,16 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
     }
 
     private int authenticateWithClaims(Context context, Map<String, Object> userInfo, String provider,
-                                       HttpServletRequest request) throws SQLException {
-        String userIdAttribute = getUserIdAttribute();
-        String userId = StringUtils.isBlank(userIdAttribute) || userInfo.get(userIdAttribute) == null
-                ? null : getAttributeAsString(userInfo, userIdAttribute);
-        if (StringUtils.isBlank(userId)) {
-            log.warn("No user ID attribute '{}' found in the user info attributes", getUserIdAttribute());
-            return NO_SUCH_USER;
-        }
+                                       String userId, HttpServletRequest request) throws SQLException {
         String emailAttribute = getEmailAttribute();
         String email = StringUtils.isBlank(emailAttribute) || userInfo.get(emailAttribute) == null
                 ? null : getAttributeAsString(userInfo, emailAttribute);
         String organization = getAttributeAsFirstValue(userInfo, getOrganizationAttribute());
+        if (StringUtils.isNotBlank(organization)) {
+            // never equal to a SAML entityID: ClarinShibAuthentication#canBindNetIdByEmail lets a Shibboleth login
+            // through the IdP recorded here take over an account (without a netid) found by its email
+            organization = ORGANIZATION_PREFIX + organization;
+        }
 
         // When required, a verified ownership is needed before trusting the claimed email for anything:
         // updating the email of an already logged-in EPerson, linking an existing account found by email, or
@@ -633,15 +636,6 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
             return true;
         }
         return toBoolean(canSelfRegister);
-    }
-
-    /**
-     * Returns the name of the user info attribute containing the unique user ID, "sub" by default.
-     *
-     * @return user ID attribute name
-     */
-    private String getUserIdAttribute() {
-        return configurationService.getProperty("authentication-oidc.user-info.id", DEFAULT_USER_ID_ATTRIBUTE);
     }
 
     /**

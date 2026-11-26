@@ -8,6 +8,7 @@
 package org.dspace.app.rest;
 
 import static java.util.Arrays.asList;
+import static org.dspace.authenticate.clarin.ClarinOidcAuthenticationBean.ORGANIZATION_PREFIX;
 import static org.dspace.content.clarin.AuthenticationIdentity.AUTH_METHOD_OIDC;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
@@ -46,6 +47,7 @@ import org.dspace.app.rest.security.clarin.ClarinOidcLoginConfigurer;
 import org.dspace.app.rest.security.jwt.EPersonClaimProvider;
 import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
 import org.dspace.authenticate.clarin.ClarinOidcAuthentication;
+import org.dspace.authenticate.clarin.ClarinShibAuthentication;
 import org.dspace.authenticate.clarin.ClarinOidcAuthenticationBean;
 import org.dspace.authenticate.clarin.oidc.FakeOidcProvider;
 import org.dspace.builder.EPersonBuilder;
@@ -167,7 +169,6 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         configurationService.setProperty("authentication-oidc.user-info.email", EMAIL);
         configurationService.setProperty("authentication-oidc.user-info.first-name", FIRST_NAME);
         configurationService.setProperty("authentication-oidc.user-info.last-name", LAST_NAME);
-        configurationService.setProperty("authentication-oidc.user-info.id", SUB);
         configurationService.setProperty("authentication-oidc.user-info.organization", ORGANIZATION);
         configurationService.setProperty("authentication-oidc.user-info.email-verified", EMAIL_VERIFIED);
         configurationService.setProperty("authentication-oidc.provider", PROVIDER);
@@ -626,7 +627,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
 
         List<ClarinUserRegistration> registrations = findRegistrations(ePerson);
         assertThat(registrations, hasSize(1));
-        assertThat(registrations.get(0).getOrganization(), equalTo("Charles University"));
+        assertThat(registrations.get(0).getOrganization(), equalTo(ORGANIZATION_PREFIX + "Charles University"));
         assertThat(registrations.get(0).getEmail(), equalTo("perun@email.it"));
         assertThat(registrations.get(0).isConfirmation(), equalTo(true));
     }
@@ -646,7 +647,8 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
 
         List<ClarinUserRegistration> registrations = findRegistrations(ePerson);
         assertThat(registrations, hasSize(1));
-        assertThat(registrations.get(0).getOrganization(), equalTo("affiliate@einfra.cesnet.cz"));
+        assertThat(registrations.get(0).getOrganization(),
+                equalTo(ORGANIZATION_PREFIX + "affiliate@einfra.cesnet.cz"));
     }
 
     @Test
@@ -704,7 +706,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
 
         List<ClarinUserRegistration> registrations = findRegistrations(ePerson);
         assertThat(registrations, hasSize(1));
-        assertThat(registrations.get(0).getOrganization(), equalTo("Old University"));
+        assertThat(registrations.get(0).getOrganization(), equalTo(ORGANIZATION_PREFIX + "Old University"));
 
         // as with Shibboleth, the organization is only set when the registration is created
         mockUserInfo("perun1", "perun@email.it", "New University");
@@ -713,7 +715,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         context.reloadEntity(registrations.get(0));
         registrations = findRegistrations(ePerson);
         assertThat(registrations, hasSize(1));
-        assertThat(registrations.get(0).getOrganization(), equalTo("Old University"));
+        assertThat(registrations.get(0).getOrganization(), equalTo(ORGANIZATION_PREFIX + "Old University"));
     }
 
     @Test
@@ -845,10 +847,13 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         registeredEPersons.add(ePerson);
         ePersons.add(ePerson);
 
-        // the ID token's iss: the provider that sent the login, like the IdP entityID stored by Shibboleth
+        // the ID token's iss: the provider that sent the login, prefixed so it never equals an IdP entityID
         List<ClarinUserRegistration> registrations = findRegistrations(ePerson);
         assertThat(registrations, hasSize(1));
-        assertThat(registrations.get(0).getOrganization(), equalTo(provider.getIssuer()));
+        assertThat(registrations.get(0).getOrganization(), equalTo(ORGANIZATION_PREFIX + provider.getIssuer()));
+        // a Shibboleth login through an IdP whose entityID is the issuer doesn't take over the account by email
+        assertThat(new ClarinShibAuthentication().canBindNetIdByEmail(context, ePerson, provider.getIssuer()),
+                is(false));
     }
 
     @Test
