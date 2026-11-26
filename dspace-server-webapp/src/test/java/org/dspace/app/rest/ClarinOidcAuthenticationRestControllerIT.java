@@ -416,8 +416,44 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         AuthenticationIdentity identity = authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER,
                 "perun1");
         assertThat(identity, notNullValue());
-        assertThat(identity.getEPerson(), equalTo(ePerson));
+        // by ID: EPerson#equals compares the email, which the login changed
+        assertThat(identity.getEPerson().getID(), equalTo(ePerson.getID()));
         assertThat(context.reloadEntity(ePerson).getNetid(), equalTo(SHIB_NETID));
+    }
+
+    @Test
+    public void testEmailUpdatedWhenLinkedByExternalId() throws Exception {
+        configurationService.setProperty("authentication-oidc.user-info.external-ids", EXTERNAL_IDS);
+        EPerson ePerson = createEPerson("shib@email.it", false);
+        setNetid(ePerson, SHIB_NETID);
+        createRegistration(ePerson, "https://idp.cuni.cz/idp/shibboleth");
+
+        mockUserInfo("perun1", "perun@email.it", "Charles University");
+        provider.userInfo.put(EXTERNAL_IDS, List.of("perun@cuni.cz"));
+
+        // the login that links the identity updates the account as every later login does
+        assertThat(login(), equalTo(ePerson.getID().toString()));
+
+        assertThat(context.reloadEntity(ePerson).getEmail(), equalTo("perun@email.it"));
+        ClarinUserRegistration registration = context.reloadEntity(findRegistrations(ePerson).get(0));
+        assertThat(registration.getEmail(), equalTo("perun@email.it"));
+        assertThat(registration.getOrganization(), equalTo("https://idp.cuni.cz/idp/shibboleth"));
+    }
+
+    @Test
+    public void testEmailNotUpdatedWhenLinkedByExternalIdAndUsedByOtherEPerson() throws Exception {
+        configurationService.setProperty("authentication-oidc.user-info.external-ids", EXTERNAL_IDS);
+        EPerson ePerson = createEPerson("shib@email.it", false);
+        setNetid(ePerson, SHIB_NETID);
+        EPerson otherEPerson = createEPerson("perun@email.it", true);
+
+        mockUserInfo("perun1", "perun@email.it", null);
+        provider.userInfo.put(EXTERNAL_IDS, List.of("perun@cuni.cz"));
+
+        assertThat(login(), equalTo(ePerson.getID().toString()));
+
+        assertThat(context.reloadEntity(ePerson).getEmail(), equalTo("shib@email.it"));
+        assertThat(ePersonService.findByEmail(context, "perun@email.it").getID(), equalTo(otherEPerson.getID()));
     }
 
     @Test

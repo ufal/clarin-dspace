@@ -238,12 +238,7 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
                 logIn(context, ePerson, userInfo, request);
                 // current user is set to the identity owner, who is allowed to update it
                 authenticationIdentityService.updateLastLogin(context, identity);
-                // the email is updated, and a missing registration created, only when the provider returns a
-                // (verified) email this time; the organization of an existing registration is never changed
-                if (StringUtils.isNotBlank(email)) {
-                    updateEmail(context, ePerson, email);
-                    createRegistrationIfMissing(context, ePerson, organization);
-                }
+                updateAccount(context, ePerson, email, organization);
                 log.info("EPerson {} logged in via OIDC identity {}", ePerson.getID(), userId);
                 return SUCCESS;
             }
@@ -259,7 +254,8 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
                 }
                 log.info("OIDC identity {} belongs to EPerson {} found by its external ID", userId,
                         externalIdOwner.getID());
-                return linkEPerson(context, externalIdOwner, userInfo, provider, userId, organization, request);
+                return linkEPerson(context, externalIdOwner, userInfo, email, provider, userId, organization,
+                        request);
             }
 
             if (StringUtils.isBlank(email)) {
@@ -277,7 +273,7 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
                     request.setAttribute(DUPLICATE_USER_ATTRIBUTE, email);
                     return BAD_ARGS;
                 }
-                return linkEPerson(context, ePerson, userInfo, provider, userId, organization, request);
+                return linkEPerson(context, ePerson, userInfo, email, provider, userId, organization, request);
             }
 
             // 3. register a new EPerson
@@ -295,8 +291,8 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
         }
     }
 
-    private int linkEPerson(Context context, EPerson ePerson, Map<String, Object> userInfo, String provider,
-                            String userId, String organization, HttpServletRequest request)
+    private int linkEPerson(Context context, EPerson ePerson, Map<String, Object> userInfo, String email,
+                            String provider, String userId, String organization, HttpServletRequest request)
             throws SQLException, AuthorizeException {
 
         // the EPerson already linked to another identity of this provider must not be taken over
@@ -306,8 +302,7 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
             log.warn("EPerson {} is already linked to another identity of the OIDC provider {}, the OIDC identity " +
                     "{} is not linked", ePerson.getID(), provider, userId);
             // the email of this login, not of the account found (which may differ when found by external ID)
-            request.setAttribute(DUPLICATE_USER_ATTRIBUTE,
-                    Objects.toString(getAttributeAsString(userInfo, getEmailAttribute()), ""));
+            request.setAttribute(DUPLICATE_USER_ATTRIBUTE, Objects.toString(email, ""));
             return BAD_ARGS;
         }
 
@@ -327,7 +322,7 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
         }
 
         logIn(context, ePerson, userInfo, request);
-        createRegistrationIfMissing(context, ePerson, organization);
+        updateAccount(context, ePerson, email, organization);
         log.info("EPerson {} was linked to the OIDC identity {}", ePerson.getID(), userId);
         return SUCCESS;
     }
@@ -531,6 +526,20 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
     private String getAttributeAsFirstValue(Map<String, Object> userInfo, String attribute) {
         List<String> values = getAttributeAsList(userInfo, attribute);
         return values.isEmpty() ? null : values.get(0).split(",", 2)[0].trim();
+    }
+
+    /**
+     * Update the account from the login, the same on the login that links the identity (e.g. to an account found by
+     * its external ID, under another email) and on every later one: only when the provider returns a (verified)
+     * email, the email is updated and a missing registration created. The organization of an existing registration
+     * is never changed.
+     */
+    private void updateAccount(Context context, EPerson ePerson, String email, String organization)
+            throws SQLException, AuthorizeException {
+        if (StringUtils.isNotBlank(email)) {
+            updateEmail(context, ePerson, email);
+            createRegistrationIfMissing(context, ePerson, organization);
+        }
     }
 
     /**
