@@ -87,6 +87,12 @@ public final class ClarinOidcLoginConfigurer {
      */
     public static final String CALLBACK_PATH = "/api/authn/oidc-callback";
 
+    /**
+     * The UI page (under dspace.ui.url) a failed login is redirected to: the generic failure of
+     * ClarinShibbolethLoginFilter, for which the UI shows the help desk contact.
+     */
+    public static final String FAILURE_PATH = "/login?error=shibboleth-authentication-failed";
+
     private static final String REDIRECT_URL_SESSION_ATTRIBUTE =
             ClarinOidcLoginConfigurer.class.getName() + ".redirectUrl";
 
@@ -125,7 +131,7 @@ public final class ClarinOidcLoginConfigurer {
                 .successHandler((request, response, authentication) -> loginToDSpace(request, response,
                         authentication, authenticationManager, restAuthenticationService, configurationService))
                 .failureHandler((request, response, exception) ->
-                        fail(request, response, exception, restAuthenticationService, configurationService)));
+                        fail(request, response, exception, configurationService)));
     }
 
     /** The redirect URL sent to the provider (authentication-oidc.redirect-url is the stock plugin's). */
@@ -186,7 +192,7 @@ public final class ClarinOidcLoginConfigurer {
             dspaceAuthentication = (DSpaceAuthentication) authenticationManager.authenticate(
                     new DSpaceAuthentication());
         } catch (AuthenticationException ex) {
-            fail(request, response, ex, restAuthenticationService, configurationService);
+            fail(request, response, ex, configurationService);
             return;
         }
         restAuthenticationService.addAuthenticationDataForUser(request, response, dspaceAuthentication, true);
@@ -196,12 +202,12 @@ public final class ClarinOidcLoginConfigurer {
     }
 
     /**
-     * A login refused because its email belongs to an account it must not be linked to is redirected to the UI's
-     * duplicate-user page, as ClarinShibbolethLoginFilter does. Any other failure gets the same response as a
-     * failed login at the stock OidcLoginFilter: 401 with the WWW-Authenticate header.
+     * The callback is a top-level browser navigation, not an XHR, so a failure is a redirect to a UI page, as in
+     * ClarinShibbolethLoginFilter: a login refused because its email belongs to an account it must not be linked to
+     * goes to the duplicate-user page, any other failure (no email, invalid state, code or token, provider error)
+     * to the login page with the error the UI shows the help desk contact for.
      */
     private static void fail(HttpServletRequest request, HttpServletResponse response, AuthenticationException ex,
-                             RestAuthenticationService restAuthenticationService,
                              ConfigurationService configurationService) throws IOException {
         HttpSession session = request.getSession(false);
         if (session != null) {
@@ -216,9 +222,7 @@ public final class ClarinOidcLoginConfigurer {
         // the OAuth2 error code (invalid_state_parameter, invalid_nonce, invalid_id_token, ...) is safe to log
         log.warn("CLARIN OIDC login failed: {}", ex instanceof OAuth2AuthenticationException
                 ? ((OAuth2AuthenticationException) ex).getError() : ex.getMessage());
-        response.setHeader("WWW-Authenticate", restAuthenticationService.getWwwAuthenticateHeaderValue(request,
-                response));
-        response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Authentication failed!");
+        response.sendRedirect(configurationService.getProperty("dspace.ui.url") + FAILURE_PATH);
     }
 
     /**

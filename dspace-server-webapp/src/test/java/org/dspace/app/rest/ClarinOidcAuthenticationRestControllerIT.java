@@ -987,7 +987,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
 
         getClient().perform(get(CALLBACK_URL)
                         .param("code", CODE).param("state", attackersState))
-                .andExpect(status().isUnauthorized())
+                .andExpect(redirectedUrl(failureUrl()))
                 .andExpect(cookie().doesNotExist("Authorization-cookie"));
         assertThat(provider.getTokenRequestBodies(), empty());
     }
@@ -1003,7 +1003,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         MvcResult victimsStart = startLogin();
 
         callback(victimsStart, attackersState)
-                .andExpect(status().isUnauthorized())
+                .andExpect(redirectedUrl(failureUrl()))
                 .andExpect(cookie().doesNotExist("Authorization-cookie"));
         assertThat(provider.getTokenRequestBodies(), empty());
     }
@@ -1167,10 +1167,16 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         return getEPersonIdFromAuthorizationCookie(loginResult());
     }
 
+    /** The callback is a browser navigation, so a failed login is a redirect to the UI's login error. */
     private void loginFails() throws Exception {
         completeLogin(actions -> actions
-                .andExpect(status().isUnauthorized())
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl(failureUrl()))
                 .andExpect(cookie().doesNotExist("Authorization-cookie")));
+    }
+
+    private String failureUrl() {
+        return configurationService.getProperty("dspace.ui.url") + ClarinOidcLoginConfigurer.FAILURE_PATH;
     }
 
     /** A refused login whose email belongs to an account it must not take over goes to the duplicate-user page. */
