@@ -103,7 +103,6 @@
             <Set ref="openaireDataSet"/>
             <Format ref="oaidc"/>
             <Format ref="oai_datacite"/>
-            <Format ref="ccmm"/>
             <Description>
                 This context exports items following the openaire data archive rules.
             </Description>

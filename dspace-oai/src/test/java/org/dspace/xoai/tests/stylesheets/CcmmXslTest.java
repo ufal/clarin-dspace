@@ -354,20 +354,54 @@ public class CcmmXslTest extends AbstractXSLTest {
     public void ccmmContainsPrimaryLanguage() throws Exception {
         // CCMM: "Use IRI identifier from the register
         // http://publications.europa.eu/resource/authority/language"
-        String result = apply("ccmm.xsl").to(resource(MAIN));
+        String result = ccmmOf(once(fixture(MAIN), ENG_CODE, ""));
         assertThat(result, is(ccmm().withXPath(
-            "//ccmm:dataset/ccmm:primary_language/ccmm:iri",
-            equalTo("http://publications.europa.eu/resource/authority/language/CES"))));
+            "//ccmm:dataset/ccmm:primary_language/ccmm:iri", equalTo(LANGUAGE + "CES"))));
+        assertThat(result, is(ccmm().withXPath("count(//ccmm:dataset/ccmm:other_language)", equalTo("0"))));
+    }
+
+    @Test
+    public void ccmmSeveralLanguagesHaveNoPrimaryLanguage() throws Exception {
+        // dc.language.iso has no order of importance, so with several languages none is the primary one
+        String result = apply("ccmm.xsl").to(resource(MAIN));
+        assertThat(result, is(ccmm().withXPath("count(//ccmm:dataset/ccmm:primary_language)", equalTo("0"))));
     }
 
     @Test
     public void ccmmOtherLanguageKeepsItsRegisterIri() throws Exception {
-        // document order is preserved and duplicates removed without reordering, so the second
-        // distinct code is the first other_language
+        // with several languages every one is an other_language, in document order
         String result = apply("ccmm.xsl").to(resource(MAIN));
+        assertThat(result, is(ccmm().withXPath("count(//ccmm:dataset/ccmm:other_language)", equalTo("2"))));
         assertThat(result, is(ccmm().withXPath(
-            "//ccmm:dataset/ccmm:other_language/ccmm:iri",
-            equalTo("http://publications.europa.eu/resource/authority/language/ENG"))));
+            "(//ccmm:dataset/ccmm:other_language/ccmm:iri)[1]", equalTo(LANGUAGE + "CES"))));
+        assertThat(result, is(ccmm().withXPath(
+            "(//ccmm:dataset/ccmm:other_language/ccmm:iri)[2]", equalTo(LANGUAGE + "ENG"))));
+    }
+
+    @Test
+    public void ccmmTheSameLanguageTwiceIsOnePrimaryLanguage() throws Exception {
+        // "cs" and "ces" are one language once mapped to ISO 639-3
+        String result = ccmmOf(once(fixture(MAIN), ENG_CODE, "<field name=\"value\">cs</field>"));
+        assertThat(result, is(ccmm().withXPath(
+            "//ccmm:dataset/ccmm:primary_language/ccmm:iri", equalTo(LANGUAGE + "CES"))));
+        assertThat(result, is(ccmm().withXPath("count(//ccmm:dataset/ccmm:other_language)", equalTo("0"))));
+    }
+
+    @Test
+    public void ccmmAValueWithoutACodeStillMeansSeveralLanguages() throws Exception {
+        // free text maps to no register code, but it can be another language, so CES is not primary
+        String result = ccmmOf(once(fixture(MAIN), ENG_CODE, "<field name=\"value\">English; Czech</field>"));
+        assertThat(result, is(ccmm().withXPath("count(//ccmm:dataset/ccmm:primary_language)", equalTo("0"))));
+        assertThat(result, is(ccmm().withXPath("count(//ccmm:dataset/ccmm:other_language)", equalTo("1"))));
+        assertThat(result, is(ccmm().withXPath(
+            "//ccmm:dataset/ccmm:other_language/ccmm:iri", equalTo(LANGUAGE + "CES"))));
+    }
+
+    @Test
+    public void ccmmNoLanguageIsNeitherPrimaryNorOther() throws Exception {
+        String result = ccmmOf(once(once(fixture(MAIN), "<field name=\"value\">ces</field>", ""), ENG_CODE, ""));
+        assertThat(result, is(ccmm().withXPath(
+            "count(//ccmm:dataset/ccmm:primary_language | //ccmm:dataset/ccmm:other_language)", equalTo("0"))));
     }
 
     @Test
@@ -1120,13 +1154,13 @@ public class CcmmXslTest extends AbstractXSLTest {
     public void ccmmLanguageCarriesTheRegisterIriAndNoInventedLabel() throws Exception {
         // the scope note asks for the register's label "and/or" its code; DSpace's own string is
         // not the register's, so only the IRI is published
-        String result = apply("ccmm.xsl").to(resource(MAIN));
-        assertThat(result, is(ccmm().withXPath(
-            "//ccmm:primary_language/ccmm:iri",
-            equalTo("http://publications.europa.eu/resource/authority/language/CES"))));
-        assertThat(result, is(ccmm().withXPath(
+        String single = ccmmOf(once(fixture(MAIN), ENG_CODE, ""));
+        assertThat(single, is(ccmm().withXPath("//ccmm:primary_language/ccmm:iri", equalTo(LANGUAGE + "CES"))));
+        assertThat(single, is(ccmm().withXPath(
             "count(//ccmm:primary_language/ccmm:label)", equalTo("0"))));
-        assertThat(result, is(ccmm().withXPath(
+        String several = apply("ccmm.xsl").to(resource(MAIN));
+        assertThat(several, is(ccmm().withXPath("count(//ccmm:other_language/ccmm:iri)", equalTo("2"))));
+        assertThat(several, is(ccmm().withXPath(
             "count(//ccmm:other_language/ccmm:label)", equalTo("0"))));
     }
 
@@ -1717,12 +1751,24 @@ public class CcmmXslTest extends AbstractXSLTest {
         // choosing one would be correcting the record
         String result = ccmmOf(add(fixture(MAIN), "dc", field("relation.isbasedon", "none", REPLACED)));
         assertThat(result, is(ccmm().withXPath(
-            "count(//ccmm:related_resource[ccmm:iri='" + REPLACED + "'])", equalTo("2"))));
+            "count(//ccmm:related_resource[ccmm:resource_url='" + REPLACED + "'])", equalTo("2"))));
         for (String type : new String[] {"Obsoletes", "IsDerivedFrom"}) {
             assertThat(type, result, is(ccmm().withXPath(
-                "count(//ccmm:related_resource[ccmm:iri='" + REPLACED + "']"
+                "count(//ccmm:related_resource[ccmm:resource_url='" + REPLACED + "']"
+                    + "[ccmm:identifier/ccmm:value='123456789/1-1111']"
                     + "[ccmm:resource_relation_type/ccmm:iri='" + RELATION + type + "'])", equalTo("1"))));
         }
+    }
+
+    @Test
+    public void ccmmOnlyTheFirstOfTwoRelationsToOneResourceCarriesItsIri() throws Exception {
+        // CCMM identifies a related resource by its iri and allows it one relation type (SHACL
+        // sh:maxCount 1 on ccmm:hasType), so a second relation to the same resource has no iri.
+        // add() puts isbasedon before MAIN's own dc.relation element, so it is the first one.
+        String result = ccmmOf(add(fixture(MAIN), "dc", field("relation.isbasedon", "none", REPLACED)));
+        assertThat(result, is(ccmm().withXPath(
+            "count(//ccmm:related_resource[ccmm:iri='" + REPLACED + "'])", equalTo("1"))));
+        assertThat(result, is(ccmm().withXPath(relationTypeOf(REPLACED), equalTo(RELATION + "IsDerivedFrom"))));
     }
 
     @Test
@@ -1910,6 +1956,9 @@ public class CcmmXslTest extends AbstractXSLTest {
     private static final String SOURCE_URI = "https://example.org/czech-nlp-dataset";
     /** dc.relation.replaces of MAIN */
     private static final String REPLACED = "http://hdl.handle.net/123456789/1-1111";
+    /** the second of MAIN's two dc.language.iso codes */
+    private static final String ENG_CODE = "<field name=\"value\">eng</field>";
+    private static final String LANGUAGE = "http://publications.europa.eu/resource/authority/language/";
 
     /** A fixture as text, to edit with {@link #once} or {@link #add} and transform with {@link #ccmmOf}. */
     private String fixture(String name) throws Exception {

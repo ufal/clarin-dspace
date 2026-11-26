@@ -160,8 +160,8 @@
     <!--
         Language codes.  LINDAT stores ISO 639-3, but stock DSpace stores 639-1 with an optional
         region subtag ("en", "en_US", "de-DE"), so the subtag is stripped and the two-letter code
-        mapped to 639-3 before the EU register IRI is built.  Document order is preserved - the
-        first code is the primary language - and duplicates are removed without reordering.
+        mapped to 639-3 before the EU register IRI is built.  Document order is preserved and
+        duplicates are removed without reordering.
     -->
     <xsl:variable name="iso1to3">
         <c k="ab">abk</c><c k="af">afr</c><c k="am">amh</c><c k="ar">ara</c><c k="as">asm</c><c k="az">aze</c>
@@ -191,6 +191,12 @@
                 else ())"/>
     <xsl:variable name="languageCodes"
         select="for $i in 1 to count($langAll) return $langAll[$i][not(. = $langAll[position() &lt; $i])]"/>
+    <!--
+        dc.language.iso has no order of importance, so only an item with exactly one language has a
+        primary language.  A value that maps to no code may still be a second language, so it counts.
+    -->
+    <xsl:variable name="singleLanguage"
+        select="count($languageCodes) = 1 and count($langAll) = count($languageRaw[normalize-space()])"/>
     <!--
         local.additional.metadata is one blob of "Label (field_key):value" lines carried over from
         the old Drupal catalogue.  Splitting on the FIRST colon is safe: every key ends in ':' and
@@ -1112,8 +1118,7 @@
             concepts; they are emitted unchanged rather than silently remapped (APC is a
             broadening of AJP, and HBS has no single successor).
         -->
-        <xsl:variable name="langCode" select="$languageCodes[1]"/>
-        <xsl:if test="$langCode">
+        <xsl:if test="$singleLanguage">
             <!--
                 The register IRI alone: the scope note asks for "language label and/or its
                 3-letter code from" the register, and CCMM's own dataset-mini sample writes
@@ -1123,7 +1128,7 @@
                 asserting a label the register does not use.
             -->
             <ccmm:primary_language>
-                <ccmm:iri><xsl:value-of select="concat('http://publications.europa.eu/resource/authority/language/', upper-case($langCode))"/></ccmm:iri>
+                <ccmm:iri><xsl:value-of select="concat('http://publications.europa.eu/resource/authority/language/', upper-case($languageCodes[1]))"/></ccmm:iri>
             </ccmm:primary_language>
         </xsl:if>
     </xsl:template>
@@ -1132,13 +1137,14 @@
     <!-- other_language (optional)                                     -->
     <!-- ============================================================ -->
     <xsl:template name="OtherLanguages">
-        <!-- every remaining code, in document order, so the positional name list stays aligned -->
-        <xsl:for-each select="2 to count($languageCodes)">
-            <xsl:variable name="i" select="."/>
-            <ccmm:other_language>
-                <ccmm:iri><xsl:value-of select="concat('http://publications.europa.eu/resource/authority/language/', upper-case($languageCodes[$i]))"/></ccmm:iri>
-            </ccmm:other_language>
-        </xsl:for-each>
+        <!-- every code, in document order, unless the item's only language is primary_language -->
+        <xsl:if test="not($singleLanguage)">
+            <xsl:for-each select="$languageCodes">
+                <ccmm:other_language>
+                    <ccmm:iri><xsl:value-of select="concat('http://publications.europa.eu/resource/authority/language/', upper-case(.))"/></ccmm:iri>
+                </ccmm:other_language>
+            </xsl:for-each>
+        </xsl:if>
     </xsl:template>
 
     <!-- ============================================================ -->
@@ -1810,15 +1816,21 @@
             distributions (a featured service also given as the demo, a web service also given as
             the source) is not repeated as a related resource: CCMM says distributions SHALL NOT be
             modeled as related resources.
+            CCMM identifies a related resource by its iri and gives it one relation type (SHACL
+            sh:maxCount 1 on ccmm:hasType), so only the first relation to an IRI, in the record's
+            order, carries it; a further one is still identified by its resource_url.
         -->
         <xsl:variable name="perIri" as="element()*">
             <xsl:for-each-group select="$deduped/*[not(ccmm:iri = $distributionIris)]" group-by="if (ccmm:iri) then string(ccmm:iri) else generate-id()">
                 <xsl:variable name="best" select="min(for $r in current-group() return cw:relationRank($r))"/>
                 <xsl:for-each-group select="current-group()[cw:relationRank(.) = $best]"
                                     group-by="string(ccmm:resource_relation_type/ccmm:iri)">
+                    <xsl:variable name="nth" select="position()"/>
                     <xsl:for-each select="current-group()[1]">
                         <!-- without the cw:assumed mark and its namespace, on every level -->
-                        <xsl:copy copy-namespaces="no"><xsl:copy-of select="node()" copy-namespaces="no"/></xsl:copy>
+                        <xsl:copy copy-namespaces="no">
+                            <xsl:copy-of select="node()[not($nth &gt; 1 and self::ccmm:iri)]" copy-namespaces="no"/>
+                        </xsl:copy>
                     </xsl:for-each>
                 </xsl:for-each-group>
             </xsl:for-each-group>
