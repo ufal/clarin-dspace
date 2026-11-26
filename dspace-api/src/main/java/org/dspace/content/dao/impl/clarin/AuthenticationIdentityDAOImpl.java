@@ -27,6 +27,17 @@ import org.dspace.eperson.EPerson;
 public class AuthenticationIdentityDAOImpl extends AbstractHibernateDAO<AuthenticationIdentity>
         implements AuthenticationIdentityDAO {
 
+    /**
+     * Flushed right away, so that a duplicate identity (e.g. from a concurrent first login) fails here, where the
+     * caller can refuse the login, and not later at the commit.
+     */
+    @Override
+    public AuthenticationIdentity create(Context context, AuthenticationIdentity identity) throws SQLException {
+        super.create(context, identity);
+        getHibernateSession(context).flush();
+        return identity;
+    }
+
     @Override
     public AuthenticationIdentity findByAuthMethodAndProviderAndUserId(Context context,
                                                                        String authMethod,

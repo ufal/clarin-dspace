@@ -18,6 +18,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.util.Date;
 import java.util.List;
+import javax.persistence.PersistenceException;
 import javax.ws.rs.BadRequestException;
 
 import org.dspace.AbstractIntegrationTestWithDatabase;
@@ -156,16 +157,13 @@ public class AuthenticationIdentityServiceTest extends AbstractIntegrationTestWi
     public void testSameEPersonSameProviderDifferentUserIdNotAllowed() throws Exception {
         context.setCurrentUser(admin);
         authenticationIdentityService.create(context, eperson, AUTH_METHOD_OIDC, PROVIDER, "perun1");
-        authenticationIdentityService.create(context, eperson, AUTH_METHOD_OIDC, PROVIDER, "perun2");
 
         // the DB constraint (not the service itself) prevents linking a second identity of the same
         // auth_method/provider to the same EPerson, guarding against a race between concurrent first
-        // logins with different user_id both passing an application-level "not already linked" check.
-        // The exact exception type Hibernate surfaces for the underlying constraint violation is not
-        // asserted here, since it varies (e.g. once the broken session is touched again by the post-commit
-        // entity reload, a less specific HibernateException can surface instead) - what matters is that
-        // committing both rows together fails.
-        assertThrows(RuntimeException.class, () -> context.commit());
+        // logins with different user_id both passing an application-level "not already linked" check;
+        // the insert is flushed, so it fails right at create
+        assertThrows(PersistenceException.class, () ->
+                authenticationIdentityService.create(context, eperson, AUTH_METHOD_OIDC, PROVIDER, "perun2"));
 
         context.rollback();
         eperson = context.reloadEntity(eperson);

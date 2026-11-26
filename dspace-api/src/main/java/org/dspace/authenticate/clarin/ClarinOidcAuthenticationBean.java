@@ -313,16 +313,9 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
 
         context.turnOffAuthorisationSystem();
         try {
+            // flushed right away: a concurrent first login of a different identity that raced past the check above
+            // to link the same EPerson fails here (authentication_identity_eperson_per_provider_unique)
             authenticationIdentityService.create(context, ePerson, AUTH_METHOD_OIDC, provider, userId);
-            // commit immediately, so a concurrent first login of a different OIDC identity racing past the
-            // check above to link the same EPerson+provider is caught right here as a constraint violation
-            // (authentication_identity_eperson_per_provider_unique), instead of silently succeeding
-            // or surfacing much later at the end-of-request commit. Depending on the database, the actual
-            // violation may surface as a plain RuntimeException rather than specifically a Hibernate
-            // ConstraintViolationException (e.g. once the broken Hibernate session is touched again by the
-            // post-commit entity reload), so any failure at this specific, narrowly-scoped commit is treated
-            // the same way: the identity was not reliably linked, so the login must not succeed.
-            context.commit();
         } catch (RuntimeException ex) {
             context.rollback();
             log.warn("EPerson {} was not linked to the OIDC identity {} of provider {}, because creating the " +
@@ -333,7 +326,6 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
             context.restoreAuthSystemState();
         }
 
-        ePerson = context.reloadEntity(ePerson);
         logIn(context, ePerson, userInfo, request);
         createRegistrationIfMissing(context, ePerson, organization);
         log.info("EPerson {} was linked to the OIDC identity {}", ePerson.getID(), userId);
@@ -410,15 +402,7 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
             ePersonService.update(context, ePerson);
 
             authenticationIdentityService.create(context, ePerson, AUTH_METHOD_OIDC, provider, userId);
-
-            ClarinUserRegistration clarinUserRegistration = new ClarinUserRegistration();
-            clarinUserRegistration.setConfirmation(true);
-            clarinUserRegistration.setEmail(ePerson.getEmail());
-            clarinUserRegistration.setPersonID(ePerson.getID());
-            clarinUserRegistration.setOrganization(StringUtils.isNotBlank(organization) ? organization :
-                    ClarinUserRegistration.UNKNOWN_USER_REGISTRATION);
-            clarinUserRegistrationService.create(context, clarinUserRegistration);
-
+            createRegistrationIfMissing(context, ePerson, organization);
             logIn(context, ePerson, userInfo, request);
             context.dispatchEvents();
             log.info("New EPerson {} was registered for the OIDC identity {}", ePerson.getID(), userId);
@@ -432,7 +416,7 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
             throws SQLException {
         request.setAttribute(OIDC_AUTHENTICATED, true);
         resolveSpecialGroups(context, userInfo);
-        logInEPerson(context, ePerson);
+        context.setCurrentUser(ePerson);
     }
 
     /**
@@ -685,10 +669,6 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
      */
     private String getOrganizationAttribute() {
         return configurationService.getProperty("authentication-oidc.user-info.organization");
-    }
-
-    private void logInEPerson(Context context, EPerson ePerson) {
-        context.setCurrentUser(ePerson);
     }
 
     /**

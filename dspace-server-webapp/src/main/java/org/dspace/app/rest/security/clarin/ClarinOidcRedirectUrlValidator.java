@@ -11,8 +11,6 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
-import java.util.Objects;
 
 import org.apache.commons.lang3.StringUtils;
 import org.dspace.services.ConfigurationService;
@@ -40,7 +38,7 @@ public final class ClarinOidcRedirectUrlValidator {
         if (StringUtils.isBlank(redirectUrl)) {
             redirectUrl = configurationService.getProperty("dspace.ui.url");
         }
-        Origin origin = Origin.of(redirectUrl);
+        URI origin = origin(redirectUrl);
         if (origin == null) {
             return null;
         }
@@ -49,7 +47,7 @@ public final class ClarinOidcRedirectUrlValidator {
         allowed.add(configurationService.getProperty("dspace.ui.url"));
         allowed.addAll(List.of(configurationService.getArrayProperty("rest.cors.allowed-origins")));
         for (String allowedUrl : allowed) {
-            if (origin.equals(Origin.of(allowedUrl))) {
+            if (origin.equals(origin(allowedUrl))) {
                 return redirectUrl;
             }
         }
@@ -58,51 +56,23 @@ public final class ClarinOidcRedirectUrlValidator {
 
     /**
      * Scheme, host and (effective) port of an absolute http(s) URI without user info, or null if the value
-     * isn't one.
+     * isn't one. URI#equals compares the scheme and host case-insensitively.
      */
-    private static final class Origin {
-        private final String scheme;
-        private final String host;
-        private final int port;
-
-        private Origin(String scheme, String host, int port) {
-            this.scheme = scheme;
-            this.host = host;
-            this.port = port;
+    private static URI origin(String url) {
+        if (StringUtils.isBlank(url) || url.indexOf('\\') >= 0) {
+            return null;
         }
-
-        static Origin of(String url) {
-            if (StringUtils.isBlank(url) || url.indexOf('\\') >= 0) {
+        try {
+            URI uri = new URI(url.trim());
+            String scheme = uri.getScheme();
+            if ((!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme))
+                    || uri.getRawUserInfo() != null || StringUtils.isBlank(uri.getHost())) {
                 return null;
             }
-            try {
-                URI uri = new URI(url.trim());
-                String scheme = uri.getScheme() == null ? null : uri.getScheme().toLowerCase(Locale.ROOT);
-                if (!"http".equals(scheme) && !"https".equals(scheme)) {
-                    return null;
-                }
-                if (uri.getRawUserInfo() != null || StringUtils.isBlank(uri.getHost())) {
-                    return null;
-                }
-                int port = uri.getPort() != -1 ? uri.getPort() : ("https".equals(scheme) ? 443 : 80);
-                return new Origin(scheme, uri.getHost().toLowerCase(Locale.ROOT), port);
-            } catch (URISyntaxException ex) {
-                return null;
-            }
-        }
-
-        @Override
-        public boolean equals(Object other) {
-            if (!(other instanceof Origin)) {
-                return false;
-            }
-            Origin that = (Origin) other;
-            return port == that.port && scheme.equals(that.scheme) && host.equals(that.host);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(scheme, host, port);
+            int port = uri.getPort() != -1 ? uri.getPort() : ("https".equalsIgnoreCase(scheme) ? 443 : 80);
+            return new URI(scheme, null, uri.getHost(), port, null, null, null);
+        } catch (URISyntaxException ex) {
+            return null;
         }
     }
 }

@@ -5,7 +5,7 @@
  *
  * http://www.dspace.org/license/
  */
-package org.dspace.authenticate.clarin.oidc;
+package org.dspace.app.rest.security.clarin;
 
 import java.io.IOException;
 import java.net.URI;
@@ -43,7 +43,6 @@ import okhttp3.mockwebserver.RecordedRequest;
  * A minimal, scriptable OIDC provider on top of MockWebServer for testing the CLARIN OIDC login end to end:
  * discovery, JWKS, token and UserInfo endpoints. The ID token is built at the token request from the fields
  * below, with the nonce taken from the last authorization request passed to {@link #authorize}.
- * Also used by ClarinOidcAuthenticationRestControllerIT (dspace-server-webapp) via the dspace-api test-jar.
  */
 public class FakeOidcProvider {
 

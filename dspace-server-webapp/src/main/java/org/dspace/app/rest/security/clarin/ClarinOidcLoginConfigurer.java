@@ -19,6 +19,7 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
@@ -28,6 +29,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.dspace.app.rest.security.DSpaceAuthentication;
 import org.dspace.app.rest.security.RestAuthenticationService;
+import org.dspace.app.rest.utils.ContextUtil;
 import org.dspace.authenticate.OidcAuthenticationBean;
 import org.dspace.authenticate.clarin.ClarinOidcAuthentication;
 import org.dspace.authenticate.clarin.ClarinOidcAuthenticationBean;
@@ -54,6 +56,7 @@ import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequ
 import org.springframework.security.oauth2.core.oidc.OidcScopes;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
+import org.springframework.util.function.SingletonSupplier;
 
 /**
  * CLARIN OIDC login (ufal/clarin-dspace#1140) on Spring Security's oauth2Login(). Spring does the whole OIDC
@@ -213,6 +216,8 @@ public final class ClarinOidcLoginConfigurer {
         if (session != null) {
             session.invalidate();
         }
+        // nothing of a failed login is kept (DSpaceRequestContextFilter doesn't run after the login filters)
+        ContextUtil.abortContext(request);
         Object duplicateEmail = request.getAttribute(ClarinOidcAuthenticationBean.DUPLICATE_USER_ATTRIBUTE);
         if (duplicateEmail != null) {
             response.sendRedirect(configurationService.getProperty("dspace.ui.url") + "/login/duplicate-user?email="
@@ -264,32 +269,29 @@ public final class ClarinOidcLoginConfigurer {
     }
 
     /**
-     * The one client registration, from OIDC discovery of authentication-oidc.issuer, built on first use (an
-     * unreachable provider doesn't break DSpace startup) and rebuilt when its configuration changes. Note that
-     * Spring caches the ID token decoder (JWKS URI) per registration ID: a different provider needs a restart.
-     * Discovery and the JWKS fetch use Spring's own RestTemplates, timed out by the JVM-wide defaults only.
+     * The one client registration, from OIDC discovery of authentication-oidc.issuer, built on first use, so that
+     * an unreachable provider doesn't break DSpace startup (a failed discovery isn't kept, the next login retries).
+     * Changing the configuration needs a restart, as Spring caches the ID token decoder (with its JWKS URI and
+     * audience) per registration ID anyway. Discovery and the JWKS fetch use Spring's own RestTemplates, timed out
+     * by the JVM-wide defaults only.
      */
     private static final class ClarinClientRegistrations implements ClientRegistrationRepository {
 
-        private final ConfigurationService configurationService;
-        private String cachedKey;
-        private ClientRegistration cachedRegistration;
+        private final Supplier<ClientRegistration> registration;
 
         ClarinClientRegistrations(ConfigurationService configurationService) {
-            this.configurationService = configurationService;
+            registration = SingletonSupplier.of(() -> build(configurationService));
         }
 
         @Override
         public ClientRegistration findByRegistrationId(String registrationId) {
-            if (!REGISTRATION_ID.equals(registrationId)) {
-                return null;
-            }
+            return REGISTRATION_ID.equals(registrationId) ? registration.get() : null;
+        }
+
+        private static ClientRegistration build(ConfigurationService configurationService) {
             String issuer = configurationService.getProperty("authentication-oidc.issuer");
             String clientId = configurationService.getProperty("authentication-oidc.client-id");
             String clientSecret = configurationService.getProperty("authentication-oidc.client-secret");
-            String redirectUri = redirectUri(configurationService);
-            String authMethod = configurationService.getProperty("authentication-oidc.token-endpoint-auth-method",
-                    ClientAuthenticationMethod.CLIENT_SECRET_POST.getValue());
             if (StringUtils.isAnyBlank(issuer, clientId, clientSecret)) {
                 throw new IllegalStateException("authentication-oidc.issuer, client-id and client-secret "
                         + "must be set to use the CLARIN OIDC authentication");
@@ -297,24 +299,17 @@ public final class ClarinOidcLoginConfigurer {
             Set<String> scopes = new LinkedHashSet<>(Arrays.asList(configurationService.getArrayProperty(
                     "authentication-oidc.scopes", new String[] {"openid", "email", "profile"})));
             scopes.add(OidcScopes.OPENID);
-
-            String key = String.join("\n", issuer, clientId, clientSecret, redirectUri, authMethod,
-                    String.join(" ", scopes));
-            synchronized (this) {
-                if (!key.equals(cachedKey)) {
-                    // OIDC discovery; the configured issuer must be exactly the discovered "issuer"
-                    cachedRegistration = ClientRegistrations.fromIssuerLocation(issuer)
-                            .registrationId(REGISTRATION_ID)
-                            .clientId(clientId)
-                            .clientSecret(clientSecret)
-                            .clientAuthenticationMethod(new ClientAuthenticationMethod(authMethod))
-                            .redirectUri(redirectUri)
-                            .scope(scopes)
-                            .build();
-                    cachedKey = key;
-                }
-                return cachedRegistration;
-            }
+            // OIDC discovery; the configured issuer must be exactly the discovered "issuer"
+            return ClientRegistrations.fromIssuerLocation(issuer)
+                    .registrationId(REGISTRATION_ID)
+                    .clientId(clientId)
+                    .clientSecret(clientSecret)
+                    .clientAuthenticationMethod(new ClientAuthenticationMethod(configurationService.getProperty(
+                            "authentication-oidc.token-endpoint-auth-method",
+                            ClientAuthenticationMethod.CLIENT_SECRET_POST.getValue())))
+                    .redirectUri(redirectUri(configurationService))
+                    .scope(scopes)
+                    .build();
         }
     }
 }

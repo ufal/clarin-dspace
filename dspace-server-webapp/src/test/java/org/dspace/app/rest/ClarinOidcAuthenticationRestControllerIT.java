@@ -30,10 +30,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.sql.SQLException;
 import java.text.ParseException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -44,12 +46,12 @@ import com.nimbusds.jwt.SignedJWT;
 import org.dspace.app.rest.matcher.GroupMatcher;
 import org.dspace.app.rest.model.AuthnRest;
 import org.dspace.app.rest.security.clarin.ClarinOidcLoginConfigurer;
+import org.dspace.app.rest.security.clarin.FakeOidcProvider;
 import org.dspace.app.rest.security.jwt.EPersonClaimProvider;
 import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
 import org.dspace.authenticate.clarin.ClarinOidcAuthentication;
-import org.dspace.authenticate.clarin.ClarinShibAuthentication;
 import org.dspace.authenticate.clarin.ClarinOidcAuthenticationBean;
-import org.dspace.authenticate.clarin.oidc.FakeOidcProvider;
+import org.dspace.authenticate.clarin.ClarinShibAuthentication;
 import org.dspace.builder.EPersonBuilder;
 import org.dspace.builder.GroupBuilder;
 import org.dspace.content.clarin.AuthenticationIdentity;
@@ -75,6 +77,7 @@ import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.ResultMatcher;
 
 /**
  * Integration tests for {@link ClarinOidcAuthenticationBean}.
@@ -972,8 +975,14 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         assertThat(getEPersonIdFromAuthorizationCookie(callback(start, authorizationParams.get("state"))
                 .andExpect(status().is3xxRedirection())
                 .andReturn()), equalTo(ePerson.getID().toString()));
-        assertThat(FakeOidcProvider.parseQuery(provider.getTokenRequestBodies().get(0)).get("code_verifier"),
-                notNullValue());
+        // what a real provider checks: the code, the same redirect_uri, and the verifier of the challenge
+        Map<String, String> tokenRequest = FakeOidcProvider.parseQuery(provider.getTokenRequestBodies().get(0));
+        assertThat(tokenRequest.get("code"), equalTo(CODE));
+        assertThat(tokenRequest.get("redirect_uri"), equalTo(authorizationParams.get("redirect_uri")));
+        assertThat(tokenRequest.get("client_secret"), equalTo(FakeOidcProvider.CLIENT_SECRET));
+        assertThat(Base64.getUrlEncoder().withoutPadding().encodeToString(MessageDigest.getInstance("SHA-256")
+                        .digest(tokenRequest.get("code_verifier").getBytes(StandardCharsets.US_ASCII))),
+                equalTo(authorizationParams.get("code_challenge")));
     }
 
     /**
@@ -1147,25 +1156,19 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     }
 
     /** Start a login, let the (fake) provider authorize it and complete it at the redirect_uri. */
-    private MvcResult completeLogin(ResultMatcherGroup expectations) throws Exception {
+    private MvcResult completeLogin(ResultMatcher... expectations) throws Exception {
         MvcResult start = startLogin();
         // keep a reference: once invalidated, the request no longer returns the session
         MockHttpSession session = session(start);
         String state = provider.authorize(start.getResponse().getRedirectedUrl()).get("state");
-        MvcResult result = expectations.apply(callback(start, state)).andReturn();
+        MvcResult result = callback(start, state).andExpectAll(expectations).andReturn();
         // the session (pending login, provider's tokens) only lives until the end of the login
         assertThat(session.isInvalid(), is(true));
         return result;
     }
 
-    private interface ResultMatcherGroup {
-        ResultActions apply(ResultActions actions) throws Exception;
-    }
-
     private MvcResult loginResult() throws Exception {
-        return completeLogin(actions -> actions
-                .andExpect(status().is3xxRedirection())
-                .andExpect(cookie().exists("Authorization-cookie")));
+        return completeLogin(status().is3xxRedirection(), cookie().exists("Authorization-cookie"));
     }
 
     private String login() throws Exception {
@@ -1174,10 +1177,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
 
     /** The callback is a browser navigation, so a failed login is a redirect to the UI's login error. */
     private void loginFails() throws Exception {
-        completeLogin(actions -> actions
-                .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl(failureUrl()))
-                .andExpect(cookie().doesNotExist("Authorization-cookie")));
+        completeLogin(redirectedUrl(failureUrl()), cookie().doesNotExist("Authorization-cookie"));
     }
 
     private String failureUrl() {
@@ -1186,11 +1186,9 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
 
     /** A refused login whose email belongs to an account it must not take over goes to the duplicate-user page. */
     private void loginRefusedAsDuplicate(String email) throws Exception {
-        completeLogin(actions -> actions
-                .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl(configurationService.getProperty("dspace.ui.url")
-                        + "/login/duplicate-user?email=" + URLEncoder.encode(email, StandardCharsets.UTF_8)))
-                .andExpect(cookie().doesNotExist("Authorization-cookie")));
+        completeLogin(redirectedUrl(configurationService.getProperty("dspace.ui.url")
+                        + "/login/duplicate-user?email=" + URLEncoder.encode(email, StandardCharsets.UTF_8)),
+                cookie().doesNotExist("Authorization-cookie"));
     }
 
     private void setNetid(EPerson ePerson, String netid) throws Exception {
