@@ -18,6 +18,7 @@ import static org.mockito.Mockito.mock;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.dspace.AbstractIntegrationTestWithDatabase;
@@ -31,7 +32,14 @@ import org.dspace.content.Community;
 import org.dspace.content.Item;
 import org.dspace.content.MetadataValue;
 import org.dspace.content.factory.ContentServiceFactory;
+import org.dspace.content.logic.DefaultFilter;
+import org.dspace.content.logic.Filter;
+import org.dspace.content.logic.LogicalStatement;
+import org.dspace.content.logic.condition.InCommunityCondition;
+import org.dspace.content.service.CollectionService;
 import org.dspace.content.service.ItemService;
+import org.dspace.handle.factory.HandleServiceFactory;
+import org.dspace.handle.service.HandleService;
 import org.dspace.identifier.doi.ClarinDataCiteConnector;
 import org.dspace.identifier.doi.DOIIdentifierException;
 import org.dspace.identifier.doi.DOIIdentifierNotApplicableException;
@@ -165,9 +173,108 @@ public class ClarinDOIIdentifierProviderIT extends AbstractIntegrationTestWithDa
         assertTrue(doi4.startsWith("doi:10.1/1-"));
         // check if the DOI for itemV2 is different from the one for item1
         assertFalse(doi4.startsWith(doi1));
-        checkDoi(doi2, DOIIdentifierProvider.MINTED);
+        checkDoi(doi4, DOIIdentifierProvider.MINTED);
         // check that the old DOI identifier was removed from itemV2
         assertEquals(0, getDoiMetadata(itemV2).size());
+    }
+
+    @Test
+    public void testMintInSubCommunity() throws IdentifierException, SQLException {
+        context.turnOffAuthorisationSystem();
+        // parentCommunity is configured for provider 10.1; the sub-community itself is not configured
+        Community subCommunity = CommunityBuilder.createSubCommunity(context, parentCommunity)
+                .withName("Sub Community 1")
+                .build();
+        Collection subCollection = CollectionBuilder.createCollection(context, subCommunity)
+                .withName("Sub Collection")
+                .build();
+        Item subItem = ItemBuilder.createItem(context, subCollection)
+                .withTitle("Sub Item")
+                .build();
+        context.restoreAuthSystemState();
+
+        // matching mirrors the per-community handle prefixes (lr.pid.community.configurations): only the
+        // direct parent communities of the owning collection count, so the top-level community's provider
+        // does not cover the sub-community and the item gets no DOI
+        assertNull(provider.mint(context, subItem));
+
+        // listing the sub-community explicitly in a provider's communities is the supported configuration
+        ClarinCommunityDOIIdentifierProvider subCommunityProvider =
+                createCommunityProvider("10.3", "3-", Set.of(subCommunity.getID().toString()));
+        ClarinDOIIdentifierProvider subCommunityDispatcher = new ClarinDOIIdentifierProvider();
+        subCommunityDispatcher.setProviders(List.of(subCommunityProvider));
+        subCommunityDispatcher.itemService = itemService;
+        subCommunityDispatcher.doiService = doiService;
+        subCommunityDispatcher.contentServiceFactory = ContentServiceFactory.getInstance();
+
+        String doi = subCommunityDispatcher.mint(context, subItem);
+        assertNotNull(doi);
+        assertTrue(doi.startsWith("doi:10.3/3-"));
+        checkDoi(doi, DOIIdentifierProvider.MINTED);
+    }
+
+    @Test
+    public void testMintForMappedItem() throws Exception {
+        context.turnOffAuthorisationSystem();
+        // map item1 (owned under the 10.1 community) into a collection of the 10.2 community, named so that it
+        // sorts before item1's owning collection in item.getCollections()
+        Community community2 = item2.getOwningCollection().getCommunities().get(0);
+        Collection mappedCollection = CollectionBuilder.createCollection(context, community2)
+                .withName("A Mapped Collection")
+                .build();
+        CollectionService collectionService = ContentServiceFactory.getInstance().getCollectionService();
+        collectionService.addItem(context, mappedCollection, item1);
+        context.restoreAuthSystemState();
+
+        // the owning collection decides, the mapped collection is ignored
+        String doi = provider.mint(context, item1);
+        assertTrue(doi.startsWith("doi:10.1/1-"));
+    }
+
+    @Test
+    public void testMintWithFilter() throws IdentifierException, SQLException {
+        // the filter given to the dispatcher is applied by the community provider it routes to
+        assertThrows(DOIIdentifierNotApplicableException.class,
+                () -> provider.mint(context, item1, filterOf((c, i) -> false)));
+        assertNull(doiService.findDOIByDSpaceObject(context, item1));
+
+        String doi = provider.mint(context, item1, filterOf((c, i) -> true));
+        assertTrue(doi.startsWith("doi:10.1/1-"));
+    }
+
+    @Test
+    public void testDoisOnlyInFilteredCommunity() throws Exception {
+        // providers are configured for communities 1 and 2, but the dispatcher's filter (the "filter" property of
+        // the ClarinDOIIdentifierProvider bean) allows DOIs in community 1 only
+        context.turnOffAuthorisationSystem();
+        // InCommunityCondition matches communities by handle; the test communities have none, as identifier
+        // providers are switched off while they are created
+        HandleService handleService = HandleServiceFactory.getInstance().getHandleService();
+        String community1Handle = handleService.createHandle(context, parentCommunity);
+        handleService.createHandle(context, item2.getOwningCollection().getCommunities().get(0));
+        context.restoreAuthSystemState();
+        InCommunityCondition inCommunity1 = new InCommunityCondition();
+        inCommunity1.setItemService(itemService);
+        inCommunity1.setParameters(Map.of("communities", List.of(community1Handle)));
+        provider.setFilter(filterOf(inCommunity1));
+
+        context.setCurrentUser(admin);
+        // community 1: DOI is registered and added to the item
+        String doi1 = provider.register(context, item1);
+        assertTrue(doi1.startsWith("doi:10.1/1-"));
+        provider.registerOnline(context, item1, doi1);
+        checkDoi(doi1, DOIIdentifierProvider.IS_REGISTERED);
+        assertEquals(1, getDoiMetadata(item1).size());
+
+        // community 2: has a provider, but the filter rejects the item
+        assertThrows(DOIIdentifierNotApplicableException.class, () -> provider.register(context, item2));
+        assertNull(doiService.findDOIByDSpaceObject(context, item2));
+        assertEquals(0, getDoiMetadata(item2).size());
+
+        // community 3: no provider, skipped
+        assertNull(provider.register(context, item3));
+        assertNull(doiService.findDOIByDSpaceObject(context, item3));
+        assertEquals(0, getDoiMetadata(item3).size());
     }
 
     @Test
@@ -281,9 +388,6 @@ public class ClarinDOIIdentifierProviderIT extends AbstractIntegrationTestWithDa
     private ClarinCommunityDOIIdentifierProvider createCommunityProvider(String doiPrefix,
                                                                          String namespaceSeparator,
                                                                          Set<String> communityIds) {
-        configurationService.setProperty("identifier.doi." + doiPrefix + ".user", "test_user");
-        configurationService.setProperty("identifier.doi." + doiPrefix + ".password", "password");
-
         ClarinDataCiteConnector connector = mock(ClarinDataCiteConnector.class);
 
         ClarinCommunityDOIIdentifierProvider communityProvider = new ClarinCommunityDOIIdentifierProvider();
@@ -300,6 +404,12 @@ public class ClarinDOIIdentifierProviderIT extends AbstractIntegrationTestWithDa
         communityProvider.init();
 
         return communityProvider;
+    }
+
+    private Filter filterOf(LogicalStatement statement) {
+        DefaultFilter filter = new DefaultFilter();
+        filter.setStatement(statement);
+        return filter;
     }
 
     private void checkDoi(String doi, Integer expectedStatus) throws SQLException {
