@@ -13,6 +13,10 @@ import java.util.Iterator;
 import java.util.List;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.dspace.app.util.factory.UtilServiceFactory;
+import org.dspace.app.util.service.DSpaceObjectUtils;
 import org.dspace.content.Collection;
 import org.dspace.content.Community;
 import org.dspace.content.DSpaceObject;
@@ -42,6 +46,8 @@ public abstract class AbstractCurationTask implements CurationTask {
     protected ItemService itemService;
     protected HandleService handleService;
     protected ConfigurationService configurationService;
+    protected DSpaceObjectUtils dspaceObjectUtils;
+    private static final Logger log = LogManager.getLogger();
 
     @Override
     public void init(Curator curator, String taskId) throws IOException {
@@ -51,6 +57,7 @@ public abstract class AbstractCurationTask implements CurationTask {
         itemService = ContentServiceFactory.getInstance().getItemService();
         handleService = HandleServiceFactory.getInstance().getHandleService();
         configurationService = DSpaceServicesFactory.getInstance().getConfigurationService();
+        dspaceObjectUtils = UtilServiceFactory.getInstance().getDSpaceObjectUtils();
     }
 
     @Override
@@ -153,7 +160,12 @@ public abstract class AbstractCurationTask implements CurationTask {
 
     @Override
     public int perform(Context ctx, String id) throws IOException {
-        DSpaceObject dso = dereference(ctx, id);
+        DSpaceObject dso = null;
+        try {
+            dso = dspaceObjectUtils.findDSpaceObject(ctx, id);
+        } catch (SQLException sqlE) {
+            throw new IOException(sqlE.getMessage(), sqlE);
+        }
         return (dso != null) ? perform(dso) : Curator.CURATE_FAIL;
     }
 

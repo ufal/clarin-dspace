@@ -16,6 +16,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.lang.reflect.Field;
 import java.net.URL;
 import java.net.URLConnection;
 import javax.net.ssl.HttpsURLConnection;
@@ -107,5 +108,31 @@ public class ClarinDiscoJuiceFeedsControllerIT extends AbstractControllerIntegra
                 .andExpect(content().string(expStr));
 
         configurationService.setProperty(configKey, origVal);
+    }
+
+    @Test
+    public void getDiscoFeedsWithoutContentReturnsEmptyFeed() throws Exception {
+        // Simulate the default state where no feeds have been downloaded (discofeed disabled).
+        Field feedsContentField = ClarinDiscoJuiceFeedsUpdateScheduler.class.getDeclaredField("feedsContent");
+        feedsContentField.setAccessible(true);
+        Object origFeedsContent = feedsContentField.get(null);
+        feedsContentField.set(null, null);
+
+        try {
+            // With a callback the JSONP wrapper must still be valid so the widget callback fires
+            // with an (empty) array instead of `undefined`.
+            getClient().perform(get("/api/discojuice/feeds?callback=dj_md_1"))
+                    .andExpect(status().isOk())
+                    .andExpect(content().contentType(APPLICATION_JAVASCRIPT_UTF8))
+                    .andExpect(content().string("dj_md_1([])"));
+
+            // Without a callback an empty JSON array is returned instead of a 204 No Content.
+            getClient().perform(get("/api/discojuice/feeds"))
+                    .andExpect(status().isOk())
+                    .andExpect(content().contentType(APPLICATION_JAVASCRIPT_UTF8))
+                    .andExpect(content().string("[]"));
+        } finally {
+            feedsContentField.set(null, origFeedsContent);
+        }
     }
 }

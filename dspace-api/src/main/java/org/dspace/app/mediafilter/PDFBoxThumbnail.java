@@ -91,6 +91,7 @@ public class PDFBoxThumbnail extends MediaFilter {
 
         // Generate thumbnail derivative and return as IO stream.
         JPEGFilter jpegFilter = new JPEGFilter();
+
         return jpegFilter.getThumb(currentItem, buf, verbose);
     }
 }

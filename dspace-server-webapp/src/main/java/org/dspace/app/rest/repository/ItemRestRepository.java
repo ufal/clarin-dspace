@@ -52,6 +52,7 @@ import org.dspace.content.service.RelationshipTypeService;
 import org.dspace.content.service.WorkspaceItemService;
 import org.dspace.content.service.clarin.ClarinItemService;
 import org.dspace.core.Context;
+import org.dspace.discovery.SearchServiceException;
 import org.dspace.util.UUIDUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -373,6 +374,27 @@ public class ItemRestRepository extends DSpaceObjectRestRepository<Item, ItemRes
         context.commit();
 
         return bundle;
+    }
+
+    /**
+     * Method to find the items for which the current user has editing rights.
+     *
+     * @param query    Query string
+     * @param pageable Pagination information
+     * @return Page of Items (REST representation) for which the current user has editing rights
+     * @throws SearchServiceException
+     */
+    @PreAuthorize("hasAuthority('AUTHENTICATED')")
+    @SearchRestMethod(name = "findEditAuthorized")
+    public Page<ItemRest> findEditAuthorized(@Parameter(value = "query") String query,
+                                             Pageable pageable)
+        throws SearchServiceException {
+        Context context = obtainContext();
+        List<Item> items = itemService.findItemsWithEdit(context, query,
+            Math.toIntExact(pageable.getOffset()),
+            Math.toIntExact(pageable.getPageSize()));
+        int tot = itemService.countItemsWithEdit(context, query);
+        return converter.toRestPage(items, pageable, tot, utils.obtainProjection());
     }
 
     @Override

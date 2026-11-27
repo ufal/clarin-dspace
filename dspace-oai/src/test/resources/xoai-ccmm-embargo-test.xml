@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+
+    The contents of this file are subject to the license and copyright
+    detailed in the LICENSE and NOTICE files at the root of the source
+    tree and available online at
+
+    http://www.dspace.org/license/
+
+-->
+<!--
+    An embargoed item.  No CLARIN licence category is present, so others/access-status decides
+    and has to reach the COAR embargo term rather than the restricted fallback.
+-->
+<metadata xmlns="http://www.lyncode.com/xoai">
+    <element name="dc">
+        <element name="date">
+            <element name="issued">
+                <element name="none">
+                    <field name="value">2023-09-01</field>
+                </element>
+            </element>
+        </element>
+        <element name="title">
+            <element name="none">
+                <field name="value">An Embargoed Dataset</field>
+            </element>
+        </element>
+    </element>
+    <element name="bundles">
+        <element name="bundle">
+            <field name="name">ORIGINAL</field>
+            <element name="bitstreams">
+                <element name="bitstream">
+                    <field name="name">embargoed.csv</field>
+                    <field name="format">text/csv</field>
+                    <field name="size">512</field>
+                    <field name="url">https://repo.example.org/bitstream/1/5/embargoed.csv</field>
+                </element>
+            </element>
+        </element>
+    </element>
+    <element name="others">
+        <field name="handle">123/999</field>
+        <field name="identifier">oai:repo.example.org:123/999</field>
+        <field name="anonymousAccess">embargo</field>
+        <element name="access-status">
+            <field name="value">embargo</field>
+        </element>
+    </element>
+    <element name="repository">
+        <field name="name">Example Repository</field>
+        <field name="url">https://repo.example.org/</field>
+    </element>
+</metadata>

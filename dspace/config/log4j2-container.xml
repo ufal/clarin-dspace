@@ -61,5 +61,12 @@
         <Root level='${loglevel.other}'>
             <AppenderRef ref='A1'/>
         </Root>
+
+        <!-- 404 NOT_FOUND responses. Set to WARN to see 404s in logs. -->
+        <Logger name='org.dspace.app.rest.exception.DSpaceApiExceptionControllerAdvice.NotFound'
+                level='OFF'
+                additivity='false'>
+            <AppenderRef ref='A1'/>
+        </Logger>
     </Loggers>
 </Configuration>

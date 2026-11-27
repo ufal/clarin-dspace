@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+
+    The contents of this file are subject to the license and copyright
+    detailed in the LICENSE and NOTICE files at the root of the source
+    tree and available online at
+
+    http://www.dspace.org/license/
+
+-->
+<!--
+    A stock DSpace item: ISO 639-1 language with a region subtag, a type from the default
+    submission list, no repository URL, and no access-status plugin.  None of the CLARIN-specific
+    fields are present.
+-->
+<metadata xmlns="http://www.lyncode.com/xoai">
+    <element name="dc">
+        <element name="contributor">
+            <element name="author">
+                <element name="none">
+                    <field name="value">Smith, Alice</field>
+                </element>
+            </element>
+        </element>
+        <element name="date">
+            <element name="issued">
+                <element name="none">
+                    <field name="value">2024-05-01</field>
+                </element>
+            </element>
+        </element>
+        <element name="identifier">
+            <element name="uri">
+                <element name="none">
+                    <field name="value">http://hdl.handle.net/123/456</field>
+                </element>
+            </element>
+        </element>
+        <element name="language">
+            <element name="iso">
+                <element name="none">
+                    <field name="value">en_US</field>
+                </element>
+            </element>
+        </element>
+        <element name="relation">
+            <element name="none">
+                <field name="value">info:eu-repo/semantics/openAccess</field>
+                <!-- five segments, but still not a grant agreement -->
+                <field name="value">info:eu-repo/semantics/altIdentifier/doi/10.1234/xyz</field>
+            </element>
+        </element>
+        <element name="title">
+            <element name="none">
+                <field name="value">A Stock DSpace Item</field>
+                <field name="value">Second Title Nobody Entered As One</field>
+            </element>
+        </element>
+        <element name="type">
+            <element name="none">
+                <field name="value">Article</field>
+            </element>
+        </element>
+    </element>
+    <element name="others">
+        <field name="handle">123/456</field>
+        <field name="identifier">oai:repo.example.org:123/456</field>
+    </element>
+    <element name="repository">
+        <field name="name">Example Repository</field>
+    </element>
+</metadata>
