@@ -73,7 +73,6 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.mock.web.MockHttpSession;
-import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
@@ -86,9 +85,9 @@ import org.springframework.test.web.servlet.ResultMatcher;
  * @author Milan Kuchtiak
  */
 // own Spring context: the CLARIN OIDC login is only installed when the plugin is enabled at startup (see
-// enablePlugin), so this context is built after that and closed afterwards, not shared with other tests
+// enablePlugin), so this context is built after that, not shared with other tests. It must not be closed after the
+// class (no @DirtiesContext): closing a context destroys the DSpace kernel shared by all tests (DSpaceKernelDestroyer)
 @TestPropertySource(properties = {"clarin.oidc.test.context = true"})
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public class ClarinOidcAuthenticationRestControllerIT extends AbstractControllerIntegrationTest {
 
     private final static String CODE = "123456";
