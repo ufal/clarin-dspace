@@ -640,6 +640,32 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     }
 
     @Test
+    public void testEmailFallbackRequiresVerifiedEmailUnlessDisabledExplicitly() throws Exception {
+        configurationService.setProperty(ClarinOidcAuthenticationBean.EMAIL_FALLBACK_PROPERTY, "true");
+        createEPerson("perun@email.it", true);
+
+        Map<String, Object> userInfo = new HashMap<>();
+        userInfo.put(SUB, "perun1");
+        userInfo.put(EMAIL, "perun@email.it");
+        userInfo.put(EMAIL_VERIFIED, false);
+        provider.userInfo = new HashMap<>(userInfo);
+
+        // the default of authentication-oidc.cfg, and the key not set at all
+        for (String requireVerifiedEmail :
+                new String[] {"${" + ClarinOidcAuthenticationBean.EMAIL_FALLBACK_PROPERTY + "}", null}) {
+            configurationService.setProperty("authentication-oidc.require-verified-email", requireVerifiedEmail);
+            if (requireVerifiedEmail != null) {
+                // resolved, not refused as an unparsable boolean
+                assertThat(configurationService.getBooleanProperty("authentication-oidc.require-verified-email"),
+                        equalTo(true));
+            }
+            loginFails();
+            assertThat(authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER, "perun1"),
+                    nullValue());
+        }
+    }
+
+    @Test
     public void testNewEPersonRegistered() throws Exception {
         Map<String, Object> userInfo = new HashMap<>();
         userInfo.put(SUB, "perun1");

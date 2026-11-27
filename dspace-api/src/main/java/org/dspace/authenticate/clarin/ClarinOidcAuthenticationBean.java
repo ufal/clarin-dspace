@@ -644,15 +644,15 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
 
     /**
      * Returns whether a login with an email the provider doesn't confirm as verified is refused (see
-     * {@link #isEmailVerified}). Off by default: with {@value #EMAIL_FALLBACK_PROPERTY} off (the default) an email
-     * never links a login to an existing account, so an unverified one can at most pre-empt its owner's address
-     * for a new account. It must be on whenever {@value #EMAIL_FALLBACK_PROPERTY} is on (see
-     * authentication-oidc.cfg).
+     * {@link #isEmailVerified}). Unless set, the same as {@value #EMAIL_FALLBACK_PROPERTY} (as in
+     * authentication-oidc.cfg), so off by default: with email fallback off an email never links a login to an
+     * existing account, so an unverified one can at most pre-empt its owner's address for a new account.
      *
-     * @return true when enabled by authentication-oidc.require-verified-email
+     * @return the value of authentication-oidc.require-verified-email
      */
     private boolean isVerifiedEmailRequired() {
-        return configurationService.getBooleanProperty("authentication-oidc.require-verified-email", false);
+        return configurationService.getBooleanProperty("authentication-oidc.require-verified-email",
+                configurationService.getBooleanProperty(EMAIL_FALLBACK_PROPERTY, false));
     }
 
     /**
