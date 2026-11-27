@@ -25,7 +25,14 @@
     "/checks/[name=User summary]/report/emptyGroups": "Empty Groups",
     "/checks/[name=License summary]/report/licenses": "Licenses",
     "/checks/[name=Metadata check]/report/errorCount": "Metadata Errors",
-    "/checks/[name=Metadata check]/report/warningCount": "Metadata Warnings"
+    "/checks/[name=Metadata check]/report/warningCount": "Metadata Warnings",
+    "/checks/[name=VLO harvest]/report/records": "VLO Harvested Records",
+    "/checks/[name=VLO harvest]/report/logWarnings": "VLO Harvest Log Warnings",
+    "/checks/[name=VLO harvest]/report/logErrors": "VLO Harvest Log Errors",
+    "/checks/[name=Link checker]/report/categories/Broken": "Link Checker Broken",
+    "/checks/[name=Link checker]/report/categories/Blocked_By_Robots_txt": "Link Checker Blocked by robots.txt",
+    "/checks/[name=Link checker]/report/categories/Restricted_Access": "Link Checker Restricted Access",
+    "/checks/[name=Link checker]/report/categories/Ok": "Link Checker Ok"
 
   },
   "fieldOrder": [
@@ -54,6 +61,13 @@
     "/checks/[name=User summary]/report/emptyGroups",
     "/checks/[name=License summary]/report/licenses",
     "/checks/[name=Metadata check]/report/errorCount",
-    "/checks/[name=Metadata check]/report/warningCount"
+    "/checks/[name=Metadata check]/report/warningCount",
+    "/checks/[name=VLO harvest]/report/records",
+    "/checks/[name=VLO harvest]/report/logWarnings",
+    "/checks/[name=VLO harvest]/report/logErrors",
+    "/checks/[name=Link checker]/report/categories/Broken",
+    "/checks/[name=Link checker]/report/categories/Blocked_By_Robots_txt",
+    "/checks/[name=Link checker]/report/categories/Restricted_Access",
+    "/checks/[name=Link checker]/report/categories/Ok"
   ]
 }

@@ -1,0 +1,123 @@
+{
+ "allLinkcheckerReport": {
+  "creationTime": "2026-10-18 20:00:07",
+  "previousCreationTime": "2026-10-17 20:00:07",
+  "overall": {
+   "totNumOfLinksWithDuration": 0,
+   "maxRespTime": 16192,
+   "statistics": [
+    {
+     "count": 2156090,
+     "avgRespTime": 1143.648493082988,
+     "maxRespTime": 16192,
+     "category": "Ok"
+    },
+    {
+     "count": 296,
+     "avgRespTime": 170.00080381679388,
+     "maxRespTime": 3878,
+     "category": "Undetermined"
+    },
+    {
+     "count": 3538005,
+     "avgRespTime": 193.14587755195373,
+     "maxRespTime": 13643,
+     "category": "Restricted_Access"
+    },
+    {
+     "count": 190164,
+     "category": "Blocked_By_Robots_txt"
+    },
+    {
+     "count": 401468,
+     "avgRespTime": 370.6042968298428,
+     "maxRespTime": 9663,
+     "category": "Broken"
+    },
+    {
+     "count": 1,
+     "category": "Invalid_URL"
+    }
+   ]
+  },
+  "collection": [
+   {
+    "name": "LINDAT_CLARIAH_CZ_digital_library_at_the_Institute_of_Formal_and_Applied_Linguistics_UFAL_",
+    "totNumOfLinksWithDuration": 0,
+    "maxRespTime": 4294,
+    "statistics": [
+     {
+      "count": 13956,
+      "avgRespTime": 42.1012,
+      "maxRespTime": 4294,
+      "category": "Ok"
+     },
+     {
+      "count": 11,
+      "category": "Undetermined"
+     },
+     {
+      "count": 249,
+      "avgRespTime": 52.49,
+      "maxRespTime": 240,
+      "category": "Restricted_Access"
+     },
+     {
+      "count": 2923,
+      "category": "Blocked_By_Robots_txt"
+     },
+     {
+      "count": 202,
+      "avgRespTime": 169.2247,
+      "maxRespTime": 1303,
+      "category": "Broken"
+     },
+     {
+      "count": 1,
+      "category": "Invalid_URL"
+     }
+    ]
+   },
+   {
+    "name": "Literary_and_Linguistic_Data_Service",
+    "totNumOfLinksWithDuration": 0,
+    "maxRespTime": 16192,
+    "statistics": [
+     {
+      "count": 352521,
+      "avgRespTime": 759.1477,
+      "maxRespTime": 16192,
+      "category": "Ok"
+     },
+     {
+      "count": 4,
+      "avgRespTime": 8.5,
+      "maxRespTime": 11,
+      "category": "Restricted_Access"
+     },
+     {
+      "count": 1,
+      "category": "Blocked_By_Robots_txt"
+     },
+     {
+      "count": 257273,
+      "avgRespTime": 354.263,
+      "maxRespTime": 9269,
+      "category": "Broken"
+     }
+    ]
+   },
+   {
+    "name": "Corpor_UCLouvain",
+    "totNumOfLinksWithDuration": 0,
+    "maxRespTime": 30,
+    "statistics": {
+     "count": 31,
+     "avgRespTime": 26.0,
+     "maxRespTime": 30,
+     "category": "Ok"
+    }
+   }
+  ]
+ }
+}
