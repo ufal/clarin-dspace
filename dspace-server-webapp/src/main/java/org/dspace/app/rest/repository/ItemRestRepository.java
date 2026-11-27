@@ -33,7 +33,6 @@ import org.dspace.app.rest.model.BundleRest;
 import org.dspace.app.rest.model.ItemRest;
 import org.dspace.app.rest.model.patch.Patch;
 import org.dspace.app.rest.repository.handler.service.UriListHandlerService;
-import org.dspace.app.rest.utils.SolrOAIReindexer;
 import org.dspace.authorize.AuthorizeException;
 import org.dspace.content.Bundle;
 import org.dspace.content.Collection;
@@ -107,9 +106,6 @@ public class ItemRestRepository extends DSpaceObjectRestRepository<Item, ItemRes
 
     @Autowired
     private MetadataFieldService metadataFieldService;
-
-    @Autowired
-    private SolrOAIReindexer solrOAIReindexer;
 
     public ItemRestRepository(ItemService dsoService) {
         super(dsoService);
@@ -191,8 +187,6 @@ public class ItemRestRepository extends DSpaceObjectRestRepository<Item, ItemRes
         try {
             deleteMultipleRelationshipsCopyVirtualMetadata(context, copyVirtual, item);
             itemService.delete(context, item);
-            solrOAIReindexer.deleteItem(item);
-
         } catch (SQLException | IOException e) {
             throw new RuntimeException(e.getMessage(), e);
         }
