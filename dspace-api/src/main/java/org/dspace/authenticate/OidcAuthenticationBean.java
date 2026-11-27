@@ -53,16 +53,16 @@ public class OidcAuthenticationBean implements AuthenticationMethod {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(OidcAuthenticationBean.class);
 
-    protected static final String OIDC_AUTHENTICATED = "oidc.authenticated";
+    private static final String OIDC_AUTHENTICATED = "oidc.authenticated";
 
     @Autowired
-    protected ConfigurationService configurationService;
+    private ConfigurationService configurationService;
 
     @Autowired
     private OidcClient oidcClient;
 
     @Autowired
-    protected EPersonService ePersonService;
+    private EPersonService ePersonService;
 
     @Override
     public boolean allowSetPassword(Context context, HttpServletRequest request, String username) throws SQLException {
@@ -95,7 +95,7 @@ public class OidcAuthenticationBean implements AuthenticationMethod {
 
     @Override
     public int authenticate(Context context, String username, String password, String realm, HttpServletRequest request)
-            throws SQLException {
+        throws SQLException {
 
         if (request == null) {
             LOGGER.warn("Unable to authenticate using OIDC because the request object is null.");
@@ -115,7 +115,7 @@ public class OidcAuthenticationBean implements AuthenticationMethod {
         return authenticateWithOidc(context, code, request);
     }
 
-    protected int authenticateWithOidc(Context context, String code, HttpServletRequest request) throws SQLException {
+    private int authenticateWithOidc(Context context, String code, HttpServletRequest request) throws SQLException {
 
         OidcTokenResponseDTO accessToken = getOidcAccessToken(code);
         if (accessToken == null) {
@@ -124,22 +124,6 @@ public class OidcAuthenticationBean implements AuthenticationMethod {
         }
 
         Map<String, Object> userInfo = getOidcUserInfo(accessToken.getAccessToken());
-
-        return authenticateWithUserInfo(context, userInfo, request);
-    }
-
-    /**
-     * Find or register the EPerson based on the attributes returned by the OIDC user info endpoint
-     * and log the user in.
-     *
-     * @param context  DSpace context
-     * @param userInfo attributes returned by the OIDC user info endpoint
-     * @param request  HTTP request
-     * @return authentication result, one of the AuthenticationMethod constants
-     * @throws SQLException if database error
-     */
-    protected int authenticateWithUserInfo(Context context, Map<String, Object> userInfo, HttpServletRequest request)
-            throws SQLException {
 
         String email = getAttributeAsString(userInfo, getEmailAttribute());
         if (StringUtils.isBlank(email)) {
@@ -156,7 +140,7 @@ public class OidcAuthenticationBean implements AuthenticationMethod {
         // if self registration is disabled, warn about this failure to find a matching eperson
         if (! canSelfRegister()) {
             LOGGER.warn("Self registration is currently disabled for OIDC, and no ePerson could be found for email: {}",
-                    email);
+                email);
         }
 
         return canSelfRegister() ? registerNewEPerson(context, userInfo, email) : NO_SUCH_USER;
@@ -205,12 +189,12 @@ public class OidcAuthenticationBean implements AuthenticationMethod {
 
     }
 
-    protected int logInEPerson(Context context, EPerson ePerson) {
+    private int logInEPerson(Context context, EPerson ePerson) {
         context.setCurrentUser(ePerson);
         return SUCCESS;
     }
 
-    protected int registerNewEPerson(Context context, Map<String, Object> userInfo, String email) throws SQLException {
+    private int registerNewEPerson(Context context, Map<String, Object> userInfo, String email) throws SQLException {
         try {
 
             context.turnOffAuthorisationSystem();
@@ -247,7 +231,7 @@ public class OidcAuthenticationBean implements AuthenticationMethod {
         }
     }
 
-    protected OidcTokenResponseDTO getOidcAccessToken(String code) {
+    private OidcTokenResponseDTO getOidcAccessToken(String code) {
         try {
             return oidcClient.getAccessToken(code);
         } catch (Exception ex) {
@@ -256,7 +240,7 @@ public class OidcAuthenticationBean implements AuthenticationMethod {
         }
     }
 
-    protected Map<String, Object> getOidcUserInfo(String accessToken) {
+    private Map<String, Object> getOidcUserInfo(String accessToken) {
         try {
             return oidcClient.getUserInfo(accessToken);
         } catch (Exception ex) {
@@ -265,26 +249,26 @@ public class OidcAuthenticationBean implements AuthenticationMethod {
         }
     }
 
-    protected String getAttributeAsString(Map<String, Object> userInfo, String attribute) {
+    private String getAttributeAsString(Map<String, Object> userInfo, String attribute) {
         if (isBlank(attribute)) {
             return null;
         }
         return userInfo.containsKey(attribute) ? String.valueOf(userInfo.get(attribute)) : null;
     }
 
-    protected String getEmailAttribute() {
+    private String getEmailAttribute() {
         return configurationService.getProperty("authentication-oidc.user-info.email", "email");
     }
 
-    protected String getFirstNameAttribute() {
+    private String getFirstNameAttribute() {
         return configurationService.getProperty("authentication-oidc.user-info.first-name", "given_name");
     }
 
-    protected String getLastNameAttribute() {
+    private String getLastNameAttribute() {
         return configurationService.getProperty("authentication-oidc.user-info.last-name", "family_name");
     }
 
-    protected boolean canSelfRegister() {
+    private boolean canSelfRegister() {
         String canSelfRegister = configurationService.getProperty("authentication-oidc.can-self-register", "true");
         if (isBlank(canSelfRegister)) {
             return true;

@@ -61,6 +61,11 @@ public class AuthenticationIdentityServiceImpl implements AuthenticationIdentity
     }
 
     @Override
+    public List<EPerson> findEPersonsByNetidValue(Context context, String value) throws SQLException {
+        return authenticationIdentityDAO.findEPersonsByNetidValue(context, value);
+    }
+
+    @Override
     public AuthenticationIdentity create(Context context,
                                          EPerson ePerson,
                                          String authMethod,

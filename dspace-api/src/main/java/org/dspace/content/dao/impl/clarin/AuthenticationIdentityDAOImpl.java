@@ -27,6 +27,17 @@ import org.dspace.eperson.EPerson;
 public class AuthenticationIdentityDAOImpl extends AbstractHibernateDAO<AuthenticationIdentity>
         implements AuthenticationIdentityDAO {
 
+    /**
+     * Flushed right away, so that a duplicate identity (e.g. from a concurrent first login) fails here, where the
+     * caller can refuse the login, and not later at the commit.
+     */
+    @Override
+    public AuthenticationIdentity create(Context context, AuthenticationIdentity identity) throws SQLException {
+        super.create(context, identity);
+        getHibernateSession(context).flush();
+        return identity;
+    }
+
     @Override
     public AuthenticationIdentity findByAuthMethodAndProviderAndUserId(Context context,
                                                                        String authMethod,
@@ -46,6 +57,15 @@ public class AuthenticationIdentityDAOImpl extends AbstractHibernateDAO<Authenti
                 "WHERE ai.ePerson = :ePerson");
         query.setParameter("ePerson", ePerson);
         return list(query);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public List<EPerson> findEPersonsByNetidValue(Context context, String value) throws SQLException {
+        Query query = createQuery(context, "SELECT e FROM EPerson e WHERE e.netid LIKE :netid ESCAPE '!'");
+        // the value is literal: escape the LIKE wildcards (and the escape character itself)
+        query.setParameter("netid", value.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "[%");
+        return (List<EPerson>) query.getResultList();
     }
 
     @Override

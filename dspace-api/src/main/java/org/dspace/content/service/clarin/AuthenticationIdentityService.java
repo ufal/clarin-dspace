@@ -71,6 +71,19 @@ public interface AuthenticationIdentityService {
                                                             String authMethod) throws SQLException;
 
     /**
+     * Find the EPersons whose netid is the given value in the format of a Shibboleth netid, "value[authority]"
+     * (see org.dspace.app.util.Util#formatNetId), whatever the authority, e.g. all the accounts of an
+     * eduPersonPrincipalName, whichever IdP asserted it. The value is matched exactly (case sensitive, no
+     * wildcards).
+     *
+     * @param context DSpace context
+     * @param value   netid value without the authority
+     * @return the EPersons, empty if none found
+     * @throws SQLException if database error
+     */
+    List<EPerson> findEPersonsByNetidValue(Context context, String value) throws SQLException;
+
+    /**
      * Create new identity linked to the ePerson. Both created and lastLogin dates are set to current time.
      * Only admin can create identity, unless the authorization system is turned off (e.g. during login).
      *
