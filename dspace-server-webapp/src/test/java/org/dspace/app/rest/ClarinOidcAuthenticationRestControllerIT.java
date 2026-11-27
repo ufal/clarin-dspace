@@ -25,22 +25,33 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.NoSuchAlgorithmException;
+import java.security.interfaces.RSAPrivateKey;
+import java.security.interfaces.RSAPublicKey;
 import java.sql.SQLException;
 import java.text.ParseException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import javax.servlet.http.Cookie;
 
 import com.nimbusds.jose.JOSEException;
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.JWSHeader;
+import com.nimbusds.jose.crypto.RSASSASigner;
+import com.nimbusds.jose.jwk.RSAKey;
+import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import org.dspace.app.rest.matcher.GroupMatcher;
 import org.dspace.app.rest.model.AuthnRest;
 import org.dspace.app.rest.security.jwt.EPersonClaimProvider;
 import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
-import org.dspace.authenticate.OidcAuthenticationBean;
 import org.dspace.authenticate.clarin.ClarinOidcAuthenticationBean;
 import org.dspace.authenticate.oidc.OidcClient;
 import org.dspace.authenticate.oidc.model.OidcTokenResponseDTO;
@@ -58,8 +69,11 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
  * Integration tests for {@link ClarinOidcAuthenticationBean}.
@@ -80,6 +94,14 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     private final static String EMAIL_VERIFIED = "email_verified";
     private final static String PROVIDER = "oidc";
 
+    // used to build and verify signed test ID tokens, see buildIdToken()/buildTestJwtDecoder()
+    private final static String ISSUER = "https://issuer.example.org";
+    private final static String CLIENT_ID = "clarin-client";
+    private final static RSAKey RSA_JWK = generateRsaKey();
+
+    // used to simulate the state cookie set by loginPageURL() when the login was initiated, see oidcCallback()
+    private final static String TEST_STATE = "test-state-value";
+
     private OidcClient originalOidcClient;
 
     private final OidcClient oidcClientMock = mock(OidcClient.class);
@@ -91,8 +113,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     private final List<EPerson> registeredEPersons = new ArrayList<>();
 
     @Autowired
-    @Qualifier("clarinOidcAuthentication")
-    private OidcAuthenticationBean oidcAuthentication;
+    private ClarinOidcAuthenticationBean oidcAuthentication;
 
     @Autowired
     private AuthenticationIdentityService authenticationIdentityService;
@@ -110,6 +131,8 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     public void setup() throws Exception {
         originalOidcClient = oidcAuthentication.getOidcClient();
         oidcAuthentication.setOidcClient(oidcClientMock);
+        // The jwtDecoder is set to a test decoder by using ReflectionTestUtils
+        ReflectionTestUtils.setField(oidcAuthentication, "jwtDecoder", buildTestJwtDecoder());
 
         // use CLARIN extension of the OIDC plugin, see org.dspace.authenticate.OidcAuthentication
         configurationService.setProperty("authentication-oidc.type", "clarin");
@@ -131,12 +154,13 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod",
                 asList("org.dspace.authenticate.OidcAuthentication", "org.dspace.authenticate.PasswordAuthentication"));
 
-        when(oidcClientMock.getAccessToken(CODE)).thenReturn(buildOidcTokenResponse());
+        when(oidcClientMock.getAccessToken(CODE)).thenReturn(buildOidcTokenResponse(buildIdToken("perun1")));
     }
 
     @After
     public void after() throws Exception {
         oidcAuthentication.setOidcClient(originalOidcClient);
+        ReflectionTestUtils.setField(oidcAuthentication, "jwtDecoder", null);
         configurationService.setProperty("authentication-oidc.type", null);
 
         context.turnOffAuthorisationSystem();
@@ -223,7 +247,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         userInfo.put(EMAIL_VERIFIED, false);
         when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
 
-        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        getClient().perform(oidcCallback(CODE))
                 .andExpect(status().isUnauthorized())
                 .andExpect(cookie().doesNotExist("Authorization-cookie"));
 
@@ -292,7 +316,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
 
         mockUserInfo("perun1", "perun@email.it", null);
 
-        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        getClient().perform(oidcCallback(CODE))
                 .andExpect(status().isUnauthorized())
                 .andExpect(cookie().doesNotExist("Authorization-cookie"));
 
@@ -309,7 +333,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         userInfo.put(EMAIL_VERIFIED, false);
         when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
 
-        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        getClient().perform(oidcCallback(CODE))
                 .andExpect(status().isUnauthorized())
                 .andExpect(cookie().doesNotExist("Authorization-cookie"));
 
@@ -326,7 +350,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         userInfo.put(EMAIL, "perun@email.it");
         when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
 
-        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        getClient().perform(oidcCallback(CODE))
                 .andExpect(status().isUnauthorized())
                 .andExpect(cookie().doesNotExist("Authorization-cookie"));
 
@@ -417,7 +441,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         configurationService.setProperty("authentication-oidc.can-self-register", "false");
         mockUserInfo("perun1", "perun@email.it", null);
 
-        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        getClient().perform(oidcCallback(CODE))
                 .andExpect(status().isUnauthorized())
                 .andExpect(cookie().doesNotExist("Authorization-cookie"));
 
@@ -433,7 +457,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         userInfo.put(EMAIL_VERIFIED, false);
         when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
 
-        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        getClient().perform(oidcCallback(CODE))
                 .andExpect(status().isUnauthorized())
                 .andExpect(cookie().doesNotExist("Authorization-cookie"));
 
@@ -445,7 +469,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     public void testWithoutEmailAndIdentity() throws Exception {
         when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(Map.of(SUB, "perun1"));
 
-        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        getClient().perform(oidcCallback(CODE))
                 .andExpect(status().isUnauthorized())
                 .andExpect(cookie().doesNotExist("Authorization-cookie"));
     }
@@ -517,7 +541,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         userInfo.put(EMAIL_VERIFIED, true);
         when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
 
-        MvcResult mvcResult = getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        MvcResult mvcResult = getClient().perform(oidcCallback(CODE))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(cookie().exists("Authorization-cookie"))
                 .andReturn();
@@ -556,7 +580,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         userInfo.put(EMAIL_VERIFIED, true);
         when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
 
-        MvcResult mvcResult = getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        MvcResult mvcResult = getClient().perform(oidcCallback(CODE))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(cookie().exists("Authorization-cookie"))
                 .andReturn();
@@ -592,7 +616,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         userInfo.put(EMAIL_VERIFIED, true);
         when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
 
-        MvcResult mvcResult = getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        MvcResult mvcResult = getClient().perform(oidcCallback(CODE))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(cookie().exists("Authorization-cookie"))
                 .andReturn();
@@ -618,7 +642,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
 
         mockUserInfo("perun1", "perun@email.it", null);
 
-        MvcResult mvcResult = getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        MvcResult mvcResult = getClient().perform(oidcCallback(CODE))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(cookie().exists("Authorization-cookie"))
                 .andReturn();
@@ -647,7 +671,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         userInfo.put(EMAIL_VERIFIED, true);
         when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
 
-        MvcResult mvcResult = getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        MvcResult mvcResult = getClient().perform(oidcCallback(CODE))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(cookie().exists("Authorization-cookie"))
                 .andReturn();
@@ -667,20 +691,181 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     public void testLoginFailsWithoutSub() throws Exception {
         createEPerson("perun@email.it", true);
 
+        // sub is a required ID token claim, so it must be missing from both sources to exercise this case
+        when(oidcClientMock.getAccessToken(CODE)).thenReturn(buildOidcTokenResponse(buildIdToken(null)));
         when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(Map.of(EMAIL, "perun@email.it"));
 
-        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc").param("code", CODE))
+        getClient().perform(oidcCallback(CODE))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+    }
+
+    @Test
+    public void testLoginFailsWithBadIdTokenSignature() throws Exception {
+        RSAKey otherKey = generateRsaKey();
+        when(oidcClientMock.getAccessToken(CODE)).thenReturn(
+                buildOidcTokenResponse(buildIdToken("perun1", ISSUER, CLIENT_ID, Instant.now().plusSeconds(3600),
+                        otherKey)));
+        mockUserInfo("perun1", "perun@email.it", null);
+
+        getClient().perform(oidcCallback(CODE))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+    }
+
+    @Test
+    public void testLoginFailsWithExpiredIdToken() throws Exception {
+        when(oidcClientMock.getAccessToken(CODE)).thenReturn(
+                buildOidcTokenResponse(buildIdToken("perun1", ISSUER, CLIENT_ID, Instant.now().minusSeconds(3600))));
+        mockUserInfo("perun1", "perun@email.it", null);
+
+        getClient().perform(oidcCallback(CODE))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+    }
+
+    @Test
+    public void testLoginFailsWithWrongIssuer() throws Exception {
+        when(oidcClientMock.getAccessToken(CODE)).thenReturn(
+                buildOidcTokenResponse(buildIdToken("perun1", "https://wrong-issuer.example.org", CLIENT_ID,
+                        Instant.now().plusSeconds(3600))));
+        mockUserInfo("perun1", "perun@email.it", null);
+
+        getClient().perform(oidcCallback(CODE))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+    }
+
+    @Test
+    public void testLoginFailsWithWrongAudience() throws Exception {
+        when(oidcClientMock.getAccessToken(CODE)).thenReturn(
+                buildOidcTokenResponse(buildIdToken("perun1", ISSUER, "wrong-client-id",
+                        Instant.now().plusSeconds(3600))));
+        mockUserInfo("perun1", "perun@email.it", null);
+
+        getClient().perform(oidcCallback(CODE))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+    }
+
+    @Test
+    public void testLoginFailsWithMismatchedAzp() throws Exception {
+        // aud correctly contains CLIENT_ID, but azp (authorized party) names a different client; per
+        // OIDC Core 2, when present azp must also identify the client the token was issued to
+        when(oidcClientMock.getAccessToken(CODE)).thenReturn(
+                buildOidcTokenResponse(buildIdTokenWithAzp("perun1", "wrong-client-id")));
+        mockUserInfo("perun1", "perun@email.it", null);
+
+        getClient().perform(oidcCallback(CODE))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+    }
+
+    @Test
+    public void testLoginFailsWhenUserInfoSubDoesNotMatchIdToken() throws Exception {
+        when(oidcClientMock.getAccessToken(CODE)).thenReturn(buildOidcTokenResponse(buildIdToken("perun1")));
+        // the sub returned by /userinfo doesn't match the verified ID token's sub
+        mockUserInfo("other-sub", "perun@email.it", null);
+
+        getClient().perform(oidcCallback(CODE))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+    }
+
+    @Test
+    public void testLoginFailsWithIdTokenMissingExpiration() throws Exception {
+        when(oidcClientMock.getAccessToken(CODE)).thenReturn(
+                buildOidcTokenResponse(buildIdTokenWithoutExpiration("perun1")));
+        mockUserInfo("perun1", "perun@email.it", null);
+
+        getClient().perform(oidcCallback(CODE))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+    }
+
+    @Test
+    public void testLoginFailsWhenUserInfoHasNoSub() throws Exception {
+        when(oidcClientMock.getAccessToken(CODE)).thenReturn(buildOidcTokenResponse(buildIdToken("perun1")));
+        // user info omits sub entirely (as opposed to supplying a mismatching one); its email must not be
+        // trusted without confirming it belongs to the authenticated subject
+        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(Map.of(EMAIL, "perun@email.it"));
+
+        getClient().perform(oidcCallback(CODE))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+    }
+
+    @Test
+    public void testLoginFailsWhenUserInfoRequestFails() throws Exception {
+        when(oidcClientMock.getAccessToken(CODE)).thenReturn(buildOidcTokenResponse(buildIdToken("perun1")));
+        // simulates OidcClientImpl#getUserInfo catching a provider failure (timeout, non-2xx response,
+        // empty body) and ClarinOidcAuthenticationBean#getOidcUserInfo returning an empty map as a result
+        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(Map.of());
+
+        getClient().perform(oidcCallback(CODE))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+    }
+
+    @Test
+    public void testEmailVerifiedNotInheritedWhenUserInfoChangesEmail() throws Exception {
+        // the ID token itself vouches for "old@email.it" being verified...
+        when(oidcClientMock.getAccessToken(CODE)).thenReturn(
+                buildOidcTokenResponse(buildIdTokenWithEmail("perun1", "old@email.it", true)));
+        // ...but user info overrides with a DIFFERENT email, without re-confirming it is verified
+        Map<String, Object> userInfo = new HashMap<>();
+        userInfo.put(SUB, "perun1");
+        userInfo.put(EMAIL, "new@email.it");
+        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
+
+        // the inherited "verified" flag must not be allowed to vouch for the new, unconfirmed email
+        getClient().perform(oidcCallback(CODE))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+    }
+
+    @Test
+    public void testLoginFailsWithMissingStateCookie() throws Exception {
+        mockUserInfo("perun1", "perun@email.it", null);
+
+        // valid code and state query param, but no state cookie at all (e.g. a forged callback URL
+        // replayed in a different browser that never received the Set-Cookie from loginPageURL())
+        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc")
+                        .param("code", CODE)
+                        .param("state", TEST_STATE))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+    }
+
+    @Test
+    public void testLoginFailsWithMismatchedState() throws Exception {
+        mockUserInfo("perun1", "perun@email.it", null);
+
+        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc")
+                        .param("code", CODE)
+                        .param("state", TEST_STATE)
+                        .cookie(new Cookie(ClarinOidcAuthenticationBean.STATE_COOKIE_NAME, "a-different-value")))
                 .andExpect(status().isUnauthorized())
                 .andExpect(cookie().doesNotExist("Authorization-cookie"));
     }
 
     private String login() throws Exception {
-        MvcResult mvcResult = getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc")
-                        .param("code", CODE))
+        MvcResult mvcResult = getClient().perform(oidcCallback(CODE))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(cookie().exists("Authorization-cookie"))
                 .andReturn();
         return getEPersonIdFromAuthorizationCookie(mvcResult);
+    }
+
+    /**
+     * Builds the OIDC callback request, including the state cookie/param pair ClarinOidcAuthenticationBean
+     * requires (set by loginPageURL() when the login is initiated, see TEST_STATE).
+     */
+    private MockHttpServletRequestBuilder oidcCallback(String code) {
+        return get("/api/" + AuthnRest.CATEGORY + "/oidc")
+                .param("code", code)
+                .param("state", TEST_STATE)
+                .cookie(new Cookie(ClarinOidcAuthenticationBean.STATE_COOKIE_NAME, TEST_STATE));
     }
 
     private List<ClarinUserRegistration> findRegistrations(EPerson ePerson) throws Exception {
@@ -729,11 +914,122 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         return identity;
     }
 
-    private OidcTokenResponseDTO buildOidcTokenResponse() {
+    private OidcTokenResponseDTO buildOidcTokenResponse(String idToken) {
         OidcTokenResponseDTO token = new OidcTokenResponseDTO();
         token.setAccessToken(ACCESS_TOKEN);
         token.setTokenType("Bearer");
+        token.setIdToken(idToken);
         return token;
+    }
+
+    private static RSAKey generateRsaKey() {
+        try {
+            KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
+            keyPairGenerator.initialize(2048);
+            KeyPair keyPair = keyPairGenerator.generateKeyPair();
+            return new RSAKey.Builder((RSAPublicKey) keyPair.getPublic())
+                    .privateKey((RSAPrivateKey) keyPair.getPrivate())
+                    .keyID("test-key-" + System.identityHashCode(keyPair))
+                    .build();
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * Builds a decoder backed by the local test key (no real JWKS endpoint available in tests), but reuses
+     * ClarinOidcAuthenticationBean's actual production validator chain (issuer/audience/required-claims)
+     * rather than a separately duplicated copy, so these tests actually exercise that production logic.
+     * buildJwtValidator() is private, so it's invoked via ReflectionTestUtils.
+     */
+    private JwtDecoder buildTestJwtDecoder() throws JOSEException {
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withPublicKey(RSA_JWK.toRSAPublicKey()).build();
+        decoder.setJwtValidator(Objects.requireNonNull(
+                ReflectionTestUtils.invokeMethod(
+                        ClarinOidcAuthenticationBean.class, "buildJwtValidator", ISSUER, CLIENT_ID))
+        );
+        return decoder;
+    }
+
+    private String buildIdToken(String sub) throws JOSEException {
+        return buildIdToken(sub, ISSUER, CLIENT_ID, Instant.now().plusSeconds(3600));
+    }
+
+    /**
+     * Builds a signed ID token with no "exp" claim at all (as opposed to {@link #buildIdToken}, which always
+     * sets one), to verify that a missing (not just expired) exp is rejected.
+     */
+    private String buildIdTokenWithoutExpiration(String sub) throws JOSEException {
+        JWTClaimsSet claims = new JWTClaimsSet.Builder()
+                .issuer(ISSUER)
+                .audience(CLIENT_ID)
+                .subject(sub)
+                .issueTime(new Date())
+                .build();
+        SignedJWT signedJwt = new SignedJWT(
+                new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(RSA_JWK.getKeyID()).build(), claims);
+        signedJwt.sign(new RSASSASigner(RSA_JWK));
+        return signedJwt.serialize();
+    }
+
+    /**
+     * Builds a signed ID token carrying its own email/email_verified claims, to verify that user info
+     * overriding the email doesn't inherit the ID token's verified flag for a different email value.
+     */
+    private String buildIdTokenWithEmail(String sub, String email, boolean emailVerified) throws JOSEException {
+        JWTClaimsSet claims = new JWTClaimsSet.Builder()
+                .issuer(ISSUER)
+                .audience(CLIENT_ID)
+                .subject(sub)
+                .issueTime(new Date())
+                .expirationTime(Date.from(Instant.now().plusSeconds(3600)))
+                .claim(EMAIL, email)
+                .claim(EMAIL_VERIFIED, emailVerified)
+                .build();
+        SignedJWT signedJwt = new SignedJWT(
+                new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(RSA_JWK.getKeyID()).build(), claims);
+        signedJwt.sign(new RSASSASigner(RSA_JWK));
+        return signedJwt.serialize();
+    }
+
+    /**
+     * Builds a signed ID token with a valid "aud" (matching CLIENT_ID) but an "azp" (authorized party)
+     * claim set to a different value, to verify that azp is checked too when present, not just aud.
+     */
+    private String buildIdTokenWithAzp(String sub, String azp) throws JOSEException {
+        JWTClaimsSet claims = new JWTClaimsSet.Builder()
+                .issuer(ISSUER)
+                .audience(CLIENT_ID)
+                .subject(sub)
+                .issueTime(new Date())
+                .expirationTime(Date.from(Instant.now().plusSeconds(3600)))
+                .claim("azp", azp)
+                .build();
+        SignedJWT signedJwt = new SignedJWT(
+                new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(RSA_JWK.getKeyID()).build(), claims);
+        signedJwt.sign(new RSASSASigner(RSA_JWK));
+        return signedJwt.serialize();
+    }
+
+    private String buildIdToken(String sub, String issuer, String audience, Instant expirationTime)
+            throws JOSEException {
+        return buildIdToken(sub, issuer, audience, expirationTime, RSA_JWK);
+    }
+
+    private String buildIdToken(String sub, String issuer, String audience, Instant expirationTime,
+                                RSAKey signingKey) throws JOSEException {
+        JWTClaimsSet.Builder claims = new JWTClaimsSet.Builder()
+                .issuer(issuer)
+                .audience(audience)
+                .issueTime(new Date())
+                .expirationTime(Date.from(expirationTime));
+        if (sub != null) {
+            claims.subject(sub);
+        }
+        SignedJWT signedJwt = new SignedJWT(
+                new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(signingKey.getKeyID()).build(), claims.build());
+        signedJwt.sign(new RSASSASigner(signingKey));
+        return signedJwt.serialize();
     }
 
     private String getEPersonIdFromAuthorizationCookie(MvcResult mvcResult) throws ParseException, JOSEException {
