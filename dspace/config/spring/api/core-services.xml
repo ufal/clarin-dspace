@@ -170,7 +170,7 @@
 
     <!-- OIDC Authentication -->
     <bean class="org.dspace.authenticate.OidcAuthenticationBean" id="oidcAuthentication"/>
-    <!-- The CLARIN extension of OidcAuthenticationBean, only used when authentication-oidc.type = clarin -->
+    <!-- The CLARIN OIDC authentication, used by the org.dspace.authenticate.clarin.ClarinOidcAuthentication plugin -->
     <bean class="org.dspace.authenticate.clarin.ClarinOidcAuthenticationBean" id="clarinOidcAuthentication"/>
     <bean class="org.dspace.authenticate.oidc.impl.OidcClientImpl" />
 

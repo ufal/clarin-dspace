@@ -8,53 +8,50 @@
 package org.dspace.app.rest;
 
 import static java.util.Arrays.asList;
+import static org.dspace.authenticate.clarin.ClarinOidcAuthenticationBean.ORGANIZATION_PREFIX;
 import static org.dspace.content.clarin.AuthenticationIdentity.AUTH_METHOD_OIDC;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.instanceOf;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.security.NoSuchAlgorithmException;
-import java.security.interfaces.RSAPrivateKey;
-import java.security.interfaces.RSAPublicKey;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.sql.SQLException;
 import java.text.ParseException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import javax.servlet.http.Cookie;
 
-import com.nimbusds.jose.JOSEException;
-import com.nimbusds.jose.JWSAlgorithm;
-import com.nimbusds.jose.JWSHeader;
-import com.nimbusds.jose.crypto.RSASSASigner;
-import com.nimbusds.jose.jwk.RSAKey;
-import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import org.dspace.app.rest.matcher.GroupMatcher;
 import org.dspace.app.rest.model.AuthnRest;
+import org.dspace.app.rest.security.clarin.ClarinOidcLoginConfigurer;
+import org.dspace.app.rest.security.clarin.FakeOidcProvider;
 import org.dspace.app.rest.security.jwt.EPersonClaimProvider;
 import org.dspace.app.rest.test.AbstractControllerIntegrationTest;
+import org.dspace.authenticate.clarin.ClarinOidcAuthentication;
 import org.dspace.authenticate.clarin.ClarinOidcAuthenticationBean;
-import org.dspace.authenticate.oidc.OidcClient;
-import org.dspace.authenticate.oidc.model.OidcTokenResponseDTO;
+import org.dspace.authenticate.clarin.ClarinShibAuthentication;
 import org.dspace.builder.EPersonBuilder;
 import org.dspace.builder.GroupBuilder;
 import org.dspace.content.clarin.AuthenticationIdentity;
@@ -62,18 +59,24 @@ import org.dspace.content.clarin.ClarinUserRegistration;
 import org.dspace.content.service.clarin.AuthenticationIdentityService;
 import org.dspace.content.service.clarin.ClarinUserRegistrationService;
 import org.dspace.eperson.EPerson;
+import org.dspace.eperson.Group;
 import org.dspace.eperson.service.EPersonService;
+import org.dspace.eperson.service.GroupService;
 import org.dspace.services.ConfigurationService;
+import org.dspace.services.factory.DSpaceServicesFactory;
 import org.dspace.util.UUIDUtils;
+import org.hamcrest.Matcher;
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
-import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.mock.web.MockHttpSession;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MvcResult;
-import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.ResultMatcher;
 
 /**
  * Integration tests for {@link ClarinOidcAuthenticationBean}.
@@ -81,30 +84,36 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  *
  * @author Milan Kuchtiak
  */
+// own Spring context: the CLARIN OIDC login is only installed when the plugin is enabled at startup (see
+// enablePlugin), so this context is built after that, not shared with other tests. It must not be closed after the
+// class (no @DirtiesContext): closing a context destroys the DSpace kernel shared by all tests (DSpaceKernelDestroyer)
+@TestPropertySource(properties = {"clarin.oidc.test.context = true"})
 public class ClarinOidcAuthenticationRestControllerIT extends AbstractControllerIntegrationTest {
 
     private final static String CODE = "123456";
-    private final static String ACCESS_TOKEN = "c41e37e5-c2de-4177-91d6-ed9e9d1f31bf";
     private final static String SUB = "sub";
     private final static String EMAIL = "email";
     private final static String FIRST_NAME = "given_name";
     private final static String LAST_NAME = "family_name";
     private final static String ORGANIZATION = "voperson_external_affiliation";
-    private final static String GROUPS = "eduperson_entitlement";
+    private final static String ENTITLEMENT = "eduperson_entitlement";
+    private final static String AFFILIATION = "voperson_external_affiliation";
+    private final static String CLAIM_MAPPING = ClarinOidcAuthenticationBean.CLAIM_GROUP_MAPPING_PREFIX;
     private final static String EMAIL_VERIFIED = "email_verified";
+    private final static String EXTERNAL_IDS = "voperson_external_id";
+    private final static String SHIB_NETID = "perun@cuni.cz[https://idp.cuni.cz/idp/shibboleth]";
     private final static String PROVIDER = "oidc";
 
-    // used to build and verify signed test ID tokens, see buildIdToken()/buildTestJwtDecoder()
-    private final static String ISSUER = "https://issuer.example.org";
-    private final static String CLIENT_ID = "clarin-client";
-    private final static RSAKey RSA_JWK = generateRsaKey();
+    private final static String START_URL = "/api/authn/oidc/start/clarin-oidc";
+    private final static String CALLBACK_URL = ClarinOidcLoginConfigurer.CALLBACK_PATH;
+    private final static String PLUGIN_SEQUENCE = "plugin.sequence.org.dspace.authenticate.AuthenticationMethod";
+    private final static List<String> CLARIN_PLUGIN_SEQUENCE = asList(
+            ClarinOidcAuthentication.class.getName(), "org.dspace.authenticate.PasswordAuthentication");
 
-    // used to simulate the state cookie set by loginPageURL() when the login was initiated, see oidcCallback()
-    private final static String TEST_STATE = "test-state-value";
+    private static String[] originalPluginSequence;
 
-    private OidcClient originalOidcClient;
-
-    private final OidcClient oidcClientMock = mock(OidcClient.class);
+    /** The OIDC provider: discovery, JWKS, token and UserInfo endpoints on a local MockWebServer. */
+    private static final FakeOidcProvider provider = new FakeOidcProvider();
 
     // EPersons whose CLARIN user registrations are removed after the test
     private final List<EPerson> ePersons = new ArrayList<>();
@@ -127,41 +136,62 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     @Autowired
     private EPersonService ePersonService;
 
+    @Autowired
+    private GroupService groupService;
+
+    @BeforeClass
+    public static void startProvider() throws Exception {
+        provider.start();
+    }
+
+    /** Runs before this class's Spring context is built, i.e. before WebSecurityConfiguration reads it. */
+    @BeforeClass
+    public static void enablePlugin() {
+        ConfigurationService configuration = DSpaceServicesFactory.getInstance().getConfigurationService();
+        originalPluginSequence = configuration.getArrayProperty(PLUGIN_SEQUENCE);
+        configuration.setProperty(PLUGIN_SEQUENCE, CLARIN_PLUGIN_SEQUENCE);
+    }
+
+    @AfterClass
+    public static void stopProvider() throws Exception {
+        provider.shutdown();
+        DSpaceServicesFactory.getInstance().getConfigurationService()
+                .setProperty(PLUGIN_SEQUENCE, asList(originalPluginSequence));
+    }
+
     @Before
     public void setup() throws Exception {
-        originalOidcClient = oidcAuthentication.getOidcClient();
-        oidcAuthentication.setOidcClient(oidcClientMock);
-        // The jwtDecoder is set to a test decoder by using ReflectionTestUtils
-        ReflectionTestUtils.setField(oidcAuthentication, "jwtDecoder", buildTestJwtDecoder());
+        provider.reset();
 
         // use CLARIN extension of the OIDC plugin, see org.dspace.authenticate.OidcAuthentication
-        configurationService.setProperty("authentication-oidc.type", "clarin");
+        configurationService.setProperty("authentication-oidc.issuer", provider.getIssuer());
+        configurationService.setProperty("authentication-oidc.client-id", FakeOidcProvider.CLIENT_ID);
+        configurationService.setProperty("authentication-oidc.client-secret", FakeOidcProvider.CLIENT_SECRET);
 
         configurationService.setProperty("authentication-oidc.user-info.email", EMAIL);
         configurationService.setProperty("authentication-oidc.user-info.first-name", FIRST_NAME);
         configurationService.setProperty("authentication-oidc.user-info.last-name", LAST_NAME);
-        configurationService.setProperty("authentication-oidc.user-info.id", SUB);
         configurationService.setProperty("authentication-oidc.user-info.organization", ORGANIZATION);
         configurationService.setProperty("authentication-oidc.user-info.email-verified", EMAIL_VERIFIED);
         configurationService.setProperty("authentication-oidc.provider", PROVIDER);
         configurationService.setProperty("authentication-oidc.can-self-register", "true");
         configurationService.setProperty("authentication-oidc.require-verified-email", "true");
+        configurationService.setProperty(ClarinOidcAuthenticationBean.EMAIL_FALLBACK_PROPERTY, null);
+        configurationService.setProperty("authentication-oidc.user-info.external-ids", null);
         // disabled by default, enabled explicitly by the tests that need it
-        configurationService.setProperty("authentication-oidc.user-info.groups", null);
-        configurationService.setProperty("authentication-oidc.group.staff", null);
+        for (String key : configurationService.getPropertyKeys("authentication-oidc.claim")) {
+            configurationService.setProperty(key, null);
+        }
         configurationService.setProperty("authentication-oidc.default.auth.group", null);
 
-        configurationService.setProperty("plugin.sequence.org.dspace.authenticate.AuthenticationMethod",
-                asList("org.dspace.authenticate.OidcAuthentication", "org.dspace.authenticate.PasswordAuthentication"));
-
-        when(oidcClientMock.getAccessToken(CODE)).thenReturn(buildOidcTokenResponse(buildIdToken("perun1")));
+        configurationService.setProperty(PLUGIN_SEQUENCE, CLARIN_PLUGIN_SEQUENCE);
     }
 
     @After
     public void after() throws Exception {
-        oidcAuthentication.setOidcClient(originalOidcClient);
-        ReflectionTestUtils.setField(oidcAuthentication, "jwtDecoder", null);
-        configurationService.setProperty("authentication-oidc.type", null);
+        configurationService.setProperty("authentication-oidc.issuer", null);
+        configurationService.setProperty("authentication-oidc.client-id", null);
+        configurationService.setProperty("authentication-oidc.client-secret", null);
 
         context.turnOffAuthorisationSystem();
         // user_registration has no foreign key to eperson, remove the registrations explicitly
@@ -179,6 +209,24 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         }
         context.restoreAuthSystemState();
         context.commit();
+    }
+
+    @Test
+    public void testAuthorizationCookieReachesStatusEndpoint() throws Exception {
+        mockUserInfo("perun1", "user@email.it", null);
+        MvcResult result = loginResult();
+        // the cookie (set by JWTTokenRestAuthenticationServiceImpl) has no Path: a browser scopes it to the callback's
+        // parent directory (RFC 6265 5.1.4), and the UI redeems it at /api/authn/status (MockMvc ignores cookie paths,
+        // so this is checked explicitly)
+        assertThat(result.getResponse().getCookie("Authorization-cookie").getPath(), nullValue());
+        String defaultPath = CALLBACK_URL.substring(0, CALLBACK_URL.lastIndexOf('/'));
+        assertThat(defaultPath, equalTo("/api/" + AuthnRest.CATEGORY));
+        registeredEPersons.add(ePersonService.find(context, UUIDUtils.fromString(
+                getEPersonIdFromAuthorizationCookie(result))));
+        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/status")
+                        .cookie(result.getResponse().getCookie("Authorization-cookie")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.authenticated", is(true)));
     }
 
     @Test
@@ -245,11 +293,9 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         userInfo.put(SUB, "perun1");
         userInfo.put(EMAIL, "perun@email.it");
         userInfo.put(EMAIL_VERIFIED, false);
-        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
+        provider.userInfo = new HashMap<>(userInfo);
 
-        getClient().perform(oidcCallback(CODE))
-                .andExpect(status().isUnauthorized())
-                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+        loginFails();
 
         // the login was rejected before any side effects, even though the identity is already linked
         assertThat(context.reloadEntity(identity).getLastLogin().getTime(), equalTo(0L));
@@ -268,6 +314,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
 
     @Test
     public void testIdentityOfOtherProviderIsNotUsed() throws Exception {
+        configurationService.setProperty(ClarinOidcAuthenticationBean.EMAIL_FALLBACK_PROPERTY, "true");
         EPerson otherProviderPerson = createEPerson("other@email.it", true);
         createIdentity(otherProviderPerson, "other-provider", "perun1");
         EPerson ePerson = createEPerson("perun@email.it", true);
@@ -281,16 +328,26 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     }
 
     @Test
-    public void testEPersonLinkedByEmail() throws Exception {
-        // EPerson created by Shibboleth
-        EPerson ePerson = createEPerson("perun@email.it", false);
-        context.turnOffAuthorisationSystem();
-        ePerson.setNetid("perun@cuni.cz[https://idp.cuni.cz/idp/shibboleth]");
-        ePersonService.update(context, ePerson);
-        context.restoreAuthSystemState();
-        context.commit();
+    public void testEPersonNotLinkedByEmailByDefault() throws Exception {
+        // a local password account
+        EPerson ePerson = createEPerson("perun@email.it", true);
 
         mockUserInfo("perun1", "perun@email.it", null);
+
+        loginRefusedAsDuplicate("perun@email.it");
+
+        assertThat(authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER, "perun1"), nullValue());
+        assertThat(ePersonService.findByEmail(context, "perun@email.it").getID(), equalTo(ePerson.getID()));
+    }
+
+    @Test
+    public void testEPersonLinkedByEmailWhenEmailFallbackOn() throws Exception {
+        configurationService.setProperty(ClarinOidcAuthenticationBean.EMAIL_FALLBACK_PROPERTY, "true");
+        EPerson ePerson = createEPerson("perun@email.it", true);
+        // e.g. registered by a Shibboleth IdP that sends no netid: the organization records the IdP
+        createRegistration(ePerson, "https://idp.example.org/idp/shibboleth");
+
+        mockUserInfo("perun1", "perun@email.it", "New University");
 
         assertThat(login(), equalTo(ePerson.getID().toString()));
 
@@ -299,26 +356,208 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         assertThat(identity, notNullValue());
         assertThat(identity.getEPerson(), equalTo(ePerson));
         assertThat(identity.getCreated(), notNullValue());
+        // linking doesn't change the existing registration's organization
+        List<ClarinUserRegistration> registrations = findRegistrations(ePerson);
+        assertThat(registrations, hasSize(1));
+        assertThat(registrations.get(0).getOrganization(), equalTo("https://idp.example.org/idp/shibboleth"));
 
-        // Shibboleth netid is not changed
-        ePerson = context.reloadEntity(ePerson);
-        assertThat(ePerson.getNetid(), equalTo("perun@cuni.cz[https://idp.cuni.cz/idp/shibboleth]"));
+        // next login is by sub, even if the email has changed; it doesn't change the organization either
+        mockUserInfo("perun1", "new@email.it", "Newer University");
+        assertThat(login(), equalTo(ePerson.getID().toString()));
+        context.reloadEntity(registrations.get(0));
+        assertThat(findRegistrations(ePerson).get(0).getOrganization(),
+                equalTo("https://idp.example.org/idp/shibboleth"));
+    }
 
-        // next login is by sub, even if the email has changed
-        mockUserInfo("perun1", "new@email.it", null);
+    @Test
+    public void testShibbolethEPersonNotLinkedByEmail() throws Exception {
+        configurationService.setProperty(ClarinOidcAuthenticationBean.EMAIL_FALLBACK_PROPERTY, "true");
+        EPerson ePerson = createEPerson("perun@email.it", false);
+        setNetid(ePerson, "perun@cuni.cz[https://idp.cuni.cz/idp/shibboleth]");
+
+        mockUserInfo("perun1", "perun@email.it", null);
+
+        loginRefusedAsDuplicate("perun@email.it");
+
+        assertThat(authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER, "perun1"), nullValue());
+        assertThat(context.reloadEntity(ePerson).getNetid(),
+                equalTo("perun@cuni.cz[https://idp.cuni.cz/idp/shibboleth]"));
+    }
+
+    @Test
+    public void testAdministratorNotLinkedByEmail() throws Exception {
+        configurationService.setProperty(ClarinOidcAuthenticationBean.EMAIL_FALLBACK_PROPERTY, "true");
+        EPerson ePerson = createEPerson("perun@email.it", true);
+        context.turnOffAuthorisationSystem();
+        groupService.addMember(context, groupService.findByName(context, Group.ADMIN), ePerson);
+        context.restoreAuthSystemState();
+        context.commit();
+
+        mockUserInfo("perun1", "perun@email.it", null);
+
+        loginRefusedAsDuplicate("perun@email.it");
+
+        assertThat(authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER, "perun1"), nullValue());
+    }
+
+    @Test
+    public void testShibbolethEPersonLinkedByExternalId() throws Exception {
+        configurationService.setProperty("authentication-oidc.user-info.external-ids", EXTERNAL_IDS);
+        // a different email than at the OIDC provider, so it couldn't be linked by email anyway
+        EPerson ePerson = createEPerson("shib@email.it", false);
+        setNetid(ePerson, SHIB_NETID);
+
+        mockUserInfo("perun1", "perun@email.it", null);
+        provider.userInfo.put(EXTERNAL_IDS, List.of("perun@muni.cz", "perun@cuni.cz"));
+
+        assertThat(login(), equalTo(ePerson.getID().toString()));
+
+        AuthenticationIdentity identity = authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER,
+                "perun1");
+        assertThat(identity, notNullValue());
+        // by ID: EPerson#equals compares the email, which the login changed
+        assertThat(identity.getEPerson().getID(), equalTo(ePerson.getID()));
+        assertThat(context.reloadEntity(ePerson).getNetid(), equalTo(SHIB_NETID));
+    }
+
+    @Test
+    public void testEmailUpdatedWhenLinkedByExternalId() throws Exception {
+        configurationService.setProperty("authentication-oidc.user-info.external-ids", EXTERNAL_IDS);
+        EPerson ePerson = createEPerson("shib@email.it", false);
+        setNetid(ePerson, SHIB_NETID);
+        createRegistration(ePerson, "https://idp.cuni.cz/idp/shibboleth");
+
+        mockUserInfo("perun1", "perun@email.it", "Charles University");
+        provider.userInfo.put(EXTERNAL_IDS, List.of("perun@cuni.cz"));
+
+        // the login that links the identity updates the account as every later login does
+        assertThat(login(), equalTo(ePerson.getID().toString()));
+
+        assertThat(context.reloadEntity(ePerson).getEmail(), equalTo("perun@email.it"));
+        ClarinUserRegistration registration = context.reloadEntity(findRegistrations(ePerson).get(0));
+        assertThat(registration.getEmail(), equalTo("perun@email.it"));
+        assertThat(registration.getOrganization(), equalTo("https://idp.cuni.cz/idp/shibboleth"));
+    }
+
+    @Test
+    public void testEmailNotUpdatedWhenLinkedByExternalIdAndUsedByOtherEPerson() throws Exception {
+        configurationService.setProperty("authentication-oidc.user-info.external-ids", EXTERNAL_IDS);
+        EPerson ePerson = createEPerson("shib@email.it", false);
+        setNetid(ePerson, SHIB_NETID);
+        EPerson otherEPerson = createEPerson("perun@email.it", true);
+
+        mockUserInfo("perun1", "perun@email.it", null);
+        provider.userInfo.put(EXTERNAL_IDS, List.of("perun@cuni.cz"));
+
+        assertThat(login(), equalTo(ePerson.getID().toString()));
+
+        assertThat(context.reloadEntity(ePerson).getEmail(), equalTo("shib@email.it"));
+        assertThat(ePersonService.findByEmail(context, "perun@email.it").getID(), equalTo(otherEPerson.getID()));
+    }
+
+    @Test
+    public void testShibbolethEPersonLinkedByExternalIdSingleValue() throws Exception {
+        configurationService.setProperty("authentication-oidc.user-info.external-ids", EXTERNAL_IDS);
+        EPerson ePerson = createEPerson("shib@email.it", false);
+        setNetid(ePerson, SHIB_NETID);
+
+        mockUserInfo("perun1", "perun@email.it", null);
+        provider.userInfo.put(EXTERNAL_IDS, "perun@cuni.cz");
+
         assertThat(login(), equalTo(ePerson.getID().toString()));
     }
 
     @Test
+    public void testExternalIdsNotUsedByDefault() throws Exception {
+        EPerson ePerson = createEPerson("shib@email.it", false);
+        setNetid(ePerson, SHIB_NETID);
+
+        mockUserInfo("perun1", "perun@email.it", null);
+        provider.userInfo.put(EXTERNAL_IDS, List.of("perun@cuni.cz"));
+
+        // a new EPerson is registered instead
+        String ePersonId = login();
+        registeredEPersons.add(ePersonService.find(context, UUIDUtils.fromString(ePersonId)));
+        assertThat(ePersonId, not(equalTo(ePerson.getID().toString())));
+    }
+
+    @Test
+    public void testExternalIdsMatchingTwoEPersonsAreNotLinked() throws Exception {
+        configurationService.setProperty("authentication-oidc.user-info.external-ids", EXTERNAL_IDS);
+        EPerson cuniPerson = createEPerson("cuni@email.it", false);
+        setNetid(cuniPerson, SHIB_NETID);
+        EPerson muniPerson = createEPerson("muni@email.it", false);
+        setNetid(muniPerson, "perun@muni.cz[https://idp.muni.cz/idp/shibboleth]");
+
+        mockUserInfo("perun1", "perun@email.it", null);
+        provider.userInfo.put(EXTERNAL_IDS, List.of("perun@cuni.cz", "perun@muni.cz"));
+
+        // no guessing: the login continues as without external IDs, here registering a new EPerson
+        String ePersonId = login();
+        registeredEPersons.add(ePersonService.find(context, UUIDUtils.fromString(ePersonId)));
+        assertThat(ePersonId, not(equalTo(cuniPerson.getID().toString())));
+        assertThat(ePersonId, not(equalTo(muniPerson.getID().toString())));
+    }
+
+    @Test
+    public void testExternalIdIsMatchedLiterally() throws Exception {
+        configurationService.setProperty("authentication-oidc.user-info.external-ids", EXTERNAL_IDS);
+        EPerson ePerson = createEPerson("shib@email.it", false);
+        setNetid(ePerson, SHIB_NETID);
+
+        mockUserInfo("perun1", "perun@email.it", null);
+        // LIKE wildcards, a prefix, another case, and values reaching into the authority part
+        provider.userInfo.put(EXTERNAL_IDS, List.of("perun_cuni.cz", "perun%", "%", "perun@cuni", "PERUN@cuni.cz",
+                SHIB_NETID, "perun@cuni.cz[https://idp.cuni.cz/idp/shibboleth"));
+
+        String ePersonId = login();
+        registeredEPersons.add(ePersonService.find(context, UUIDUtils.fromString(ePersonId)));
+        assertThat(ePersonId, not(equalTo(ePerson.getID().toString())));
+    }
+
+    @Test
+    public void testAdministratorNotLinkedByExternalId() throws Exception {
+        configurationService.setProperty("authentication-oidc.user-info.external-ids", EXTERNAL_IDS);
+        EPerson ePerson = createEPerson("shib@email.it", false);
+        setNetid(ePerson, SHIB_NETID);
+        context.turnOffAuthorisationSystem();
+        groupService.addMember(context, groupService.findByName(context, Group.ADMIN), ePerson);
+        context.restoreAuthSystemState();
+        context.commit();
+
+        mockUserInfo("perun1", "perun@email.it", null);
+        provider.userInfo.put(EXTERNAL_IDS, List.of("perun@cuni.cz"));
+
+        loginRefusedAsDuplicate("perun@email.it");
+
+        assertThat(authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER, "perun1"), nullValue());
+    }
+
+    @Test
+    public void testEPersonNotLinkedByExternalIdWhenAlreadyLinkedToOtherIdentity() throws Exception {
+        configurationService.setProperty("authentication-oidc.user-info.external-ids", EXTERNAL_IDS);
+        EPerson ePerson = createEPerson("shib@email.it", false);
+        setNetid(ePerson, SHIB_NETID);
+        createIdentity(ePerson, PROVIDER, "other-sub");
+
+        mockUserInfo("perun1", "perun@email.it", null);
+        provider.userInfo.put(EXTERNAL_IDS, List.of("perun@cuni.cz"));
+
+        // the page shows the email of this login, not the email of the account it was refused to be linked to
+        loginRefusedAsDuplicate("perun@email.it");
+
+        assertThat(authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER, "perun1"), nullValue());
+    }
+
+    @Test
     public void testEPersonNotLinkedWhenAlreadyLinkedToOtherIdentity() throws Exception {
+        configurationService.setProperty(ClarinOidcAuthenticationBean.EMAIL_FALLBACK_PROPERTY, "true");
         EPerson ePerson = createEPerson("perun@email.it", true);
         createIdentity(ePerson, PROVIDER, "other-sub");
 
         mockUserInfo("perun1", "perun@email.it", null);
 
-        getClient().perform(oidcCallback(CODE))
-                .andExpect(status().isUnauthorized())
-                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+        loginRefusedAsDuplicate("perun@email.it");
 
         assertThat(authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER, "perun1"), nullValue());
     }
@@ -331,11 +570,9 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         userInfo.put(SUB, "perun1");
         userInfo.put(EMAIL, "perun@email.it");
         userInfo.put(EMAIL_VERIFIED, false);
-        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
+        provider.userInfo = new HashMap<>(userInfo);
 
-        getClient().perform(oidcCallback(CODE))
-                .andExpect(status().isUnauthorized())
-                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+        loginFails();
 
         assertThat(authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER, "perun1"), nullValue());
         assertThat(ePersonService.find(context, ePerson.getID()).getEmail(), equalTo("perun@email.it"));
@@ -348,29 +585,83 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         Map<String, Object> userInfo = new HashMap<>();
         userInfo.put(SUB, "perun1");
         userInfo.put(EMAIL, "perun@email.it");
-        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
+        provider.userInfo = new HashMap<>(userInfo);
 
-        getClient().perform(oidcCallback(CODE))
-                .andExpect(status().isUnauthorized())
-                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+        loginFails();
 
+        assertThat(authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER, "perun1"), nullValue());
+    }
+
+    @Test
+    public void testUnverifiedEmailAcceptedByDefault() throws Exception {
+        configurationService.setProperty("authentication-oidc.require-verified-email", null);
+
+        Map<String, Object> userInfo = new HashMap<>();
+        userInfo.put(SUB, "perun1");
+        userInfo.put(EMAIL, "perun@email.it");
+        provider.userInfo = new HashMap<>(userInfo);
+
+        String ePersonId = login();
+        registeredEPersons.add(ePersonService.find(context, UUIDUtils.fromString(ePersonId)));
+        assertThat(ePersonService.findByEmail(context, "perun@email.it").getID().toString(), equalTo(ePersonId));
+    }
+
+    @Test
+    public void testUnverifiedEmailDoesNotLinkByDefault() throws Exception {
+        configurationService.setProperty("authentication-oidc.require-verified-email", null);
+        createEPerson("perun@email.it", true);
+
+        Map<String, Object> userInfo = new HashMap<>();
+        userInfo.put(SUB, "perun1");
+        userInfo.put(EMAIL, "perun@email.it");
+        provider.userInfo = new HashMap<>(userInfo);
+
+        // email-fallback is off by default too
+        loginRefusedAsDuplicate("perun@email.it");
         assertThat(authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER, "perun1"), nullValue());
     }
 
     @Test
     public void testEPersonLinkedByEmailWhenVerificationNotRequired() throws Exception {
         configurationService.setProperty("authentication-oidc.require-verified-email", "false");
+        configurationService.setProperty(ClarinOidcAuthenticationBean.EMAIL_FALLBACK_PROPERTY, "true");
         EPerson ePerson = createEPerson("perun@email.it", true);
 
         Map<String, Object> userInfo = new HashMap<>();
         userInfo.put(SUB, "perun1");
         userInfo.put(EMAIL, "perun@email.it");
         userInfo.put(EMAIL_VERIFIED, false);
-        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
+        provider.userInfo = new HashMap<>(userInfo);
 
         assertThat(login(), equalTo(ePerson.getID().toString()));
         assertThat(authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER, "perun1").getEPerson(),
                 equalTo(ePerson));
+    }
+
+    @Test
+    public void testEmailFallbackRequiresVerifiedEmailUnlessDisabledExplicitly() throws Exception {
+        configurationService.setProperty(ClarinOidcAuthenticationBean.EMAIL_FALLBACK_PROPERTY, "true");
+        createEPerson("perun@email.it", true);
+
+        Map<String, Object> userInfo = new HashMap<>();
+        userInfo.put(SUB, "perun1");
+        userInfo.put(EMAIL, "perun@email.it");
+        userInfo.put(EMAIL_VERIFIED, false);
+        provider.userInfo = new HashMap<>(userInfo);
+
+        // the default of authentication-oidc.cfg, and the key not set at all
+        for (String requireVerifiedEmail :
+                new String[] {"${" + ClarinOidcAuthenticationBean.EMAIL_FALLBACK_PROPERTY + "}", null}) {
+            configurationService.setProperty("authentication-oidc.require-verified-email", requireVerifiedEmail);
+            if (requireVerifiedEmail != null) {
+                // resolved, not refused as an unparsable boolean
+                assertThat(configurationService.getBooleanProperty("authentication-oidc.require-verified-email"),
+                        equalTo(true));
+            }
+            loginFails();
+            assertThat(authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER, "perun1"),
+                    nullValue());
+        }
     }
 
     @Test
@@ -382,7 +673,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         userInfo.put(LAST_NAME, "Perun");
         userInfo.put(ORGANIZATION, "Charles University");
         userInfo.put(EMAIL_VERIFIED, true);
-        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
+        provider.userInfo = new HashMap<>(userInfo);
 
         EPerson ePerson = ePersonService.find(context, UUIDUtils.fromString(login()));
         registeredEPersons.add(ePerson);
@@ -400,7 +691,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
 
         List<ClarinUserRegistration> registrations = findRegistrations(ePerson);
         assertThat(registrations, hasSize(1));
-        assertThat(registrations.get(0).getOrganization(), equalTo("Charles University"));
+        assertThat(registrations.get(0).getOrganization(), equalTo(ORGANIZATION_PREFIX + "Charles University"));
         assertThat(registrations.get(0).getEmail(), equalTo("perun@email.it"));
         assertThat(registrations.get(0).isConfirmation(), equalTo(true));
     }
@@ -412,7 +703,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         userInfo.put(EMAIL, "perun@email.it");
         userInfo.put(ORGANIZATION, List.of("affiliate@einfra.cesnet.cz", "affiliate@google.extidp.cesnet.cz"));
         userInfo.put(EMAIL_VERIFIED, true);
-        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
+        provider.userInfo = new HashMap<>(userInfo);
 
         EPerson ePerson = ePersonService.find(context, UUIDUtils.fromString(login()));
         registeredEPersons.add(ePerson);
@@ -420,7 +711,8 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
 
         List<ClarinUserRegistration> registrations = findRegistrations(ePerson);
         assertThat(registrations, hasSize(1));
-        assertThat(registrations.get(0).getOrganization(), equalTo("affiliate@einfra.cesnet.cz"));
+        assertThat(registrations.get(0).getOrganization(),
+                equalTo(ORGANIZATION_PREFIX + "affiliate@einfra.cesnet.cz"));
     }
 
     @Test
@@ -441,9 +733,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         configurationService.setProperty("authentication-oidc.can-self-register", "false");
         mockUserInfo("perun1", "perun@email.it", null);
 
-        getClient().perform(oidcCallback(CODE))
-                .andExpect(status().isUnauthorized())
-                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+        loginFails();
 
         assertThat(ePersonService.findByEmail(context, "perun@email.it"), nullValue());
         assertThat(authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER, "perun1"), nullValue());
@@ -455,11 +745,9 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         userInfo.put(SUB, "perun1");
         userInfo.put(EMAIL, "perun@email.it");
         userInfo.put(EMAIL_VERIFIED, false);
-        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
+        provider.userInfo = new HashMap<>(userInfo);
 
-        getClient().perform(oidcCallback(CODE))
-                .andExpect(status().isUnauthorized())
-                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+        loginFails();
 
         assertThat(ePersonService.findByEmail(context, "perun@email.it"), nullValue());
         assertThat(authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER, "perun1"), nullValue());
@@ -467,15 +755,13 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
 
     @Test
     public void testWithoutEmailAndIdentity() throws Exception {
-        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(Map.of(SUB, "perun1"));
+        provider.userInfo = new HashMap<>(Map.of(SUB, "perun1"));
 
-        getClient().perform(oidcCallback(CODE))
-                .andExpect(status().isUnauthorized())
-                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+        loginFails();
     }
 
     @Test
-    public void testOrganizationUpdatedOnLogin() throws Exception {
+    public void testOrganizationNotUpdatedOnLaterLogin() throws Exception {
         EPerson ePerson = createEPerson("perun@email.it", true);
         createIdentity(ePerson, PROVIDER, "perun1");
 
@@ -484,15 +770,16 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
 
         List<ClarinUserRegistration> registrations = findRegistrations(ePerson);
         assertThat(registrations, hasSize(1));
-        assertThat(registrations.get(0).getOrganization(), equalTo("Old University"));
+        assertThat(registrations.get(0).getOrganization(), equalTo(ORGANIZATION_PREFIX + "Old University"));
 
+        // as with Shibboleth, the organization is only set when the registration is created
         mockUserInfo("perun1", "perun@email.it", "New University");
         login();
 
         context.reloadEntity(registrations.get(0));
         registrations = findRegistrations(ePerson);
         assertThat(registrations, hasSize(1));
-        assertThat(registrations.get(0).getOrganization(), equalTo("New University"));
+        assertThat(registrations.get(0).getOrganization(), equalTo(ORGANIZATION_PREFIX + "Old University"));
     }
 
     @Test
@@ -516,7 +803,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         Map<String, Object> userInfo = new HashMap<>();
         userInfo.put(SUB, "perun1");
         userInfo.put(ORGANIZATION, "New University");
-        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
+        provider.userInfo = new HashMap<>(userInfo);
 
         assertThat(login(), equalTo(ePerson.getID().toString()));
 
@@ -526,346 +813,463 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
     }
 
     @Test
-    public void testSpecialGroupsAssignedFromGroups() throws Exception {
-        configurationService.setProperty("authentication-oidc.user-info.groups", GROUPS);
-        configurationService.setProperty("authentication-oidc.group.staff", "Staff Test Group");
+    public void testSpecialGroupsAssignedFromClaim() throws Exception {
+        configurationService.setProperty(CLAIM_MAPPING + ENTITLEMENT, "staff => Staff Test Group");
+        createGroups("Staff Test Group");
 
-        context.turnOffAuthorisationSystem();
-        GroupBuilder.createGroup(context).withName("Staff Test Group").build();
-        context.restoreAuthSystemState();
+        mockUserInfoWithClaim(ENTITLEMENT, List.of("staff", "unmapped-group"));
 
-        Map<String, Object> userInfo = new HashMap<>();
-        userInfo.put(SUB, "perun1");
-        userInfo.put(EMAIL, "perun@email.it");
-        userInfo.put(GROUPS, List.of("staff", "unmapped-group"));
-        userInfo.put(EMAIL_VERIFIED, true);
-        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
-
-        MvcResult mvcResult = getClient().perform(oidcCallback(CODE))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(cookie().exists("Authorization-cookie"))
-                .andReturn();
-
-        registeredEPersons.add(ePersonService.find(context, UUIDUtils.fromString(
-                getEPersonIdFromAuthorizationCookie(mvcResult))));
-
-        String token = getTokenFromAuthorizationCookie(mvcResult);
-        getClient(token).perform(get("/api/" + AuthnRest.CATEGORY + "/status/specialGroups")
-                        .param("projection", "full"))
-                .andExpect(status().isOk())
-                .andExpect(content().contentType(contentType))
-                .andExpect(jsonPath("$._embedded.specialGroups",
-                        containsInAnyOrder(GroupMatcher.matchGroupWithName("Staff Test Group"))));
+        assertSpecialGroups(loginResult(), containsInAnyOrder(GroupMatcher.matchGroupWithName("Staff Test Group")));
     }
 
     @Test
-    public void testGroupMappingStripsAuthoritySuffixFromEntitlementUrn() throws Exception {
-        configurationService.setProperty("authentication-oidc.user-info.groups", GROUPS);
-        configurationService.setProperty("authentication-oidc.group.urn:geant:cesnet.cz:group:einfra",
-                "eInfra Users");
-        configurationService.setProperty("authentication-oidc.group.urn:geant:cesnet.cz:group:einfra:members",
-                "eInfra Members");
+    public void testGroupMappingOfSeveralClaims() throws Exception {
+        configurationService.setProperty(CLAIM_MAPPING + ENTITLEMENT, "staff => Staff Test Group");
+        configurationService.setProperty(CLAIM_MAPPING + AFFILIATION,
+                "member@cuni.cz => Members, member@cuni.cz => CUNI Members");
+        // a single string claim, like Keycloak's groups of a user in one group
+        configurationService.setProperty(CLAIM_MAPPING + "groups", "testers => Testers, editors => Editors");
+        createGroups("Staff Test Group", "Members", "CUNI Members", "Testers", "Editors");
 
-        context.turnOffAuthorisationSystem();
-        GroupBuilder.createGroup(context).withName("eInfra Users").build();
-        GroupBuilder.createGroup(context).withName("eInfra Members").build();
-        context.restoreAuthSystemState();
+        Map<String, Object> userInfo = userInfoWithEmail();
+        userInfo.put(ENTITLEMENT, List.of("staff"));
+        userInfo.put(AFFILIATION, List.of("member@cuni.cz"));
+        userInfo.put("groups", "testers");
+        provider.userInfo = userInfo;
 
-        Map<String, Object> userInfo = new HashMap<>();
-        userInfo.put(SUB, "perun1");
-        userInfo.put(EMAIL, "perun@email.it");
-        userInfo.put(GROUPS, List.of(
+        assertSpecialGroups(loginResult(), containsInAnyOrder(
+                GroupMatcher.matchGroupWithName("Staff Test Group"), GroupMatcher.matchGroupWithName("Members"),
+                GroupMatcher.matchGroupWithName("CUNI Members"), GroupMatcher.matchGroupWithName("Testers")));
+    }
+
+    @Test
+    public void testGroupMappingWithScopeAndRoleWildcards() throws Exception {
+        configurationService.setProperty(CLAIM_MAPPING + AFFILIATION, "member@* => Members, *@cuni.cz => CUNI, "
+                + "staff@* => Staff, *@mff.cuni.cz => MFF, affiliate@einfra.cesnet.cz => eInfra, *@* => Everyone");
+        createGroups("Members", "CUNI", "Staff", "MFF", "eInfra", "Everyone");
+
+        mockUserInfoWithClaim(AFFILIATION, List.of("member@cuni.cz", "affiliate@google.extidp.cesnet.cz"));
+
+        assertSpecialGroups(loginResult(), containsInAnyOrder(GroupMatcher.matchGroupWithName("Members"),
+                GroupMatcher.matchGroupWithName("CUNI")));
+    }
+
+    @Test
+    public void testGroupMappingIgnoresAuthorityOfEntitlementUrn() throws Exception {
+        configurationService.setProperty(CLAIM_MAPPING + ENTITLEMENT,
+                "urn:geant:cesnet.cz:group:einfra => eInfra Users, "
+                        + "urn:geant:cesnet.cz:group:einfra:members#another authority => eInfra Members, "
+                        + "urn:geant:cesnet.cz:group:einfra:admins => eInfra Admins");
+        createGroups("eInfra Users", "eInfra Members", "eInfra Admins");
+
+        // AARC-G069 2.3: the authority (from '#' on) is ignored when comparing; a role is a different value
+        mockUserInfoWithClaim(ENTITLEMENT, List.of(
                 "urn:geant:cesnet.cz:group:einfra#Perun Identity and Management System - Maintenance",
-                "urn:geant:cesnet.cz:group:einfra:members#Perun Identity and Management System - Maintenance"));
-        userInfo.put(EMAIL_VERIFIED, true);
-        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
+                "urn:geant:cesnet.cz:group:einfra:members#Perun Identity and Management System - Maintenance",
+                "urn:geant:cesnet.cz:group:einfra:admins:role=manager#Perun Identity and Management System"));
 
-        MvcResult mvcResult = getClient().perform(oidcCallback(CODE))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(cookie().exists("Authorization-cookie"))
-                .andReturn();
-
-        registeredEPersons.add(ePersonService.find(context, UUIDUtils.fromString(
-                getEPersonIdFromAuthorizationCookie(mvcResult))));
-
-        String token = getTokenFromAuthorizationCookie(mvcResult);
-        getClient(token).perform(get("/api/" + AuthnRest.CATEGORY + "/status/specialGroups")
-                        .param("projection", "full"))
-                .andExpect(status().isOk())
-                .andExpect(content().contentType(contentType))
-                .andExpect(jsonPath("$._embedded.specialGroups",
-                        containsInAnyOrder(GroupMatcher.matchGroupWithName("eInfra Users"),
-                                GroupMatcher.matchGroupWithName("eInfra Members"))));
+        assertSpecialGroups(loginResult(), containsInAnyOrder(GroupMatcher.matchGroupWithName("eInfra Users"),
+                GroupMatcher.matchGroupWithName("eInfra Members")));
     }
 
     @Test
     public void testDefaultAuthGroupAssignedOnLogin() throws Exception {
         configurationService.setProperty("authentication-oidc.default.auth.group", "Authenticated");
-        configurationService.setProperty("authentication-oidc.user-info.groups", GROUPS);
-        configurationService.setProperty("authentication-oidc.group.staff", "Staff Test Group");
+        configurationService.setProperty(CLAIM_MAPPING + ENTITLEMENT, "staff => Staff Test Group");
+        createGroups("Authenticated", "Staff Test Group");
 
-        context.turnOffAuthorisationSystem();
-        GroupBuilder.createGroup(context).withName("Authenticated").build();
-        GroupBuilder.createGroup(context).withName("Staff Test Group").build();
-        context.restoreAuthSystemState();
+        mockUserInfoWithClaim(ENTITLEMENT, List.of("staff"));
 
-        Map<String, Object> userInfo = new HashMap<>();
-        userInfo.put(SUB, "perun1");
-        userInfo.put(EMAIL, "perun@email.it");
-        userInfo.put(GROUPS, List.of("staff"));
-        userInfo.put(EMAIL_VERIFIED, true);
-        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
-
-        MvcResult mvcResult = getClient().perform(oidcCallback(CODE))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(cookie().exists("Authorization-cookie"))
-                .andReturn();
-
-        registeredEPersons.add(ePersonService.find(context, UUIDUtils.fromString(
-                getEPersonIdFromAuthorizationCookie(mvcResult))));
-
-        String token = getTokenFromAuthorizationCookie(mvcResult);
-        getClient(token).perform(get("/api/" + AuthnRest.CATEGORY + "/status/specialGroups")
-                        .param("projection", "full"))
-                .andExpect(status().isOk())
-                .andExpect(content().contentType(contentType))
-                .andExpect(jsonPath("$._embedded.specialGroups",
-                        containsInAnyOrder(GroupMatcher.matchGroupWithName("Authenticated"),
-                                GroupMatcher.matchGroupWithName("Staff Test Group"))));
+        assertSpecialGroups(loginResult(), containsInAnyOrder(GroupMatcher.matchGroupWithName("Authenticated"),
+                GroupMatcher.matchGroupWithName("Staff Test Group")));
     }
 
     @Test
     public void testNoDefaultAuthGroupWhenNotConfigured() throws Exception {
-        context.turnOffAuthorisationSystem();
-        GroupBuilder.createGroup(context).withName("Authenticated").build();
-        context.restoreAuthSystemState();
+        createGroups("Authenticated");
 
         mockUserInfo("perun1", "perun@email.it", null);
 
-        MvcResult mvcResult = getClient().perform(oidcCallback(CODE))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(cookie().exists("Authorization-cookie"))
-                .andReturn();
-
-        registeredEPersons.add(ePersonService.find(context, UUIDUtils.fromString(
-                getEPersonIdFromAuthorizationCookie(mvcResult))));
-
-        String token = getTokenFromAuthorizationCookie(mvcResult);
-        getClient(token).perform(get("/api/" + AuthnRest.CATEGORY + "/status/specialGroups")
-                        .param("projection", "full"))
-                .andExpect(status().isOk())
-                .andExpect(content().contentType(contentType))
-                .andExpect(jsonPath("$._embedded.specialGroups", empty()));
+        assertSpecialGroups(loginResult(), empty());
     }
 
     @Test
-    public void testNoSpecialGroupsWhenGroupsAttributeNotConfigured() throws Exception {
-        context.turnOffAuthorisationSystem();
-        GroupBuilder.createGroup(context).withName("Staff Test Group").build();
-        context.restoreAuthSystemState();
+    public void testNoSpecialGroupsWithoutClaimMapping() throws Exception {
+        createGroups("Staff Test Group");
 
-        Map<String, Object> userInfo = new HashMap<>();
-        userInfo.put(SUB, "perun1");
-        userInfo.put(EMAIL, "perun@email.it");
-        userInfo.put(GROUPS, List.of("staff"));
-        userInfo.put(EMAIL_VERIFIED, true);
-        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
+        mockUserInfoWithClaim(ENTITLEMENT, List.of("staff"));
 
-        MvcResult mvcResult = getClient().perform(oidcCallback(CODE))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(cookie().exists("Authorization-cookie"))
-                .andReturn();
+        assertSpecialGroups(loginResult(), empty());
+    }
 
-        registeredEPersons.add(ePersonService.find(context, UUIDUtils.fromString(
-                getEPersonIdFromAuthorizationCookie(mvcResult))));
+    @Test
+    public void testOrganizationFromIssuer() throws Exception {
+        configurationService.setProperty("authentication-oidc.user-info.organization", "iss");
+        mockUserInfo("perun1", "perun@email.it", "Charles University");
 
-        String token = getTokenFromAuthorizationCookie(mvcResult);
-        getClient(token).perform(get("/api/" + AuthnRest.CATEGORY + "/status/specialGroups")
-                        .param("projection", "full"))
-                .andExpect(status().isOk())
-                .andExpect(content().contentType(contentType))
-                .andExpect(jsonPath("$._embedded.specialGroups", empty()));
+        EPerson ePerson = ePersonService.find(context, UUIDUtils.fromString(login()));
+        registeredEPersons.add(ePerson);
+        ePersons.add(ePerson);
+
+        // the ID token's iss: the provider that sent the login, prefixed so it never equals an IdP entityID
+        List<ClarinUserRegistration> registrations = findRegistrations(ePerson);
+        assertThat(registrations, hasSize(1));
+        assertThat(registrations.get(0).getOrganization(), equalTo(ORGANIZATION_PREFIX + provider.getIssuer()));
+        // a Shibboleth login through an IdP whose entityID is the issuer doesn't take over the account by email
+        assertThat(new ClarinShibAuthentication().canBindNetIdByEmail(context, ePerson, provider.getIssuer()),
+                is(false));
     }
 
     @Test
     public void testLoginFailsWithoutSub() throws Exception {
         createEPerson("perun@email.it", true);
 
-        // sub is a required ID token claim, so it must be missing from both sources to exercise this case
-        when(oidcClientMock.getAccessToken(CODE)).thenReturn(buildOidcTokenResponse(buildIdToken(null)));
-        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(Map.of(EMAIL, "perun@email.it"));
+        // sub is a required ID token claim
+        provider.idTokenSubject = null;
+        provider.userInfo = new HashMap<>(Map.of(EMAIL, "perun@email.it", EMAIL_VERIFIED, true));
 
-        getClient().perform(oidcCallback(CODE))
-                .andExpect(status().isUnauthorized())
-                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+        loginFails();
     }
 
     @Test
     public void testLoginFailsWithBadIdTokenSignature() throws Exception {
-        RSAKey otherKey = generateRsaKey();
-        when(oidcClientMock.getAccessToken(CODE)).thenReturn(
-                buildOidcTokenResponse(buildIdToken("perun1", ISSUER, CLIENT_ID, Instant.now().plusSeconds(3600),
-                        otherKey)));
+        provider.idTokenSigningKey = FakeOidcProvider.generateRsaKey("other-key");
         mockUserInfo("perun1", "perun@email.it", null);
 
-        getClient().perform(oidcCallback(CODE))
-                .andExpect(status().isUnauthorized())
-                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+        loginFails();
+    }
+
+    @Test
+    public void testLoginFailsWithUnsignedIdToken() throws Exception {
+        provider.unsignedIdToken = true;
+        mockUserInfo("perun1", "perun@email.it", null);
+
+        loginFails();
     }
 
     @Test
     public void testLoginFailsWithExpiredIdToken() throws Exception {
-        when(oidcClientMock.getAccessToken(CODE)).thenReturn(
-                buildOidcTokenResponse(buildIdToken("perun1", ISSUER, CLIENT_ID, Instant.now().minusSeconds(3600))));
+        provider.idTokenExpiresAt = Instant.now().minusSeconds(3600);
         mockUserInfo("perun1", "perun@email.it", null);
 
-        getClient().perform(oidcCallback(CODE))
-                .andExpect(status().isUnauthorized())
-                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+        loginFails();
     }
 
     @Test
     public void testLoginFailsWithWrongIssuer() throws Exception {
-        when(oidcClientMock.getAccessToken(CODE)).thenReturn(
-                buildOidcTokenResponse(buildIdToken("perun1", "https://wrong-issuer.example.org", CLIENT_ID,
-                        Instant.now().plusSeconds(3600))));
+        provider.idTokenIssuer = "https://wrong-issuer.example.org";
         mockUserInfo("perun1", "perun@email.it", null);
 
-        getClient().perform(oidcCallback(CODE))
-                .andExpect(status().isUnauthorized())
-                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+        loginFails();
     }
 
     @Test
     public void testLoginFailsWithWrongAudience() throws Exception {
-        when(oidcClientMock.getAccessToken(CODE)).thenReturn(
-                buildOidcTokenResponse(buildIdToken("perun1", ISSUER, "wrong-client-id",
-                        Instant.now().plusSeconds(3600))));
+        provider.idTokenAudience = "wrong-client-id";
         mockUserInfo("perun1", "perun@email.it", null);
 
-        getClient().perform(oidcCallback(CODE))
-                .andExpect(status().isUnauthorized())
-                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+        loginFails();
     }
 
     @Test
-    public void testLoginFailsWithMismatchedAzp() throws Exception {
-        // aud correctly contains CLIENT_ID, but azp (authorized party) names a different client; per
-        // OIDC Core 2, when present azp must also identify the client the token was issued to
-        when(oidcClientMock.getAccessToken(CODE)).thenReturn(
-                buildOidcTokenResponse(buildIdTokenWithAzp("perun1", "wrong-client-id")));
+    public void testLoginFailsWithWrongNonce() throws Exception {
+        provider.idTokenNonce = "nonce-of-another-login";
         mockUserInfo("perun1", "perun@email.it", null);
 
-        getClient().perform(oidcCallback(CODE))
-                .andExpect(status().isUnauthorized())
-                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+        loginFails();
     }
 
     @Test
     public void testLoginFailsWhenUserInfoSubDoesNotMatchIdToken() throws Exception {
-        when(oidcClientMock.getAccessToken(CODE)).thenReturn(buildOidcTokenResponse(buildIdToken("perun1")));
         // the sub returned by /userinfo doesn't match the verified ID token's sub
         mockUserInfo("other-sub", "perun@email.it", null);
 
-        getClient().perform(oidcCallback(CODE))
-                .andExpect(status().isUnauthorized())
-                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+        loginFails();
+    }
+
+    @Test
+    public void testLoginFailsWithMismatchedAzp() throws Exception {
+        // aud correctly contains the client ID, but azp (authorized party) names a different client
+        provider.idTokenClaims.put("azp", "wrong-client-id");
+        mockUserInfo("perun1", "perun@email.it", null);
+
+        loginFails();
     }
 
     @Test
     public void testLoginFailsWithIdTokenMissingExpiration() throws Exception {
-        when(oidcClientMock.getAccessToken(CODE)).thenReturn(
-                buildOidcTokenResponse(buildIdTokenWithoutExpiration("perun1")));
+        // a missing (not just expired) exp must be rejected, exp is a required ID token claim
+        provider.idTokenWithoutExpiration = true;
         mockUserInfo("perun1", "perun@email.it", null);
 
-        getClient().perform(oidcCallback(CODE))
-                .andExpect(status().isUnauthorized())
-                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+        loginFails();
     }
 
     @Test
     public void testLoginFailsWhenUserInfoHasNoSub() throws Exception {
-        when(oidcClientMock.getAccessToken(CODE)).thenReturn(buildOidcTokenResponse(buildIdToken("perun1")));
-        // user info omits sub entirely (as opposed to supplying a mismatching one); its email must not be
-        // trusted without confirming it belongs to the authenticated subject
-        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(Map.of(EMAIL, "perun@email.it"));
+        // user info omits sub entirely (as opposed to a mismatching one): its email must not be trusted
+        // without confirming it belongs to the authenticated subject
+        provider.userInfo = new HashMap<>(Map.of(EMAIL, "perun@email.it", EMAIL_VERIFIED, true));
 
-        getClient().perform(oidcCallback(CODE))
-                .andExpect(status().isUnauthorized())
-                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+        loginFails();
     }
 
     @Test
     public void testLoginFailsWhenUserInfoRequestFails() throws Exception {
-        when(oidcClientMock.getAccessToken(CODE)).thenReturn(buildOidcTokenResponse(buildIdToken("perun1")));
-        // simulates OidcClientImpl#getUserInfo catching a provider failure (timeout, non-2xx response,
-        // empty body) and ClarinOidcAuthenticationBean#getOidcUserInfo returning an empty map as a result
-        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(Map.of());
+        // the UserInfo endpoint answers HTTP 500
+        provider.userInfo = null;
 
-        getClient().perform(oidcCallback(CODE))
-                .andExpect(status().isUnauthorized())
-                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+        loginFails();
     }
 
     @Test
-    public void testEmailVerifiedNotInheritedWhenUserInfoChangesEmail() throws Exception {
-        // the ID token itself vouches for "old@email.it" being verified...
-        when(oidcClientMock.getAccessToken(CODE)).thenReturn(
-                buildOidcTokenResponse(buildIdTokenWithEmail("perun1", "old@email.it", true)));
-        // ...but user info overrides with a DIFFERENT email, without re-confirming it is verified
-        Map<String, Object> userInfo = new HashMap<>();
-        userInfo.put(SUB, "perun1");
-        userInfo.put(EMAIL, "new@email.it");
-        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
-
-        // the inherited "verified" flag must not be allowed to vouch for the new, unconfirmed email
-        getClient().perform(oidcCallback(CODE))
-                .andExpect(status().isUnauthorized())
-                .andExpect(cookie().doesNotExist("Authorization-cookie"));
-    }
-
-    @Test
-    public void testLoginFailsWithMissingStateCookie() throws Exception {
+    public void testLoginUsesPkce() throws Exception {
+        EPerson ePerson = createEPerson("perun@email.it", true);
+        createIdentity(ePerson, PROVIDER, "perun1");
         mockUserInfo("perun1", "perun@email.it", null);
 
-        // valid code and state query param, but no state cookie at all (e.g. a forged callback URL
-        // replayed in a different browser that never received the Set-Cookie from loginPageURL())
-        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc")
-                        .param("code", CODE)
-                        .param("state", TEST_STATE))
-                .andExpect(status().isUnauthorized())
-                .andExpect(cookie().doesNotExist("Authorization-cookie"));
-    }
+        MvcResult start = startLogin();
+        Map<String, String> authorizationParams = provider.authorize(start.getResponse().getRedirectedUrl());
+        assertThat(authorizationParams.get("code_challenge_method"), equalTo("S256"));
+        assertThat(authorizationParams.get("nonce"), notNullValue());
 
-    @Test
-    public void testLoginFailsWithMismatchedState() throws Exception {
-        mockUserInfo("perun1", "perun@email.it", null);
-
-        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc")
-                        .param("code", CODE)
-                        .param("state", TEST_STATE)
-                        .cookie(new Cookie(ClarinOidcAuthenticationBean.STATE_COOKIE_NAME, "a-different-value")))
-                .andExpect(status().isUnauthorized())
-                .andExpect(cookie().doesNotExist("Authorization-cookie"));
-    }
-
-    private String login() throws Exception {
-        MvcResult mvcResult = getClient().perform(oidcCallback(CODE))
+        assertThat(getEPersonIdFromAuthorizationCookie(callback(start, authorizationParams.get("state"))
                 .andExpect(status().is3xxRedirection())
-                .andExpect(cookie().exists("Authorization-cookie"))
-                .andReturn();
-        return getEPersonIdFromAuthorizationCookie(mvcResult);
+                .andReturn()), equalTo(ePerson.getID().toString()));
+        // what a real provider checks: the code, the same redirect_uri, and the verifier of the challenge
+        Map<String, String> tokenRequest = FakeOidcProvider.parseQuery(provider.getTokenRequestBodies().get(0));
+        assertThat(tokenRequest.get("code"), equalTo(CODE));
+        assertThat(tokenRequest.get("redirect_uri"), equalTo(authorizationParams.get("redirect_uri")));
+        assertThat(tokenRequest.get("client_secret"), equalTo(FakeOidcProvider.CLIENT_SECRET));
+        assertThat(Base64.getUrlEncoder().withoutPadding().encodeToString(MessageDigest.getInstance("SHA-256")
+                        .digest(tokenRequest.get("code_verifier").getBytes(StandardCharsets.US_ASCII))),
+                equalTo(authorizationParams.get("code_challenge")));
     }
 
     /**
-     * Builds the OIDC callback request, including the state cookie/param pair ClarinOidcAuthenticationBean
-     * requires (set by loginPageURL() when the login is initiated, see TEST_STATE).
+     * Login CSRF: an attacker sends the victim's browser to the callback with a code (and state) issued for the
+     * attacker's own account. Without the session of a login started in this browser, the code is
+     * not even exchanged.
      */
-    private MockHttpServletRequestBuilder oidcCallback(String code) {
-        return get("/api/" + AuthnRest.CATEGORY + "/oidc")
-                .param("code", code)
-                .param("state", TEST_STATE)
-                .cookie(new Cookie(ClarinOidcAuthenticationBean.STATE_COOKIE_NAME, TEST_STATE));
+    @Test
+    public void testCallbackWithoutSessionFails() throws Exception {
+        EPerson ePerson = createEPerson("perun@email.it", true);
+        createIdentity(ePerson, PROVIDER, "perun1");
+        mockUserInfo("perun1", "perun@email.it", null);
+
+        MvcResult attackersStart = startLogin();
+        String attackersState = provider.authorize(attackersStart.getResponse().getRedirectedUrl()).get("state");
+
+        getClient().perform(get(CALLBACK_URL)
+                        .param("code", CODE).param("state", attackersState))
+                .andExpect(redirectedUrl(failureUrl()))
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+        assertThat(provider.getTokenRequestBodies(), empty());
+    }
+
+    @Test
+    public void testCallbackWithStateOfAnotherLoginFails() throws Exception {
+        EPerson ePerson = createEPerson("perun@email.it", true);
+        createIdentity(ePerson, PROVIDER, "perun1");
+        mockUserInfo("perun1", "perun@email.it", null);
+
+        MvcResult attackersStart = startLogin();
+        String attackersState = provider.authorize(attackersStart.getResponse().getRedirectedUrl()).get("state");
+        MvcResult victimsStart = startLogin();
+
+        callback(victimsStart, attackersState)
+                .andExpect(redirectedUrl(failureUrl()))
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+        assertThat(provider.getTokenRequestBodies(), empty());
+    }
+
+    @Test
+    public void testRedirectsToUrlGivenAtStartAndIgnoresCallbackParameter() throws Exception {
+        EPerson ePerson = createEPerson("perun@email.it", true);
+        createIdentity(ePerson, PROVIDER, "perun1");
+        mockUserInfo("perun1", "perun@email.it", null);
+
+        String itemPage = configurationService.getProperty("dspace.ui.url") + "/items/123";
+        MvcResult start = getClient().perform(get(START_URL)
+                        .param("redirectUrl", itemPage))
+                .andExpect(status().is3xxRedirection())
+                .andReturn();
+        String state = provider.authorize(start.getResponse().getRedirectedUrl()).get("state");
+
+        getClient().perform(get(CALLBACK_URL)
+                        .param("code", CODE).param("state", state)
+                        .param("redirectUrl", "https://evil.example.org/")
+                        .session(session(start)))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl(itemPage));
+    }
+
+    /** A redirectUrl that isn't the server, UI or an allowed origin is replaced by the UI URL. */
+    @Test
+    public void testForeignRedirectUrlFallsBackToUi() throws Exception {
+        EPerson ePerson = createEPerson("perun@email.it", true);
+        createIdentity(ePerson, PROVIDER, "perun1");
+        mockUserInfo("perun1", "perun@email.it", null);
+
+        String uiHost = java.net.URI.create(configurationService.getProperty("dspace.ui.url")).getHost();
+        for (String redirectUrl : List.of("https://evil.example.org/",
+                "https://evil.example.org\\@" + uiHost + "/",
+                "https://user@" + uiHost + "/",
+                "javascript:alert(1)")) {
+            MvcResult start = getClient().perform(get(START_URL).param("redirectUrl", redirectUrl))
+                    .andExpect(status().is3xxRedirection())
+                    .andReturn();
+            String state = provider.authorize(start.getResponse().getRedirectedUrl()).get("state");
+            callback(start, state)
+                    .andExpect(status().is3xxRedirection())
+                    .andExpect(redirectedUrl(configurationService.getProperty("dspace.ui.url")));
+        }
+    }
+
+    /**
+     * The stock OidcLoginFilter stays registered on /api/authn/oidc: a callback sent there (code and state of a
+     * login started in this browser) must not log anyone in, nor reach the provider.
+     */
+    @Test
+    public void testStockCallbackPathDoesNotLogIn() throws Exception {
+        EPerson ePerson = createEPerson("perun@email.it", true);
+        createIdentity(ePerson, PROVIDER, "perun1");
+        mockUserInfo("perun1", "perun@email.it", null);
+
+        MvcResult start = startLogin();
+        String state = provider.authorize(start.getResponse().getRedirectedUrl()).get("state");
+
+        getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/oidc")
+                        .param("code", CODE).param("state", state)
+                        .session(session(start)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().doesNotExist("Authorization-cookie"));
+        assertThat(provider.getTokenRequestBodies(), empty());
+    }
+
+    @Test
+    public void testRedirectUriIsTheCallbackPath() throws Exception {
+        MvcResult start = startLogin();
+        assertThat(provider.authorize(start.getResponse().getRedirectedUrl()).get("redirect_uri"),
+                is(configurationService.getProperty("dspace.server.url") + CALLBACK_URL));
+    }
+
+    @Test
+    public void testLoginPageUrlPointsToStartEndpoint() throws Exception {
+        MvcResult mvcResult = getClient().perform(get("/api/" + AuthnRest.CATEGORY + "/status"))
+                .andExpect(status().isOk())
+                .andReturn();
+        assertThat(mvcResult.getResponse().getHeader("WWW-Authenticate"),
+                containsString("location=\"" + configurationService.getProperty("dspace.server.url")
+                        + ClarinOidcAuthenticationBean.START_PATH + "?redirectUrl="));
+    }
+
+    @Test
+    public void testProviderDefaultsToVerifiedIssuer() throws Exception {
+        configurationService.setProperty("authentication-oidc.provider", null);
+        mockUserInfo("perun1", "perun@email.it", null);
+
+        String ePersonId = login();
+        registeredEPersons.add(ePersonService.find(context, UUIDUtils.fromString(ePersonId)));
+
+        AuthenticationIdentity identity = authenticationIdentityService.find(context, AUTH_METHOD_OIDC,
+                provider.getIssuer(), "perun1");
+        assertThat(identity, notNullValue());
+        assertThat(identity.getEPerson().getID().toString(), equalTo(ePersonId));
+    }
+
+    /**
+     * The ID token's email_verified=true must not vouch for a different, unverified email returned by
+     * UserInfo (email and email_verified are always taken from the same source).
+     */
+    @Test
+    public void testIdTokenEmailVerifiedDoesNotVouchForUserInfoEmail() throws Exception {
+        createEPerson("admin@email.it", true);
+        provider.idTokenClaims.put(EMAIL, "perun@email.it");
+        provider.idTokenClaims.put(EMAIL_VERIFIED, true);
+        provider.userInfo = new HashMap<>(Map.of(SUB, "perun1", EMAIL, "admin@email.it"));
+
+        loginFails();
+        assertThat(authenticationIdentityService.find(context, AUTH_METHOD_OIDC, PROVIDER, "perun1"), nullValue());
+    }
+
+    /** Start a login like the UI does: GET the start endpoint, which redirects to the provider. */
+    private MvcResult startLogin() throws Exception {
+        MvcResult start = getClient().perform(get(START_URL)
+                        .param("redirectUrl", configurationService.getProperty("dspace.ui.url")))
+                .andExpect(status().is3xxRedirection())
+                .andReturn();
+        assertThat(session(start), notNullValue());
+        return start;
+    }
+
+    /** The browser's HTTP session (JSESSIONID) created by the start of the login. */
+    private static MockHttpSession session(MvcResult start) {
+        return (MockHttpSession) start.getRequest().getSession(false);
+    }
+
+    /** The browser comes back from the provider to the redirect_uri with a code and the given state. */
+    private ResultActions callback(MvcResult start, String state) throws Exception {
+        return getClient().perform(get(CALLBACK_URL)
+                .param("code", CODE)
+                .param("state", state)
+                .session(session(start)));
+    }
+
+    /** Start a login, let the (fake) provider authorize it and complete it at the redirect_uri. */
+    private MvcResult completeLogin(ResultMatcher... expectations) throws Exception {
+        MvcResult start = startLogin();
+        // keep a reference: once invalidated, the request no longer returns the session
+        MockHttpSession session = session(start);
+        String state = provider.authorize(start.getResponse().getRedirectedUrl()).get("state");
+        MvcResult result = callback(start, state).andExpectAll(expectations).andReturn();
+        // the session (pending login, provider's tokens) only lives until the end of the login
+        assertThat(session.isInvalid(), is(true));
+        return result;
+    }
+
+    private MvcResult loginResult() throws Exception {
+        return completeLogin(status().is3xxRedirection(), cookie().exists("Authorization-cookie"));
+    }
+
+    private String login() throws Exception {
+        return getEPersonIdFromAuthorizationCookie(loginResult());
+    }
+
+    /** The callback is a browser navigation, so a failed login is a redirect to the UI's login error. */
+    private void loginFails() throws Exception {
+        completeLogin(redirectedUrl(failureUrl()), cookie().doesNotExist("Authorization-cookie"));
+    }
+
+    private String failureUrl() {
+        return configurationService.getProperty("dspace.ui.url") + ClarinOidcLoginConfigurer.FAILURE_PATH;
+    }
+
+    /** A refused login whose email belongs to an account it must not take over goes to the duplicate-user page. */
+    private void loginRefusedAsDuplicate(String email) throws Exception {
+        completeLogin(redirectedUrl(configurationService.getProperty("dspace.ui.url")
+                        + "/login/duplicate-user?email=" + URLEncoder.encode(email, StandardCharsets.UTF_8)),
+                cookie().doesNotExist("Authorization-cookie"));
+    }
+
+    private void setNetid(EPerson ePerson, String netid) throws Exception {
+        context.turnOffAuthorisationSystem();
+        ePerson.setNetid(netid);
+        ePersonService.update(context, ePerson);
+        context.restoreAuthSystemState();
+        context.commit();
+    }
+
+    private void createRegistration(EPerson ePerson, String organization) throws Exception {
+        context.turnOffAuthorisationSystem();
+        ClarinUserRegistration registration = new ClarinUserRegistration();
+        registration.setConfirmation(true);
+        registration.setEmail(ePerson.getEmail());
+        registration.setPersonID(ePerson.getID());
+        registration.setOrganization(organization);
+        clarinUserRegistrationService.create(context, registration);
+        context.restoreAuthSystemState();
+        context.commit();
     }
 
     private List<ClarinUserRegistration> findRegistrations(EPerson ePerson) throws Exception {
@@ -875,6 +1279,38 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         } finally {
             context.restoreAuthSystemState();
         }
+    }
+
+    private Map<String, Object> userInfoWithEmail() {
+        Map<String, Object> userInfo = new HashMap<>();
+        userInfo.put(SUB, "perun1");
+        userInfo.put(EMAIL, "perun@email.it");
+        userInfo.put(EMAIL_VERIFIED, true);
+        return userInfo;
+    }
+
+    private void mockUserInfoWithClaim(String claim, Object value) {
+        Map<String, Object> userInfo = userInfoWithEmail();
+        userInfo.put(claim, value);
+        provider.userInfo = userInfo;
+    }
+
+    private void createGroups(String... names) throws SQLException {
+        context.turnOffAuthorisationSystem();
+        for (String name : names) {
+            GroupBuilder.createGroup(context).withName(name).build();
+        }
+        context.restoreAuthSystemState();
+    }
+
+    private void assertSpecialGroups(MvcResult mvcResult, Matcher<? extends Iterable<?>> groups) throws Exception {
+        registeredEPersons.add(ePersonService.find(context, UUIDUtils.fromString(
+                getEPersonIdFromAuthorizationCookie(mvcResult))));
+        getClient(getTokenFromAuthorizationCookie(mvcResult))
+                .perform(get("/api/" + AuthnRest.CATEGORY + "/status/specialGroups").param("projection", "full"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(contentType))
+                .andExpect(jsonPath("$._embedded.specialGroups", groups));
     }
 
     private void mockUserInfo(String sub, String email, String organization) {
@@ -887,7 +1323,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         if (organization != null) {
             userInfo.put(ORGANIZATION, organization);
         }
-        when(oidcClientMock.getUserInfo(ACCESS_TOKEN)).thenReturn(userInfo);
+        provider.userInfo = new HashMap<>(userInfo);
     }
 
     private EPerson createEPerson(String email, boolean canLogIn) throws SQLException {
@@ -914,125 +1350,7 @@ public class ClarinOidcAuthenticationRestControllerIT extends AbstractController
         return identity;
     }
 
-    private OidcTokenResponseDTO buildOidcTokenResponse(String idToken) {
-        OidcTokenResponseDTO token = new OidcTokenResponseDTO();
-        token.setAccessToken(ACCESS_TOKEN);
-        token.setTokenType("Bearer");
-        token.setIdToken(idToken);
-        return token;
-    }
-
-    private static RSAKey generateRsaKey() {
-        try {
-            KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
-            keyPairGenerator.initialize(2048);
-            KeyPair keyPair = keyPairGenerator.generateKeyPair();
-            return new RSAKey.Builder((RSAPublicKey) keyPair.getPublic())
-                    .privateKey((RSAPrivateKey) keyPair.getPrivate())
-                    .keyID("test-key-" + System.identityHashCode(keyPair))
-                    .build();
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    /**
-     * Builds a decoder backed by the local test key (no real JWKS endpoint available in tests), but reuses
-     * ClarinOidcAuthenticationBean's actual production validator chain (issuer/audience/required-claims)
-     * rather than a separately duplicated copy, so these tests actually exercise that production logic.
-     * buildJwtValidator() is private, so it's invoked via ReflectionTestUtils.
-     */
-    private JwtDecoder buildTestJwtDecoder() throws JOSEException {
-        NimbusJwtDecoder decoder = NimbusJwtDecoder.withPublicKey(RSA_JWK.toRSAPublicKey()).build();
-        decoder.setJwtValidator(Objects.requireNonNull(
-                ReflectionTestUtils.invokeMethod(
-                        ClarinOidcAuthenticationBean.class, "buildJwtValidator", ISSUER, CLIENT_ID))
-        );
-        return decoder;
-    }
-
-    private String buildIdToken(String sub) throws JOSEException {
-        return buildIdToken(sub, ISSUER, CLIENT_ID, Instant.now().plusSeconds(3600));
-    }
-
-    /**
-     * Builds a signed ID token with no "exp" claim at all (as opposed to {@link #buildIdToken}, which always
-     * sets one), to verify that a missing (not just expired) exp is rejected.
-     */
-    private String buildIdTokenWithoutExpiration(String sub) throws JOSEException {
-        JWTClaimsSet claims = new JWTClaimsSet.Builder()
-                .issuer(ISSUER)
-                .audience(CLIENT_ID)
-                .subject(sub)
-                .issueTime(new Date())
-                .build();
-        SignedJWT signedJwt = new SignedJWT(
-                new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(RSA_JWK.getKeyID()).build(), claims);
-        signedJwt.sign(new RSASSASigner(RSA_JWK));
-        return signedJwt.serialize();
-    }
-
-    /**
-     * Builds a signed ID token carrying its own email/email_verified claims, to verify that user info
-     * overriding the email doesn't inherit the ID token's verified flag for a different email value.
-     */
-    private String buildIdTokenWithEmail(String sub, String email, boolean emailVerified) throws JOSEException {
-        JWTClaimsSet claims = new JWTClaimsSet.Builder()
-                .issuer(ISSUER)
-                .audience(CLIENT_ID)
-                .subject(sub)
-                .issueTime(new Date())
-                .expirationTime(Date.from(Instant.now().plusSeconds(3600)))
-                .claim(EMAIL, email)
-                .claim(EMAIL_VERIFIED, emailVerified)
-                .build();
-        SignedJWT signedJwt = new SignedJWT(
-                new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(RSA_JWK.getKeyID()).build(), claims);
-        signedJwt.sign(new RSASSASigner(RSA_JWK));
-        return signedJwt.serialize();
-    }
-
-    /**
-     * Builds a signed ID token with a valid "aud" (matching CLIENT_ID) but an "azp" (authorized party)
-     * claim set to a different value, to verify that azp is checked too when present, not just aud.
-     */
-    private String buildIdTokenWithAzp(String sub, String azp) throws JOSEException {
-        JWTClaimsSet claims = new JWTClaimsSet.Builder()
-                .issuer(ISSUER)
-                .audience(CLIENT_ID)
-                .subject(sub)
-                .issueTime(new Date())
-                .expirationTime(Date.from(Instant.now().plusSeconds(3600)))
-                .claim("azp", azp)
-                .build();
-        SignedJWT signedJwt = new SignedJWT(
-                new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(RSA_JWK.getKeyID()).build(), claims);
-        signedJwt.sign(new RSASSASigner(RSA_JWK));
-        return signedJwt.serialize();
-    }
-
-    private String buildIdToken(String sub, String issuer, String audience, Instant expirationTime)
-            throws JOSEException {
-        return buildIdToken(sub, issuer, audience, expirationTime, RSA_JWK);
-    }
-
-    private String buildIdToken(String sub, String issuer, String audience, Instant expirationTime,
-                                RSAKey signingKey) throws JOSEException {
-        JWTClaimsSet.Builder claims = new JWTClaimsSet.Builder()
-                .issuer(issuer)
-                .audience(audience)
-                .issueTime(new Date())
-                .expirationTime(Date.from(expirationTime));
-        if (sub != null) {
-            claims.subject(sub);
-        }
-        SignedJWT signedJwt = new SignedJWT(
-                new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(signingKey.getKeyID()).build(), claims.build());
-        signedJwt.sign(new RSASSASigner(signingKey));
-        return signedJwt.serialize();
-    }
-
-    private String getEPersonIdFromAuthorizationCookie(MvcResult mvcResult) throws ParseException, JOSEException {
+    private String getEPersonIdFromAuthorizationCookie(MvcResult mvcResult) throws ParseException {
         Cookie authorizationCookie = mvcResult.getResponse().getCookie("Authorization-cookie");
         assertThat(authorizationCookie, notNullValue());
         SignedJWT jwt = SignedJWT.parse(authorizationCookie.getValue());

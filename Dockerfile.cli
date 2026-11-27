@@ -49,7 +49,9 @@ ENV DSPACE_INSTALL=/dspace
 # Copy the /dspace directory from 'ant_build' container to /dspace in this container
 COPY --from=ant_build /dspace $DSPACE_INSTALL
 # Give java extra memory (1GB)
-ENV JAVA_OPTS=-Xmx1000m
+# Default connect (10 s) and read (60 s) timeouts of the JDK's HTTP client for calls that don't set their own
+# (see Dockerfile)
+ENV JAVA_OPTS="-Xmx1000m -Dsun.net.client.defaultConnectTimeout=10000 -Dsun.net.client.defaultReadTimeout=60000"
 # Install unzip for AIPs
 RUN apt-get update \
     && apt-get install -y --no-install-recommends unzip \

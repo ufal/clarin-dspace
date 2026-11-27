@@ -7,28 +7,19 @@
  */
 package org.dspace.authenticate.clarin;
 
-import static java.lang.String.format;
-import static java.net.URLEncoder.encode;
 import static org.apache.commons.lang.BooleanUtils.toBoolean;
-import static org.apache.commons.lang3.StringUtils.isAnyBlank;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 import static org.dspace.content.clarin.AuthenticationIdentity.AUTH_METHOD_OIDC;
 
-import java.io.UnsupportedEncodingException;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.SecureRandom;
 import java.sql.SQLException;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.stream.Collectors;
-import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
@@ -37,9 +28,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.dspace.authenticate.AuthenticationMethod;
 import org.dspace.authenticate.OidcAuthenticationBean;
-import org.dspace.authenticate.oidc.OidcClient;
-import org.dspace.authenticate.oidc.model.OidcTokenResponseDTO;
 import org.dspace.authorize.AuthorizeException;
+import org.dspace.authorize.service.AuthorizeService;
 import org.dspace.content.clarin.AuthenticationIdentity;
 import org.dspace.content.clarin.ClarinUserRegistration;
 import org.dspace.content.service.clarin.AuthenticationIdentityService;
@@ -51,39 +41,35 @@ import org.dspace.eperson.service.EPersonService;
 import org.dspace.eperson.service.GroupService;
 import org.dspace.services.ConfigurationService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
-import org.springframework.security.oauth2.core.OAuth2Error;
-import org.springframework.security.oauth2.core.OAuth2TokenValidator;
-import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
-import org.springframework.security.oauth2.core.oidc.OidcIdToken;
-import org.springframework.security.oauth2.core.oidc.OidcUserInfo;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtException;
-import org.springframework.security.oauth2.jwt.JwtValidators;
-import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 
 /**
- * CLARIN extension of the OIDC authentication, implemented independently of {@link OidcAuthenticationBean}
- * (not by extending it) so that it can verify the ID token instead of only trusting the user info endpoint
- * response. The ID token's signature is verified against the provider's JSON Web Key Set
- * (authentication-oidc.jwks-uri), and its "iss" and "aud" claims are checked against
- * authentication-oidc.issuer and authentication-oidc.client-id; expiry is checked as part of the same
- * verification. The verified ID token claims and the user info endpoint claims are then merged (user info
- * claims take precedence on overlapping keys, per OIDC Core 5.3.2) into the same claims map used below.
+ * CLARIN extension of the OIDC authentication (ufal/clarin-dspace#1140).
  * <p>
- * If the provider returns an email that it doesn't confirm is verified, authentication fails immediately
- * (see {@link #isEmailVerified}). Otherwise, the user is identified by the OIDC user ID (the "sub" claim by
- * default) stored in the authentication_identity table, instead of the email which may change:
+ * The OIDC protocol (discovery, state, nonce, PKCE, code exchange, ID token and UserInfo validation) is done by
+ * Spring Security's oauth2Login() in the REST webapp (ClarinOidcLoginConfigurer): the login is started at
+ * {@link #START_PATH} (see {@link #loginPageURL}) and completed at the configured redirect URL
+ * (GET /api/authn/oidc-callback). The webapp hands the claims of the verified ID token and UserInfo
+ * response over in the {@link #ID_TOKEN_CLAIMS_ATTRIBUTE} and {@link #USER_INFO_CLAIMS_ATTRIBUTE} request
+ * attributes; this class only decides which EPerson they belong to.
+ * <p>
+ * If verified emails are required (authentication-oidc.require-verified-email) and the provider returns an email
+ * that it doesn't confirm is verified, authentication fails immediately (see {@link #isEmailVerified}).
+ * Otherwise, the user is identified by the OIDC user ID (the "sub" claim by
+ * default) together with the provider (the verified issuer, unless authentication-oidc.provider is set),
+ * stored in the authentication_identity table, instead of the email which may change:
  * <ol>
  *     <li>the EPerson linked to the (oidc, provider, user ID) identity is logged in</li>
- *     <li>otherwise the identity is linked to the existing EPerson with the same email (e.g. created by Shibboleth)
- *     </li>
+ *     <li>otherwise, if authentication-oidc.user-info.external-ids is set, the identity is linked to the one
+ *     EPerson whose Shibboleth netid has one of the external IDs the provider vouches for (see
+ *     {@code findByExternalIds}); an administrator found this way is refused as a duplicate user</li>
+ *     <li>otherwise, if an EPerson with the same email exists, the identity is linked to it only when
+ *     {@value #EMAIL_FALLBACK_PROPERTY} is on, the EPerson has no netid and isn't an administrator (the same rule as
+ *     {@link ClarinShibAuthentication#canBindNetIdByEmail}); otherwise the login is refused as a duplicate user
+ *     (see {@link #DUPLICATE_USER_ATTRIBUTE})</li>
  *     <li>otherwise a new EPerson is registered, together with the identity and CLARIN user registration</li>
  * </ol>
  * As in {@link ClarinShibAuthentication}, the EPerson canLogIn flag is not checked, because it only controls
  * the password login in CLARIN.
- * ufal/clarin-dspace#1140
  *
  * @author Milan Kuchtiak
  */
@@ -91,32 +77,51 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
 
     private static final Logger log = LogManager.getLogger(ClarinOidcAuthenticationBean.class);
 
-    private static final String LOGIN_PAGE_URL_FORMAT =
-            "%s?client_id=%s&response_type=code&scope=%s&redirect_uri=%s&state=%s";
-
     private static final String OIDC_AUTHENTICATED = "oidc.authenticated";
 
-    public static final String DEFAULT_PROVIDER = "oidc";
-    public static final String DEFAULT_USER_ID_ATTRIBUTE = "sub";
-    public static final String DEFAULT_EMAIL_VERIFIED_ATTRIBUTE = "email_verified";
+    /**
+     * Request attribute holding the claims (Map&lt;String, Object&gt;) of the ID token verified by Spring Security,
+     * set only by the REST webapp after a completed OIDC login. Request attributes can't be set by the client.
+     */
+    public static final String ID_TOKEN_CLAIMS_ATTRIBUTE = "oidc.clarin.id-token-claims";
 
     /**
-     * Name of the cookie binding the OIDC authorization request to the browser that initiated it, to
-     * prevent login CSRF (an attacker completing their own login, then tricking a victim's browser into
-     * loading the resulting callback URL, logging the victim into the attacker's account). Public so
-     * {@link org.dspace.app.rest.security.OidcLoginFilter} can clear it after a successful login.
+     * Request attribute holding the claims (Map&lt;String, Object&gt;) of the UserInfo response, whose sub Spring
+     * Security has matched against the ID token's, set together with {@link #ID_TOKEN_CLAIMS_ATTRIBUTE}.
      */
-    public static final String STATE_COOKIE_NAME = "dspace.oidc.state";
+    public static final String USER_INFO_CLAIMS_ATTRIBUTE = "oidc.clarin.user-info-claims";
 
-    private static final int STATE_COOKIE_MAX_AGE_SECONDS = 600;
+    /** Spring client registration ID of the CLARIN OIDC provider. */
+    public static final String REGISTRATION_ID = "clarin-oidc";
 
-    private static final SecureRandom STATE_RANDOM = new SecureRandom();
+    /** Base path of Spring's endpoint starting the login (followed by /{registrationId}). */
+    public static final String START_BASE_PATH = "/api/authn/oidc/start";
+
+    /** Path of the endpoint starting the login, relative to dspace.server.url. */
+    public static final String START_PATH = START_BASE_PATH + "/" + REGISTRATION_ID;
+
+    /**
+     * Whether an OIDC identity may be linked to an existing EPerson found by its (verified) email. Off by default,
+     * and even when on, never to an EPerson with a netid (a Shibboleth account) or an administrator.
+     */
+    public static final String EMAIL_FALLBACK_PROPERTY = "authentication-oidc.email-fallback";
+
+    /** authentication-oidc.claim.&lt;claim&gt; = VALUE =&gt; GROUP, ... maps claim values to special groups. */
+    public static final String CLAIM_GROUP_MAPPING_PREFIX = "authentication-oidc.claim.";
+
+    /**
+     * Request attribute holding the email of a login refused because that email belongs to an EPerson this
+     * identity must not be linked to; the REST webapp then sends the user to the UI's duplicate-user page.
+     */
+    public static final String DUPLICATE_USER_ATTRIBUTE = "oidc.clarin.duplicate-user";
+
+    /** Prefixes the organization (authentication-oidc.user-info.organization) a new registration is created with. */
+    public static final String ORGANIZATION_PREFIX = "oidc:";
+
+    public static final String DEFAULT_EMAIL_VERIFIED_ATTRIBUTE = "email_verified";
 
     @Autowired
     private ConfigurationService configurationService;
-
-    @Autowired
-    private OidcClient oidcClient;
 
     @Autowired
     private EPersonService ePersonService;
@@ -130,7 +135,8 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
     @Autowired
     private GroupService groupService;
 
-    private JwtDecoder jwtDecoder;
+    @Autowired
+    private AuthorizeService authorizeService;
 
     @Override
     public int authenticate(Context context, String username, String password, String realm, HttpServletRequest request)
@@ -145,173 +151,78 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
             return NO_SUCH_USER;
         }
 
-        if (!isStateValid(request)) {
-            log.warn("OIDC authentication failed, because the state parameter is missing or does not match " +
-                    "the " + STATE_COOKIE_NAME + " cookie set when the login was initiated");
-            return BAD_CREDENTIALS;
-        }
-
-        String code = request.getParameter("code");
-        if (StringUtils.isEmpty(code)) {
-            log.warn("The incoming request has not code parameter");
+        Object idTokenClaims = request.getAttribute(ID_TOKEN_CLAIMS_ATTRIBUTE);
+        if (!(idTokenClaims instanceof Map)) {
+            // not the end of a login completed by Spring Security's OIDC client
             return NO_SUCH_USER;
         }
+        Object userInfoClaims = request.getAttribute(USER_INFO_CLAIMS_ATTRIBUTE);
+        Map<String, Object> idToken = toClaims(idTokenClaims);
+        Map<String, Object> userInfo = userInfoClaims instanceof Map ? toClaims(userInfoClaims) : Map.of();
 
-        return authenticateWithOidc(context, code, request);
+        // the verified issuer and subject of the ID token: the subject is the user's unique and stable ID at the
+        // provider (Spring has checked that the UserInfo's sub is the same)
+        Object issuer = idToken.get("iss");
+        Object subject = idToken.get("sub");
+        if (issuer == null || subject == null || StringUtils.isAnyBlank(issuer.toString(), subject.toString())) {
+            log.warn("Unable to authenticate using OIDC because the ID token has no issuer or subject.");
+            return NO_SUCH_USER;
+        }
+        String provider = StringUtils.defaultIfBlank(configurationService.getProperty("authentication-oidc.provider"),
+                issuer.toString());
+        return authenticateWithClaims(context, mergeClaims(idToken, userInfo), provider, subject.toString(),
+                request);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> toClaims(Object claims) {
+        return (Map<String, Object>) claims;
     }
 
     /**
-     * Returns whether the "state" request parameter returned by the OIDC provider matches the value this
-     * bean set in the {@link #STATE_COOKIE_NAME} cookie when it built the authorization redirect URL (see
-     * {@link #loginPageURL}). This binds the authorization request to the browser that initiated it,
-     * preventing an attacker from tricking a victim's browser into completing the attacker's own login
-     * (login CSRF / authorization code injection, see RFC 9700).
+     * Merge the verified ID token claims and the UserInfo claims (whose sub the protocol layer has already
+     * matched against the ID token) into one map. UserInfo claims win on overlapping keys, except that the
+     * email and its verification flag are always taken together from the same source: an email_verified=true
+     * of the ID token must never vouch for a different email returned by UserInfo.
      */
-    private boolean isStateValid(HttpServletRequest request) {
-        String state = request.getParameter("state");
-        if (StringUtils.isBlank(state)) {
-            return false;
-        }
-        Cookie[] cookies = request.getCookies();
-        if (cookies == null) {
-            return false;
-        }
-        for (Cookie cookie : cookies) {
-            if (STATE_COOKIE_NAME.equals(cookie.getName())) {
-                // constant-time comparison, so a timing side-channel can't be used to guess the cookie
-                // value one character at a time
-                return MessageDigest.isEqual(state.getBytes(StandardCharsets.UTF_8),
-                        cookie.getValue().getBytes(StandardCharsets.UTF_8));
-            }
-        }
-        return false;
-    }
-
-    private int authenticateWithOidc(Context context, String code, HttpServletRequest request) throws SQLException {
-        OidcTokenResponseDTO tokenResponse = getOidcAccessToken(code);
-        if (tokenResponse == null || StringUtils.isBlank(tokenResponse.getIdToken())) {
-            log.warn("No access/ID token retrieved by code");
-            return NO_SUCH_USER;
-        }
-
-        OidcIdToken idToken;
-        try {
-            Jwt jwt = getJwtDecoder().decode(tokenResponse.getIdToken());
-            idToken = new OidcIdToken(jwt.getTokenValue(), jwt.getIssuedAt(), jwt.getExpiresAt(), jwt.getClaims());
-        } catch (JwtException ex) {
-            log.warn("OIDC authentication failed, because the ID token could not be verified", ex);
-            return BAD_CREDENTIALS;
-        }
-
-        Map<String, Object> userInfoClaims = getOidcUserInfo(tokenResponse.getAccessToken());
-        if (userInfoClaims == null || userInfoClaims.isEmpty()) {
-            // OidcUserInfo rejects an empty claims map with IllegalArgumentException; getOidcUserInfo()
-            // already returns an empty map on any provider failure (timeout, non-2xx, empty body), so this
-            // must be treated as an authentication failure here rather than letting that exception escape
-            // as an unhandled server error
-            log.warn("OIDC authentication failed, because no user info could be retrieved for the access token");
-            return BAD_CREDENTIALS;
-        }
-        OidcUserInfo userInfo = new OidcUserInfo(userInfoClaims);
-        // the sub claim is REQUIRED in the user info response (OIDC Core 5.3.2) and MUST match the verified
-        // ID token's subject; a blank sub is not skipped, since that would let its email/group claims be
-        // used without confirming they belong to the authenticated subject
-        if (StringUtils.isBlank(userInfo.getSubject()) || !userInfo.getSubject().equals(idToken.getSubject())) {
-            log.warn("OIDC authentication failed, because the sub claim of the user info ({}) does not match the " +
-                    "verified ID token ({})", userInfo.getSubject(), idToken.getSubject());
-            return BAD_CREDENTIALS;
-        }
-
-        // The ID token claims are signature-verified and form the trusted base; user info claims (only
-        // TLS-trusted, not signature-verified) take precedence for overlapping keys, per OIDC Core 5.3.2.
-        Map<String, Object> claims = new HashMap<>(idToken.getClaims());
-        String emailAttribute = getEmailAttribute();
-        String emailVerifiedAttribute = getEmailVerifiedAttribute();
-        if (StringUtils.isNotBlank(emailAttribute) && userInfoClaims.containsKey(emailAttribute)
-                && !userInfoClaims.containsKey(emailVerifiedAttribute)
-                && !Objects.equals(claims.get(emailAttribute), userInfoClaims.get(emailAttribute))) {
-            // user info overrides the email without (re-)confirming it is verified; the inherited verified
-            // flag from the ID token was only ever vouching for the ID token's own email value, so it must
-            // not be allowed to carry over and apply to a different, unverified email from user info
-            claims.remove(emailVerifiedAttribute);
-        }
+    private Map<String, Object> mergeClaims(Map<String, Object> idTokenClaims, Map<String, Object> userInfoClaims) {
+        Map<String, Object> claims = new HashMap<>(idTokenClaims);
         claims.putAll(userInfoClaims);
 
-        return authenticateWithClaims(context, claims, request);
-    }
-
-    /**
-     * Returns the {@link JwtDecoder} used to verify the signature, issuer, audience and expiry of the ID
-     * token, built on first use from authentication-oidc.jwks-uri/issuer/client-id and cached.
-     * Synchronized because this bean is a singleton invoked concurrently by authenticate() across requests.
-     */
-    private synchronized JwtDecoder getJwtDecoder() {
-        if (jwtDecoder == null) {
-            jwtDecoder = buildJwtDecoder();
+        String emailAttribute = getEmailAttribute();
+        String emailVerifiedAttribute = getEmailVerifiedAttribute();
+        if (StringUtils.isNotBlank(emailAttribute)) {
+            Map<String, Object> emailSource = userInfoClaims.containsKey(emailAttribute)
+                    ? userInfoClaims : idTokenClaims;
+            claims.remove(emailAttribute);
+            claims.remove(emailVerifiedAttribute);
+            if (emailSource.containsKey(emailAttribute)) {
+                claims.put(emailAttribute, emailSource.get(emailAttribute));
+            }
+            if (StringUtils.isNotBlank(emailVerifiedAttribute) && emailSource.containsKey(emailVerifiedAttribute)) {
+                claims.put(emailVerifiedAttribute, emailSource.get(emailVerifiedAttribute));
+            }
         }
-        return jwtDecoder;
+        return claims;
     }
 
-    private JwtDecoder buildJwtDecoder() {
-        String jwksUri = configurationService.getProperty("authentication-oidc.jwks-uri");
-        String issuer = configurationService.getProperty("authentication-oidc.issuer");
-        String clientId = configurationService.getProperty("authentication-oidc.client-id");
-        if (isAnyBlank(jwksUri, issuer, clientId)) {
-            throw new IllegalStateException("authentication-oidc.jwks-uri, authentication-oidc.issuer and "
-                    + "authentication-oidc.client-id must all be set to use the CLARIN OIDC extension");
-        }
-
-        NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(jwksUri).build();
-        decoder.setJwtValidator(buildJwtValidator(issuer, clientId));
-        return decoder;
-    }
-
-    /**
-     * Builds the ID token validator chain (issuer, audience, required claims), kept separate from
-     * {@link #buildJwtDecoder} so tests can exercise this exact production validator logic (via
-     * ReflectionTestUtils) against a decoder backed by a local test key, instead of maintaining a
-     * separately duplicated copy that wouldn't notice if a validator were ever removed here.
-     */
-    private static OAuth2TokenValidator<Jwt> buildJwtValidator(String issuer, String clientId) {
-        OAuth2TokenValidator<Jwt> withIssuer = JwtValidators.createDefaultWithIssuer(issuer);
-        OAuth2TokenValidator<Jwt> withAudience = jwt -> jwt.getAudience() != null
-                && jwt.getAudience().contains(clientId)
-                && (!jwt.getClaims().containsKey("azp") || clientId.equals(jwt.getClaimAsString("azp")))
-                ? OAuth2TokenValidatorResult.success()
-                : OAuth2TokenValidatorResult.failure(new OAuth2Error("invalid_token",
-                        "The aud or azp claim does not identify the configured client ID", null));
-        // JwtValidators.createDefaultWithIssuer only checks exp/nbf when present, it doesn't require them;
-        // exp, iat and sub are REQUIRED ID token claims (OIDC Core 2), so a token omitting them must not
-        // be trusted, e.g. a correctly signed token with no exp would otherwise never expire
-        OAuth2TokenValidator<Jwt> withRequiredClaims = jwt -> jwt.getExpiresAt() != null
-                && jwt.getIssuedAt() != null
-                && StringUtils.isNotBlank(jwt.getSubject())
-                ? OAuth2TokenValidatorResult.success()
-                : OAuth2TokenValidatorResult.failure(new OAuth2Error("invalid_token",
-                        "The exp, iat and sub claims are required", null));
-        return new DelegatingOAuth2TokenValidator<>(withIssuer, withAudience, withRequiredClaims);
-    }
-
-    private int authenticateWithClaims(Context context, Map<String, Object> userInfo, HttpServletRequest request)
-            throws SQLException {
-        String userIdAttribute = getUserIdAttribute();
-        String userId = StringUtils.isBlank(userIdAttribute) || userInfo.get(userIdAttribute) == null
-                ? null : getAttributeAsString(userInfo, userIdAttribute);
-        if (StringUtils.isBlank(userId)) {
-            log.warn("No user ID attribute '{}' found in the user info attributes", getUserIdAttribute());
-            return NO_SUCH_USER;
-        }
-        String provider = getProvider();
+    private int authenticateWithClaims(Context context, Map<String, Object> userInfo, String provider,
+                                       String userId, HttpServletRequest request) throws SQLException {
         String emailAttribute = getEmailAttribute();
         String email = StringUtils.isBlank(emailAttribute) || userInfo.get(emailAttribute) == null
                 ? null : getAttributeAsString(userInfo, emailAttribute);
         String organization = getAttributeAsFirstValue(userInfo, getOrganizationAttribute());
+        if (StringUtils.isNotBlank(organization)) {
+            // never equal to a SAML entityID: ClarinShibAuthentication#canBindNetIdByEmail lets a Shibboleth login
+            // through the IdP recorded here take over an account (without a netid) found by its email
+            organization = ORGANIZATION_PREFIX + organization;
+        }
 
-        // A verified ownership is required before trusting the claimed email for anything: updating the
-        // email of an already logged-in EPerson, taking over an existing account found by email (e.g. one
-        // created by Shibboleth), or registering a new EPerson under an address its owner never confirmed
-        // (which could pre-empt the real owner, e.g. blocking them from later registering/linking via
-        // Shibboleth with that same email). A blank email isn't checked, since there is nothing to verify.
+        // When required, a verified ownership is needed before trusting the claimed email for anything:
+        // updating the email of an already logged-in EPerson, linking an existing account found by email, or
+        // registering a new EPerson under an address its owner never confirmed (which could pre-empt the real
+        // owner, e.g. blocking them from later registering/linking via Shibboleth with that same email).
+        // A blank email isn't checked, since there is nothing to verify.
         if (StringUtils.isNotBlank(email) && !isEmailVerified(userInfo)) {
             log.warn("OIDC identity {} was not authenticated, because the provider did not confirm the email " +
                     "{} is verified (check authentication-oidc.user-info.email-verified)", userId, email);
@@ -327,14 +238,24 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
                 logIn(context, ePerson, userInfo, request);
                 // current user is set to the identity owner, who is allowed to update it
                 authenticationIdentityService.updateLastLogin(context, identity);
-                // neither is updated when the provider doesn't return an email this time, since the
-                // organization is only meaningful together with a (verified) email identifying its owner
-                if (StringUtils.isNotBlank(email)) {
-                    updateEmail(context, ePerson, email);
-                    updateOrganization(context, ePerson, organization);
-                }
+                updateAccount(context, ePerson, email, organization);
                 log.info("EPerson {} logged in via OIDC identity {}", ePerson.getID(), userId);
                 return SUCCESS;
+            }
+
+            // 1b. link the identity to the one EPerson whose Shibboleth netid is among the user's external IDs
+            EPerson externalIdOwner = findByExternalIds(context, userInfo, userId);
+            if (externalIdOwner != null) {
+                if (authorizeService.isAdmin(context, externalIdOwner)) {
+                    log.warn("OIDC identity {} was not linked to the administrator EPerson {} found by its external " +
+                            "ID", userId, externalIdOwner.getID());
+                    request.setAttribute(DUPLICATE_USER_ATTRIBUTE, Objects.toString(email, ""));
+                    return BAD_ARGS;
+                }
+                log.info("OIDC identity {} belongs to EPerson {} found by its external ID", userId,
+                        externalIdOwner.getID());
+                return linkEPerson(context, externalIdOwner, userInfo, email, provider, userId, organization,
+                        request);
             }
 
             if (StringUtils.isBlank(email)) {
@@ -342,10 +263,17 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
                 return NO_SUCH_USER;
             }
 
-            // 2. link the identity to the existing EPerson with the same email
+            // 2. link the identity to the existing EPerson with the same email, if allowed
             EPerson ePerson = ePersonService.findByEmail(context, email);
             if (ePerson != null) {
-                return linkEPerson(context, ePerson, userInfo, provider, userId, organization, request);
+                if (!canLinkByEmail(context, ePerson)) {
+                    log.warn("OIDC identity {} was not linked to EPerson {} found by the email {}: linking by email " +
+                            "is off ({}), or the EPerson has a netid or is an administrator", userId,
+                            ePerson.getID(), email, EMAIL_FALLBACK_PROPERTY);
+                    request.setAttribute(DUPLICATE_USER_ATTRIBUTE, email);
+                    return BAD_ARGS;
+                }
+                return linkEPerson(context, ePerson, userInfo, email, provider, userId, organization, request);
             }
 
             // 3. register a new EPerson
@@ -363,31 +291,26 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
         }
     }
 
-    private int linkEPerson(Context context, EPerson ePerson, Map<String, Object> userInfo, String provider,
-                            String userId, String organization, HttpServletRequest request)
+    private int linkEPerson(Context context, EPerson ePerson, Map<String, Object> userInfo, String email,
+                            String provider, String userId, String organization, HttpServletRequest request)
             throws SQLException, AuthorizeException {
 
         // the EPerson already linked to another identity of this provider must not be taken over
         List<AuthenticationIdentity> identities =
                 authenticationIdentityService.findByEPersonAndAuthMethod(context, ePerson, AUTH_METHOD_OIDC);
         if (identities.stream().anyMatch(identity -> provider.equals(identity.getProvider()))) {
-            log.warn("EPerson {} with the same email is already linked to another identity of the OIDC provider " +
-                    "{}, the OIDC identity {} is not linked", ePerson.getID(), provider, userId);
+            log.warn("EPerson {} is already linked to another identity of the OIDC provider {}, the OIDC identity " +
+                    "{} is not linked", ePerson.getID(), provider, userId);
+            // the email of this login, not of the account found (which may differ when found by external ID)
+            request.setAttribute(DUPLICATE_USER_ATTRIBUTE, Objects.toString(email, ""));
             return BAD_ARGS;
         }
 
         context.turnOffAuthorisationSystem();
         try {
+            // flushed right away: a concurrent first login of a different identity that raced past the check above
+            // to link the same EPerson fails here (authentication_identity_eperson_per_provider_unique)
             authenticationIdentityService.create(context, ePerson, AUTH_METHOD_OIDC, provider, userId);
-            // commit immediately, so a concurrent first login of a different OIDC identity racing past the
-            // check above to link the same EPerson+provider is caught right here as a constraint violation
-            // (authentication_identity_eperson_auth_method_provider_unique), instead of silently succeeding
-            // or surfacing much later at the end-of-request commit. Depending on the database, the actual
-            // violation may surface as a plain RuntimeException rather than specifically a Hibernate
-            // ConstraintViolationException (e.g. once the broken Hibernate session is touched again by the
-            // post-commit entity reload), so any failure at this specific, narrowly-scoped commit is treated
-            // the same way: the identity was not reliably linked, so the login must not succeed.
-            context.commit();
         } catch (RuntimeException ex) {
             context.rollback();
             log.warn("EPerson {} was not linked to the OIDC identity {} of provider {}, because creating the " +
@@ -398,11 +321,55 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
             context.restoreAuthSystemState();
         }
 
-        ePerson = context.reloadEntity(ePerson);
         logIn(context, ePerson, userInfo, request);
-        updateOrganization(context, ePerson, organization);
-        log.info("EPerson {} found by email was linked to the OIDC identity {}", ePerson.getID(), userId);
+        updateAccount(context, ePerson, email, organization);
+        log.info("EPerson {} was linked to the OIDC identity {}", ePerson.getID(), userId);
         return SUCCESS;
+    }
+
+    /**
+     * Find the EPerson whose Shibboleth netid ("value[IdP entityID]", see org.dspace.app.util.Util#formatNetId) has
+     * one of the values of the external IDs attribute (authentication-oidc.user-info.external-ids), e.g. e-INFRA's
+     * voperson_external_id: the eduPersonPrincipalNames of the user's other identities, which the provider has
+     * linked only after the user logged in with each of them.
+     *
+     * @return the EPerson, or null when the attribute isn't configured or sent, or when no EPerson or more than one
+     *         EPerson matches (the identity isn't linked by guessing)
+     */
+    private EPerson findByExternalIds(Context context, Map<String, Object> userInfo, String userId)
+            throws SQLException {
+        String attribute = configurationService.getProperty("authentication-oidc.user-info.external-ids");
+        if (StringUtils.isBlank(attribute)) {
+            return null;
+        }
+        Map<UUID, EPerson> matches = new LinkedHashMap<>();
+        for (String externalId : getAttributeAsList(userInfo, attribute)) {
+            String value = externalId.trim();
+            // a bracket would let the value reach into the authority part of a netid
+            if (value.isEmpty() || StringUtils.containsAny(value, '[', ']')) {
+                continue;
+            }
+            for (EPerson ePerson : authenticationIdentityService.findEPersonsByNetidValue(context, value)) {
+                matches.put(ePerson.getID(), ePerson);
+            }
+        }
+        if (matches.size() > 1) {
+            log.warn("OIDC identity {} was not linked by its external IDs, because they match {} EPersons: {}", userId,
+                    matches.size(), matches.keySet());
+            return null;
+        }
+        return matches.isEmpty() ? null : matches.values().iterator().next();
+    }
+
+    /**
+     * Whether an OIDC identity may be linked to the existing EPerson found by its email: only when
+     * {@value #EMAIL_FALLBACK_PROPERTY} is on, the EPerson has no netid (it isn't a Shibboleth account) and it is
+     * not an administrator. The same rule as ClarinShibAuthentication#canBindNetIdByEmail.
+     */
+    private boolean canLinkByEmail(Context context, EPerson ePerson) throws SQLException {
+        return configurationService.getBooleanProperty(EMAIL_FALLBACK_PROPERTY, false)
+                && ePerson.getNetid() == null
+                && !authorizeService.isAdmin(context, ePerson);
     }
 
     private int registerNewEPerson(Context context, Map<String, Object> userInfo, String email, String provider,
@@ -430,15 +397,7 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
             ePersonService.update(context, ePerson);
 
             authenticationIdentityService.create(context, ePerson, AUTH_METHOD_OIDC, provider, userId);
-
-            ClarinUserRegistration clarinUserRegistration = new ClarinUserRegistration();
-            clarinUserRegistration.setConfirmation(true);
-            clarinUserRegistration.setEmail(ePerson.getEmail());
-            clarinUserRegistration.setPersonID(ePerson.getID());
-            clarinUserRegistration.setOrganization(StringUtils.isNotBlank(organization) ? organization :
-                    ClarinUserRegistration.UNKNOWN_USER_REGISTRATION);
-            clarinUserRegistrationService.create(context, clarinUserRegistration);
-
+            createRegistrationIfMissing(context, ePerson, organization);
             logIn(context, ePerson, userInfo, request);
             context.dispatchEvents();
             log.info("New EPerson {} was registered for the OIDC identity {}", ePerson.getID(), userId);
@@ -452,32 +411,38 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
             throws SQLException {
         request.setAttribute(OIDC_AUTHENTICATED, true);
         resolveSpecialGroups(context, userInfo);
-        logInEPerson(context, ePerson);
+        context.setCurrentUser(ePerson);
     }
 
     /**
-     * Map the OIDC groups (attribute configured by authentication-oidc.user-info.groups) to DSpace groups
-     * (authentication-oidc.group.&lt;group value&gt;), and add the default authentication group
-     * (authentication-oidc.default.auth.group), caching them all as the context's special groups,
-     * the same way {@link ClarinShibAuthentication} does for Shibboleth attributes.
-     * The OIDC group claims are only available here, during the user info exchange, so unlike
-     * Shibboleth the special groups cannot be recomputed later from the request on every call
-     * to {@link #getSpecialGroups}.
+     * Map claim values to DSpace groups and add the default authentication group
+     * (authentication-oidc.default.auth.group), caching them all as the context's special groups, like
+     * {@link ShibGroup} does for Shibboleth attributes. Each authentication-oidc.claim.&lt;claim&gt; property
+     * is a list of VALUE =&gt; GROUP rules, the Shibboleth authentication-shibboleth.header.&lt;attribute&gt;
+     * syntax; see {@link #matchesClaimValue} for how VALUE is matched.
+     * The claims are only available here, during the login, so unlike Shibboleth the special groups cannot be
+     * recomputed later from the request on every call to {@link #getSpecialGroups}.
      */
-    private void resolveSpecialGroups(Context context, Map<String, Object> userInfo) throws SQLException {
-        String groupsAttribute = getGroupsAttribute();
-        if (StringUtils.isNotBlank(groupsAttribute)) {
-            for (String rawGroup : getAttributeAsList(userInfo, groupsAttribute)) {
-                String externalGroup = stripAuthoritySuffix(rawGroup);
-                String[] groupNames =
-                        configurationService.getArrayProperty("authentication-oidc.group." + externalGroup);
-                if (groupNames == null || groupNames.length == 0) {
-                    log.debug("No DSpace group mapping found for the OIDC group '{}', check " +
-                            "authentication-oidc.group.{} in authentication-oidc.cfg", externalGroup, externalGroup);
+    private void resolveSpecialGroups(Context context, Map<String, Object> claims) throws SQLException {
+        // the prefix without its trailing dot: commons-configuration matches prefixes up to a dot
+        String prefix = StringUtils.removeEnd(CLAIM_GROUP_MAPPING_PREFIX, ".");
+        for (String key : configurationService.getPropertyKeys(prefix)) {
+            if (!key.startsWith(CLAIM_GROUP_MAPPING_PREFIX)) {
+                continue;
+            }
+            List<String> values = getAttributeAsList(claims, key.substring(CLAIM_GROUP_MAPPING_PREFIX.length()));
+            if (values.isEmpty()) {
+                continue;
+            }
+            for (String rule : configurationService.getArrayProperty(key)) {
+                String[] parts = rule.split("=>", 2);
+                if (parts.length != 2 || StringUtils.isBlank(parts[0]) || StringUtils.isBlank(parts[1])) {
+                    log.warn("Ignoring the rule '{}' of {}, expected VALUE => GROUP", rule, key);
                     continue;
                 }
-                for (String groupName : groupNames) {
-                    addSpecialGroup(context, groupName, "group '" + externalGroup + "'");
+                String pattern = parts[0].trim();
+                if (values.stream().anyMatch(value -> matchesClaimValue(pattern, value))) {
+                    addSpecialGroup(context, parts[1], key);
                 }
             }
         }
@@ -489,15 +454,34 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
     }
 
     /**
-     * Strips the authority suffix from a group value, i.e. everything from the first '#' onwards. AARC-style
-     * eduPersonEntitlement URNs append the responsible authority there (e.g. the issuing Perun instance), which
-     * is constant across all entitlements of the same IdP and, unlike the rest of the URN, often contains
-     * spaces that would otherwise have to be escaped in the authentication-oidc.group.&lt;group value&gt;
-     * configuration key. A value without '#' is returned unchanged.
+     * Whether a claim value matches the VALUE of a group mapping rule: exactly, except that
+     * <ul>
+     *     <li>"role@*" matches any scope and "*@scope" any role of a scoped value (e.g. an affiliation
+     *     "member@cuni.cz"); "*" stands for the whole role or scope only;</li>
+     *     <li>the authority of an AARC entitlement URN (from '#' on, e.g. "urn:geant:cesnet.cz:group:einfra#perun")
+     *     is ignored on both sides, as AARC-G069 section 2.3 (and RFC 8141 section 3) require for comparing them.</li>
+     * </ul>
      */
-    private String stripAuthoritySuffix(String group) {
-        int hashIndex = group.indexOf('#');
-        return (hashIndex >= 0 ? group.substring(0, hashIndex) : group).trim();
+    static boolean matchesClaimValue(String pattern, String value) {
+        String rule = withoutUrnAuthority(pattern.trim());
+        String claimValue = withoutUrnAuthority(value.trim());
+        int at = claimValue.lastIndexOf('@');
+        if (rule.startsWith("*@")) {
+            String scope = rule.substring(2);
+            return !scope.isEmpty() && !scope.contains("*") && at > 0 && claimValue.substring(at + 1).equals(scope);
+        }
+        if (rule.endsWith("@*")) {
+            String role = rule.substring(0, rule.length() - 2);
+            return !role.isEmpty() && !role.contains("*") && at > 0 && claimValue.substring(0, at).equals(role);
+        }
+        return rule.equals(claimValue);
+    }
+
+    /** An AARC entitlement URN without its authority (the f-component, from '#' on); other values unchanged. */
+    private static String withoutUrnAuthority(String value) {
+        int hashIndex = value.indexOf('#');
+        return hashIndex >= 0 && StringUtils.startsWithIgnoreCase(value, "urn:")
+                ? value.substring(0, hashIndex) : value;
     }
 
     /**
@@ -545,6 +529,20 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
     }
 
     /**
+     * Update the account from the login, the same on the login that links the identity (e.g. to an account found by
+     * its external ID, under another email) and on every later one: only when the provider returns a (verified)
+     * email, the email is updated and a missing registration created. The organization of an existing registration
+     * is never changed.
+     */
+    private void updateAccount(Context context, EPerson ePerson, String email, String organization)
+            throws SQLException, AuthorizeException {
+        if (StringUtils.isNotBlank(email)) {
+            updateEmail(context, ePerson, email);
+            createRegistrationIfMissing(context, ePerson, organization);
+        }
+    }
+
+    /**
      * Update the email of the EPerson and its CLARIN user registration, when changed by the OIDC provider.
      * The email is not updated when it is already used by another EPerson.
      *
@@ -582,37 +580,25 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
     }
 
     /**
-     * Update the organization of the CLARIN user registration, when provided by the OIDC provider.
-     * The registration is created when missing, e.g. for the EPerson created by an administrator.
+     * Create the CLARIN user registration when the EPerson has none (e.g. an EPerson created by an administrator),
+     * with the organization provided by the OIDC provider, or "Unknown". The organization of an existing
+     * registration is never changed, as with Shibboleth, which records the IdP there when it registers an account
+     * (ClarinShibAuthentication#canBindNetIdByEmail relies on it).
      */
-    private void updateOrganization(Context context, EPerson ePerson, String organization)
+    private void createRegistrationIfMissing(Context context, EPerson ePerson, String organization)
             throws SQLException, AuthorizeException {
-
-        if (StringUtils.isBlank(organization)) {
+        context.turnOffAuthorisationSystem();
+        try {
             if (!clarinUserRegistrationService.findByEPersonUUID(context, ePerson.getID()).isEmpty()) {
                 return;
             }
-            organization = ClarinUserRegistration.UNKNOWN_USER_REGISTRATION;
-        }
-        context.turnOffAuthorisationSystem();
-        try {
-            List<ClarinUserRegistration> registrations =
-                    clarinUserRegistrationService.findByEPersonUUID(context, ePerson.getID());
-            if (registrations.isEmpty()) {
-                ClarinUserRegistration clarinUserRegistration = new ClarinUserRegistration();
-                clarinUserRegistration.setConfirmation(true);
-                clarinUserRegistration.setEmail(ePerson.getEmail());
-                clarinUserRegistration.setPersonID(ePerson.getID());
-                clarinUserRegistration.setOrganization(organization);
-                clarinUserRegistrationService.create(context, clarinUserRegistration);
-                return;
-            }
-            for (ClarinUserRegistration registration : registrations) {
-                if (!organization.equals(registration.getOrganization())) {
-                    registration.setOrganization(organization);
-                    clarinUserRegistrationService.update(context, registration);
-                }
-            }
+            ClarinUserRegistration clarinUserRegistration = new ClarinUserRegistration();
+            clarinUserRegistration.setConfirmation(true);
+            clarinUserRegistration.setEmail(ePerson.getEmail());
+            clarinUserRegistration.setPersonID(ePerson.getID());
+            clarinUserRegistration.setOrganization(StringUtils.isNotBlank(organization) ? organization :
+                    ClarinUserRegistration.UNKNOWN_USER_REGISTRATION);
+            clarinUserRegistrationService.create(context, clarinUserRegistration);
         } finally {
             context.restoreAuthSystemState();
         }
@@ -646,15 +632,6 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
     }
 
     /**
-     * Returns the name of the user info attribute containing the unique user ID, "sub" by default.
-     *
-     * @return user ID attribute name
-     */
-    private String getUserIdAttribute() {
-        return configurationService.getProperty("authentication-oidc.user-info.id", DEFAULT_USER_ID_ATTRIBUTE);
-    }
-
-    /**
      * Returns the name of the boolean user info attribute confirming the email is verified, "email_verified"
      * by default, as defined by the OIDC standard claims.
      *
@@ -666,16 +643,16 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
     }
 
     /**
-     * Returns whether a verified email is required to link the OIDC identity to an existing EPerson found by
-     * email (see {@link #isEmailVerified}). Enabled by default, since otherwise any OIDC provider that doesn't
-     * actually verify a claimed email (or a user who can set their own email at the provider) could take over
-     * an existing account, including an administrator's. Only disable this for a deployment whose provider is
-     * known not to emit the verified-email claim at all (see authentication-oidc.cfg).
+     * Returns whether a login with an email the provider doesn't confirm as verified is refused (see
+     * {@link #isEmailVerified}). Unless set, the same as {@value #EMAIL_FALLBACK_PROPERTY} (as in
+     * authentication-oidc.cfg), so off by default: with email fallback off an email never links a login to an
+     * existing account, so an unverified one can at most pre-empt its owner's address for a new account.
      *
-     * @return true unless disabled by authentication-oidc.require-verified-email
+     * @return the value of authentication-oidc.require-verified-email
      */
     private boolean isVerifiedEmailRequired() {
-        return configurationService.getBooleanProperty("authentication-oidc.require-verified-email", true);
+        return configurationService.getBooleanProperty("authentication-oidc.require-verified-email",
+                configurationService.getBooleanProperty(EMAIL_FALLBACK_PROPERTY, false));
     }
 
     /**
@@ -704,138 +681,16 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
     }
 
     /**
-     * Returns the name of the user info attribute containing the user's groups, used to assign special
-     * groups (authentication-oidc.group.&lt;group value&gt;), not set by default.
-     *
-     * @return groups attribute name or null
+     * The login starts at Spring's authorization request endpoint in DSpace, not directly at the provider: it
+     * has to keep the pending login (state, nonce, PKCE verifier) in the browser's HTTP session before
+     * redirecting to the provider.
+     * The redirectUrl parameter must stay the first and only query parameter, the Angular UI replaces it with
+     * the current page.
      */
-    private String getGroupsAttribute() {
-        return configurationService.getProperty("authentication-oidc.user-info.groups");
-    }
-
-    /**
-     * Returns the stable label of the OIDC provider, stored together with the user ID.
-     * It must not be changed after users have logged in, otherwise they won't be found by their user ID.
-     *
-     * @return provider label
-     */
-    private String getProvider() {
-        return configurationService.getProperty("authentication-oidc.provider", DEFAULT_PROVIDER);
-    }
-
-    private OidcTokenResponseDTO getOidcAccessToken(String code) {
-        try {
-            return oidcClient.getAccessToken(code);
-        } catch (Exception ex) {
-            log.error("An error occurs retriving the OIDC access_token", ex);
-            return null;
-        }
-    }
-
-    private Map<String, Object> getOidcUserInfo(String accessToken) {
-        try {
-            return oidcClient.getUserInfo(accessToken);
-        } catch (Exception ex) {
-            log.error("An error occurs retriving the OIDC user info", ex);
-            return Map.of();
-        }
-    }
-
-    private void logInEPerson(Context context, EPerson ePerson) {
-        context.setCurrentUser(ePerson);
-    }
-
     @Override
     public String loginPageURL(Context context, HttpServletRequest request, HttpServletResponse response) {
-
-        String authorizeUrl = configurationService.getProperty("authentication-oidc.authorize-endpoint");
-        String clientId = configurationService.getProperty("authentication-oidc.client-id");
-        String clientSecret = configurationService.getProperty("authentication-oidc.client-secret");
-        String redirectUri = configurationService.getProperty("authentication-oidc.redirect-url");
-        String tokenUrl = configurationService.getProperty("authentication-oidc.token-endpoint");
-        String userInfoUrl = configurationService.getProperty("authentication-oidc.user-info-endpoint");
-        String[] defaultScopes =
-            new String[] {
-                "openid", "email", "profile"
-            };
-        String scopes = String.join(" ", configurationService.getArrayProperty("authentication-oidc.scopes",
-            defaultScopes));
-
-        if (isAnyBlank(authorizeUrl, clientId, redirectUri, clientSecret, tokenUrl, userInfoUrl)) {
-            log.error("Missing mandatory configuration properties for ClarinOidcAuthenticationBean");
-
-            // prepare a Map of the properties which can not have sane defaults, but are still required
-            final Map<String, String> map = Map.of("authorizeUrl", authorizeUrl, "clientId", clientId, "redirectUri",
-                redirectUri, "clientSecret", clientSecret, "tokenUrl", tokenUrl, "userInfoUrl", userInfoUrl);
-            final Iterator<Entry<String, String>> iterator = map.entrySet().iterator();
-
-            while (iterator.hasNext()) {
-                final Entry<String, String> entry = iterator.next();
-
-                if (isBlank(entry.getValue())) {
-                    log.error(" * {} is missing", entry.getKey());
-                }
-            }
-            return "";
-        }
-
-        String state = getOrCreateState(request, response);
-
-        try {
-            return format(LOGIN_PAGE_URL_FORMAT, authorizeUrl, clientId, scopes, encode(redirectUri, "UTF-8"),
-                    encode(state, "UTF-8"));
-        } catch (UnsupportedEncodingException e) {
-            log.error(e.getMessage(), e);
-            return "";
-        }
-
-    }
-
-    /**
-     * Returns the value of the {@link #STATE_COOKIE_NAME} cookie already set on this browser, or generates
-     * a new unpredictable one if absent, (re-)setting the cookie either way so its expiry keeps extending
-     * while the browser keeps checking the authentication status (see {@link #loginPageURL}'s callers,
-     * which run on every unauthenticated request, not only when the user deliberately starts an OIDC
-     * login). Reusing rather than always regenerating avoids invalidating an in-flight login started in
-     * another tab/request.
-     */
-    private String getOrCreateState(HttpServletRequest request, HttpServletResponse response) {
-        String state = null;
-        Cookie[] cookies = request.getCookies();
-        if (cookies != null) {
-            for (Cookie cookie : cookies) {
-                if (STATE_COOKIE_NAME.equals(cookie.getName()) && StringUtils.isNotBlank(cookie.getValue())) {
-                    state = cookie.getValue();
-                    break;
-                }
-            }
-        }
-        if (state == null) {
-            byte[] randomBytes = new byte[32];
-            STATE_RANDOM.nextBytes(randomBytes);
-            state = Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
-        }
-        response.addHeader("Set-Cookie", buildStateCookieHeader(state, STATE_COOKIE_MAX_AGE_SECONDS));
-        return state;
-    }
-
-    /**
-     * Builds a Set-Cookie header value for the {@link #STATE_COOKIE_NAME} cookie, matching the attributes
-     * used elsewhere in DSpace for similar cookies (HttpOnly, Secure, SameSite=None, since the UI and REST
-     * API are typically cross-origin), built manually since dspace-api does not depend on spring-web's
-     * ResponseCookie.
-     */
-    private String buildStateCookieHeader(String value, int maxAgeSeconds) {
-        return STATE_COOKIE_NAME + "=" + value + "; Max-Age=" + maxAgeSeconds
-                + "; Path=/; HttpOnly; Secure; SameSite=None";
-    }
-
-    public OidcClient getOidcClient() {
-        return this.oidcClient;
-    }
-
-    public void setOidcClient(OidcClient oidcClient) {
-        this.oidcClient = oidcClient;
+        return configurationService.getProperty("dspace.server.url") + START_PATH + "?redirectUrl="
+                + configurationService.getProperty("dspace.ui.url");
     }
 
     @Override
@@ -878,7 +733,7 @@ public class ClarinOidcAuthenticationBean implements AuthenticationMethod {
     }
 
     /**
-     * Returns the special groups resolved from the OIDC groups and the default authentication group during
+     * Returns the special groups resolved from the claim group mappings and the default authentication group during
      * {@link #authenticateWithClaims} and cached on the context, either just now (fresh login) or restored
      * from the JWT token special groups claim of a previous OIDC login (see SpecialGroupClaimProvider).
      */
