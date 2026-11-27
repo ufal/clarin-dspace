@@ -7,6 +7,7 @@
  */
 package org.dspace.handle.service;
 
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 
@@ -180,6 +181,18 @@ public interface HandleService {
 
     public void modifyHandleDSpaceObject(Context context, String handle, DSpaceObject newOwner) throws SQLException;
 
+    /**
+     * Update the metadata of the handle record for the given DSpaceObject.
+     * This is used to update the handle metadata values stored in the handle record, such as the title or the URL.
+     *
+     * @param context       DSpace context
+     * @param dso           The DSpaceObject whose handle metadata should be updated
+     * @throws SQLException If a database error occurs
+     * @throws IOException  If an error occurs while updating the handle metadata,
+     *                      e.g. when communicating with an external handle service
+     */
+    public void updateHandleMetadata(Context context, DSpaceObject dso) throws SQLException, IOException;
+
     int countTotal(Context context) throws SQLException;
 
     /**
@@ -196,7 +209,7 @@ public interface HandleService {
     /**
      * Gets the additional prefixes used for handles,
      * mapped in configuration file.
-     * 
+     *
      * @return `String[]` array of prefixes
      */
     String[] getAdditionalPrefixes();
